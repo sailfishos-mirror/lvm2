@@ -6,7 +6,7 @@
 
 /* Locking functions for LVM
  * The main purpose of this part of the library is to serialise LVM
- * management operations (across a cluster if necessary)/
+ * management operations (across a cluster if necessary)
  */
 
 
@@ -29,6 +29,9 @@
 #include <search.h>
 #include <errno.h>
 
+#include "metadata.h"
+#include "activate.h"
+#include "log.h"
 #include "clvm.h"
 #include "cmgr.h"
 
@@ -318,7 +321,7 @@ int cluster_free_request(lvm_response_t *response)
 static int num_responses;
 static lvm_response_t *response;
 
-int lock_for_cluster(char scope, char *name, int suspend, int verbosity)
+int lock_for_cluster(char scope, char *name, int suspend)
 {
     int  status;
     int  i;
@@ -359,7 +362,7 @@ int lock_for_cluster(char scope, char *name, int suspend, int verbosity)
     {
 	if (response[i].status == -EHOSTDOWN)
 	{
-	    if (verbosity) fprintf(stderr, "clvmd not running on node %s\n", response[i].node);
+	    log_verbose("clvmd not running on node %s\n", response[i].node);
 	    status = -1;
 	}
     }
@@ -376,7 +379,7 @@ int lock_for_cluster(char scope, char *name, int suspend, int verbosity)
     return status;
 }
 
-int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
+int unlock_for_cluster(char scope, char *name, int suspend)
 {
     int status;
     int i;
@@ -439,22 +442,19 @@ int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
 					 &unlock_response, &num_unlock_responses);
 		if (status)
 		{
-		    if (verbosity)
-			fprintf(stderr, "cluster command to node %s failed: %s\n",
-				response[i].node, strerror(errno));
+		    log_verbose("cluster command to node %s failed: %s\n",
+				    response[i].node, strerror(errno));
 		}
 		else if (unlock_response[0].status != 0)
 		{
-		    if (verbosity > 1)
-			fprintf(stderr, "unlock on node %s failed: %s\n",
+		    log_verbose("unlock on node %s failed: %s\n",
 				response[i].node, strerror(unlock_response[0].status));
 		}
 		cluster_free_request(unlock_response);
 	    }
 	    else
 	    {
-		if (verbosity)
-		    fprintf(stderr, "command on node %s failed: '%s' - will be left locked\n",
+		log_verbose("command on node %s failed: '%s' - will be left locked\n",
 			    response[i].node, strerror(response[i].status));
 	    }
 	}
@@ -468,8 +468,7 @@ int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
 				 &unlock_response, &num_unlock_responses);
 	if (status)
 	{
-	    if (verbosity > 1)
-		fprintf(stderr, "cluster command failed: %s\n",
+	    log_verbose("cluster command failed: %s\n",
 			strerror(errno));
 	}
 	else
@@ -478,8 +477,7 @@ int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
 	    {
 		if (unlock_response[i].status != 0)
 		{
-		    if (verbosity > 1)
-			fprintf(stderr, "unlock on node %s failed: %s\n",
+		    log_verbose("unlock on node %s failed: %s\n",
 				response[i].node, strerror(unlock_response[0].status));
 		}
 	    }
@@ -493,12 +491,14 @@ int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
 
 
 static int clustered = 0;
+static int suspended = 0;
 
-int lock_lvm(char scope, char *name, int suspend, int verbosity)
+int lock_lvm(int suspend)
 {
     int status;
 
-    status = lock_for_cluster(scope, name, suspend, verbosity);
+    suspended = suspend;
+    status = lock_for_cluster('G', NULL, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -506,7 +506,8 @@ int lock_lvm(char scope, char *name, int suspend, int verbosity)
 	if (errno == ENOENT)
 	{
 	    clustered = 0;
-	    /* TODO: Local Lock/suspend*/
+	    /* TODO: Local Lock
+	       suspend*/
 	    return 0;
 	}
 	clustered = 1;
@@ -517,15 +518,97 @@ int lock_lvm(char scope, char *name, int suspend, int verbosity)
 }
 
 
-int unlock_lvm(char scope, char *name, int suspend, int verbosity)
+int unlock_lvm()
 {
     if (!clustered)
     {
-	/* TODO: Local unlock/resume */
+	/* TODO: Local unlock
+	   resume all */
 	return 0;
     }
     else
     {
-	return unlock_for_cluster( scope, name, suspend, verbosity);
+	return unlock_for_cluster('G', NULL, suspended);
+    }
+}
+
+
+
+int lock_vg(struct volume_group *vg, int suspend)
+{
+    int status;
+
+    suspended = suspend;
+    status = lock_for_cluster('V', vg->name, suspend);
+    if (status == -1)
+    {
+	/* ENOENT means clvmd is not running - assume we are not clustered */
+	/* TODO: May need some way of forcing this to fail in the future */
+	if (errno == ENOENT)
+	{
+	    clustered = 0;
+	    /* TODO: Local Lock */
+	    suspend_lvs_in_vg(vg, 1);
+	    return 0;
+	}
+	clustered = 1;
+	return -1;
+    }
+    clustered = 1;
+    return status;
+}
+
+
+int unlock_vg(struct volume_group *vg)
+{
+    if (!clustered)
+    {
+	activate_lvs_in_vg(vg);
+	/* TODO Local Unlock */
+	return 0;
+    }
+    else
+    {
+	return unlock_for_cluster('V', vg->name, suspended);
+    }
+}
+
+
+int lock_lv(struct logical_volume *lv, int suspend)
+{
+    int status;
+
+    suspended = suspend;
+    status = lock_for_cluster('L', lv->name, suspend);
+    if (status == -1)
+    {
+	/* ENOENT means clvmd is not running - assume we are not clustered */
+	/* TODO: May need some way of forcing this to fail in the future */
+	if (errno == ENOENT)
+	{
+	    /* TODO: Local lock */
+	    clustered = 0;
+	    lv_suspend(lv, 1);
+	    return 0;
+	}
+	clustered = 1;
+	return -1;
+    }
+    clustered = 1;
+    return status;
+}
+
+
+int unlock_lv(struct logical_volume *lv)
+{
+    if (!clustered)
+    {
+	lv_reactivate(lv);
+	/* TODO Local Unlock */
+	return 0;
+    }
+    else
+    {
+	return unlock_for_cluster('L', lv->name, suspended);
     }
 }
