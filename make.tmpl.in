@@ -43,13 +43,22 @@ mandir = @mandir@
 OWNER=@OWNER@
 GROUP=@GROUP@
 
+#
+# Shared library versions
+# TODO: Substitute version numbers
+SLIB_NAME = liblvm
+SLIB_SOV  = $(SLIB_NAME).so.2.0
+SLIB_SOM  = $(SLIB_NAME).so.0
+SLIB_SO   = $(SLIB_NAME).so
+
+
 # The number of jobs to run, if blank, defaults to the make standard
 ifndef MAKEFLAGS
 MAKEFLAGS = @JOBS@
 endif
 
 SUFFIXES=
-SUFFIXES=.c .d .o
+SUFFIXES=.c .d .o .po
 
 CFLAGS+=-Wall 
 #CFLAGS+=-O2
@@ -69,6 +78,7 @@ ifeq ("@READLINE@", "yes")
 endif
 
 OBJECTS=$(SOURCES:%.c=%.o)
+POBJECTS=$(SOURCES:%.c=%.po)
 
 SUBDIRS.install := $(SUBDIRS:=.install)
 SUBDIRS.clean := $(SUBDIRS:=.clean)
@@ -96,6 +106,9 @@ $(SUBDIRS.distclean):
 %.o: %.c
 	$(CC) -c $(INCLUDES) $(CFLAGS) $< -o $@
 
+%.po: %.c
+	$(CC) -c $(INCLUDES) $(CFLAGS) -fPIC $< -o $@
+
 %.d: %.c
 	set -e; FILE=`echo $@ | sed 's/\\//\\\\\\//g;s/\\.d//g'`; \
 		INC_LNS=`echo $(INC_LNS) | sed -e 's/\\//\\\\\\//g'`; \
@@ -104,7 +117,7 @@ $(SUBDIRS.distclean):
 		[ -s $@ ] || $(RM) $@
 
 clean: $(SUBDIRS.clean)
-	$(RM) $(OBJECTS) $(TARGETS) $(SOURCES:%.c=%.d)
+	$(RM) $(POBJECTS) $(OBJECTS) $(TARGETS) $(SOURCES:%.c=%.d)
 
 distclean: $(SUBDIRS.distclean)
 	$(RM) $(OBJECTS) $(TARGETS) $(SOURCES:%.c=%.d)

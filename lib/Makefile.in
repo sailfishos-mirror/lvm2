@@ -37,10 +37,10 @@ SOURCES=\
 	regex/matcher.c \
 	regex/parse_rx.c \
 	regex/ttree.c \
-	uuid/uuid.c \
-	cmgr/cmgr.c
+	cmgr/cmgr.c \
+	uuid/uuid.c
 
-TARGETS=liblvm.a
+TARGETS=liblvm.a $(SLIB_SOV) $(SLIB_SOM) $(SLIB_SO)
 
 include ../make.tmpl
 
@@ -48,4 +48,13 @@ liblvm.a: $(OBJECTS)
 	$(RM) $@
 	$(AR) r $@ $(OBJECTS)
 	$(RANLIB) $@
+
+$(SLIB_SOV): $(POBJECTS)
+	$(CC) -shared -Wl,-soname,$(SLIB_SOM) -o $(SLIB_SOV) $(POBJECTS)
+
+$(SLIB_SOM): $(SLIB_SOV)
+	ln -sf $(SLIB_SOV) $(SLIB_SOM)
+
+$(SLIB_SO): $(SLIB_SOV)
+	ln -sf $(SLIB_SOV) $(SLIB_SO)
 
