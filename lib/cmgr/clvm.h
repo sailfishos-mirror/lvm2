@@ -30,8 +30,11 @@ struct clvm_header
 #define CLVMD_SOCKNAME "/var/run/clvmd"
 
 /* Command numbers */
-#define CLVMD_CMD_TEST               4 
+#define CLVMD_CMD_TEST               4
 
 /* Lock/Unlock commands */
 #define CLVMD_CMD_LOCK              30
 #define CLVMD_CMD_UNLOCK            31
+
+#define CLVMD_CMD_LOCK_SUSPEND      32
+#define CLVMD_CMD_UNLOCK_RESUME     33

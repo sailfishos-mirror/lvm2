@@ -4,9 +4,9 @@
  * This file is released under the LGPL.
  */
 
-/* Library functions for Cluster Manager
- * These functions are only used when LVM is run in cluster-enabled
- * mode
+/* Locking functions for LVM
+ * The main purpose of this part of the library is to serialise LVM
+ * management operations (across a cluster if necessary)/
  */
 
 
@@ -172,7 +172,7 @@ static void build_header(struct clvm_header *head, int cmd, char *node, void *da
 }
 
 /* Send a message to a(or all) node(s) in the cluster */
-int lvm_cluster_write(char cmd, char *node, void *data, int len)
+int cluster_write(char cmd, char *node, void *data, int len)
 {
     char  outbuf[sizeof(struct clvm_header)+len+strlen(node)+1];
     char *retbuf = NULL;
@@ -197,8 +197,8 @@ int lvm_cluster_write(char cmd, char *node, void *data, int len)
 
 /* API: Send a message to a(or all) node(s) in the cluster
    and wait for replies */
-int lvm_cluster_request(char cmd, char *node, void *data, int len,
-			lvm_response_t **response, int *num)
+int cluster_request(char cmd, char *node, void *data, int len,
+		    lvm_response_t **response, int *num)
 {
     char  outbuf[sizeof(struct clvm_header)+len+strlen(node)+1];
     int  *outptr;
@@ -286,7 +286,7 @@ int lvm_cluster_request(char cmd, char *node, void *data, int len,
 }
 
 /* API: Free reply array */
-int lvm_cluster_free_request(lvm_response_t *response)
+int cluster_free_request(lvm_response_t *response)
 {
     int *ptr = (int *)response-2;
     int i;
@@ -318,13 +318,22 @@ int lvm_cluster_free_request(lvm_response_t *response)
 static int num_responses;
 static lvm_response_t *response;
 
-int lvm_lock_for_cluster(char scope, char *name, int verbosity)
+int lock_for_cluster(char scope, char *name, int suspend, int verbosity)
 {
     int  status;
     int  i;
     char *args;
     int  len;
+    int  cmd;
 
+    /* Validate scope */
+    if (scope != 'V' && scope != 'L' && scope != 'G')
+    {
+	errno = EINVAL;
+	return -1;
+    }
+
+    /* Allow for NULL in name field */
     if (name)
     {
 	len = strlen(name)+2;
@@ -339,9 +348,11 @@ int lvm_lock_for_cluster(char scope, char *name, int verbosity)
     }
     args[0] = scope;
 
-    status = lvm_cluster_request(CLVMD_CMD_LOCK,
-				 "", args, len,
-				 &response, &num_responses);
+    cmd = (suspend)?CLVMD_CMD_LOCK_SUSPEND:CLVMD_CMD_LOCK;
+
+    status = cluster_request(cmd,
+			     "", args, len,
+			     &response, &num_responses);
 
     /* If any nodes were down then display them and return an error */
     for (i=0; i<num_responses; i++)
@@ -358,19 +369,20 @@ int lvm_lock_for_cluster(char scope, char *name, int verbosity)
     if (status)
     {
 	int saved_errno = errno;
-	lvm_cluster_free_request(response);
+	cluster_free_request(response);
 	num_responses = 0;
 	errno = saved_errno;
     }
     return status;
 }
 
-int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
+int unlock_for_cluster(char scope, char *name, int suspend, int verbosity)
 {
     int status;
     int i;
     int len;
     int failed;
+    int cmd;
     int num_unlock_responses;
     char *args;
     lvm_response_t *unlock_response;
@@ -379,6 +391,15 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
     if (num_responses == 0)
 	return 0;
 
+
+    /* Validate scope */
+    if (scope != 'V' && scope != 'L' && scope != 'G')
+    {
+	errno = EINVAL;
+	return -1;
+    }
+
+    /* Allow for NULL in name field */
     if (name)
     {
 	len = strlen(name)+2;
@@ -392,6 +413,8 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
 	args[1] = '\0';
     }
     args[0] = scope;
+
+    cmd = (suspend)?CLVMD_CMD_UNLOCK_RESUME:CLVMD_CMD_UNLOCK;
 
     /* See if it failed anywhere */
     failed = 0;
@@ -410,10 +433,10 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
 	    /* Unlock the ones that succeeded */
 	    if (response[i].status == 0)
 	    {
-		status = lvm_cluster_request(CLVMD_CMD_UNLOCK,
-					     response[i].node,
-					     args, len,
-					     &unlock_response, &num_unlock_responses);
+		status = cluster_request(cmd,
+					 response[i].node,
+					 args, len,
+					 &unlock_response, &num_unlock_responses);
 		if (status)
 		{
 		    if (verbosity)
@@ -426,7 +449,7 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
 			fprintf(stderr, "unlock on node %s failed: %s\n",
 				response[i].node, strerror(unlock_response[0].status));
 		}
-		lvm_cluster_free_request(unlock_response);
+		cluster_free_request(unlock_response);
 	    }
 	    else
 	    {
@@ -439,10 +462,10 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
     else
     {
 	/* All OK, we can do a full cluster unlock */
-	status = lvm_cluster_request(CLVMD_CMD_UNLOCK,
-				     "",
-				     args, len,
-				     &unlock_response, &num_unlock_responses);
+	status = cluster_request(cmd,
+				 "",
+				 args, len,
+				 &unlock_response, &num_unlock_responses);
 	if (status)
 	{
 	    if (verbosity > 1)
@@ -461,9 +484,48 @@ int lvm_unlock_for_cluster(char scope, char *name, int verbosity)
 		}
 	    }
 	}
-	lvm_cluster_free_request(unlock_response);
+	cluster_free_request(unlock_response);
     }
-    lvm_cluster_free_request(response);
+    cluster_free_request(response);
 
     return 0;
+}
+
+
+static int clustered = 0;
+
+int lock_lvm(char scope, char *name, int suspend, int verbosity)
+{
+    int status;
+
+    status = lock_for_cluster(scope, name, suspend, verbosity);
+    if (status == -1)
+    {
+	/* ENOENT means clvmd is not running - assume we are not clustered */
+	/* TODO: May need some way of forcing this to fail in the future */
+	if (errno == ENOENT)
+	{
+	    clustered = 0;
+	    /* TODO: Local Lock/suspend*/
+	    return 0;
+	}
+	clustered = 1;
+	return -1;
+    }
+    clustered = 1;
+    return status;
+}
+
+
+int unlock_lvm(char scope, char *name, int suspend, int verbosity)
+{
+    if (!clustered)
+    {
+	/* TODO: Local unlock/resume */
+	return 0;
+    }
+    else
+    {
+	return unlock_for_cluster( scope, name, suspend, verbosity);
+    }
 }
