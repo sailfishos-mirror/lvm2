@@ -106,6 +106,7 @@ static void pvcreate_single(const char *pv_name)
 int pvcreate(int argc, char **argv)
 {
 	int i;
+	int ret = ECMD_FAILED;
 
 	if (!argc) {
 		log_error("Please enter a physical volume path");
@@ -117,10 +118,20 @@ int pvcreate(int argc, char **argv)
 		return EINVALID_CMD_LINE;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	        log_error("error locking lvm");
+	        return ECMD_FAILED;
+	}
+
 	for (i = 0; i < argc; i++) {
 		pvcreate_single(argv[i]);
 		pool_empty(fid->cmd->mem);
 	}
 
-	return 0;
+	ret = 0;
+ finish:
+	unlock_lvm(ret);
+
+	return ret;
 }

@@ -27,6 +27,7 @@ int pvchange(int argc, char **argv)
 	int opt = 0;
 	int done = 0;
 	int total = 0;
+	int ret = ECMD_FAILED;
 
 	struct physical_volume *pv;
 	char *pv_name;
@@ -48,6 +49,12 @@ int pvchange(int argc, char **argv)
 		return EINVALID_CMD_LINE;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	    log_error("error locking lvm");
+	    return ECMD_FAILED;
+	}
+
 	if (argc) {
 		log_verbose("Using physical volume(s) on command line");
 		for (; opt < argc; opt++) {
@@ -63,7 +70,7 @@ int pvchange(int argc, char **argv)
 	} else {
 		log_verbose("Scanning for physical volume names");
 		if (!(pvs = fid->ops->get_pvs(fid))) {
-			return ECMD_FAILED;
+		        goto finish;
 		}
 
 		list_iterate(pvh, pvs) {
@@ -80,8 +87,11 @@ int pvchange(int argc, char **argv)
 
 	log_print("%d physical volume(s) changed / %d physical volume(s) "
 		  "not changed", done, total - done);
+	ret = 0;
+ finish:
+	unlock_lvm(ret);
 
-	return 0;
+	return ret;
 }
 
 int pvchange_single(struct physical_volume *pv)
@@ -96,7 +106,7 @@ int pvchange_single(struct physical_volume *pv)
 	/* If in a VG, must change using volume group.  Pointless. */
 	/* FIXME: Provide a direct pv_write_pv that *only* touches PV structs*/
 	if (*pv->vg_name) {
-		log_verbose("Finding volume group of physical volume %s", 
+		log_verbose("Finding volume group of physical volume %s",
 			    pv_name);
 		if (!(vg = fid->ops->vg_read(fid, pv->vg_name))) {
 			log_error("Unable to find volume group of %s", pv_name);
@@ -144,7 +154,7 @@ int pvchange_single(struct physical_volume *pv)
 		}
 	} else {
 		if (!(fid->ops->pv_write(fid, pv))) {
-			log_error("Failed to store physical volume %s", 
+			log_error("Failed to store physical volume %s",
 				  pv_name);
 			return 0;
 		}
