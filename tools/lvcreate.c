@@ -129,7 +129,7 @@ int lvcreate(int argc, char **argv)
 	}
 
 	/* Prevent other commands from interleaving */
-	if (lock_lvm('V', vg_name, 0, 0) != 0) {
+	if (lock_vg(vg, 0) != 0) {
 	    log_error("error locking LVM");
 	    return ECMD_FAILED;
 	}
@@ -278,7 +278,7 @@ int lvcreate(int argc, char **argv)
 	ret = 0;
 
  finish:
-	unlock_lvm('V', vg_name, 0, 0);
+	unlock_vg(vg);
 
 /******** FIXME backup
 	if ((ret = do_autobackup(vg_name, vg)))
