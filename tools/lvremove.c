@@ -34,6 +34,9 @@ int lvremove(int argc, char **argv)
 
 static int lvremove_single(struct volume_group *vg, struct logical_volume *lv)
 {
+        int ret = 0;
+	int count;
+
 	if (!(vg->status & ACTIVE)) {
 		log_error("Volume group %s must be active before removing a "
 			  "logical volume", vg->name);
@@ -64,10 +67,28 @@ static int lvremove_single(struct volume_group *vg, struct logical_volume *lv)
 		}
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_vg(vg, 0) != 0) {
+	        log_error("error locking volume group");
+	        return ECMD_FAILED;
+	}
+
+	ret = ECMD_FAILED;
+
+	/* Check open count (maybe across the cluster) */
+	if (get_lv_open_count(lv, &count) != 0) {
+	        log_error("error getting open count");
+	        goto finish;
+	}
+	if (count > 0) {
+	        log_print("logical volume %s is open, not removed", lv->name);
+	        goto finish;
+	}
+
 	log_verbose("Releasing logical volume %s", lv->name);
 	if (!lv_remove(vg, lv)) {
 		log_error("Error releasing logical volume %s", lv->name);
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 /********* FIXME
@@ -78,13 +99,17 @@ static int lvremove_single(struct volume_group *vg, struct logical_volume *lv)
 
 	/* store it on disks */
 	if (fid->ops->vg_write(fid, vg))
-		return ECMD_FAILED;
+	        goto finish;
 
 /******** FIXME
 	if ((ret = do_autobackup(vg->name, vg)))
-		return ret;
+		goto finish;
 **********/
 
 	log_print("logical volume %s successfully removed", lv->name);
-	return 0;
+	ret = 0;
+
+ finish:
+	unlock_vg(vg);
+	return ret;
 }

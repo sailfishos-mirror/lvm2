@@ -44,6 +44,7 @@
 #include "format1.h"
 #include "toollib.h"
 #include "activate.h"
+#include "cmgr.h"
 
 #define CMD_LEN 256
 #define MAX_ARGS 64

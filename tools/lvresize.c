@@ -281,10 +281,11 @@ int lvresize(int argc, char **argv)
 
 /********* FIXME Backup
         if ((ret = do_autobackup(vg_name, vg)))
-                return ret;
+                goto finish;
 ************/
 
 	log_print("Logical volume %s successfully resized", lv_name);
+	ret = 0;
 
  finish:
 	unlock_vg(vg);

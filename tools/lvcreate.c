@@ -130,7 +130,7 @@ int lvcreate(int argc, char **argv)
 
 	/* Prevent other commands from interleaving */
 	if (lock_vg(vg, 0) != 0) {
-	    log_error("error locking LVM");
+	    log_error("error locking volume group");
 	    return ECMD_FAILED;
 	}
 
