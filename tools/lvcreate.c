@@ -249,13 +249,18 @@ int lvcreate(int argc, char **argv)
 	if (!lv_activate(lv))
 	        goto finish;
 
+	ret = 0;
+ finish:
+	/* TODO: Actually - this will do the activate as well */
+	unlock_vg(vg, ret);
+
 	if (zero) {
 		struct device *dev;
 		char *name;
 
 		if (!(name = dbg_malloc(NAME_LEN))) {
 			log_error("Name allocation failed - device not zeroed");
-			goto finish;
+			return ECMD_FAILED;
 		}
 
 		snprintf(name, NAME_LEN, "%s%s/%s", fid->cmd->dev_dir,
@@ -265,20 +270,15 @@ int lvcreate(int argc, char **argv)
 
 		if (!(dev = dev_cache_get(name, NULL))) {
 			log_error("%s not found: device not zeroed", name);
-			goto finish;
+			return ECMD_FAILED;
 		}
 		if (!(dev_open(dev, O_WRONLY)))
-		        goto finish;
+		        return ECMD_FAILED;
 		dev_zero(dev, 0, 4096);
 		dev_close(dev);
 
 	} else
 		log_print("WARNING: %s not zeroed", lv->name);
-
-	ret = 0;
-
- finish:
-	unlock_vg(vg);
 
 /******** FIXME backup
 	if ((ret = do_autobackup(vg_name, vg)))

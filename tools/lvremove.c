@@ -110,6 +110,6 @@ static int lvremove_single(struct volume_group *vg, struct logical_volume *lv)
 	ret = 0;
 
  finish:
-	unlock_vg(vg);
+	unlock_vg(vg, ret);
 	return ret;
 }

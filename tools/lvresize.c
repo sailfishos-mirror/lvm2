@@ -288,6 +288,6 @@ int lvresize(int argc, char **argv)
 	ret = 0;
 
  finish:
-	unlock_vg(vg);
+	unlock_vg(vg, ret);
 	return ret;
 }

@@ -26,6 +26,7 @@ int lvrename(int argc, char **argv)
 	char *lv_name_old, *lv_name_new;
 	char *vg_name, *vg_name_new;
 	char *st;
+	int ret = ECMD_FAILED;
 
 	struct volume_group *vg;
 	struct logical_volume *lv;
@@ -89,35 +90,41 @@ int lvrename(int argc, char **argv)
 		return ECMD_FAILED;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_vg(vg, 0) != 0) {
+	        log_error("error locking volume group");
+	        return ECMD_FAILED;
+	}
+
 	if (!(vg->status & ACTIVE)) {
 		log_error("Volume group %s must be active before changing a "
 			  "logical volume", vg_name);
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	if ((lvh = find_lv_in_vg(vg, lv_name_new))) {
 		log_error("Logical volume %s already exists in "
 			  "volume group %s", lv_name_new, vg_name);
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	if (!(lvh = find_lv_in_vg(vg, lv_name_old))) {
 		log_error("Existing logical volume %s not found in "
 			  "volume group %s", lv_name_old, vg_name);
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	lv = &list_item(lvh, struct lv_list)->lv;
 
 	if (!(lv->name = pool_strdup(fid->cmd->mem, lv_name_new))) {
 		log_error("Failed to allocate space for new name");
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	/* store it on disks */
 	log_verbose("Writing out updated volume group");
 	if (!(fid->ops->vg_write(fid, vg))) {
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	/* FIXME Update symlink.  lv_reactivate? */
@@ -126,6 +133,8 @@ int lvrename(int argc, char **argv)
 
 	log_print("Renamed %s to %s in volume group %s%s",
 		  lv_name_old, lv_name_new, fid->cmd->dev_dir, vg_name);
-
-	return 0;
+	ret = 0;
+ finish:
+	unlock_vg(vg, ret);
+	return ret;
 }
