@@ -490,9 +490,11 @@ int unlock_for_cluster(char scope, char *name, int suspend)
 }
 
 
+/* Keep track of the current request state */
 static int clustered = 0;
 static int suspended = 0;
 
+/* Lock the whole system */
 int lock_lvm(int suspend)
 {
     int status;
@@ -507,7 +509,7 @@ int lock_lvm(int suspend)
 	{
 	    clustered = 0;
 	    /* TODO: Local Lock
-	       suspend*/
+	       suspend everything */
 	    return 0;
 	}
 	clustered = 1;
@@ -533,13 +535,13 @@ int unlock_lvm()
 }
 
 
-
+/* Lock a whole VOlume group and all its LVs */
 int lock_vg(struct volume_group *vg, int suspend)
 {
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('V', vg->name, suspend);
+    status = lock_for_cluster('V', vg->id.uuid, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -548,7 +550,7 @@ int lock_vg(struct volume_group *vg, int suspend)
 	{
 	    clustered = 0;
 	    /* TODO: Local Lock */
-	    suspend_lvs_in_vg(vg, 1);
+	    if (suspend) suspend_lvs_in_vg(vg, 1);
 	    return 0;
 	}
 	clustered = 1;
@@ -569,17 +571,17 @@ int unlock_vg(struct volume_group *vg)
     }
     else
     {
-	return unlock_for_cluster('V', vg->name, suspended);
+	return unlock_for_cluster('V', vg->id.uuid, suspended);
     }
 }
 
-
+/* Just lock a Logical volume */
 int lock_lv(struct logical_volume *lv, int suspend)
 {
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('L', lv->name, suspend);
+    status = lock_for_cluster('L', lv->id.uuid, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -588,7 +590,7 @@ int lock_lv(struct logical_volume *lv, int suspend)
 	{
 	    /* TODO: Local lock */
 	    clustered = 0;
-	    lv_suspend(lv, 1);
+	    if (suspend) lv_suspend(lv, 1);
 	    return 0;
 	}
 	clustered = 1;
@@ -609,6 +611,6 @@ int unlock_lv(struct logical_volume *lv)
     }
     else
     {
-	return unlock_for_cluster('L', lv->name, suspended);
+	return unlock_for_cluster('L', lv->id.uuid, suspended);
     }
 }
