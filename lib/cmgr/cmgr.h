@@ -41,3 +41,12 @@ extern int unlock_vg(struct volume_group *vg);
    using these */
 extern int get_lv_open_count(struct logical_volume *lv, int *open_count);
 extern int get_vg_active_count(struct volume_group *vg, int *active_count);
+
+/* Lock modes: these are taken from the IBM DLM,
+   but we only support EX! */
+#define   LKM_NLMODE      0               /* null lock */
+#define   LKM_CRMODE      1               /* concurrent read */
+#define   LKM_CWMODE      2               /* concurrent write */
+#define   LKM_PRMODE      3               /* protected read */
+#define   LKM_PWMODE      4               /* protected write */
+#define   LKM_EXMODE      5               /* exclusive */

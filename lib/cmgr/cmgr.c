@@ -39,8 +39,9 @@
 /* This gets stuck at the start of memory we allocate so we
    can sanity-check it at deallocation time */
 #define LVM_SIGNATURE 0x434C564D
-
 #define MAX_CLUSTER_MEMBER_NAME_LEN 255
+#define LVM_GLOBAL_LOCK "LVM_GLOBAL"
+#define LOCKFILE_DIR "/var/lock/lvm"
 
 /* NOTE: the LVMD uses the socket FD as the client ID, this means
    that any client that calls fork() will inherit the context of
@@ -313,9 +314,135 @@ int cluster_free_request(lvm_response_t *response)
 }
 
 
+
+static pid_t locked_by(char *lockfile_name)
+{
+    /* Check lock is not stale - the file should contain
+       the owners PID */
+    FILE *f = fopen(lockfile_name, "r");
+    pid_t pid = 0;
+
+    if (f)
+    {
+	char proc_pid[PATH_MAX];
+	struct stat st;
+
+	/* Normal practice to to kill -0 the process at this point
+	   but we may not have the privilege */
+	fscanf(f, "%d\n", &pid);
+	fclose(f);
+
+	snprintf(proc_pid, sizeof(proc_pid), "/proc/%d", pid);
+	if (stat(proc_pid, &st) == 0)
+	{
+	    /* Process exists - lock is valid. */
+	    return pid;
+	}
+	/* Remove stale lock file */
+	unlink(lockfile_name);
+    }
+
+    /* Not locked */
+    return -1;
+}
+
+
+/* LOCK resource using a file */
+static int lock_resource(char *resource, int mode, int flags, int *lockid)
+{
+    struct stat;
+    int fd;
+    char lockfile_name[PATH_MAX];
+    mode_t old_umask;
+    FILE *pidfile;
+    int ret = -1;
+    int ret_errno;
+
+    if (mode != LKM_EXMODE)
+    {
+	ret_errno = EINVAL;
+	goto lock_finish;
+    }
+
+    old_umask = umask(000);
+
+    ret_errno = -EPERM;
+    if (mkdir(LOCKFILE_DIR, 0777) != 0)
+	if (errno != EEXIST)
+	    goto lock_finish;
+
+    /* Make the lockfile name */
+    snprintf(lockfile_name, sizeof(lockfile_name), LOCKFILE_DIR "/%s", resource);
+
+    /* Keep trying to lock untill we succeed
+       unless LKM_NONBLOCK was requested */
+    do
+    {
+	fd = open(lockfile_name, O_CREAT|O_EXCL|O_WRONLY, 0666);
+	if (fd == -1)
+	{
+	    pid_t owner_pid;
+
+	    /* Is the permission on the directory correct ? */
+	    if (errno == EPERM)
+		goto lock_finish;
+
+	    owner_pid = locked_by(lockfile_name);
+	    /* If it's locked and the caller doesn't want to block then return */
+	    if (owner_pid > 0 && (flags & O_NONBLOCK))
+	    {
+		ret_errno = EAGAIN;
+		goto lock_finish;
+	    }
+
+	    /* If it's locked, then wait and try again in a second,
+	       Ugh, need directrory notification */
+	    if (owner_pid > 0)
+	    {
+		sleep(1);
+	    }
+	}
+    }
+    while (fd < 0);
+
+    /* OK - lock it */
+    pidfile = fdopen(fd, "w");
+    if (pidfile)
+    {
+	fprintf(pidfile, "%d\n", getpid());
+	fclose(pidfile);
+	ret = 0;
+    }
+
+lock_finish:
+    umask(old_umask);
+    errno = ret_errno;
+    return ret;
+}
+
+
+static int unlock_resource(char *resource, int lockid)
+{
+    char lockfile_name[PATH_MAX];
+    pid_t owner_pid;
+
+    snprintf(lockfile_name, sizeof(lockfile_name), LOCKFILE_DIR "/%s", resource);
+
+    owner_pid = locked_by(lockfile_name);
+
+    /* Is it locked by us ? */
+    if (owner_pid != getpid())
+    {
+	errno = EINVAL;
+	return -1;
+    }
+    unlink(lockfile_name);
+    return 0;
+}
+
+
 /* These are a "higher-level" API providing black-box lock/unlock
    functions for cluster LVM...maybe */
-
 
 /* Set by lock(), used by unlock() */
 static int num_responses;
@@ -493,6 +620,7 @@ int unlock_for_cluster(char scope, char *name, int namelen, int suspend)
 /* Keep track of the current request state */
 static int clustered = 0;
 static int suspended = 0;
+static int lockid;
 
 /* Lock the whole system */
 int lock_lvm(int suspend)
@@ -508,8 +636,11 @@ int lock_lvm(int suspend)
 	if (errno == ENOENT)
 	{
 	    clustered = 0;
-	    /* TODO: Local Lock
-	       suspend everything */
+	    status = lock_resource(LVM_GLOBAL_LOCK, LKM_EXMODE, 0, &lockid);
+	    if (!status)
+		return status;
+
+	    /* TODO: suspend? */
 	    return 0;
 	}
 	clustered = 1;
@@ -524,9 +655,8 @@ int unlock_lvm()
 {
     if (!clustered)
     {
-	/* TODO: Local unlock
-	   resume all */
-	return 0;
+	/* TODO: resume? */
+	return unlock_resource(LVM_GLOBAL_LOCK, lockid);
     }
     else
     {
@@ -549,7 +679,12 @@ int lock_vg(struct volume_group *vg, int suspend)
 	if (errno == ENOENT)
 	{
 	    clustered = 0;
-	    /* TODO: Local Lock */
+
+	    /* Get LVM lock */
+	    status = lock_resource(LVM_GLOBAL_LOCK, LKM_EXMODE, 0, &lockid);
+	    if (!status)
+		return status;
+
 	    if (suspend) suspend_lvs_in_vg(vg, 1);
 	    return 0;
 	}
@@ -566,8 +701,7 @@ int unlock_vg(struct volume_group *vg)
     if (!clustered)
     {
 	activate_lvs_in_vg(vg);
-	/* TODO Local Unlock */
-	return 0;
+	return unlock_resource(LVM_GLOBAL_LOCK, lockid);
     }
     else
     {
@@ -588,8 +722,13 @@ int lock_lv(struct logical_volume *lv, int suspend)
 	/* TODO: May need some way of forcing this to fail in the future */
 	if (errno == ENOENT)
 	{
-	    /* TODO: Local lock */
 	    clustered = 0;
+
+	    /* Get LVM lock */
+	    status = lock_resource(LVM_GLOBAL_LOCK, LKM_EXMODE, 0, &lockid);
+	    if (!status)
+		return status;
+
 	    if (suspend) lv_suspend(lv, 1);
 	    return 0;
 	}
@@ -606,8 +745,7 @@ int unlock_lv(struct logical_volume *lv)
     if (!clustered)
     {
 	lv_reactivate(lv);
-	/* TODO Local Unlock */
-	return 0;
+	return unlock_resource(LVM_GLOBAL_LOCK, lockid);
     }
     else
     {
