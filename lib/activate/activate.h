@@ -7,10 +7,13 @@
 #ifndef LVM_ACTIVATE_H
 #define LVM_ACTIVATE_H
 
+#include <libdevmapper.h>
+
 /* FIXME Snapshot handling? */
 
 int lv_active(struct logical_volume *lv);
 int lv_open_count(struct logical_volume *lv);
+int lv_info(struct logical_volume *lv, struct dm_info *info);
 
 int lv_activate(struct logical_volume *lv);
 int lv_reactivate(struct logical_volume *lv);
@@ -39,12 +42,5 @@ int activate_lvs_in_vg(struct volume_group *vg);
  * Deactivate all LVs in the VG
  */
 int deactivate_lvs_in_vg(struct volume_group *vg);
-
-/*
- *
- * Suspend/resume 
- */
-int lv_suspend(struct logical_volume *lv, int sus);
-int suspend_lvs_in_vg(struct volume_group *vg, int sus);
 
 #endif

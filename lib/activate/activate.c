@@ -10,8 +10,6 @@
 #include "log.h"
 #include "fs.h"
 
-#include <devmapper/libdevmapper.h>
-
 static void _build_lv_name(char *buffer, size_t s, struct logical_volume *lv)
 {
 	snprintf(buffer, s, "%s_%s", lv->vg->name, lv->name);
@@ -33,8 +31,9 @@ static struct dm_task *_setup_task(struct logical_volume *lv, int task)
 	return dmt;
 }
 
-static struct dm_task *_info(struct logical_volume *lv)
+int lv_info(struct logical_volume *lv, struct dm_info *info)
 {
+	int r = 0;
 	struct dm_task *dmt;
 
 	if (!(dmt = _setup_task(lv, DM_DEVICE_INFO))) {
@@ -44,54 +43,44 @@ static struct dm_task *_info(struct logical_volume *lv)
 
 	if (!dm_task_run(dmt)) {
 		stack;
-		goto bad;
+		goto out;
 	}
 
-	return dmt;
+	if (!dm_task_get_info(dmt, info)) {
+		stack;
+		goto out;
+	}
+	r = 1;
 
- bad:
+ out:
 	dm_task_destroy(dmt);
-	return NULL;
+	return r;
 }
 
 int lv_active(struct logical_volume *lv)
 {
 	int r = -1;
-	struct dm_task *dmt;
+	struct dm_info info;
 
-	if (!(dmt = _info(lv))) {
+	if (!lv_info(lv, &info)) {
 		stack;
 		return r;
 	}
 
-	if (!dm_task_exists(dmt, &r)) {
-		stack;
-		goto out;
-	}
-
- out:
-	dm_task_destroy(dmt);
-	return r;
+	return info.exists;
 }
 
 int lv_open_count(struct logical_volume *lv)
 {
 	int r = -1;
-	struct dm_task *dmt;
+	struct dm_info info;
 
-	if (!(dmt = _info(lv))) {
+	if (!lv_info(lv, &info)) {
 		stack;
 		return r;
 	}
 
-	if (!dm_task_open_count(dmt, &r)) {
-		stack;
-		goto out;
-	}
-
- out:
-	dm_task_destroy(dmt);
-	return r;
+	return info.open_count;
 }
 
 /*
@@ -113,8 +102,12 @@ static int _emit_target(struct dm_task *dmt, struct logical_volume *lv,
 		if (!first)
 			first = pes;
 
-		else if (first->pv != pes->pv || first->pe != pes->pe + 1)
-				break; /* no longer contig. */
+		/*
+		 * check that we're still contiguous.
+		 */
+		else if ((pes->pv != first->pv) ||
+			 (pes->pe != first->pe + count))
+				break;
 
 		count++;
 	}
@@ -157,6 +150,8 @@ int _load(struct logical_volume *lv, int task)
 
 	if (!(r = dm_task_run(dmt)))
 		stack;
+
+	log_verbose("Logical volume %s activated", lv->name);
 
  out:
 	dm_task_destroy(dmt);
