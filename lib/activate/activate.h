@@ -18,6 +18,7 @@ int lv_info(struct logical_volume *lv, struct dm_info *info);
 int lv_activate(struct logical_volume *lv);
 int lv_reactivate(struct logical_volume *lv);
 int lv_deactivate(struct logical_volume *lv);
+int lv_suspend(struct logical_volume *lv, int sus);
 
 /*
  * Return number of LVs in the VG that are
@@ -42,5 +43,11 @@ int activate_lvs_in_vg(struct volume_group *vg);
  * Deactivate all LVs in the VG
  */
 int deactivate_lvs_in_vg(struct volume_group *vg);
+
+/*
+ *
+ * Suspend/resume
+ */
+int suspend_lvs_in_vg(struct volume_group *vg, int sus);
 
 #endif
