@@ -390,7 +390,7 @@ static void add_getopt_arg(int arg, char **ptr, struct option **o)
 		(*o)->name = a->long_arg + 2;
 		(*o)->has_arg = a->fn ? 1 : 0;
 		(*o)->flag = NULL;
-		(*o)->val = a->short_arg ? a->short_arg : (int) a;
+		(*o)->val = a->short_arg;
 		(*o)++;
 	}
 }
@@ -460,7 +460,7 @@ static struct arg *find_arg(struct command *com, int opt)
 	for (i = 0; i < com->num_args; i++) {
 		a = the_args + com->valid_args[i];
 
-		if ((opt == a->short_arg) || (opt == (int) a))
+		if (opt == a->short_arg)
 			return a;
 	}
 
@@ -721,6 +721,7 @@ static int init(void)
 
 	/* FIXME: Override from config file. (Append trailing slash if reqd) */
 	cmd->dev_dir = "/dev/";
+	dm_set_dev_dir(cmd->dev_dir);
 
 	if (!(cmd->cf = create_config_file())) {
 		stack;
@@ -743,6 +744,8 @@ static int init(void)
 
 		__init_log(cmd->cf);
 	}
+
+	dm_log_init(print_log);
 
 	if (!dev_cache_setup(cmd->cf)) {
 		goto out;
