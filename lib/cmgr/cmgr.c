@@ -766,7 +766,10 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
 
     /* Local check only */
     if (!clustered)
-	return lv_open_count(lv);
+    {
+	*open_count = lv_open_count(lv);
+	return 0;
+    }
 
     /* Do cluster check */
     status = cluster_request(CLVMD_CMD_LVCHECK, "",
