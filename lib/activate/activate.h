@@ -40,4 +40,11 @@ int activate_lvs_in_vg(struct volume_group *vg);
  */
 int deactivate_lvs_in_vg(struct volume_group *vg);
 
+/*
+ *
+ * Suspend/resume 
+ */
+int lv_suspend(struct logical_volume *lv, int sus);
+int suspend_lvs_in_vg(struct volume_group *vg, int sus);
+
 #endif

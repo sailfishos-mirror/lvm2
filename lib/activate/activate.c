@@ -226,6 +226,27 @@ int lv_deactivate(struct logical_volume *lv)
 	return r;
 }
 
+int lv_suspend(struct logical_volume *lv, int sus)
+{
+    return _suspend(lv, sus);
+}
+
+int suspend_lvs_in_vg(struct volume_group *vg, int sus)
+{
+	struct list *lvh;
+	struct logical_volume *lv;
+	int count = 0;
+
+	list_iterate(lvh, &vg->lvs) {
+		lv = &(list_item(lvh, struct lv_list)->lv);
+
+		count += (_suspend(lv, sus));
+	}
+
+	return count;
+}
+
+
 int activate_lvs_in_vg(struct volume_group *vg)
 {
 	struct list *lvh;
