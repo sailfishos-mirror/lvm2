@@ -29,13 +29,13 @@ extern int unlock_for_cluster(char scope, char *name, int namelen, int suspend);
 /* The "even higher-level" API that also copes with
    non-clustered environment. */
 extern int lock_lvm(int suspend);
-extern int unlock_lvm(void);
+extern int unlock_lvm(int cmd_status);
 
 extern int lock_lv(struct logical_volume *lv, int suspend);
-extern int unlock_lv(struct logical_volume *lv);
+extern int unlock_lv(struct logical_volume *lv, int cmd_status);
 
 extern int lock_vg(struct volume_group *vg, int suspend);
-extern int unlock_vg(struct volume_group *vg);
+extern int unlock_vg(struct volume_group *vg, int cmd_status);
 
 /* The system must be locked by one of the above calls before
    using these */

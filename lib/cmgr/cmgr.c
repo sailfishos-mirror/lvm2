@@ -651,7 +651,7 @@ int lock_lvm(int suspend)
 }
 
 
-int unlock_lvm()
+int unlock_lvm(int cmd_status)
 {
     if (!clustered)
     {
@@ -660,12 +660,13 @@ int unlock_lvm()
     }
     else
     {
-	return unlock_for_cluster('G', NULL, 0, suspended);
+	char cmd = (cmd_status==0)?'G':'g';
+	return unlock_for_cluster(cmd, NULL, 0, suspended);
     }
 }
 
 
-/* Lock a whole VOlume group and all its LVs */
+/* Lock a whole Volume group and all its LVs */
 int lock_vg(struct volume_group *vg, int suspend)
 {
     int status;
@@ -696,7 +697,7 @@ int lock_vg(struct volume_group *vg, int suspend)
 }
 
 
-int unlock_vg(struct volume_group *vg)
+int unlock_vg(struct volume_group *vg, int cmd_status)
 {
     if (!clustered)
     {
@@ -705,7 +706,8 @@ int unlock_vg(struct volume_group *vg)
     }
     else
     {
-	return unlock_for_cluster('V', vg->name, strlen(vg->name)+1, suspended);
+	char cmd = (cmd_status==0)?'V':'v';
+	return unlock_for_cluster(cmd, vg->name, strlen(vg->name)+1, suspended);
     }
 }
 
@@ -743,7 +745,7 @@ int lock_lv(struct logical_volume *lv, int suspend)
 }
 
 
-int unlock_lv(struct logical_volume *lv)
+int unlock_lv(struct logical_volume *lv, int cmd_status)
 {
     char full_lv_name[strlen(lv->name)+strlen(lv->vg->name)+2];
 
@@ -756,7 +758,8 @@ int unlock_lv(struct logical_volume *lv)
     }
     else
     {
-	return unlock_for_cluster('L', full_lv_name, strlen(full_lv_name)+1, suspended);
+	char cmd = (cmd_status==0)?'L':'l';
+	return unlock_for_cluster(cmd, full_lv_name, strlen(full_lv_name)+1, suspended);
     }
 }
 
