@@ -521,9 +521,9 @@ int unlock_for_cluster(char scope, char *name, int namelen, int suspend)
     if (num_responses == 0)
 	return 0;
 
-
     /* Validate scope */
-    if (scope != 'V' && scope != 'L' && scope != 'G')
+    if (scope != 'V' && scope != 'L' && scope != 'G' &&
+	scope != 'v' && scope != 'l' && scope != 'g')
     {
 	errno = EINVAL;
 	return -1;
@@ -786,7 +786,6 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
 	return 0;
     }
 
-
     if (status)
     {
 	int saved_errno = errno;
@@ -807,8 +806,8 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
 	    if (lv_response[i].response[0] != '\0')
 	    {
 		count++;
-		log_very_verbose("LV %s is open on node %s\n",
-				  lv->name, lv_response[i].node);
+		log_verbose("Logical volume %s is open on node %s\n",
+			    lv->name, lv_response[i].node);
 	    }
 	}
     }
@@ -819,8 +818,8 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
     return 0;
 }
 
-/* Get the number of nodes the VG is active on.
-   Needs to be locked first (we check the clustered flag)
+/*
+  Get the number of nodes the VG is active on.
 */
 int get_vg_active_count(struct volume_group *vg, int *active_count)
 {
@@ -830,15 +829,18 @@ int get_vg_active_count(struct volume_group *vg, int *active_count)
     int count = 0;
     int i;
 
-    /* Local check only
-     TODO: Local VG routines */
-//    if (!clustered)
-//	return vg_active(vg);
-
     /* Do cluster check */
     status = cluster_request(CLVMD_CMD_VGCHECK, "",
 			     vg->name, strlen(vg->name)+1,
 			     &vg_response, &num_vg_responses);
+
+    /* Are we sngle-node only ?*/
+    if (status == -1 && errno == ENOENT)
+    {
+	*active_count = 1; //vg_active(vg);
+	return 0;
+    }
+
     if (status)
     {
 	int saved_errno = errno;
@@ -859,8 +861,8 @@ int get_vg_active_count(struct volume_group *vg, int *active_count)
 	    if (vg_response[i].response[0] != '\0')
 	    {
 		count++;
-		log_very_verbose("VG %s is active on node %s\n",
-				  vg->name, vg_response[i].node);
+		log_verbose("Volume group %s is active on node %s\n",
+			    vg->name, vg_response[i].node);
 	    }
 	}
     }
