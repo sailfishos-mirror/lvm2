@@ -713,9 +713,12 @@ int unlock_vg(struct volume_group *vg)
 int lock_lv(struct logical_volume *lv, int suspend)
 {
     int status;
+    char full_lv_name[strlen(lv->name)+strlen(lv->vg->name)+2];
+
+    sprintf(full_lv_name, "%s/%s", lv->vg->name, lv->name);
 
     suspended = suspend;
-    status = lock_for_cluster('L', lv->name, strlen(lv->name)+1, suspend);
+    status = lock_for_cluster('L', full_lv_name,  strlen(full_lv_name)+1, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -742,6 +745,10 @@ int lock_lv(struct logical_volume *lv, int suspend)
 
 int unlock_lv(struct logical_volume *lv)
 {
+    char full_lv_name[strlen(lv->name)+strlen(lv->vg->name)+2];
+
+    sprintf(full_lv_name, "%s/%s", lv->vg->name, lv->name);
+
     if (!clustered)
     {
 	lv_reactivate(lv);
@@ -749,13 +756,13 @@ int unlock_lv(struct logical_volume *lv)
     }
     else
     {
-	return unlock_for_cluster('L', lv->name, strlen(lv->name)+1, suspended);
+	return unlock_for_cluster('L', full_lv_name, strlen(full_lv_name)+1, suspended);
     }
 }
 
-/* Maybe should replace lv_open_count()
-   Needs to be locked first (we check the clustered flag)
-*/
+/*
+  Maybe should replace lv_open_count() (Which we use!)
+ */
 int get_lv_open_count(struct logical_volume *lv, int *open_count)
 {
     int status;
@@ -764,17 +771,19 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
     int count = 0;
     int i;
 
-    /* Local check only */
-    if (!clustered)
-    {
-	*open_count = lv_open_count(lv);
-	return 0;
-    }
 
     /* Do cluster check */
     status = cluster_request(CLVMD_CMD_LVCHECK, "",
 			     lv->name, strlen(lv->name)+1,
 			     &lv_response, &num_lv_responses);
+    /* Are we sngle-node only ?*/
+    if (status == -1 && errno == ENOENT)
+    {
+	*open_count = lv_open_count(lv);
+	return 0;
+    }
+
+
     if (status)
     {
 	int saved_errno = errno;
