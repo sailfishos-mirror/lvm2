@@ -33,6 +33,7 @@ int lvresize(int argc, char **argv)
 	const char *cmd_name;
 	struct list *lvh, *pvh, *pvl;
 	int opt = 0;
+	int ret = 0;
 
 	enum {
 		LV_ANY = 0,
@@ -192,6 +193,13 @@ int lvresize(int argc, char **argv)
 			resize = LV_EXTEND;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_vg(vg, 0) != 0) {
+	    log_error("error locking volume group");
+	    return ECMD_FAILED;
+	}
+
+	ret = ECMD_FAILED;
 	if (resize == LV_REDUCE) {
 		if (argc)
 			log_print("Ignoring PVs on command line when reducing");
@@ -214,7 +222,7 @@ int lvresize(int argc, char **argv)
 					  " [y/n]: ", lv_name) == 'n') {
 				log_print("Logical volume %s NOT reduced",
 					  lv_name);
-				return ECMD_FAILED;
+				goto finish;
 			}
 		}
 
@@ -225,7 +233,7 @@ int lvresize(int argc, char **argv)
 		/* Build up list of PVs */
 		if (!(pvh = pool_alloc(fid->cmd->mem, sizeof(struct list)))) {
 			log_error("pvh list allocation failed");
-			return ECMD_FAILED;
+			goto finish;
 		}
 		list_init(pvh);
 		for (; opt < argc; opt++) {
@@ -233,7 +241,8 @@ int lvresize(int argc, char **argv)
 				log_error("Physical Volume %s not found in "
 					  "Volume Group %s", argv[opt],
 					  vg->name);
-				return EINVALID_CMD_LINE;
+				ret = EINVALID_CMD_LINE;
+				goto finish;
 			}
 			if (list_item(pvl, struct pv_list)->pv.pe_count ==
 			    list_item(pvl, struct pv_list)->pv.pe_allocated) {
@@ -262,20 +271,22 @@ int lvresize(int argc, char **argv)
 
 	/* store vg on disk(s) */
 	if (!fid->ops->vg_write(fid, vg))
-		return ECMD_FAILED;
+	        goto finish;
 
 	/* FIXME Ensure it always displays errors? */
 	if (!lv_reactivate(lv))
-		return ECMD_FAILED;
+	        goto finish;
 
 /********* FIXME Resume *********/
 
-/********* FIXME Backup 
+/********* FIXME Backup
         if ((ret = do_autobackup(vg_name, vg)))
                 return ret;
 ************/
 
 	log_print("Logical volume %s successfully resized", lv_name);
 
-	return 0;
+ finish:
+	unlock_vg(vg);
+	return ret;
 }
