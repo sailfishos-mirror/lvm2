@@ -321,7 +321,7 @@ int cluster_free_request(lvm_response_t *response)
 static int num_responses;
 static lvm_response_t *response;
 
-int lock_for_cluster(char scope, char *name, int suspend)
+int lock_for_cluster(char scope, char *name, int namelen, int suspend)
 {
     int  status;
     int  i;
@@ -337,11 +337,11 @@ int lock_for_cluster(char scope, char *name, int suspend)
     }
 
     /* Allow for NULL in name field */
-    if (name)
+    if (name && namelen)
     {
-	len = strlen(name)+2;
-	args = alloca(len);
-	strcpy(args+1, name);
+	len = namelen + 2;
+	args = alloca(namelen);
+	memcpy(args+1, name, namelen);
     }
     else
     {
@@ -379,7 +379,7 @@ int lock_for_cluster(char scope, char *name, int suspend)
     return status;
 }
 
-int unlock_for_cluster(char scope, char *name, int suspend)
+int unlock_for_cluster(char scope, char *name, int namelen, int suspend)
 {
     int status;
     int i;
@@ -403,11 +403,11 @@ int unlock_for_cluster(char scope, char *name, int suspend)
     }
 
     /* Allow for NULL in name field */
-    if (name)
+    if (name && namelen)
     {
-	len = strlen(name)+2;
-	args = alloca(len);
-	strcpy(args+1, name);
+	len = namelen + 2;
+	args = alloca(namelen);
+	memcpy(args+1, name, namelen);
     }
     else
     {
@@ -500,7 +500,7 @@ int lock_lvm(int suspend)
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('G', NULL, suspend);
+    status = lock_for_cluster('G', NULL, 0, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -530,7 +530,7 @@ int unlock_lvm()
     }
     else
     {
-	return unlock_for_cluster('G', NULL, suspended);
+	return unlock_for_cluster('G', NULL, 0, suspended);
     }
 }
 
@@ -541,7 +541,7 @@ int lock_vg(struct volume_group *vg, int suspend)
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('V', vg->id.uuid, suspend);
+    status = lock_for_cluster('V', vg->id.uuid, sizeof(vg->id.uuid), suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -571,7 +571,7 @@ int unlock_vg(struct volume_group *vg)
     }
     else
     {
-	return unlock_for_cluster('V', vg->id.uuid, suspended);
+	return unlock_for_cluster('V', vg->id.uuid, sizeof(vg->id.uuid), suspended);
     }
 }
 
@@ -581,7 +581,7 @@ int lock_lv(struct logical_volume *lv, int suspend)
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('L', lv->id.uuid, suspend);
+    status = lock_for_cluster('L', lv->id.uuid, sizeof(lv->id.uuid), suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -611,6 +611,109 @@ int unlock_lv(struct logical_volume *lv)
     }
     else
     {
-	return unlock_for_cluster('L', lv->id.uuid, suspended);
+	return unlock_for_cluster('L', lv->id.uuid, sizeof(lv->id.uuid), suspended);
     }
+}
+
+/* Maybe should replace lv_open_count()
+   Needs to be locked first (we check the clustered flag)
+*/
+int get_lv_open_count(struct logical_volume *lv, int *open_count)
+{
+    int status;
+    int num_lv_responses;
+    lvm_response_t *lv_response;
+    int count = 0;
+    int i;
+
+    /* Local check only */
+    if (!clustered)
+	return lv_open_count(lv);
+
+    /* Do cluster check */
+    status = cluster_request(CLVMD_CMD_LVCHECK, "",
+			     lv->id.uuid, sizeof(lv->id.uuid),
+			     &lv_response, &num_lv_responses);
+    if (status)
+    {
+	int saved_errno = errno;
+	cluster_free_request(lv_response);
+	errno = saved_errno;
+	return status;
+    }
+
+    for (i=0; i<num_lv_responses; i++)
+    {
+	if (lv_response[i].status != 0)
+	{
+	    log_verbose("lv_open_count on node %s failed: %s\n",
+			lv_response[i].node, strerror(lv_response[i].status));
+	}
+	else
+	{
+	    if (lv_response[i].response[0] != '\0')
+	    {
+		count++;
+		log_very_verbose("LV %s is open on node %s\n",
+				  lv->name, lv_response[i].node);
+	    }
+	}
+    }
+    cluster_free_request(lv_response);
+
+    *open_count = count;
+
+    return 0;
+}
+
+/* Get the number of nodes the VG is active on.
+   Needs to be locked first (we check the clustered flag)
+*/
+int get_vg_active_count(struct volume_group *vg, int *active_count)
+{
+    int status;
+    int num_vg_responses;
+    lvm_response_t *vg_response;
+    int count = 0;
+    int i;
+
+    /* Local check only
+     TODO: Local VG routines */
+//    if (!clustered)
+//	return vg_active(vg);
+
+    /* Do cluster check */
+    status = cluster_request(CLVMD_CMD_VGCHECK, "",
+			     vg->id.uuid, sizeof(vg->id.uuid),
+			     &vg_response, &num_vg_responses);
+    if (status)
+    {
+	int saved_errno = errno;
+	cluster_free_request(vg_response);
+	errno = saved_errno;
+	return status;
+    }
+
+    for (i=0; i<num_vg_responses; i++)
+    {
+	if (vg_response[i].status != 0)
+	{
+	    log_verbose("vg_active_count on node %s failed: %s\n",
+			vg_response[i].node, strerror(vg_response[i].status));
+	}
+	else
+	{
+	    if (vg_response[i].response[0] != '\0')
+	    {
+		count++;
+		log_very_verbose("VG %s is active on node %s\n",
+				  vg->name, vg_response[i].node);
+	    }
+	}
+    }
+    cluster_free_request(vg_response);
+
+    *active_count = count;
+
+    return 0;
 }

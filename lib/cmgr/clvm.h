@@ -38,3 +38,9 @@ struct clvm_header
 
 #define CLVMD_CMD_LOCK_SUSPEND      32
 #define CLVMD_CMD_UNLOCK_RESUME     33
+
+/* Info Commands */
+#define CLVMD_CMD_LVDISPLAY         40
+#define CLVMD_CMD_LVCHECK           41
+#define CLVMD_CMD_VGDISPLAY         42
+#define CLVMD_CMD_VGCHECK           43
