@@ -15,6 +15,7 @@ int lvcreate(int argc, char **argv)
 	int stripes = 1;
 	int stripesize = 0;
 
+	int ret;
 	int opt = 0;
 	uint32_t status = 0;
 	uint32_t size = 0;
@@ -127,19 +128,27 @@ int lvcreate(int argc, char **argv)
 		return ECMD_FAILED;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_lvm('V', vg_name, 0, 0) != 0) {
+	    log_error("error locking LVM");
+	    return ECMD_FAILED;
+	}
+
 	if (argc) {
+	        ret = ECMD_FAILED;
 		/* Build up list of PVs */
 		if (!(pvh = pool_alloc(fid->cmd->mem, sizeof(struct list)))) {
 			log_error("pvh list allocation failed");
-			return ECMD_FAILED;
+			goto finish;
 		}
 		list_init(pvh);
+		ret = EINVALID_CMD_LINE;
 		for (; opt < argc; opt++) {
 			if (!(pvl = find_pv_in_vg(vg, argv[opt]))) {
 				log_error("Physical Volume %s not found in "
 					  "Volume Group %s", argv[opt],
 					  vg->name);
-				return EINVALID_CMD_LINE;
+				goto finish;
 			}
 			if (list_item(pvl, struct pv_list)->pv.pe_count ==
 			    list_item(pvl, struct pv_list)->pv.pe_allocated) {
@@ -163,7 +172,8 @@ int lvcreate(int argc, char **argv)
 	if (argc && argc != stripes) {
 		log_error("Incorrect number of physical volumes on "
 			  "command line for %d-way striping", stripes);
-		return EINVALID_CMD_LINE;
+		ret = EINVALID_CMD_LINE;
+		goto finish;
 	}
 
 /******** FIXME Inside lv_create stripes
@@ -221,8 +231,9 @@ int lvcreate(int argc, char **argv)
 	}
 *************/
 
+	ret = ECMD_FAILED;
 	if (!(lv = lv_create(lv_name, status, stripes, stripesize, extents,
-			     vg, pvh))) return ECMD_FAILED;
+			     vg, pvh))) goto finish;
 
 	if (arg_count(readahead_ARG)) {
 		log_verbose("Setting read ahead sectors");
@@ -231,12 +242,12 @@ int lvcreate(int argc, char **argv)
 
 	/* store vg on disk(s) */
 	if (!fid->ops->vg_write(fid, vg))
-		return ECMD_FAILED;
+		goto finish;
 
 	log_print("Logical volume %s created", lv->name);
 
 	if (!lv_activate(lv))
-		return ECMD_FAILED;
+	        goto finish;
 
 	if (zero) {
 		struct device *dev;
@@ -244,7 +255,7 @@ int lvcreate(int argc, char **argv)
 
 		if (!(name = dbg_malloc(NAME_LEN))) {
 			log_error("Name allocation failed - device not zeroed");
-			return ECMD_FAILED;
+			goto finish;
 		}
 
 		snprintf(name, NAME_LEN, "%s%s/%s", fid->cmd->dev_dir,
@@ -254,20 +265,25 @@ int lvcreate(int argc, char **argv)
 
 		if (!(dev = dev_cache_get(name, NULL))) {
 			log_error("%s not found: device not zeroed", name);
-			return ECMD_FAILED;
+			goto finish;
 		}
 		if (!(dev_open(dev, O_WRONLY)))
-			return ECMD_FAILED;
+		        goto finish;
 		dev_zero(dev, 0, 4096);
 		dev_close(dev);
 
 	} else
 		log_print("WARNING: %s not zeroed", lv->name);
 
+	ret = 0;
+
+ finish:
+	unlock_lvm('V', vg_name, 0, 0);
+
 /******** FIXME backup
 	if ((ret = do_autobackup(vg_name, vg)))
 		return ret;
 ***********/
 
-	return 0;
+	return ret;
 }
