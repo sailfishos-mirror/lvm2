@@ -27,6 +27,8 @@ void vgchange_logicalvolume(struct volume_group *vg);
 
 int vgchange(int argc, char **argv)
 {
+        int ret;
+
 	if (!(arg_count(available_ARG) + arg_count(logicalvolume_ARG) +
 	      arg_count(allocation_ARG))) {
 		log_error("One of -a, -l or -x options required");
@@ -44,7 +46,17 @@ int vgchange(int argc, char **argv)
 		return EINVALID_CMD_LINE;
 	}
 
-	return process_each_vg(argc, argv, &vgchange_single);
+
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	        log_error("error locking lvm");
+		return ECMD_FAILED;
+	}
+
+	ret = process_each_vg(argc, argv, &vgchange_single);
+
+	unlock_lvm(ret);
+	return ret;
 }
 
 static int vgchange_single(const char *vg_name)
@@ -103,12 +115,12 @@ void vgchange_available(struct volume_group *vg)
 	if (available) {
 		vg->status |= ACTIVE;
 		list_iterate(pvh, &vg->pvs)
-			list_item(pvh, struct pv_list)->pv.status 
+			list_item(pvh, struct pv_list)->pv.status
 				  |= ACTIVE;
 	} else {
 		vg->status &= ~ACTIVE;
 		list_iterate(pvh, &vg->pvs)
-			list_item(pvh, struct pv_list)->pv.status 
+			list_item(pvh, struct pv_list)->pv.status
 				  &= ~ACTIVE;
 	}
 

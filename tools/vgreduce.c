@@ -26,6 +26,7 @@ int vgreduce(int argc, char **argv)
 {
 	struct volume_group *vg;
 	char *vg_name;
+	int ret = ECMD_FAILED;
 
 	if (!argc) {
 		log_error("Please give volume group name and "
@@ -64,13 +65,19 @@ int vgreduce(int argc, char **argv)
 		return ECMD_FAILED;
 	}
 
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	    log_error("error locking lvm");
+	    return ECMD_FAILED;
+	}
+
 	/* FIXME: Pass private structure through to all these functions */
 	/* and update in batch here? */
-	return process_each_pv(argc, argv, vg, vgreduce_single);
+	ret = process_each_pv(argc, argv, vg, vgreduce_single);
 
 /******* FIXME
 	log_error ("no empty physical volumes found in volume group \"%s\"", vg_name);
-		
+
 	log_verbose
 	    ("volume group \"%s\" will be reduced by %d physical volume%s",
 	     vg_name, np, np > 1 ? "s" : "");
@@ -81,7 +88,9 @@ int vgreduce(int argc, char **argv)
 	     vg_name, error > 0 ? "NOT " : "", p > 1 ? "s" : "");
 		log_print("%s", pv_this[p]->pv_name);
 ********/
+	unlock_lvm(ret);
 
+	return ret;
 }
 
 /* Or take pv_name instead? */

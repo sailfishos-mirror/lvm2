@@ -24,6 +24,7 @@ int vgrename(int argc, char **argv)
 {
 	char *dev_dir;
 	int length;
+	int ret = ECMD_FAILED;
 
 	char *vg_name_old, *vg_name_new;
 
@@ -90,7 +91,13 @@ int vgrename(int argc, char **argv)
 	/* Change the volume group name */
 	strcpy(vg_old->name, vg_name_new);
 
-	/* FIXME Should vg_write fix these implicitly? It has to check them. */
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	    log_error("error locking lvm");
+	    return ECMD_FAILED;
+	}
+
+        /* FIXME Should vg_write fix these implicitly? It has to check them. */
 	list_iterate(pvh, &vg_old->pvs) {
 		strcpy(list_item(pvh, struct pv_list)->pv.vg_name,
 		       vg_name_new);
@@ -109,13 +116,13 @@ int vgrename(int argc, char **argv)
 	if (rename(old_path, new_path)) {
 		log_error("Renaming %s to %s failed: %s",
 			  old_path, new_path, strerror(errno));
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 	/* store it on disks */
 	log_verbose("Writing out updated volume group");
 	if (!(fid->ops->vg_write(fid, vg_old))) {
-		return ECMD_FAILED;
+		goto finish;
 	}
 
 /*********** 
@@ -127,8 +134,10 @@ int vgrename(int argc, char **argv)
 		  vg_name_old, vg_name_new);
 
 	/* FIXME: Deallocations */
-
-	return 0;
+	ret = 0;
+ finish:
+	unlock_lvm(ret);
+	return ret;
 }
 
 /* FIXME: Moved into vg_write now */

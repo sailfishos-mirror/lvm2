@@ -24,7 +24,18 @@ static int vgremove_single(const char *vg_name);
 
 int vgremove(int argc, char **argv)
 {
-	return process_each_vg(argc, argv, &vgremove_single);
+    int ret;
+
+    /* Prevent other commands from interleaving */
+    if (lock_lvm(0) != 0) {
+	log_error("error locking lvm");
+	return ECMD_FAILED;
+    }
+
+    ret = process_each_vg(argc, argv, &vgremove_single);
+
+    unlock_lvm(ret);
+    return ret;
 }
 
 static int vgremove_single(const char *vg_name)
@@ -33,10 +44,22 @@ static int vgremove_single(const char *vg_name)
 	struct physical_volume *pv;
 	struct list *pvh;
 	int ret = 0;
+	int count;
 
 	log_verbose("Checking for volume group %s", vg_name);
 	if (!(vg = fid->ops->vg_read(fid, vg_name))) {
 		log_error("Volume group %s doesn't exist", vg_name);
+		return ECMD_FAILED;
+	}
+
+	/* Check cluster active count if appropriate */
+	if (get_vg_active_count(vg, &count)) {
+	        log_error("Error getting active count for volume group %s", vg_name);
+	        return ECMD_FAILED;
+	}
+
+	if (count > 0) {
+		log_error("Volume group %s is still active", vg_name);
 		return ECMD_FAILED;
 	}
 
@@ -66,7 +89,7 @@ static int vgremove_single(const char *vg_name)
 		*pv->vg_name = '\0';
 		if (!(fid->ops->pv_write(fid, pv))) {
 			log_error("Failed to remove physical volume %s from "
-				  "volume group %s", dev_name(pv->dev), 
+				  "volume group %s", dev_name(pv->dev),
 				  vg_name);
 			ret = ECMD_FAILED;
 		}

@@ -24,6 +24,7 @@ int vgextend(int argc, char **argv)
 {
 	char *vg_name;
 	struct volume_group *vg = NULL;
+	int ret = ECMD_FAILED;
 
 	if (!argc) {
 		log_error("Please enter volume group name and "
@@ -63,9 +64,15 @@ int vgextend(int argc, char **argv)
 	dummy = NULL;
 **********/
 
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	    log_error("error locking lvm");
+	    return ECMD_FAILED;
+	}
+
 	/* extend vg */
 	if (!vg_extend(fid, vg, argc, argv))
-		return ECMD_FAILED;
+		goto finish;
 
 	/* ret > 0 */
 	log_verbose("Volume group '%s' will be extended by %d new "
@@ -73,7 +80,7 @@ int vgextend(int argc, char **argv)
 
         /* store vg on disk(s) */
         if (!fid->ops->vg_write(fid, vg))
-                return ECMD_FAILED;
+                goto finish;
 
 /********* FIXME
 	if ((ret = do_autobackup(vg_name, vg)))
@@ -81,6 +88,9 @@ int vgextend(int argc, char **argv)
 *********/
 
 	log_print("Volume group '%s' successfully extended", vg_name);
+	ret = 0;
 
-	return 0;
+ finish:
+	unlock_lvm(ret);
+	return ret;
 }

@@ -32,6 +32,7 @@ int vgcreate(int argc, char **argv)
 	uint32_t extent_size;
 	char *vg_name;
 	struct volume_group *vg;
+	int ret = ECMD_FAILED;
 
 	if (!argc) {
 		log_error("Please provide volume group name and "
@@ -55,12 +56,12 @@ int vgcreate(int argc, char **argv)
 		log_error("maxlogicalvolumes too low");
 		return EINVALID_CMD_LINE;
 	}
-		
+
 	if (max_pv < 1) {
 		log_error("maxphysicalvolumes too low");
 		return EINVALID_CMD_LINE;
 	}
-		
+
         /* Strip dev_dir if present */
         if (!strncmp(vg_name, fid->cmd->dev_dir, strlen(fid->cmd->dev_dir)))
                 vg_name += strlen(fid->cmd->dev_dir);
@@ -71,22 +72,28 @@ int vgcreate(int argc, char **argv)
                 return ECMD_FAILED;
         }
 
-	/* create the new vg */
-	if (!(vg = vg_create(fid, vg_name, extent_size, max_pv, max_lv, 
-		       argc - 1, argv + 1)))
-		return ECMD_FAILED;
+	/* Prevent other commands from interleaving */
+	if (lock_lvm(0) != 0) {
+	    log_error("error locking lvm");
+	    return ECMD_FAILED;
+	}
 
-	if (max_lv != vg->max_lv) 
-		log_error("Warning: Setting maxlogicalvolumes to %d", 
+	/* create the new vg */
+	if (!(vg = vg_create(fid, vg_name, extent_size, max_pv, max_lv,
+		       argc - 1, argv + 1)))
+		goto finish;
+
+	if (max_lv != vg->max_lv)
+		log_error("Warning: Setting maxlogicalvolumes to %d",
 			  vg->max_lv);
 
-	if (max_pv != vg->max_pv) 
-		log_error("Warning: Setting maxphysicalvolumes to %d", 
+	if (max_pv != vg->max_pv)
+		log_error("Warning: Setting maxphysicalvolumes to %d",
 			  vg->max_pv);
 
 	/* store vg on disk(s) */
 	if (!fid->ops->vg_write(fid, vg))
-		return ECMD_FAILED;
+		goto finish;
 
 	/* FIXME Create /dev/vg */
 	/* FIXME Activate */
@@ -94,5 +101,8 @@ int vgcreate(int argc, char **argv)
 	log_print("Volume group %s successfully created and activated",
 		  vg_name);
 
-	return 0;
+	ret = 0;
+ finish:
+	unlock_lvm(ret);
+	return ret;
 }
