@@ -671,7 +671,7 @@ int lock_vg(struct volume_group *vg, int suspend)
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('V', vg->id.uuid, sizeof(vg->id.uuid), suspend);
+    status = lock_for_cluster('V', vg->name, strlen(vg->name)+1, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -705,7 +705,7 @@ int unlock_vg(struct volume_group *vg)
     }
     else
     {
-	return unlock_for_cluster('V', vg->id.uuid, sizeof(vg->id.uuid), suspended);
+	return unlock_for_cluster('V', vg->name, strlen(vg->name)+1, suspended);
     }
 }
 
@@ -715,7 +715,7 @@ int lock_lv(struct logical_volume *lv, int suspend)
     int status;
 
     suspended = suspend;
-    status = lock_for_cluster('L', lv->id.uuid, sizeof(lv->id.uuid), suspend);
+    status = lock_for_cluster('L', lv->name, strlen(lv->name)+1, suspend);
     if (status == -1)
     {
 	/* ENOENT means clvmd is not running - assume we are not clustered */
@@ -749,7 +749,7 @@ int unlock_lv(struct logical_volume *lv)
     }
     else
     {
-	return unlock_for_cluster('L', lv->id.uuid, sizeof(lv->id.uuid), suspended);
+	return unlock_for_cluster('L', lv->name, strlen(lv->name)+1, suspended);
     }
 }
 
@@ -770,7 +770,7 @@ int get_lv_open_count(struct logical_volume *lv, int *open_count)
 
     /* Do cluster check */
     status = cluster_request(CLVMD_CMD_LVCHECK, "",
-			     lv->id.uuid, sizeof(lv->id.uuid),
+			     lv->name, strlen(lv->name)+1,
 			     &lv_response, &num_lv_responses);
     if (status)
     {
@@ -822,7 +822,7 @@ int get_vg_active_count(struct volume_group *vg, int *active_count)
 
     /* Do cluster check */
     status = cluster_request(CLVMD_CMD_VGCHECK, "",
-			     vg->id.uuid, sizeof(vg->id.uuid),
+			     vg->name, strlen(vg->name)+1,
 			     &vg_response, &num_vg_responses);
     if (status)
     {
