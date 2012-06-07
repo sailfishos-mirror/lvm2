@@ -1,3 +1,14 @@
+NEWS
+----
+
+On 7th June 2012, we froze this copy of the source code and moved it to
+fedorahosted.org:
+
+  http://git.fedorahosted.org/git/LVM2.git
+  git clone git://git.fedorahosted.org/git/LVM2.git
+
+-------------------------------------------------------------------------------
+
 This tree contains the LVM2 and device-mapper tools and libraries.
 
 For more information about LVM2 read the changelog in the WHATS_NEW file.

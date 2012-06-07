@@ -1,3 +1,11 @@
+On 7th June 2012, we froze this copy of the source code and moved it to
+fedorahosted.org:
+
+  http://git.fedorahosted.org/git/LVM2.git
+  git clone git://git.fedorahosted.org/git/LVM2.git
+
+--------------------------------------------------------------------------------
+
 Version 2.02.96 - 
 ================================
   Fix error paths for regex filter initialization.
