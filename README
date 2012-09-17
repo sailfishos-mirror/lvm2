@@ -4,8 +4,8 @@ NEWS
 On 7th June 2012, we froze this copy of the source code and moved it to
 fedorahosted.org:
 
-  http://git.fedorahosted.org/git/LVM2.git
-  git clone git://git.fedorahosted.org/git/LVM2.git
+  http://git.fedorahosted.org/git/lvm2.git
+  git clone git://git.fedorahosted.org/git/lvm2.git
 
 -------------------------------------------------------------------------------
 
