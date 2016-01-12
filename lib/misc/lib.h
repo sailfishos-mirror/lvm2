@@ -25,7 +25,7 @@
 #endif
 
 /* HM FIXME: REMOVEME: devel output */
-#if 1
+#if 0
 #define PFL() printf("%s %u\n", __func__, __LINE__);
 #define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
 #else

@@ -26,16 +26,6 @@ struct device_id_list {
 	char pvid[ID_LEN + 1];
 };
 
-/* HM FIXME: REMOVEME: devel output */
-#define USE_PFL
-#ifdef USE_PFL
-#define PFL() printf("%s %u\n", __func__, __LINE__);
-#define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
-#else
-#define PFL()
-#define PFLA(format, arg...)
-#endif
-
 const char *command_name(struct cmd_context *cmd)
 {
 	return cmd->command->name;
