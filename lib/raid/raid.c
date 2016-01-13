@@ -141,6 +141,7 @@ static int _raid_text_import(struct lv_segment *seg,
 				}
 			} 
 
+		/* FIXME: only necessary for givne matadata w/o new data_copies */
 		} else if (!strcmp(aip->name, "data_copies"))
 			seg->data_copies = seg_is_raid1(seg) ? seg->area_count : 1;
 	}
@@ -160,7 +161,6 @@ static int _raid_text_import(struct lv_segment *seg,
 	seg->status |= RAID;
 	seg->area_len = raid_rimage_extents(seg->segtype, seg->len, seg->area_count - seg->segtype->parity_devs,
 					    seg->segtype->parity_devs ? 1 : seg->data_copies);
-
 	return 1;
 }
 
@@ -174,7 +174,7 @@ static int _raid_text_export(const struct lv_segment *seg, struct formatter *f)
 
 	else {
 		outf(f, "device_count = %u", seg->area_count);
-		if (seg->data_copies > 1)
+		if (seg->data_copies > 0)
 			outf(f, "data_copies = %" PRIu32, seg->data_copies);
 		if (seg->region_size)
 			outf(f, "region_size = %" PRIu32, seg->region_size);

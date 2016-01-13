@@ -174,6 +174,8 @@ FIELD(SEGS, seg, NUM, "#Cpy", list, 4, segdata_copies, datacopies, "Number of da
 FIELD(SEGS, seg, NUM, "#Cpy", list, 4, segdata_copies, data_copies, "Number of data copies.", 0)
 FIELD(SEGS, seg, NUM, "data", list, 4, segdata_offset, dataoffset, "Data offset on each image device.", 0)
 FIELD(SEGS, seg, NUM, "data", list, 4, segdata_offset, data_offset, "Data offset on each image device.", 0)
+FIELD(SEGS, seg, NUM, "ndata", list, 4, segnewdata_offset, newdataoffset, "New data offset after any reshape on each image device.", 0)
+FIELD(SEGS, seg, NUM, "ndata", list, 4, segnewdata_offset, new_data_offset, "New data offset after any reshape on each image device.", 0)
 FIELD(SEGS, seg, NUM, "#Par", list, 4, seg_parity_chunks, parity, "Number of (rotating) parity chunks.", 0)
 FIELD(SEGS, seg, NUM, "#Par", list, 4, seg_parity_chunks, parity_chunks, "Number of (rotating) parity chunks.", 0)
 FIELD(SEGS, seg, NUM, "#Par", list, 4, seg_parity_chunks, parity_devs, "Number of (rotating) parity chunks.", 0)

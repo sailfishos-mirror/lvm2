@@ -2057,31 +2057,22 @@ static int _segdata_copies_disp(struct dm_report *rh, struct dm_pool *mem,
 				const void *data, void *private)
 {
 	const struct lv_segment *seg = (const struct lv_segment *) data;
-	uint32_t data_copies = seg->segtype->parity_devs ?
-			       (seg->segtype->parity_devs + 1) : seg->data_copies;
 
-#if 0
-PFLA("seg->data_copies=%u data_copies=%u", seg->data_copies, data_copies);
-	if ((seg_is_raid1(seg) || seg_is_mirror(seg)) &&
-	    !seg_is_any_raid10(seg))
-		data_copies = seg->area_count;
-#endif
-
-	if (data_copies > 1)
-		return dm_report_field_uint32(rh, field, &data_copies);
+	if (seg->data_copies > 1)
+		return dm_report_field_uint32(rh, field, &seg->data_copies);
 
 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_32));
 }
 
-#if 1
-static int _segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
-				struct dm_report_field *field,
-				const void *data, void *private)
+static int __segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
+				 struct dm_report_field *field,
+				 const void *data, void *private, int new_data_offset)
 {
 	const struct lv_segment *seg = (const struct lv_segment *) data;
 	const char *what = "";
 
-	if (lv_is_raid_image(seg->lv) && !seg->le) {
+	if (lv_is_raid_image(seg->lv) && !seg->le &&
+	    (seg->reshape_len || !new_data_offset)) {
 		struct lv_list *lvl;
 		char *lv_name = strdup(seg->lv->name);
 
@@ -2095,8 +2086,13 @@ static int _segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
 					if (seg_is_reshapable_raid(first_seg(lvl->lv))) {
 						uint64_t data_offset;
 
-						if (lv_raid_offset_and_sectors(lvl->lv, &data_offset, NULL))
+						if (lv_raid_offset_and_sectors(lvl->lv, &data_offset, NULL)) {
+							if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
+								data_offset = data_offset ? 0 :
+									      seg->reshape_len * seg->lv->vg->extent_size;
+
 							return dm_report_field_uint64(rh, field, &data_offset);
+						}
 
 						what = _str_unknown;
 					}
@@ -2108,27 +2104,20 @@ static int _segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
 
 	return _field_set_value(field, what, &GET_TYPE_RESERVED_VALUE(num_undef_64));
 }
-#else
+
 static int _segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
 				struct dm_report_field *field,
 				const void *data, void *private)
 {
-	const struct lv_segment *seg = (const struct lv_segment *) data;
-	const char *what = "";
-
-	/* HM FIXME: display data offset on image LVs, not on the top-level raid LV? */
-	if (seg_is_reshapable_raid(seg)) {
-		uint64_t data_offset;
-
-		if (lv_raid_offset_and_sectors(seg->lv, &data_offset, NULL))
-			return dm_report_field_uint64(rh, field, &data_offset);
-
-		what = _str_unknown;
-	}
-
-	return _field_set_value(field, what, &GET_TYPE_RESERVED_VALUE(num_undef_64));
+	return __segdata_offset_disp(rh, mem, field, data, private, 0);
 }
-#endif
+
+static int _segnewdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
+				   struct dm_report_field *field,
+				   const void *data, void *private)
+{
+	return __segdata_offset_disp(rh, mem, field, data, private, 1);
+}
 
 static int _seg_parity_chunks_disp(struct dm_report *rh, struct dm_pool *mem,
 		   		   struct dm_report_field *field,

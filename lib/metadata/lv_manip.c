@@ -2334,8 +2334,10 @@ static int _for_each_pv(struct cmd_context *cmd, struct logical_volume *lv,
 	int r = 1;
 
 	if (!seg && !(seg = find_seg_by_le(lv, le))) {
+#if 0
 		log_error("Failed to find segment for %s extent %" PRIu32,
 			  lv->name, le);
+#endif
 		return 0;
 	}
 
@@ -5665,6 +5667,20 @@ PFL();
 		}
 		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
 	}
+
+#if 1
+	if (lv_is_raid(lv)) {
+		unsigned stripes = seg->area_count - seg->segtype->parity_devs;
+
+PFLA("lp->extents=%u", lp->extents);
+		lp->extents = _round_to_stripe_boundary(lv, lp->extents, stripes,
+							lp->extents < existing_physical_extents);
+PFLA("lp->extents=%u", lp->extents);
+		lp->extents = raid_total_extents(seg->segtype, lp->extents, stripes,
+					 	 seg->data_copies) / seg->data_copies;
+PFLA("lp->extents=%u", lp->extents);
+} else 
+#endif
 
 	/* Perform any rounding to produce complete stripes. */
 	if (lp->stripes > 1) {
