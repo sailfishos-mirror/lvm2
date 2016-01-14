@@ -2647,6 +2647,7 @@ static int _reset_flags_passed_to_kernel(struct logical_volume *lv, int write_re
  * WARNING: needs to be called with at least 3 arguments to suit va_list processing!
  */
 typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
+static int _lv_update_and_reload(struct logical_volume *lv, int recurse);
 static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, ...)
 {
 	int r = 0;
@@ -2672,7 +2673,7 @@ PFL();
 		goto err;
 PFL();
 	/* Update metadata and reload mappings including flags (e.g. LV_REBUILD) */
-	if (!lv_update_and_reload(lv))
+	if (!_lv_update_and_reload(lv, 0))
 		goto err;
 PFL();
 
@@ -3095,7 +3096,7 @@ int lv_raid_split(struct logical_volume *lv, int yes,
 	if (!_lv_is_active((lv)))
 		return 0;
 
-	/* Special case for splitting off image of a duplicating LV */
+	/* Special case for splitting off an image of a duplicating LV */
 	if (_lv_is_duplicating(lv))
 		return _raid_split_duplicate(lv, yes, split_name, new_image_count);
 
@@ -3359,7 +3360,7 @@ static int _lv_update_and_reload(struct logical_volume *lv, int recurse)
 	for (s = 0; s < seg->area_count; s++) {
 		if ((lv1 = seg_lv(seg, s))) {
 PFLA("lv1=%s recurse=%d", display_lvname(lv1), recurse);
-			if (seg_type(first_seg(lv1), 0) == AREA_LV) {
+			if (lv_is_duplicated(lv1) && seg_type(first_seg(lv1), 0) == AREA_LV) {
 				if (!_lv_update_and_reload(lv1, 1))
 					return_0;
 
@@ -5848,7 +5849,7 @@ static int _remove_duplicating_layer(struct logical_volume *lv,
 }
 
 /* HM Helper: callback to rename duplicated @lv and is sub LVs to __ namespacse to avoid collisions */
-static int _pre_rename_duplicated_lv_and_sub_lvs(struct logical_volume *lv, void *data)
+static int _pre_raid_split_duplicate_rename_lv_and_sub_lvs(struct logical_volume *lv, void *data)
 {
 	uint32_t s;
 	struct lv_segment *seg;
@@ -5865,7 +5866,7 @@ static int _pre_rename_duplicated_lv_and_sub_lvs(struct logical_volume *lv, void
 }
 
 /* HM Helper: callback to rename duplicated @lv and its sub LVs back from "__" infixed namespace */
-static int _post_rename_duplicated_lv_and_sub_lvs_back(struct logical_volume *lv, void *data)
+static int _post_raid_split_duplicate_rename_lv_and_sub_lvs(struct logical_volume *lv, void *data)
 {
 	uint32_t s;
 	struct lv_segment *seg;
@@ -5888,7 +5889,7 @@ static int _post_rename_duplicated_lv_and_sub_lvs_back(struct logical_volume *lv
 }
 
 /* HM Helper: callback to extract last metadata image of @lv and remove top-level raid1 layer */
-static int _pre_rename_duplicated_sub_lvs(struct logical_volume *lv, void *data)
+static int _pre_raid_split_duplicate_remove_layer(struct logical_volume *lv, void *data)
 {
 	struct dm_list *removal_lvs;
 	struct lv_segment *seg;
@@ -5905,7 +5906,7 @@ static int _pre_rename_duplicated_sub_lvs(struct logical_volume *lv, void *data)
 }
 
 /* HM Helper: callback to rename all sub_lvs of @lv (if raid) to flat namespace */
-static int _post_rename_duplicated_sub_lvs(struct logical_volume *lv, void *data)
+static int _post_raid_split_duplicate_rename_sub_lvs(struct logical_volume *lv, void *data)
 {
 	struct logical_volume *split_lv;
 
@@ -6017,20 +6018,20 @@ static int _raid_split_duplicate(struct logical_volume *lv, int yes,
 		seg->meta_areas[s] = seg->meta_areas[s + 1];
 	}
 
-	/* We have more than one sub LVs -> rename and shift down */
+	/* We have more than one sub LVs -> set up pre/post fns to rename and shift down */
 	if (seg->area_count > 1) {
 		fn_pre_data = NULL;
-		fn_pre_on_lv = _pre_rename_duplicated_lv_and_sub_lvs;
-		fn_post_on_lv = _post_rename_duplicated_lv_and_sub_lvs_back;
+		fn_pre_on_lv = _pre_raid_split_duplicate_rename_lv_and_sub_lvs;
+		fn_post_on_lv = _post_raid_split_duplicate_rename_lv_and_sub_lvs;
 
-	/* We are down to the last sub LV -> remove the top-level raid1 mapping */
+	/* We are down to the last sub LV -> set up pre/post fns to remove the top-level raid1 mapping */
 	} else  {
 		fn_pre_data = &removal_lvs;
-		fn_pre_on_lv  = _pre_rename_duplicated_sub_lvs;
-		fn_post_on_lv = _post_rename_duplicated_sub_lvs;
+		fn_pre_on_lv  = _pre_raid_split_duplicate_remove_layer;
+		fn_post_on_lv = _post_raid_split_duplicate_rename_sub_lvs;
 	}
 
-	log_debug_metadata("Updating VG metadata, reloading %s and activating split LV %s",
+	log_debug_metadata("Updating VG metadata; reloading %s and activating split LV %s",
 			   display_lvname(lv), display_lvname(split_lv));
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs,
 							 fn_post_on_lv, split_lv,
@@ -6038,7 +6039,7 @@ static int _raid_split_duplicate(struct logical_volume *lv, int yes,
 }
 
 /* HM Helper: callback to rename any sub LVs of @lv to flat namespace */
-static int _post_rename_sub_lvs_on_unduplication(struct logical_volume *lv, void *data)
+static int _post_raid_unduplicate_rename_sub_lvs(struct logical_volume *lv, void *data)
 {
 	if (!lv_is_raid(lv))
 		return 1;
@@ -6124,7 +6125,7 @@ static int _raid_unduplicate(struct logical_volume *lv,
 	/* Remove top-level raid1 layer keeping first sub LV and update+reload LV */
 	return _remove_duplicating_layer(lv, &removal_lvs) &&
 	       _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs,
-							 _post_rename_sub_lvs_on_unduplication, lv, NULL);
+							 _post_raid_unduplicate_rename_sub_lvs, lv, NULL);
 
 }
 
@@ -6196,11 +6197,13 @@ static int _pre_raid_duplicate_rename_metadata_sub_lvs(struct logical_volume *lv
 		    !_rename_lv(lv1, "_rmeta_", "__rmeta_"))
 			return 0;
 
+#if 0
 	/* Activate new duplicated LV to prevent unsafe table load */
 	if (!activate_lv_excl_local(lv->vg->cmd, dup_lv)) {
 		lv_remove(dup_lv);
 		return 0;
 	}
+#endif
 
 	return 1;
 }
