@@ -5669,19 +5669,17 @@ PFL();
 	}
 
 #if 1
-	if (lv_is_raid(lv)) {
+	/* HM FIXME: sufficient for RAID? */
+	if (seg_is_raid(seg) &&
+	    !seg_is_raid1(seg)) {
 		unsigned stripes = seg->area_count - seg->segtype->parity_devs;
 
-PFLA("lp->extents=%u", lp->extents);
 		lp->extents = _round_to_stripe_boundary(lv, lp->extents, stripes,
 							lp->extents < existing_physical_extents);
-PFLA("lp->extents=%u", lp->extents);
 		lp->extents = raid_total_extents(seg->segtype, lp->extents, stripes,
 					 	 seg->data_copies) / seg->data_copies;
-PFLA("lp->extents=%u", lp->extents);
 } else 
 #endif
-
 	/* Perform any rounding to produce complete stripes. */
 	if (lp->stripes > 1) {
 		if (lp->stripe_size < STRIPE_SIZE_MIN) {
