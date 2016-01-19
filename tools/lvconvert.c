@@ -1737,14 +1737,17 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 	    !seg_is_linear(seg) &&
 	    !seg_is_raid(seg) &&
 	    !seg_is_mirrored(seg) &&
+	    !seg_is_thin_volume(seg) &&
 	    !seg_is_striped(seg)) {
 		log_error("'--mirrors/-m' is not compatible with %s",
 			  lvseg_name(seg));
 		return 0;
 	}
 
+#if 0
 	if (!_lvconvert_validate_thin(lv, lp))
 		return_0;
+#endif
 
 	/* Change number of RAID1 images */
 	if (arg_count(cmd, mirrors_ARG) || arg_count(cmd, splitmirrors_ARG)) {
@@ -1777,7 +1780,7 @@ PFLA("image_count=%u\n", image_count);
 	if (arg_count(cmd, splitmirrors_ARG))
 		return lv_raid_split(lv, lp->yes, lp->lv_split_name, image_count, lp->pvh);
 
-	if ((seg_is_linear(seg) || seg_is_striped(seg) || seg_is_mirror(seg) || seg_is_raid(seg)) &&
+	if ((seg_is_linear(seg) || seg_is_striped(seg) || seg_is_thin(seg) || seg_is_mirror(seg) || seg_is_raid(seg)) &&
 	    (arg_count(cmd, type_ARG) ||
 	     arg_is_set(cmd, mirrors_ARG) ||
 	     arg_is_set(cmd, regionsize_ARG) ||
@@ -1844,7 +1847,8 @@ PFLA("image_count=%u\n", image_count);
 		if (segtype_is_thin(lp->segtype) && arg_count(cmd, name_ARG))
 			lp->pool_data_name = arg_str_value(cmd, name_ARG, NULL);
 
-PFLA("lp->region_size=%u", lp->region_size);
+PFLA("lp->region_size=%u lp->segtype=%s lp->pool_data_name=%s", lp->region_size, lp->segtype ? lp->segtype->name : "", lp->pool_data_name ?: "");
+PFLA("lp->region_size=%u lp->segtype=%s", lp->region_size, lp->segtype ? lp->segtype->name : "");
 PFLA("lp->pool_data_name=%s lp->lv_split_name=%s lp->lv_name=%s", lp->pool_data_name, lp->lv_split_name, lp->lv_name);
 		return lv_raid_convert(lv, (struct lv_raid_convert_params)
 				       { .segtype = arg_count(cmd, type_ARG) ? (struct segment_type *) lp->segtype : NULL,
@@ -3429,6 +3433,7 @@ static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
 		if (arg_count(cmd, repair_ARG) && arg_count(cmd, use_policies_ARG))
 			_remove_missing_empty_pv(lv->vg, failed_pvs);
 	} else if (arg_is_set(cmd, duplicate_ARG) ||
+		   arg_is_set(cmd, unduplicate_ARG) ||
 		   segtype_is_raid(lp->segtype) ||
 segtype_is_striped(lp->segtype) ||
 (segtype_is_mirror(lp->segtype) && !arg_is_set(cmd, mirrorlog_ARG)) ||

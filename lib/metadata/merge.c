@@ -93,6 +93,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
 					  lv->name);
 				inc_error_count;
 			} else if (!seg_is_thin_volume(first_seg(lv))) {
+PFLA("segtype=%s", lvseg_name(first_seg(lv)));
 				log_error("LV %s is thin volume without first thin volume segment.",
 					  lv->name);
 				inc_error_count;

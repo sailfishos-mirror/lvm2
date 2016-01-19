@@ -4702,6 +4702,7 @@ static int _rename_sub_lv(struct logical_volume *lv,
 	 * The suffix follows lv_name_old and includes '_'.
 	 */
 	len = strlen(lv_name_old);
+PFLA("lv=%s lv_name_old=%s lv_name_new=%s len=%u", display_lvname(lv), lv_name_old, lv_name_new, len);
 	if (strncmp(lv->name, lv_name_old, len) || lv->name[len] != '_') {
 		log_error("Cannot rename \"%s\": name format not recognized "
 			  "for internal LV \"%s\"",
@@ -4766,27 +4767,33 @@ static int _for_each_sub_lv(struct logical_volume *lv, int skip_pools,
 
 	dm_list_iterate_items(seg, &lv->segments) {
 		if (seg->log_lv) {
+PFL();
 			if (!fn(seg->log_lv, data))
 				return_0;
 			if (!for_each_sub_lv(seg->log_lv, fn, data))
 				return_0;
 		}
 
-		if (seg->metadata_lv) {
-			if (!fn(seg->metadata_lv, data))
-				return_0;
-			if (!for_each_sub_lv(seg->metadata_lv, fn, data))
-				return_0;
-		}
+		if (!seg_is_thin(seg) && !seg_is_raid(seg)) {
+			if (seg->metadata_lv) {
+PFL();
+				if (!fn(seg->metadata_lv, data))
+					return_0;
+				if (!for_each_sub_lv(seg->metadata_lv, fn, data))
+					return_0;
+			}
 
-		if (seg->pool_lv && !skip_pools) {
-			if (!fn(seg->pool_lv, data))
-				return_0;
-			if (!for_each_sub_lv(seg->pool_lv, fn, data))
-				return_0;
+			if (seg->pool_lv && !skip_pools) {
+PFL();
+				if (!fn(seg->pool_lv, data))
+					return_0;
+				if (!for_each_sub_lv(seg->pool_lv, fn, data))
+					return_0;
+			}
 		}
 
 		for (s = 0; s < seg->area_count; s++) {
+PFL();
 			if (seg_type(seg, s) != AREA_LV)
 				continue;
 			if (!fn(seg_lv(seg, s), data))
@@ -4794,12 +4801,14 @@ static int _for_each_sub_lv(struct logical_volume *lv, int skip_pools,
 			if (!for_each_sub_lv(seg_lv(seg, s), fn, data))
 				return_0;
 		}
-
+PFL();
 		if (!seg_is_raid(seg) || !seg->meta_areas)
 			continue;
+PFL();
 
 		/* RAID has meta_areas */
 		for (s = 0; s < seg->area_count; s++) {
+PFL();
 			if (seg_metatype(seg, s) != AREA_LV)
 				continue;
 			if (!fn(seg_metalv(seg, s), data))
@@ -4808,6 +4817,7 @@ static int _for_each_sub_lv(struct logical_volume *lv, int skip_pools,
 				return_0;
 		}
 	}
+PFL();
 
 	return 1;
 }
@@ -5682,6 +5692,7 @@ PFL();
 #endif
 	/* Perform any rounding to produce complete stripes. */
 	if (lp->stripes > 1) {
+PFLA("lp->stripes=%u", lp->stripes);
 		if (lp->stripe_size < STRIPE_SIZE_MIN) {
 			log_error("Invalid stripe size %s",
 				  display_size(cmd, (uint64_t) lp->stripe_size));
@@ -6970,7 +6981,7 @@ int move_lv_segments(struct logical_volume *lv_to,
 int remove_layer_from_lv(struct logical_volume *lv,
 			 struct logical_volume *layer_lv)
 {
-	static const char _suffixes[][8] = { "_tdata", "_cdata", "_corig" };
+	static const char _suffixes[][8] = { "_tdata", "_cdata", "_corig", "_dup_" };
 	struct logical_volume *parent_lv;
 	struct lv_segment *parent_seg;
 	struct segment_type *segtype;
@@ -6996,7 +7007,7 @@ PFL();
 	 * Before removal, the layer should be cleaned up,
 	 * i.e. additional segments and areas should have been removed.
 	 */
-PFLA("lv=%s layer_lv=%s segments=%u area_count=%u layer_lv!=%u parent_lv->le_count=%u layer_lv->le_count=%u", display_lvname(lv), layer_lv ? display_lvname(layer_lv) : NULL, dm_list_size(&parent_lv->segments), parent_seg->area_count, layer_lv != seg_lv(parent_seg, 0), parent_lv->le_count, layer_lv->le_count)
+PFLA("lv=%s parent_lv=%s layer_lv=%s segments=%u area_count=%u layer_lv!=%u parent_lv->le_count=%u layer_lv->le_count=%u", display_lvname(lv), display_lvname(parent_lv), layer_lv ? display_lvname(layer_lv) : NULL, dm_list_size(&parent_lv->segments), parent_seg->area_count, layer_lv != seg_lv(parent_seg, 0), parent_lv->le_count, layer_lv->le_count)
 	if (dm_list_size(&parent_lv->segments) != 1 ||
 	    parent_seg->area_count != 1 ||
 	    seg_type(parent_seg, 0) != AREA_LV ||
@@ -7004,19 +7015,19 @@ PFLA("lv=%s layer_lv=%s segments=%u area_count=%u layer_lv!=%u parent_lv->le_cou
 	    parent_lv->le_count != layer_lv->le_count)
 		return_0;
 PFL();
-
 	if (!lv_empty(parent_lv))
 		return_0;
-
+PFL();
 	if (!move_lv_segments(parent_lv, layer_lv, 0, 0))
 		return_0;
-
+PFL();
 	/* Replace the empty layer with error segment */
 	if (!(segtype = get_segtype_from_string(lv->vg->cmd, "error")))
 		return_0;
+PFL();
 	if (!lv_add_virtual_segment(layer_lv, 0, parent_lv->le_count, segtype))
 		return_0;
-
+PFLA("parent_lv=%s layer_lv=%s", display_lvname(lv), display_lvname(parent_lv));
 	/*
 	 * recuresively rename sub LVs
 	 *   currently supported only for thin data layer
@@ -7024,14 +7035,13 @@ PFL();
 	 */
 	if (!strstr(layer_lv->name, "_mimage"))
 		for (r = 0; r < DM_ARRAY_SIZE(_suffixes); ++r)
-			if (strstr(layer_lv->name, _suffixes[r]) == 0) {
+			if (strstr(layer_lv->name, _suffixes[r])) {
 				lv_names.old = layer_lv->name;
 				lv_names.new = parent_lv->name;
 				if (!for_each_sub_lv(parent_lv, _rename_cb, (void *) &lv_names))
 					return_0;
 				break;
 			}
-
 PFLA("%s", layer_lv->name);
 	return 1;
 }
@@ -7621,6 +7631,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		return NULL;
 	}
 
+PFLA("lp->region_size=%u", lp->region_size);
 	if (!_vg_check_features(vg, lp))
 		return_NULL;
 
@@ -7757,6 +7768,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		return NULL;
 	}
 
+PFLA("lp->region_size=%u", lp->region_size);
 	if (origin_lv && seg_is_cache_pool(lp)) {
 		/* Converting exiting origin and creating cache pool */
 		if (!validate_lv_cache_create_origin(origin_lv))
@@ -7814,10 +7826,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* FIXME This will not pass cluster lock! */
 		init_mirror_in_sync(lp->nosync);
 
+PFLA("lp->region_size=%u", lp->region_size);
 		lp->region_size = adjusted_mirror_region_size(vg->extent_size,
 							      lp->extents,
 							      lp->region_size, 0,
 							      vg_is_clustered(vg));
+PFLA("lp->region_size=%u", lp->region_size);
 	} else if (pool_lv && seg_is_thin_volume(lp)) {
 		if (!lv_is_thin_pool(pool_lv)) {
 			log_error("Logical volume %s is not a thin pool.",
@@ -7965,7 +7979,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 
 	dm_list_splice(&lv->tags, &lp->tags);
 
-PFLA("lp->stripes=%u lp->stripe_size=%u lp->mirrors=%u", lp->stripes, lp->stripe_size, lp->mirrors);
+PFLA("lp->stripes=%u lp->stripe_size=%u lp->mirrors=%u lp->region_size=%u", lp->stripes, lp->stripe_size, lp->mirrors, lp->region_size);
 	if (!lv_extend(lv, create_segtype,
 		       lp->stripes, lp->stripe_size,
 		       lp->mirrors,
