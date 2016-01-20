@@ -1158,6 +1158,7 @@ struct logical_volume *first_replicator_dev(const struct logical_volume *lv);
 uint32_t raid_rmeta_extents_delta(struct cmd_context *cmd,
 				  uint32_t rimage_extents_cur, uint32_t rimage_extents_new,
 				  uint32_t region_size, uint32_t extent_size);
+int lv_raid_in_sync(const struct logical_volume *lv);
 int lv_is_raid_with_tracking(const struct logical_volume *lv);
 uint32_t lv_raid_image_count(const struct logical_volume *lv);
 int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,

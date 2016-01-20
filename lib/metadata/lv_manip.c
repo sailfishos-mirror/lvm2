@@ -1658,7 +1658,14 @@ int lv_refresh_suspend_resume(struct cmd_context *cmd, struct logical_volume *lv
  */
 int lv_reduce(struct logical_volume *lv, uint32_t extents)
 {
-	return _lv_reduce(lv, extents, extents == lv->le_count ? 1 : 0);
+	int delete = (extents == lv->le_count ? 1 : 0);
+
+	if (!delete && !lv_raid_in_sync(lv)) {
+		log_error("RAID LV %s has to be in-sync to extend its size!", display_lvname(lv));
+		return 0;
+	}
+
+	return _lv_reduce(lv, extents, delete);
 }
 
 /*
@@ -4439,13 +4446,12 @@ int lv_extend(struct logical_volume *lv,
 	uint64_t lv_size;
 	struct lv_segment *seg = last_seg(lv);
 
-	/*
-	 * HM FIXME:
-	 *
-	 * extents raid set capacity which fails for complex layouts and allocation of reshape space!
-	 *
-	 * e.g. too much allocated for raid10
-	 */
+
+	if (!lv_raid_in_sync(lv)) {
+		log_error("RAID LV %s has to be in-sync to extend its size!", display_lvname(lv));
+		return 0;
+	}
+
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
 #if 1
