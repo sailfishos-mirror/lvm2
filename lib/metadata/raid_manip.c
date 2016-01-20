@@ -40,7 +40,7 @@
 #define RETURN_IF_NONZERO(arg, msg) \
 { \
 	if ((arg)) { \
-		log_error(INTERNAL_ERROR "%s -- no %s!", __func__, (msg)); \
+		log_error(INTERNAL_ERROR "%s[%u] -- no %s!", __func__, __LINE__, (msg)); \
 		return 0; \
 	} \
 }
@@ -56,6 +56,11 @@
 /* Macro to check argument @seg exists */
 #define RETURN_IF_SEG_ZERO(seg) \
 	RETURN_IF_ZERO((seg), "lv segment argument");
+
+/* False if (@seg)->area_count, else true and display @msg */
+#define RETURN_IF_SEG_AREA_COUNT_FALSE(seg, s) \
+	RETURN_IF_ZERO((seg)->area_count, "segment areas"); \
+	RETURN_IF_ZERO((s) < seg->area_count, "valid segment area index")
 
 /* Macro to check argument @segtype exists */
 #define RETURN_IF_SEGTYPE_ZERO(segtype) \
@@ -79,6 +84,8 @@
 /* HM Helper: conditionally return seg_metalv(@seg, @s) to prevent oops */
 static struct logical_volume *_seg_metalv_checked(struct lv_segment *seg, uint32_t s)
 {
+	RETURN_IF_SEG_ZERO(seg);
+
 	return (seg->meta_areas && seg_metatype(seg, s) == AREA_LV) ? seg_metalv(seg, s) : NULL;
 }
 
@@ -86,18 +93,23 @@ static struct logical_volume *_seg_metalv_checked(struct lv_segment *seg, uint32
 static int _ensure_min_region_size(const struct logical_volume *lv)
 {
 	struct lv_segment *seg;
+	uint32_t min_region_size, region_size;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_ZERO(lv->size, "LV size set");
+	RETURN_IF_ZERO(seg->region_size, "segment region size set");
 
 	/* MD's bitmap is limited to tracking 2^21 regions */
-	uint32_t min_region_size = lv->size / (1 << 21);
-	uint32_t region_size = seg->region_size;
+	min_region_size = lv->size / (1 << 21);
+	region_size = seg->region_size;
 
-	while (seg->region_size < min_region_size)
-		seg->region_size *= 2;
+	while (region_size < min_region_size)
+		region_size *= 2;
 
-	if (seg->region_size != region_size)
+	if (seg->region_size != region_size) {
 		log_very_verbose("Setting region_size to %u", seg->region_size);
+		seg->region_size = region_size;
+	}
 
 	return 1;
 }
@@ -122,8 +134,7 @@ static int _check_and_init_region_size(const struct logical_volume *lv)
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 
-	if (!seg->region_size)
-		seg->region_size = get_default_region_size(lv->vg->cmd);
+	seg->region_size = seg->region_size ?: get_default_region_size(lv->vg->cmd);
 
 	return _ensure_min_region_size(lv);
 }
@@ -131,7 +142,7 @@ static int _check_and_init_region_size(const struct logical_volume *lv)
 /* Return data images count for @total_rimages depending on @seg's type */
 static uint32_t _data_rimages_count(const struct lv_segment *seg, const uint32_t total_rimages)
 {
-	RETURN_IF_ZERO(seg, "lv raid segment");
+	RETURN_IF_SEG_ZERO(seg);
 	RETURN_IF_NONZERO(!seg_is_thin(seg) && total_rimages <= seg->segtype->parity_devs,
 			  "total rimages count > parity devices");
 
@@ -146,8 +157,7 @@ static struct logical_volume *_find_lv_in_sub_lvs(struct logical_volume *lv,
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
-	RETURN_IF_ZERO(idx, "idx argument");
+	RETURN_IF_ZERO(idx, "idx argument pointer");
 
 	for (s = 0; s < seg->area_count; s++) {
 		RETURN_IF_ZERO(seg_type(seg, s) == AREA_LV, "sub lv");
@@ -167,6 +177,8 @@ static char *_strstr_strings(const char *str, ...)
 	char *substr, *r = NULL;
 	va_list ap;
 
+	RETURN_IF_ZERO(str, "string argument");
+
 	va_start(ap, str);
 	while ((substr = va_arg(ap, char *)))
 		if ((r = strstr(str, substr)))
@@ -180,9 +192,12 @@ static char *_strstr_strings(const char *str, ...)
 static char *_top_level_lv_name(struct logical_volume *lv)
 {
 	char *p, *r;
+
+	RETURN_IF_LV_ZERO(lv);
+	RETURN_IF_ZERO((r = dm_pool_strdup(lv->vg->vgmem, lv->name)),
+		       "lv name allocation possible");
 	
-	if ((r = dm_pool_strdup(lv->vg->vgmem, lv->name)) &&
-	    (p = _strstr_strings(r, "_rimage_", "_dup_", "_extracted", NULL)))
+	if ((p = _strstr_strings(r, "_rimage_", "_dup_", "_extracted", NULL)))
 		*p = '\0'; /* LV name returned is now that of top-level RAID */
 
 	return r;
@@ -227,18 +242,16 @@ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 
-	if (!lv_is_raid(lv))
-		return 0;
-
-	for (s = 0; s < seg->area_count; s++)
-		if (lv_is_visible(seg_lv(seg, s))) {
-			if (!(seg_lv(seg, s)->status & LVM_WRITE)) {
-				*tracking = seg_lv(seg, s);
-				return 1;
+	if (lv_is_raid(lv))
+		for (s = 0; s < seg->area_count; s++)
+			if (lv_is_visible(seg_lv(seg, s))) {
+				if (!(seg_lv(seg, s)->status & LVM_WRITE)) {
+					*tracking = seg_lv(seg, s);
+					return 1;
+				}
+	
+				RETURN_IF_ZERO(0, "read-only tracking LV!");
 			}
-
-			RETURN_IF_ZERO(0, "read-only tracking LV!");
-		}
 
 	return 0;
 }
@@ -276,6 +289,8 @@ static int _lv_is_duplicating(const struct logical_volume *lv)
 /* HM Helper: check if @lv is active and display cluster/local message if not */
 static int _lv_is_active(struct logical_volume *lv)
 {
+	RETURN_IF_LV_ZERO(lv);
+
 	if (vg_is_clustered(lv->vg)) {
 		if (!lv_is_active_exclusive_locally(lv)) {
 			log_error("%s in clustered VG must be active exclusive "
@@ -297,6 +312,9 @@ static int _lv_is_active(struct logical_volume *lv)
 static int _activate_lv_list_excl_local(struct dm_list *lvs)
 {
 	struct lv_list *lvl;
+
+	RETURN_IF_ZERO(lvs, "lvs list argument");
+	RETURN_IF_NONZERO(dm_list_empty(lvs), "lvs listed");
 
 	dm_list_iterate_items(lvl, lvs)
 		if (!activate_lv_excl_local(lvl->lv->vg->cmd, lvl->lv))
@@ -356,7 +374,6 @@ static int _activate_sublv_preserving_excl(struct logical_volume *top_lv,
 
 	RETURN_IF_ZERO(top_lv, "top level LV");
 	RETURN_IF_ZERO(sub_lv, "sub LV");
-
 	cmd = top_lv->vg->cmd;
 
 	/* If top RAID was EX, use EX */
@@ -372,6 +389,8 @@ static int _activate_sublv_preserving_excl(struct logical_volume *top_lv,
 /* Return # of reshape LEs per device for @seg */
 static uint32_t _reshape_len_per_dev(struct lv_segment *seg)
 {
+	RETURN_IF_SEG_ZERO(seg);
+
 	return seg->reshape_len;
 }
 
@@ -398,8 +417,8 @@ static int _lv_set_reshape_len(struct logical_volume *lv, uint32_t reshape_len)
 	struct lv_segment *seg, *data_seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "lv raid segment areas");
-	RETURN_IF_ZERO(reshape_len < lv->le_count - 1, "proper reshape_len");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
+	RETURN_IF_ZERO(reshape_len < lv->le_count - 1, "proper reshape_len argument");
 
 	seg->reshape_len = reshape_len;
 
@@ -427,7 +446,7 @@ static int _lv_set_image_lvs_start_les(struct logical_volume *lv)
 	struct lv_segment *data_seg, *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "raid segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	for (s = 0; s < seg->area_count; s++) {
 		RETURN_IF_ZERO(seg_type(seg, s) == AREA_LV, "sub lv");
@@ -533,7 +552,7 @@ static int _dev_in_sync(struct logical_volume *lv, const uint32_t idx)
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_NONZERO(idx >= seg->area_count, "bogus index");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, idx);
 
 	if (!seg_is_raid(seg))
 		return seg->area_count;
@@ -1550,7 +1569,7 @@ static int _extract_image_component_pair(struct lv_segment *seg, uint32_t idx,
 	RETURN_IF_ZERO(extracted_meta_lvs, "extracted meta LVs list argument");
 	RETURN_IF_ZERO(extracted_data_lvs, "extracted data LVs list argument");
 	RETURN_IF_NONZERO(set_error_seg < 0 || set_error_seg > 1, "set error segment argument");
-	RETURN_IF_ZERO(idx < seg->area_count, "suitable area index");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, idx);
 
 	/* Don't change extraction sequence; callers are relying on it */
 	if (extracted_meta_lvs) {
@@ -1583,8 +1602,8 @@ static int _extract_image_component_sublist(struct lv_segment *seg,
 	struct lv_list *lvl;
 
 	RETURN_IF_ZERO(seg, "seg argument");
-	RETURN_IF_NONZERO(idx >= seg->area_count || end > seg->area_count || end <= idx,
-			  "area index wrong for segment");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, idx);
+	RETURN_IF_NONZERO(end > seg->area_count || end <= idx, "area index wrong for segment");
 
 	if (!(lvl = dm_pool_alloc(seg_lv(seg, idx)->vg->vgmem, sizeof(*lvl) * (end - idx))))
 		return_0;
@@ -1912,7 +1931,7 @@ static int _alloc_rmeta_devs_for_lv(struct logical_volume *lv,
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 	RETURN_IF_ZERO(meta_lvs, "mate LVs list argument");
 	RETURN_IF_NONZERO(seg->meta_areas, "meta LVs may exist");
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	dm_list_init(&data_lvs);
 
@@ -3106,8 +3125,8 @@ int lv_raid_split(struct logical_volume *lv, int yes,
 	struct dm_list tracking_pvs;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, new_image_count);
 	RETURN_IF_ZERO(split_name, "split name argument");
-	RETURN_IF_ZERO(new_image_count < seg->area_count, "valid image count");
 	cmd = lv->vg->cmd;
 
 	dm_list_init(&meta_lvs);
@@ -3825,7 +3844,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 	struct dm_list data_lvs;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO((area_count = seg->area_count), "now segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, (area_count = seg->area_count));
 	RETURN_IF_ZERO(allocate_pvs || dm_list_empty(allocate_pvs), "PVs to allocate");
 
 	if (!seg_is_striped(seg)) {
@@ -4494,13 +4513,13 @@ static int _lv_raid10_resize_data_copies(struct logical_volume *lv,
 	/* HM FIXME: accept raid10* once (if ever) MD kernel supports it */
 	RETURN_IF_ZERO(seg_is_striped(seg) || seg_is_any_raid0(seg) || seg_is_raid10_far(seg),
 		       "processable segment type");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, new_data_copies - 1);
 	RETURN_IF_ZERO(seg->area_count > 1, "area count > 1");
 	RETURN_IF_NONZERO((seg_is_striped(seg) || seg_is_any_raid0(seg)) && seg->data_copies != 1,
 			  "#data_copies == 1 with striped/raid0");
 	RETURN_IF_NONZERO(seg_is_raid10(seg) && seg->data_copies < 2,
 			  "#data_copies < 2 with raid10_");
 	RETURN_IF_NONZERO(new_data_copies == seg->data_copies, "change in #data_copies");
-	RETURN_IF_NONZERO(new_data_copies > seg->area_count, "#data_copies <= stripes");
 	RETURN_IF_NONZERO(lv->le_count % seg->area_count, "divisibility of LV size by stripes");
 	RETURN_IF_ZERO((raid0_meta_segtype = get_segtype_from_flag(lv->vg->cmd, SEG_RAID0_META)),
 		       "raid0_meta segment type found?");
@@ -4546,8 +4565,8 @@ static int _activate_sub_lvs(struct logical_volume *lv, uint32_t start_idx)
 	struct lv_segment *seg;
 	struct cmd_context *cmd;
 
+	/* seg->area_count may be 0 here! */
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_NONZERO(seg->area_count && start_idx >= seg->area_count, "proper start_idx argument");
 	cmd = lv->vg->cmd;
 
 	log_debug_metadata("Activating %u image component%s of LV %s",
@@ -5754,8 +5773,8 @@ static int _get_max_sub_lv_name_index(struct logical_volume *lv, uint32_t *max_i
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 	RETURN_IF_ZERO(max_idx, "max index argument");
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
 
 	*max_idx = 0;
 
@@ -5788,13 +5807,11 @@ static int _prepare_seg_for_name_shift(struct logical_volume *lv)
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
-
 	if (!_get_max_sub_lv_name_index(lv, &max_idx))
 		return 0;
 
 	seg->area_count++;
-	RETURN_IF_ZERO((max_idx < seg->area_count), "valid maximum index");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, max_idx);
 
 	for (s = seg->area_count - 1; s > -1; s--) {
 		if (seg_type(seg, s) != AREA_LV)
@@ -5805,7 +5822,8 @@ static int _prepare_seg_for_name_shift(struct logical_volume *lv)
 		if (!_lv_name_get_string_index(seg_lv(seg, s), &idx))
 			return 0;
 
-		RETURN_IF_ZERO(idx < seg->area_count, "valid sub-lv index");
+		RETURN_IF_SEG_AREA_COUNT_FALSE(seg, idx);
+
 		if (idx != s) {
 			seg->areas[idx] = seg->areas[s];
 			seg->meta_areas[idx] = seg->meta_areas[s];
@@ -5833,7 +5851,8 @@ static int _rename_sub_lvs(struct logical_volume *lv, enum rename_dir dir)
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 	if (seg_is_thin(seg))
 		return 1;
-	RETURN_IF_ZERO(seg->area_count, "areas");
+
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 PFL();
 	if (!lv_is_raid(lv) && !lv_is_raid_image(lv))
 		return 1;
@@ -5960,7 +5979,7 @@ static int _post_raid_split_duplicate_rename_lv_and_sub_lvs(struct logical_volum
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 	RETURN_IF_ZERO((split_lv = data), "valid split LV");
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	if (!lv_update_and_reload(split_lv))
 		return_0;
@@ -6033,9 +6052,9 @@ static int _raid_split_duplicate(struct logical_volume *lv, int yes,
 	fn_on_lv_t fn_pre_on_lv, fn_post_on_lv;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 	RETURN_IF_ZERO(_lv_is_duplicating(lv), "Called with non-duplicating LV");
 	RETURN_IF_ZERO(split_name, "split name argument");
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
 	RETURN_IF_ZERO(seg->meta_areas, "metadata segment areas");
 
 	if (!_lv_is_active((lv)))
@@ -6156,7 +6175,7 @@ static int _raid_unduplicate(struct logical_volume *lv,
 	struct dm_list removal_lvs;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 	RETURN_IF_ZERO(sub_lv_name, "sub LV name");
 
 	if (!_lv_is_duplicating(lv)) {
@@ -6339,9 +6358,8 @@ static int _raid_duplicate(struct logical_volume *lv,
 	struct logical_volume *dup_lv;
 	struct lv_segment *seg;
 
-	/* new_segtype may be naught */
+	/* new_segtype is allowed to be naught */
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-PFL();
 	RETURN_IF_NONZERO(!seg_is_thin(seg) && !seg->area_count, "lv segment areas");
 	RETURN_IF_ZERO(data_copies, "data copies argument");
 	RETURN_IF_ZERO(allocate_pvs, "allocate pvs");
@@ -6496,7 +6514,7 @@ TAKEOVER_HELPER_FN(_linear_raid0)
 	struct dm_list meta_lvs;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	dm_list_init(&meta_lvs);
 
@@ -6549,7 +6567,7 @@ TAKEOVER_HELPER_FN(_linear_raid14510)
 	struct segment_type *segtype;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
-	RETURN_IF_ZERO(seg->area_count, "lv segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	dm_list_init(&data_lvs);
 	dm_list_init(&meta_lvs);
@@ -8286,7 +8304,7 @@ TAKEOVER_FN(_r01_s)
 	struct dm_list removal_lvs;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	dm_list_init(&removal_lvs);
 PFL();
@@ -9139,7 +9157,7 @@ static int _remove_partial_multi_segment_image(struct logical_volume *lv,
 	struct lv_segment *raid_seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (raid_seg = first_seg(lv)));
-	RETURN_IF_ZERO(raid_seg->area_count, "no raid segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(raid_seg, 0);
 	RETURN_IF_ZERO(remove_pvs, "remove pvs list argument");
 
 	if (!(lv->status & PARTIAL_LV)) {
@@ -9175,7 +9193,7 @@ static int _generate_name_and_set_segment(struct logical_volume *lv,
 	const char *suffix;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (raid_seg = first_seg(lv)));
-	RETURN_IF_ZERO(raid_seg->area_count, "no raid segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(raid_seg, 0);
 	RETURN_IF_ZERO(lvs, "no LVs list");
 	RETURN_IF_NONZERO(dm_list_empty(lvs), "no LVs listed");
 
@@ -9528,6 +9546,8 @@ int lv_raid_replace(struct logical_volume *lv,
 			if (!_lv_name_get_string_index(lvl->lv, &s))
 				return 0;
 
+			RETURN_IF_SEG_AREA_COUNT_FALSE(raid_seg, s);
+
 			/* We only have to allocate the new metadata devs...  */
 			if (!__alloc_rmeta_for_lv(seg_lv(raid_seg, s), &lvlist[sd].lv, allocate_pvs))
 				return 0;
@@ -9668,10 +9688,10 @@ static int _find_failed_pvs_of_lv(struct logical_volume *lv,
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 	RETURN_IF_ZERO(failed_pvs, "failed pvs list argument");
 	RETURN_IF_ZERO(failed_rimage, "failed rimage argument");
 	RETURN_IF_ZERO(failed_rmeta, "failed rmeta argument");
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
 
 	if (_lv_is_duplicating(lv)) {
 		for (s = 0; s < seg->area_count; s++)
@@ -10007,8 +10027,8 @@ static int _raid10_seg_images_sane(struct lv_segment *seg)
 	uint32_t len = 0, s;
 	struct logical_volume *slv;
 
-	RETURN_IF_ZERO(seg, "seg argument");
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
+	RETURN_IF_SEG_ZERO(seg);
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 
 	for (s = 0; s < seg->area_count; s++) {
 		RETURN_IF_ZERO(seg_type(seg, s) == AREA_LV, "raid10_far image LV");
@@ -10033,7 +10053,7 @@ static int _split_lv_data_images(struct logical_volume *lv,
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO(seg->area_count, "segment areas");
+	RETURN_IF_SEG_AREA_COUNT_FALSE(seg, 0);
 	RETURN_IF_ZERO(split_len < seg->len, "suitable agument split_len");
 
 	for (s = 0; s < seg->area_count; s++) {
