@@ -872,7 +872,6 @@ struct lv_raid_convert_params {
 	int unduplicate;
 	const int data_copies; /* to be able to detect -m0; -1 if no data copy change requested */
 	const unsigned region_size;
-	const int region_size_arg;
 	const unsigned stripes;
 	const unsigned stripe_size;
 	const char *lv_name; /* sub-lv name to unduplicate or pool LV name to create a duplicated thin LV */
