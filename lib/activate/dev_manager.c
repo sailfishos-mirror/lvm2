@@ -181,7 +181,8 @@ typedef enum {
 static uint32_t _seg_len(const struct lv_segment *seg)
 {
 	if (seg_is_raid(seg))
-		return seg->len - (seg->area_count - seg->segtype->parity_devs) * seg->reshape_len;
+		return seg->len - (((seg->area_count - seg->segtype->parity_devs) * seg->reshape_len) /
+				   (seg_is_any_raid10(seg) ? seg->data_copies : 1));
 
 	return seg->len;
 }
@@ -2765,7 +2766,7 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
 		/* Replace target and all its used devs with error mapping */
 		log_debug_activation("Using error for pending delete %s.",
 				     seg->lv->name);
-		if (!dm_tree_node_add_error_target(dnode, (uint64_t)seg->lv->vg->extent_size * _seg_len(seg)))
+		if (!dm_tree_node_add_error_target(dnode, (uint64_t) seg->lv->vg->extent_size * _seg_len(seg)))
 			return_0;
 	} else if (!_add_target_to_dtree(dm, dnode, seg, laopts))
 		return_0;

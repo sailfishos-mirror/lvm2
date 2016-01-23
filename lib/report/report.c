@@ -1957,6 +1957,12 @@ static int _vgsize_disp(struct dm_report *rh, struct dm_pool *mem,
 	return _size64_disp(rh, mem, field, &size, private);
 }
 
+static int _seg_len(const struct lv_segment *seg)
+{
+	return seg->len - (((seg->area_count - seg->segtype->parity_devs) * seg->reshape_len) /
+			   (seg_is_any_raid10(seg) ? seg->data_copies : 1));
+}
+
 static int _lvsize_disp(struct dm_report *rh, struct dm_pool *mem,
 			struct dm_report_field *field,
 			const void *data, void *private)
@@ -1967,8 +1973,7 @@ static int _lvsize_disp(struct dm_report *rh, struct dm_pool *mem,
 
 	if (seg_type(seg, 0) == AREA_LV &&
 	    seg->area_count > 1)
-		size = lv->size - seg->reshape_len *
-		       (seg->area_count - seg->segtype->parity_devs) * lv->vg->extent_size;
+		size = (uint64_t) _seg_len(seg) * lv->vg->extent_size;
 
 	return _size64_disp(rh, mem, field, &size, private);
 }
@@ -2175,7 +2180,6 @@ static int _segsize_disp(struct dm_report *rh, struct dm_pool *mem,
 {
 	const struct lv_segment *seg = (const struct lv_segment *) data;
 	uint64_t size = lvseg_size(seg);
-PFL();
 
 	return _size64_disp(rh, mem, field, &size, private);
 }
@@ -2189,10 +2193,7 @@ static int _segsizepe_disp(struct dm_report *rh,
 	const struct lv_segment *seg = (const struct lv_segment *) data;
 
 	if (seg) {
-		uint32_t len = seg->len;
-
-		if (seg->area_count > 1)
-			len -= seg->reshape_len * (seg->area_count - seg->segtype->parity_devs);
+		uint32_t len = (seg->area_count > 1) ? _seg_len(seg) : seg->len;
 
 		return dm_report_field_uint32(rh, field, &len);
 	}

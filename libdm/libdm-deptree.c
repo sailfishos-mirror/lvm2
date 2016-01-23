@@ -2418,7 +2418,7 @@ static int _raid_emit_segment_line(struct dm_task *dmt, uint32_t major,
 	param_count += _get_params_count(seg->writemostly);
 
 	if ((seg->type == SEG_RAID1) && seg->stripe_size)
-		log_error("WARNING: Ignoring RAID1 stripe size");
+		log_info("WARNING: Ignoring RAID1 stripe size");
 
 	/* Kernel only expects "raid0", not "raid0_meta" */
 	type = seg->type;
