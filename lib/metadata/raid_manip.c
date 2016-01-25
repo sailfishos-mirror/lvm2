@@ -4275,7 +4275,7 @@ static int _reshape_adjust_to_size(struct logical_volume *lv,
 	if (old_image_count < new_image_count) {
 		_lv_set_reshape_len(lv, _reshape_len_per_dev(seg));
 
-PFLA("lv->size=%s seg->len=%u lv_reshape_len=%u seg->area_len=%u seg->area_count=%u old_image_count=%u new_image_count=%u", display_size(lv->vg->cmd, lv->size), seg->len, lv_reshape_len, seg->area_len, seg->area_count, old_image_count, new_image_count);
+PFLA("lv->size=%s seg->len=%u seg->area_len=%u seg->area_count=%u old_image_count=%u new_image_count=%u", display_size(lv->vg->cmd, lv->size), seg->len, seg->area_len, seg->area_count, old_image_count, new_image_count);
 		/* Extend from raid1 mapping */
 		if (old_image_count == 2 &&
 		    !seg->stripe_size)
@@ -7580,7 +7580,7 @@ TAKEOVER_FN(_r0_m)
 TAKEOVER_FN(_r0_r0m)
 {
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
-
+PFL();
 	/* Archive metadata */
 	if (!archive(lv->vg))
 		return_0;
@@ -7658,7 +7658,7 @@ TAKEOVER_FN(_r0m_r0)
 	struct dm_list removal_lvs;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
-
+PFL(); 
 	dm_list_init(&removal_lvs);
 
 	/* Archive metadata */
@@ -9142,9 +9142,12 @@ out:
 
 err:
 	/* FIXME: enhance message */
-	log_error("Converting the segment type for %s (directly) from %s to %s"
-		  " is not supported.", display_lvname(lv),
-		  lvseg_name(seg), new_segtype->name);
+	if (seg->segtype == new_segtype)
+		log_error("LV %s already is of type %s", display_lvname(lv), lvseg_name(seg));
+	else
+		log_error("Converting the segment type for %s (directly) from %s to %s"
+		  	" is not supported.", display_lvname(lv),
+		  	lvseg_name(seg), new_segtype->name);
 
 	return 0;
 }
