@@ -162,7 +162,7 @@ int print_flags(uint64_t status, int type, char *buffer, size_t size)
 
 	if (status)
 		log_warn(INTERNAL_ERROR "Metadata inconsistency: "
-			 "Not all flags successfully exported.");
+			 "Not all flags successfully exported (0x%lx).", status);
 
 	return 1;
 }
