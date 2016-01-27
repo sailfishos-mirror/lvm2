@@ -2076,30 +2076,37 @@ static int __segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
 	const struct lv_segment *seg = (const struct lv_segment *) data;
 	const char *what = "";
 
-	if (lv_is_raid_image(seg->lv) && !seg->le &&
+	if (lv_is_raid_image(seg->lv) &&
+	    !seg->le &&
 	    (seg->reshape_len || !new_data_offset)) {
 		struct lv_list *lvl;
-		char *lv_name = strdup(seg->lv->name);
+		char *lv_name;
 
-		if (lv_name) {
+		if ((lv_name = strdup(seg->lv->name))) {
 			char *p = strchr(lv_name, '_');
 
 			if (p) {
-				*p = '\0';
+				/* Handle duplicated sub LVs */
+				if (strstr(p, "_dup_"))
+					p = strchr(p + 5, '_');
 
-				if ((lvl = find_lv_in_vg(seg->lv->vg, lv_name))) {
-					if (seg_is_reshapable_raid(first_seg(lvl->lv))) {
-						uint64_t data_offset;
+				if (p) {
+					*p = '\0';
 
-						if (lv_raid_offset_and_sectors(lvl->lv, &data_offset, NULL)) {
-							if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
-								data_offset = data_offset ? 0 :
-									      seg->reshape_len * seg->lv->vg->extent_size;
+					if ((lvl = find_lv_in_vg(seg->lv->vg, lv_name))) {
+						if (seg_is_reshapable_raid(first_seg(lvl->lv))) {
+							uint64_t data_offset;
 
-							return dm_report_field_uint64(rh, field, &data_offset);
+							if (lv_raid_offset_and_sectors(lvl->lv, &data_offset, NULL)) {
+								if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
+									data_offset = data_offset ? 0 :
+										      seg->reshape_len * seg->lv->vg->extent_size;
+
+								return dm_report_field_uint64(rh, field, &data_offset);
+							}
+
+							what = _str_unknown;
 						}
-
-						what = _str_unknown;
 					}
 				}
 			}

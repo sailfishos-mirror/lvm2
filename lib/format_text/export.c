@@ -361,6 +361,7 @@ static int _print_header(struct cmd_context *cmd, struct formatter *f,
 static int _print_flag_config(struct formatter *f, uint64_t status, int type)
 {
 	char buffer[4096];
+
 	if (!print_flags(status, type | STATUS_FLAG, buffer, sizeof(buffer)))
 		return_0;
 	outf(f, "status = %s", buffer);
