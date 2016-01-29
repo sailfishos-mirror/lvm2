@@ -1936,6 +1936,9 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
 	RETURN_IF_LV_SEG_ZERO(data_lv, first_seg(data_lv));
 	RETURN_IF_ZERO(meta_lv, "meta_lv argument");
 
+	if (__alloc_rmeta_for_lv(data_lv, meta_lv, NULL))
+		return 1;
+
 	return __alloc_rmeta_for_lv(data_lv, meta_lv, allocate_pvs);
 }
 
@@ -5204,6 +5207,10 @@ static struct possible_takeover_reshape_type _possible_takeover_reshape_types[] 
 	  .current_areas = 1,
 	  .options = ALLOW_REGION_SIZE|ALLOW_DATA_COPIES },
 	{ .current_types  = SEG_AREAS_STRIPED, /* linear, i.e. seg->area_count = 1 */
+	  .possible_types = SEG_RAID0|SEG_RAID0_META,
+	  .current_areas = 1,
+	  .options = ALLOW_STRIPE_SIZE },
+	{ .current_types  = SEG_AREAS_STRIPED, /* linear, i.e. seg->area_count = 1 */
 	  .possible_types = SEG_RAID4|SEG_RAID5_LS|SEG_RAID5_LA|SEG_RAID5_RS|SEG_RAID5_RA|SEG_RAID5_N,
 	  .current_areas = 1,
 	  .options = ALLOW_REGION_SIZE },
@@ -5716,7 +5723,6 @@ static int _lv_is_synced(struct logical_volume *lv)
 	struct dm_list *allocate_pvs
 
 #if 0
-	unsigned new_region_size,
 	unsigned new_extents,
 #endif
 /*
@@ -6597,7 +6603,7 @@ static int _raid_duplicate(struct logical_volume *lv,
 
 	if (!(duplicating = _lv_is_duplicating(lv)) &&
 	    lv_is_duplicated(lv)) {
-		log_error("Can't duplicate already duplicated sub LV %s", display_lvname(lv));
+		log_error("Can't duplicate duplicated sub LV %s", display_lvname(lv));
 		if ((p = strchr(lv->name, '_'))) {
 			*p = '\0';
 			log_error("Use \"lvconvert --duplicate --type ...\" on top-level duplicating LV %s!",
@@ -6785,6 +6791,7 @@ TAKEOVER_HELPER_FN(_linear_raid0)
 
 	seg->segtype = new_segtype;
 	seg->region_size = 0;
+	seg->stripe_size = new_stripe_size;
 
 	log_debug_metadata("Updating metadata and reloading mappings for %s",
 			   display_lvname(lv));
@@ -6856,7 +6863,7 @@ TAKEOVER_HELPER_FN(_striped_raid0_raid45610)
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
-	RETURN_IF_ZERO(seg->area_count > 1, "area count > 1");
+	RETURN_IF_ZERO(seg->area_count, "area count");
 
 PFLA("data_copies=%u", new_data_copies);
 
@@ -7602,7 +7609,7 @@ TAKEOVER_FN(_l_r0)
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
 
 	return _lv_has_segments_with_n_areas(lv, 1) &&
-	       _linear_raid0(lv, new_segtype, yes, force, 1, 1, 0, 0, 0, allocate_pvs);
+	       _linear_raid0(lv, new_segtype, yes, force, 1, 1, 0, new_stripe_size, 0, allocate_pvs);
 }
 
 /* Linear -> raid1 */
@@ -7612,8 +7619,9 @@ TAKEOVER_FN(_l_r1)
 
 	return _lv_has_segments_with_n_areas(lv, 1) &&
 	       _linear_raid14510(lv, new_segtype, yes, force,
-				 new_image_count, new_image_count, 0 /* new_stripes */,
-				 new_stripe_size, new_region_size, allocate_pvs);
+				 new_image_count, new_image_count,
+				 0 /* new_stripes */, 0, new_region_size,
+				 allocate_pvs);
 }
 
 /* Linear -> raid4/5 */
@@ -7632,17 +7640,21 @@ TAKEOVER_FN(_l_r10)
 {
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
 
-printf("new_stripe_size=%u\n", new_stripe_size);
 	return _lv_has_segments_with_n_areas(lv, 1) &&
 	       _linear_raid14510(lv, new_segtype, yes, force,
 				 2 /* new_image_count */ , 2, 0 /* new_stripes */,
 				 new_stripe_size, new_region_size, allocate_pvs);
 }
 
-/* Striped -> raid0 */
-TAKEOVER_FN(_s_r0)
+/* HM Helper: convert @lv from striped -> raid0(_meta) */
+static int _striped_raid0(struct logical_volume *lv,
+			  const struct segment_type *new_segtype,
+			  int yes, int force, int alloc_metadata_devs,
+			  struct dm_list *allocate_pvs)
 {
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
+	if (alloc_metadata_devs)
+		RETURN_IF_ZERO(allocate_pvs && !dm_list_empty(allocate_pvs), "allocate pvs");
 
 	if (!_yes_no_conversion(lv, new_segtype, yes, force, 0, 0, 1, 0, 0))
 		return 0;
@@ -7651,22 +7663,19 @@ TAKEOVER_FN(_s_r0)
 	if (!archive(lv->vg))
 		return_0;
 
-	return _convert_striped_to_raid0(lv, 0 /* !alloc_metadata_devs */, 1 /* update_and_reload */, allocate_pvs) ? 1 : 0;
+	return _convert_striped_to_raid0(lv, alloc_metadata_devs, 1 /* update_and_reload */, allocate_pvs) ? 1 : 0;
+}
+
+/* Striped -> raid0 */
+TAKEOVER_FN(_s_r0)
+{
+	return _striped_raid0(lv, new_segtype, yes, force, 0, allocate_pvs);
 }
 
 /* Striped -> raid0_meta */
 TAKEOVER_FN(_s_r0m)
 {
-	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
-
-	if (!_yes_no_conversion(lv, new_segtype, yes, force, 0, 0, 1, 0, 0))
-		return 0;
-
-	/* Archive metadata */
-	if (!archive(lv->vg))
-		return_0;
-
-	return _convert_striped_to_raid0(lv, 1 /* alloc_metadata_devs */, 1 /* update_and_reload */, allocate_pvs) ? 1 : 0;
+	return _striped_raid0(lv, new_segtype, yes, force, 1, allocate_pvs);
 } 
 
 /* Striped -> raid4/5 */
@@ -7845,7 +7854,12 @@ TAKEOVER_FN(_r0_r6)
 /* raid0 with N images (N > 1) -> raid10 */
 TAKEOVER_FN(_r0_r10)
 {
+	uint32_t data_copies = new_data_copies;
+
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
+
+	if (segtype_is_raid10_near(new_segtype) && data_copies == 1)
+		data_copies++;
 
 	return _striped_raid0_raid45610(lv, new_segtype, yes, force, first_seg(lv)->area_count * new_data_copies,
 					new_data_copies, 0, 0, new_region_size, allocate_pvs);
@@ -7931,10 +7945,15 @@ TAKEOVER_FN(_r0m_r6)
 /* raid0_meta wih 1 image -> raid10 */
 TAKEOVER_FN(_r0m_r10)
 {
+	uint32_t data_copies = new_data_copies;
+
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, first_seg(lv), new_segtype);
 
-	return _striped_raid0_raid45610(lv, new_segtype, yes, force, first_seg(lv)->area_count * new_data_copies,
-					new_data_copies, 0, 0, new_region_size, allocate_pvs);
+	if (segtype_is_raid10_near(new_segtype) && data_copies == 1)
+		data_copies++;
+
+	return _striped_raid0_raid45610(lv, new_segtype, yes, force, first_seg(lv)->area_count * data_copies,
+					data_copies, 0, 0, new_region_size, allocate_pvs);
 }
 
 
@@ -8989,10 +9008,31 @@ PFLA("segtype_to=%s", (*segtype_to)->name);
 	return r;
 }
 
+/* HM Helper: initialize @*stripe_size */
+static int _init_stripe_size(const struct lv_segment *seg, uint32_t *stripe_size)
+{
+	RETURN_IF_SEG_ZERO(seg);
+	RETURN_IF_ZERO(stripe_size, "stripe_size pointer argument");
+
+	if (*stripe_size)
+		return 1;
+
+	if (seg->stripe_size)
+		*stripe_size = seg->stripe_size;
+	else {
+		*stripe_size = 64;
+		if (!seg_is_raid01(seg))
+			log_warn("Initializing stripe size on %s to %u sectors",
+				 display_lvname(seg->lv), *stripe_size);
+	}
+
+	return 1;
+}
+
 /*
- * HM Helper
+ * HM Helper:
  *
- * Define current conversion parameters for lv_raid_convert
+ * define current conversion parameters for lv_raid_convert
  * based on those of @seg if not set
  */
 static int _raid_convert_define_parms(const struct lv_segment *seg,
@@ -9030,35 +9070,39 @@ static int _raid_convert_define_parms(const struct lv_segment *seg,
 
 	} else if (segtype_is_mirror(*segtype) ||
 		   segtype_is_raid1(*segtype)) {
-		*stripes = 1;
 		*data_copies = *data_copies < 2 ? 2 : *data_copies;
+		*stripes = 1;
+		*stripe_size = 0;
 
 	} else if (segtype_is_any_raid10(*segtype)) {
 		*data_copies = *data_copies < 2 ? 2 : *data_copies;
+
 		if (!segtype_is_raid10_far(*segtype) &&
 		    *stripes < 3)
 			*stripes = 3;
 
+		if (!_init_stripe_size(seg, stripe_size))
+			return 0;
+
 	} else if (segtype_is_striped(*segtype) ||
 		   segtype_is_striped_raid(*segtype)) {
-		if (*stripes > 1 && !*stripe_size) {
-			if (seg->stripe_size)
-				*stripe_size = seg->stripe_size;
-			else {
-				*stripe_size = 64;
-				if (!seg_is_raid01(seg))
-					log_warn("Initializing stripe size on %s to %u sectors",
-						 display_lvname(seg->lv), *stripe_size);
+		if (seg_is_raid10_near(seg) && seg->area_count == 2)
+			if (*stripes) {
+				log_warn("Ignoring stripes argument on %s", display_lvname(seg->lv));
+				*stripes = 1;
 			}
-		}
+
+		if (!_init_stripe_size(seg, stripe_size))
+			return 0;
 
 		if (*stripes == 1 &&
 		    *data_copies > 1) {
 			if (*stripe_size) {
-				log_warn("Ignoring stripe size on %s", display_lvname(seg->lv));
+				log_warn("Ignoring stripe size argument on %s", display_lvname(seg->lv));
 				*stripe_size = 0;
 			}
 		}
+
 	}
 
 	if (segtype_is_raid(*segtype) &&
