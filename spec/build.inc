@@ -4,6 +4,13 @@
 %enableif %{enable_profiling} profiling
 %global enable_lvmetad %(if echo %{services} | grep -q lvmetad; then echo 1; else echo 0; fi)
 %enableif %{enable_lvmetad} lvmetad
+%global enable_lvmpolld %(if echo %{services} | grep -q lvmpolld; then echo 1; else echo 0; fi)
+%enableif %{enable_lvmpolld} lvmpolld
+%global enable_lvmlockd %(if echo %{services} | grep -q lvmlockd; then echo 1; else echo 0; fi)
+%if %{enable_lvmlockd}
+%enableif %{enable_lockd_dlm} lockd-dlm
+%enableif %{enable_lockd_sanlock} lockd-sanlock
+%endif
 
 %build
 %configure \
@@ -24,6 +31,7 @@
   --enable-applib \
   --enable-cmdlib \
   --enable-dmeventd \
+  --enable-write_install \
   %{configure_flags}
 
 make %{?_smp_mflags}
@@ -32,10 +40,14 @@ make %{?_smp_mflags}
 %install
 make install DESTDIR=$RPM_BUILD_ROOT
 make install_system_dirs DESTDIR=$RPM_BUILD_ROOT
-make install_initscripts DESTDIR=$RPM_BUILD_ROOT
 %if %{enable_systemd}
 make install_systemd_units DESTDIR=$RPM_BUILD_ROOT
 make install_tmpfiles_configuration DESTDIR=$RPM_BUILD_ROOT
+%else
+make install_initscripts DESTDIR=$RPM_BUILD_ROOT
+%endif
+%if %{enable_testsuite}
+make -C test install DESTDIR=$RPM_BUILD_ROOT
 %endif
 
 # when building an src.rpm from freestanding specfiles

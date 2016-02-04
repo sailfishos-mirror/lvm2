@@ -43,7 +43,7 @@ static void _pvscan_display_single(struct cmd_context *cmd,
 		/* pv_show(pv); */
 
 		/* FIXME - Moved to Volume Group structure */
-		/* log_print("System Id             %s", pv->vg->system_id); */
+		/* log_print("system ID             %s", pv->vg->system_id); */
 
 		/* log_print(" "); */
 		/* return; */
@@ -106,7 +106,7 @@ static int _auto_activation_handler(struct cmd_context *cmd,
 		return_0;
 
 	/* NB. This is safe because we know lvmetad is running and we won't hit disk. */
-	vg = vg_read(cmd, vgname, (const char *)&vgid_raw, 0);
+	vg = vg_read(cmd, vgname, (const char *)&vgid_raw, 0, 0);
 	if (vg_read_error(vg)) {
 		log_error("Failed to read Volume Group \"%s\" (%s) during autoactivation.", vgname, vgid);
 		release_vg(vg);
@@ -166,7 +166,7 @@ static int _clear_dev_from_lvmetad_cache(dev_t devno, int32_t major, int32_t min
 {
 	char buf[24];
 
-	(void) dm_snprintf(buf, sizeof(buf), "%" PRIi32 ":%" PRIi32, major, minor);
+	(void) dm_snprintf(buf, sizeof(buf), FMTi32 ":" FMTi32, major, minor);
 
 	if (!lvmetad_pv_gone(devno, buf, handler))
 		return_0;
@@ -188,6 +188,8 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 	struct arg_value_group_list *current_group;
 	dev_t devno;
 	activation_handler handler = NULL;
+
+	cmd->include_foreign_vgs = 1;
 
 	/*
 	 * Return here immediately if lvmetad is not used.
@@ -239,8 +241,17 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 		if (pv_name[0] == '/') {
 			/* device path */
 			if (!(dev = dev_cache_get(pv_name, cmd->lvmetad_filter))) {
-				log_error("Physical Volume %s not found.", pv_name);
-				ret = ECMD_FAILED;
+				if ((dev = dev_cache_get(pv_name, NULL))) {
+					if (!_clear_dev_from_lvmetad_cache(dev->dev, MAJOR(dev->dev), MINOR(dev->dev), handler)) {
+						stack;
+						ret = ECMD_FAILED;
+						break;
+					}
+				} else {
+					log_error("Physical Volume %s not found.", pv_name);
+					ret = ECMD_FAILED;
+					break;
+				}
 				continue;
 			}
 		}
@@ -251,7 +262,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 				ret = ECMD_FAILED;
 				continue;
 			}
-			devno = MKDEV((dev_t)major, minor);
+			devno = MKDEV((dev_t)major, (dev_t)minor);
 			if (!(dev = dev_cache_get_by_devt(devno, cmd->lvmetad_filter))) {
 				if (!(_clear_dev_from_lvmetad_cache(devno, major, minor, handler))) {
 					stack;
@@ -266,7 +277,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 			stack;
 			break;
 		}
-		if (!lvmetad_pvscan_single(cmd, dev, handler)) {
+		if (!lvmetad_pvscan_single(cmd, dev, handler, 0)) {
 			ret = ECMD_FAILED;
 			stack;
 			break;
@@ -284,7 +295,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 		if (major < 0 || minor < 0)
 			continue;
 
-		devno = MKDEV((dev_t)major, minor);
+		devno = MKDEV((dev_t)major, (dev_t)minor);
 
 		if (!(dev = dev_cache_get_by_devt(devno, cmd->lvmetad_filter))) {
 			if (!(_clear_dev_from_lvmetad_cache(devno, major, minor, handler))) {
@@ -299,7 +310,7 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 			stack;
 			break;
 		}
-		if (!lvmetad_pvscan_single(cmd, dev, handler)) {
+		if (!lvmetad_pvscan_single(cmd, dev, handler, 0)) {
 			ret = ECMD_FAILED;
 			stack;
 			break;
@@ -308,9 +319,9 @@ static int _pvscan_lvmetad(struct cmd_context *cmd, int argc, char **argv)
 	}
 
 out:
-	sync_local_dev_names(cmd);
+	if (!sync_local_dev_names(cmd))
+		stack;
 	unlock_vg(cmd, VG_GLOBAL);
-
 	return ret;
 }
 
@@ -359,6 +370,10 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
 		log_error("Unable to obtain global lock.");
 		return ECMD_FAILED;
 	}
+
+	/* Needed for a current listing of the global VG namespace. */
+	if (!lockd_gl(cmd, "sh", 0))
+		return_ECMD_FAILED;
 
 	if (cmd->full_filter->wipe)
 		cmd->full_filter->wipe(cmd->full_filter);

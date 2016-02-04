@@ -259,6 +259,7 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
 				      uint32_t *pvmove_mirror_count __attribute__((unused)))
 {
 	static int _no_discards = 0;
+	static int _no_error_if_no_space = 0;
 	char *metadata_dlid, *pool_dlid;
 	const struct lv_thin_message *lmsg;
 	const struct logical_volume *origin;
@@ -293,7 +294,8 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
 		return 0;
 	}
 
-	if (!dm_tree_node_add_thin_pool_target(node, len, seg->transaction_id,
+	if (!dm_tree_node_add_thin_pool_target(node, len,
+					       seg->transaction_id,
 					       metadata_dlid, pool_dlid,
 					       seg->chunk_size, seg->low_water_mark,
 					       seg->zero_new_blocks ? 0 : 1))
@@ -313,6 +315,12 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
 	} else if (seg->discards != THIN_DISCARDS_IGNORE)
 		log_warn_suppress(_no_discards++, "WARNING: Thin pool target does "
 				  "not support discards (needs kernel >= 3.4).");
+
+	if (attr & THIN_FEATURE_ERROR_IF_NO_SPACE)
+		dm_tree_node_set_thin_pool_error_if_no_space(node, lv_is_error_when_full(seg->lv));
+	else if (lv_is_error_when_full(seg->lv))
+		log_warn_suppress(_no_error_if_no_space++, "WARNING: Thin pool target does "
+				  "not support error if no space (needs version >= 1.10).");
 
 	/*
 	 * Add messages only for activation tree.
@@ -337,7 +345,7 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
 				 */
 				if (!lv_thin_pool_transaction_id(seg->lv, &transaction_id))
 					return_0; /* Thin pool should exist and work */
-				if (transaction_id != seg->transaction_id) {
+				if ((transaction_id + 1) != seg->transaction_id) {
 					log_error("Can't create snapshot %s as origin %s is not suspended.",
 						  lmsg->u.lv->name, origin->name);
 					return 0;
@@ -602,14 +610,18 @@ static int _thin_target_percent(void **target_state __attribute__((unused)),
 				uint64_t *total_denominator)
 {
 	struct dm_status_thin *s;
+	uint64_t csize;
 
 	/* Status for thin device is in sectors */
 	if (!dm_get_status_thin(mem, params, &s))
 		return_0;
 
 	if (seg) {
-		*percent = dm_make_percent(s->mapped_sectors, seg->lv->size);
-		*total_denominator += seg->lv->size;
+		/* Pool allocates whole chunk so round-up to nearest one */
+		csize = first_seg(seg->pool_lv)->chunk_size;
+		csize = ((seg->lv->size + csize - 1) / csize) * csize;
+		*percent = dm_make_percent(s->mapped_sectors, csize);
+		*total_denominator += csize;
 	} else {
 		/* No lv_segment info here */
 		*percent = DM_PERCENT_INVALID;
@@ -638,7 +650,8 @@ static int _thin_target_present(struct cmd_context *cmd,
 		{ 1, 4, THIN_FEATURE_BLOCK_SIZE, "block_size" },
 		{ 1, 5, THIN_FEATURE_DISCARDS_NON_POWER_2, "discards_non_power_2" },
 		{ 1, 10, THIN_FEATURE_METADATA_RESIZE, "metadata_resize" },
-		{ 9, 11, THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND, "external_origin_extend" },
+		{ 1, 10, THIN_FEATURE_ERROR_IF_NO_SPACE, "error_if_no_space" },
+		{ 1, 13, THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND, "external_origin_extend" },
 	};
 
 	static const char _lvmconf[] = "global/thin_disabled_features";
@@ -674,7 +687,7 @@ static int _thin_target_present(struct cmd_context *cmd,
 	if (attributes) {
 		if (!_feature_mask) {
 			/* Support runtime lvm.conf changes, N.B. avoid 32 feature */
-			if ((cn = find_config_tree_node(cmd, global_thin_disabled_features_CFG, NULL))) {
+			if ((cn = find_config_tree_array(cmd, global_thin_disabled_features_CFG, NULL))) {
 				for (cv = cn->v; cv; cv = cv->next) {
 					if (cv->type != DM_CFG_STRING) {
 						log_error("Ignoring invalid string in config file %s.",
@@ -753,7 +766,8 @@ int init_multiple_segtypes(struct cmd_context *cmd, struct segtype_library *segl
 		const char name[16];
 		uint32_t flags;
 	} reg_segtypes[] = {
-		{ &_thin_pool_ops, "thin-pool", SEG_THIN_POOL | SEG_CANNOT_BE_ZEROED | SEG_ONLY_EXCLUSIVE },
+		{ &_thin_pool_ops, "thin-pool", SEG_THIN_POOL | SEG_CANNOT_BE_ZEROED |
+		SEG_ONLY_EXCLUSIVE | SEG_CAN_ERROR_WHEN_FULL },
 		/* FIXME Maybe use SEG_THIN_VOLUME instead of SEG_VIRTUAL */
 		{ &_thin_ops, "thin", SEG_THIN_VOLUME | SEG_VIRTUAL | SEG_ONLY_EXCLUSIVE }
 	};

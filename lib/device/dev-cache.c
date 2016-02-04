@@ -64,8 +64,21 @@ static void _dev_init(struct device *dev, int max_error_count)
 	dev->read_ahead = -1;
 	dev->max_error_count = max_error_count;
 
+	dev->ext.enabled = 0;
+	dev->ext.src = DEV_EXT_NONE;
+
 	dm_list_init(&dev->aliases);
 	dm_list_init(&dev->open_list);
+}
+
+void dev_destroy_file(struct device *dev)
+{
+	if (!(dev->flags & DEV_ALLOCED))
+		return;
+
+	dm_free((void *) dm_list_item(dev->aliases.n, struct dm_str_list)->str);
+	dm_free(dev->aliases.n);
+	dm_free(dev);
 }
 
 struct device *dev_create_file(const char *filename, struct device *dev,
@@ -678,10 +691,12 @@ static int _init_preferred_names(struct cmd_context *cmd)
 
 	_cache.preferred_names_matcher = NULL;
 
-	if (!(cn = find_config_tree_node(cmd, devices_preferred_names_CFG, NULL)) ||
+	if (!(cn = find_config_tree_array(cmd, devices_preferred_names_CFG, NULL)) ||
 	    cn->v->type == DM_CFG_EMPTY_ARRAY) {
-		log_very_verbose("devices/preferred_names not found in config file: "
-				 "using built-in preferences");
+		log_very_verbose("devices/preferred_names %s: "
+				 "using built-in preferences",
+				 cn && cn->v->type == DM_CFG_EMPTY_ARRAY ? "is empty"
+									 : "not found in config");
 		return 1;
 	}
 
@@ -940,7 +955,7 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
 		if (d)
 			dm_hash_remove(_cache.names, name);
 		log_sys_very_verbose("stat", name);
-		return NULL;
+		d = NULL;
 	}
 
 	if (d && (buf.st_rdev != d->dev)) {
@@ -983,12 +998,31 @@ static struct device *_dev_cache_seek_devt(dev_t dev)
  */
 struct device *dev_cache_get_by_devt(dev_t dev, struct dev_filter *f)
 {
+	char path[PATH_MAX];
+	const char *sysfs_dir;
+	struct stat info;
 	struct device *d = _dev_cache_seek_devt(dev);
 
 	if (d && (d->flags & DEV_REGULAR))
 		return d;
 
 	if (!d) {
+		sysfs_dir = dm_sysfs_dir();
+		if (sysfs_dir && *sysfs_dir) {
+			/* First check if dev is sysfs to avoid useless scan */
+			if (dm_snprintf(path, sizeof(path), "%s/dev/block/%d:%d",
+					sysfs_dir, (int)MAJOR(dev), (int)MINOR(dev)) < 0) {
+				log_error("dm_snprintf partition failed.");
+				return NULL;
+			}
+
+			if (lstat(path, &info)) {
+				log_debug("No sysfs entry for %d:%d.",
+					  (int)MAJOR(dev), (int)MINOR(dev));
+				return NULL;
+			}
+		}
+
 		_full_scan(0);
 		d = _dev_cache_seek_devt(dev);
 	}

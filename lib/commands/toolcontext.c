@@ -30,6 +30,7 @@
 #include "lvmcache.h"
 #include "lvmetad.h"
 #include "archiver.h"
+#include "lvmpolld-client.h"
 
 #ifdef HAVE_LIBDL
 #include "sharedlib.h"
@@ -54,6 +55,128 @@
 #endif
 
 static const size_t linebuffer_size = 4096;
+
+/*
+ * Copy the input string, removing invalid characters.
+ */
+const char *system_id_from_string(struct cmd_context *cmd, const char *str)
+{
+	char *system_id;
+
+	if (!str || !*str) {
+		log_warn("WARNING: Empty system ID supplied.");
+		return "";
+	}
+
+	if (!(system_id = dm_pool_zalloc(cmd->libmem, strlen(str) + 1))) {
+		log_warn("WARNING: Failed to allocate system ID.");
+		return NULL;
+	}
+
+	copy_systemid_chars(str, system_id);
+
+	if (!*system_id) {
+		log_warn("WARNING: Invalid system ID format: %s", str);
+		return NULL;
+	}
+
+	if (!strncmp(system_id, "localhost", 9)) {
+		log_warn("WARNING: system ID may not begin with the string \"localhost\".");
+		return NULL;
+	}
+
+	return system_id;
+}
+
+static const char *_read_system_id_from_file(struct cmd_context *cmd, const char *file)
+{
+	char *line = NULL;
+	size_t line_size;
+	char *start, *end;
+	const char *system_id = NULL;
+	FILE *fp;
+
+	if (!file || !strlen(file) || !file[0])
+		return_NULL;
+
+	if (!(fp = fopen(file, "r"))) {
+		log_warn("WARNING: %s: fopen failed: %s", file, strerror(errno));
+		return NULL;
+	}
+
+	while (getline(&line, &line_size, fp) > 0) {
+		start = line;
+
+		/* Ignore leading whitespace */
+		while (*start && isspace(*start))
+			start++;
+
+		/* Ignore rest of line after # */
+		if (!*start || *start == '#')
+			continue;
+
+		if (system_id && *system_id) {
+			log_warn("WARNING: Ignoring extra line(s) in system ID file %s.", file);
+			break;
+		}
+
+		/* Remove any comments from end of line */
+		for (end = start; *end; end++)
+			if (*end == '#') {
+				*end = '\0';
+				break;
+			}
+
+		system_id = system_id_from_string(cmd, start);
+	}
+
+	free(line);
+
+	if (fclose(fp))
+		stack;
+
+	return system_id;
+}
+
+static const char *_system_id_from_source(struct cmd_context *cmd, const char *source)
+{
+	char filebuf[PATH_MAX];
+	const char *file;
+	const char *etc_str;
+	const char *str;
+	const char *system_id = NULL;
+
+	if (!strcasecmp(source, "uname")) {
+		if (cmd->hostname)
+			system_id = system_id_from_string(cmd, cmd->hostname);
+		goto out;
+	}
+
+	/* lvm.conf and lvmlocal.conf are merged into one config tree */
+	if (!strcasecmp(source, "lvmlocal")) {
+		if ((str = find_config_tree_str(cmd, local_system_id_CFG, NULL)))
+			system_id = system_id_from_string(cmd, str);
+		goto out;
+	}
+
+	if (!strcasecmp(source, "machineid") || !strcasecmp(source, "machine-id")) {
+		etc_str = find_config_tree_str(cmd, global_etc_CFG, NULL);
+		if (dm_snprintf(filebuf, sizeof(filebuf), "%s/machine-id", etc_str) != -1)
+			system_id = _read_system_id_from_file(cmd, filebuf);
+		goto out;
+	}
+
+	if (!strcasecmp(source, "file")) {
+		file = find_config_tree_str(cmd, global_system_id_file_CFG, NULL);
+		system_id = _read_system_id_from_file(cmd, file);
+		goto out;
+	}
+
+	log_warn("WARNING: Unrecognised system_id_source \"%s\".", source);
+
+out:
+	return system_id;
+}
 
 static int _get_env_vars(struct cmd_context *cmd)
 {
@@ -122,8 +245,10 @@ static int _parse_debug_classes(struct cmd_context *cmd)
 	const struct dm_config_value *cv;
 	int debug_classes = 0;
 
-	if (!(cn = find_config_tree_node(cmd, log_debug_classes_CFG, NULL)))
-		return DEFAULT_LOGGED_DEBUG_CLASSES;
+	if (!(cn = find_config_tree_array(cmd, log_debug_classes_CFG, NULL))) {
+		log_error(INTERNAL_ERROR "Unable to find configuration for log/debug_classes.");
+		return -1;
+	}
 
 	for (cv = cn->v; cv; cv = cv->next) {
 		if (cv->type != DM_CFG_STRING) {
@@ -151,6 +276,8 @@ static int _parse_debug_classes(struct cmd_context *cmd)
 			debug_classes |= LOG_CLASS_CACHE;
 		else if (!strcasecmp(cv->v.str, "locking"))
 			debug_classes |= LOG_CLASS_LOCKING;
+		else if (!strcasecmp(cv->v.str, "lvmpolld"))
+			debug_classes |= LOG_CLASS_LVMPOLLD;
 		else
 			log_verbose("Unrecognised value for log/debug_classes: %s", cv->v.str);
 	}
@@ -288,7 +415,59 @@ static int _check_config(struct cmd_context *cmd)
 	return 1;
 }
 
-int process_profilable_config(struct cmd_context *cmd) {
+static const char *_set_time_format(struct cmd_context *cmd)
+{
+	/* Compared to strftime, we do not allow "newline" character - the %n in format. */
+	static const char *allowed_format_chars = "aAbBcCdDeFGghHIjklmMpPrRsStTuUVwWxXyYzZ%";
+	static const char *allowed_alternative_format_chars_e = "cCxXyY";
+	static const char *allowed_alternative_format_chars_o = "deHImMSuUVwWy";
+	static const char *chars_to_check;
+	const char *tf = find_config_tree_str(cmd, report_time_format_CFG, NULL);
+	const char *p_fmt;
+	size_t i;
+	char c;
+
+	if (!*tf) {
+		log_error("Configured time format is empty string.");
+		goto bad;
+	} else {
+		p_fmt = tf;
+		while ((c = *p_fmt)) {
+			if (c == '%') {
+				c = *++p_fmt;
+				if (c == 'E') {
+					c = *++p_fmt;
+					chars_to_check = allowed_alternative_format_chars_e;
+				} else if (c == 'O') {
+					c = *++p_fmt;
+					chars_to_check = allowed_alternative_format_chars_o;
+				} else
+					chars_to_check = allowed_format_chars;
+
+				for (i = 0; chars_to_check[i]; i++) {
+					if (c == chars_to_check[i])
+						break;
+				}
+				if (!chars_to_check[i])
+					goto_bad;
+			}
+			else if (isprint(c))
+				p_fmt++;
+			else {
+				log_error("Configured time format contains non-printable characters.");
+				goto bad;
+			}
+		}
+	}
+
+	return tf;
+bad:
+	log_error("Invalid time format \"%s\" supplied.", tf);
+	return NULL;
+}
+
+int process_profilable_config(struct cmd_context *cmd)
+{
 	if (!(cmd->default_settings.unit_factor =
 	      dm_units_to_factor(find_config_tree_str(cmd, global_units_CFG, NULL),
 				 &cmd->default_settings.unit_type, 1, NULL))) {
@@ -300,6 +479,46 @@ int process_profilable_config(struct cmd_context *cmd) {
 	cmd->report_binary_values_as_numeric = find_config_tree_bool(cmd, report_binary_values_as_numeric_CFG, NULL);
 	cmd->default_settings.suffix = find_config_tree_bool(cmd, global_suffix_CFG, NULL);
 	cmd->report_list_item_separator = find_config_tree_str(cmd, report_list_item_separator_CFG, NULL);
+	if (!(cmd->time_format = _set_time_format(cmd)))
+		return 0;
+
+	return 1;
+}
+
+static int _init_system_id(struct cmd_context *cmd)
+{
+	const char *source, *system_id;
+	int local_set = 0;
+
+	cmd->system_id = NULL;
+	cmd->unknown_system_id = 0;
+
+	system_id = find_config_tree_str_allow_empty(cmd, local_system_id_CFG, NULL);
+	if (system_id && *system_id)
+		local_set = 1;
+
+	source = find_config_tree_str(cmd, global_system_id_source_CFG, NULL);
+	if (!source)
+		source = "none";
+
+	/* Defining local system_id but not using it is probably a config mistake. */
+	if (local_set && strcmp(source, "lvmlocal"))
+		log_warn("WARNING: local/system_id is set, so should global/system_id_source be \"lvmlocal\" not \"%s\"?", source);
+
+	if (!strcmp(source, "none"))
+		return 1;
+
+	if ((system_id = _system_id_from_source(cmd, source)) && *system_id) {
+		cmd->system_id = system_id;
+		return 1;
+	}
+
+	/*
+	 * The source failed to resolve a system_id.  In this case allow
+	 * VGs with no system_id to be accessed, but not VGs with a system_id.
+	 */
+	log_warn("WARNING: No system ID found from system_id_source %s.", source);
+	cmd->unknown_system_id = 1;
 
 	return 1;
 }
@@ -307,12 +526,12 @@ int process_profilable_config(struct cmd_context *cmd) {
 static int _process_config(struct cmd_context *cmd)
 {
 	mode_t old_umask;
+	const char *dev_ext_info_src;
 	const char *read_ahead;
 	struct stat st;
 	const struct dm_config_node *cn;
 	const struct dm_config_value *cv;
 	int64_t pv_min_kb;
-	const char *lvmetad_socket;
 	int udev_disabled = 0;
 	char sysfs_dir[PATH_MAX];
 
@@ -339,6 +558,16 @@ static int _process_config(struct cmd_context *cmd)
 	if (!dm_set_uuid_prefix("LVM-"))
 		return_0;
 #endif
+
+	dev_ext_info_src = find_config_tree_str(cmd, devices_external_device_info_source_CFG, NULL);
+	if (!strcmp(dev_ext_info_src, "none"))
+		init_external_device_info_source(DEV_EXT_NONE);
+	else if (!strcmp(dev_ext_info_src, "udev"))
+		init_external_device_info_source(DEV_EXT_UDEV);
+	else {
+		log_error("Invalid external device info source specification.");
+		return 0;
+	}
 
 	/* proc dir */
 	if (dm_snprintf(cmd->proc_dir, sizeof(cmd->proc_dir), "%s",
@@ -423,7 +652,7 @@ static int _process_config(struct cmd_context *cmd)
 		}
 	}
 
-	if ((cn = find_config_tree_node(cmd, activation_mlock_filter_CFG, NULL)))
+	if ((cn = find_config_tree_array(cmd, activation_mlock_filter_CFG, NULL)))
 		for (cv = cn->v; cv; cv = cv->next) 
 			if ((cv->type != DM_CFG_STRING) || !cv->v.str[0]) 
 				log_error("Ignoring invalid activation/mlock_filter entry in config file");
@@ -445,29 +674,8 @@ static int _process_config(struct cmd_context *cmd)
 	init_detect_internal_vg_cache_corruption
 		(find_config_tree_bool(cmd, global_detect_internal_vg_cache_corruption_CFG, NULL));
 
-	lvmetad_disconnect();
-
-	lvmetad_socket = getenv("LVM_LVMETAD_SOCKET");
-	if (!lvmetad_socket)
-		lvmetad_socket = DEFAULT_RUN_DIR "/lvmetad.socket";
-
-	/* TODO?
-		lvmetad_socket = find_config_tree_str(cmd, "lvmetad/socket_path",
-						      DEFAULT_RUN_DIR "/lvmetad.socket");
-	*/
-	lvmetad_set_socket(lvmetad_socket);
-	cn = find_config_tree_node(cmd, devices_global_filter_CFG, NULL);
-	lvmetad_set_token(cn ? cn->v : NULL);
-
-	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
-	    find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
-		log_warn("WARNING: configuration setting use_lvmetad overridden to 0 due to locking_type 3. "
-			 "Clustered environment not supported by lvmetad yet.");
-		lvmetad_set_active(NULL, 0);
-	} else
-		lvmetad_set_active(NULL, find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL));
-
-	lvmetad_init(cmd);
+	if (!_init_system_id(cmd))
+		return_0;
 
 	return 1;
 }
@@ -526,11 +734,12 @@ static int _init_tags(struct cmd_context *cmd, struct dm_config_tree *cft)
 	const char *tag;
 	int passes;
 
-	if (!(tn = find_config_tree_node(cmd, tags_CFG_SECTION, NULL)) || !tn->child)
+	/* Access tags section directly */
+	if (!(tn = find_config_node(cmd, cft, tags_CFG_SECTION)) || !tn->child)
 		return 1;
 
 	/* NB hosttags 0 when already 1 intentionally does not delete the tag */
-	if (!cmd->hosttags && find_config_tree_bool(cmd, tags_hosttags_CFG, NULL)) {
+	if (!cmd->hosttags && find_config_bool(cmd, cft, tags_hosttags_CFG)) {
 		/* FIXME Strip out invalid chars: only A-Za-z0-9_+.- */
 		if (!_set_tag(cmd, cmd->hostname))
 			return_0;
@@ -561,7 +770,7 @@ static int _init_tags(struct cmd_context *cmd, struct dm_config_tree *cft)
 	return 1;
 }
 
-static int _load_config_file(struct cmd_context *cmd, const char *tag)
+static int _load_config_file(struct cmd_context *cmd, const char *tag, int local)
 {
 	static char config_file[PATH_MAX] = "";
 	const char *filler = "";
@@ -569,6 +778,10 @@ static int _load_config_file(struct cmd_context *cmd, const char *tag)
 
 	if (*tag)
 		filler = "_";
+	else if (local) {
+		filler = "";
+		tag = "local";
+	}
 
 	if (dm_snprintf(config_file, sizeof(config_file), "%s/lvm%s%s.conf",
 			 cmd->system_dir, filler, tag) < 0) {
@@ -596,7 +809,9 @@ static int _load_config_file(struct cmd_context *cmd, const char *tag)
 	return 1;
 }
 
-/* Find and read first config file */
+/*
+ * Find and read lvm.conf.
+ */
 static int _init_lvm_conf(struct cmd_context *cmd)
 {
 	/* No config file if LVM_SYSTEM_DIR is empty */
@@ -608,7 +823,7 @@ static int _init_lvm_conf(struct cmd_context *cmd)
 		return 1;
 	}
 
-	if (!_load_config_file(cmd, ""))
+	if (!_load_config_file(cmd, "", 0))
 		return_0;
 
 	return 1;
@@ -621,7 +836,7 @@ static int _init_tag_configs(struct cmd_context *cmd)
 
 	/* Tag list may grow while inside this loop */
 	dm_list_iterate_items(sl, &cmd->tags) {
-		if (!_load_config_file(cmd, sl->str))
+		if (!_load_config_file(cmd, sl->str, 0))
 			return_0;
 	}
 
@@ -768,15 +983,9 @@ static int _init_dev_cache(struct cmd_context *cmd)
 
 	init_obtain_device_list_from_udev(device_list_from_udev);
 
-	if (!(cn = find_config_tree_node(cmd, devices_scan_CFG, NULL))) {
-		if (!dev_cache_add_dir("/dev")) {
-			log_error("Failed to add /dev to internal "
-				  "device cache");
-			return 0;
-		}
-		log_verbose("device/scan not in config file: "
-			    "Defaulting to /dev");
-		return 1;
+	if (!(cn = find_config_tree_array(cmd, devices_scan_CFG, NULL))) {
+		log_error(INTERNAL_ERROR "Unable to find configuration for devices/scan.");
+		return_0;
 	}
 
 	for (cv = cn->v; cv; cv = cv->next) {
@@ -814,7 +1023,7 @@ static int _init_dev_cache(struct cmd_context *cmd)
 		}
 	}
 
-	if (!(cn = find_config_tree_node(cmd, devices_loopfiles_CFG, NULL)))
+	if (!(cn = find_config_tree_array(cmd, devices_loopfiles_CFG, NULL)))
 		return 1;
 
 	for (cv = cn->v; cv; cv = cv->next) {
@@ -835,7 +1044,7 @@ static int _init_dev_cache(struct cmd_context *cmd)
 	return 1;
 }
 
-#define MAX_FILTERS 7
+#define MAX_FILTERS 8
 
 static struct dev_filter *_init_lvmetad_filter_chain(struct cmd_context *cmd)
 {
@@ -905,7 +1114,14 @@ static struct dev_filter *_init_lvmetad_filter_chain(struct cmd_context *cmd)
 			nr_filt++;
 	}
 
-	if (!(composite = composite_filter_create(nr_filt, filters)))
+	/* firmware raid filter. Optional, non-critical. */
+	if (find_config_tree_bool(cmd, devices_fw_raid_component_detection_CFG, NULL)) {
+		init_fwraid_filtering(1);
+		if ((filters[nr_filt] = fwraid_filter_create(cmd->dev_types)))
+			nr_filt++;
+	}
+
+	if (!(composite = composite_filter_create(nr_filt, 1, filters)))
 		goto_bad;
 
 	return composite;
@@ -926,7 +1142,7 @@ bad:
  *     sysfs filter -> global regex filter -> type filter ->
  *     usable device filter(FILTER_MODE_PRE_LVMETAD) ->
  *     mpath component filter -> partitioned filter ->
- *     md component filter
+ *     md component filter -> fw raid filter
  *
  *   - cmd->filter - the filter chain used for lvmetad responses:
  *     persistent filter -> usable device filter(FILTER_MODE_POST_LVMETAD) ->
@@ -942,15 +1158,21 @@ bad:
  *     global regex filter -> type filter ->
  *     usable device filter(FILTER_MODE_NO_LVMETAD) ->
  *     mpath component filter -> partitioned filter ->
- *     md component filter
+ *     md component filter -> fw raid filter
  *
  */
-static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
+int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
 {
 	const char *dev_cache;
 	struct dev_filter *filter = NULL, *filter_components[2] = {0};
 	struct stat st;
 	const struct dm_config_node *cn;
+	struct timespec ts, cts;
+
+	if (!cmd->initialized.connections) {
+		log_error(INTERNAL_ERROR "connections must be initialized before filters");
+		return 0;
+	}
 
 	cmd->dump_filter = 0;
 
@@ -981,11 +1203,11 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
 	}
 
 	/* filter component 1 */
-	if ((cn = find_config_tree_node(cmd, devices_filter_CFG, NULL))) {
+	if ((cn = find_config_tree_array(cmd, devices_filter_CFG, NULL))) {
 		if (!(filter_components[1] = regex_filter_create(cn->v)))
 			goto_bad;
 		/* we have two filter components - create composite filter */
-		if (!(filter = composite_filter_create(2, filter_components)))
+		if (!(filter = composite_filter_create(2, 0, filter_components)))
 			goto_bad;
 	} else
 		/* we have only one filter component - no need to create composite filter */
@@ -1004,7 +1226,7 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
 	if (lvmetad_used()) {
 		filter_components[0] = cmd->lvmetad_filter;
 		filter_components[1] = cmd->filter;
-		if (!(cmd->full_filter = composite_filter_create(2, filter_components)))
+		if (!(cmd->full_filter = composite_filter_create(2, 0, filter_components)))
 			goto_bad;
 	} else
 		cmd->full_filter = filter;
@@ -1023,12 +1245,16 @@ static int _init_filters(struct cmd_context *cmd, unsigned load_persistent_cache
 	 */
 	if (!find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL) &&
 	    load_persistent_cache && !cmd->is_long_lived &&
-	    !stat(dev_cache, &st) &&
-	    (st.st_ctime > config_file_timestamp(cmd->cft)) &&
-	    !persistent_filter_load(cmd->filter, NULL))
-		log_verbose("Failed to load existing device cache from %s",
-			    dev_cache);
+	    !stat(dev_cache, &st)) {
+		lvm_stat_ctim(&ts, &st);
+		cts = config_file_timestamp(cmd->cft);
+		if (timespeccmp(&ts, &cts, >) &&
+		    !persistent_filter_load(cmd->filter, NULL))
+			log_verbose("Failed to load existing device cache from %s",
+				    dev_cache);
+	}
 
+	cmd->initialized.filters = 1;
 	return 1;
 bad:
 	if (!filter) {
@@ -1052,6 +1278,7 @@ bad:
 	if (cmd->lvmetad_filter)
 		cmd->lvmetad_filter->destroy(cmd->lvmetad_filter);
 
+	cmd->initialized.filters = 0;
 	return 0;
 }
 
@@ -1095,7 +1322,7 @@ static int _init_formats(struct cmd_context *cmd)
 #ifdef HAVE_LIBDL
 	/* Load any formats in shared libs if not static */
 	if (!is_static() &&
-	    (cn = find_config_tree_node(cmd, global_format_libraries_CFG, NULL))) {
+	    (cn = find_config_tree_array(cmd, global_format_libraries_CFG, NULL))) {
 
 		const struct dm_config_value *cv;
 		struct format_type *(*init_format_fn) (struct cmd_context *);
@@ -1261,7 +1488,7 @@ static int _init_segtypes(struct cmd_context *cmd)
 #ifdef HAVE_LIBDL
 	/* Load any formats in shared libs unless static */
 	if (!is_static() &&
-	    (cn = find_config_tree_node(cmd, global_segment_libraries_CFG, NULL))) {
+	    (cn = find_config_tree_array(cmd, global_segment_libraries_CFG, NULL))) {
 
 		const struct dm_config_value *cv;
 		int (*init_multiple_segtypes_fn) (struct cmd_context *,
@@ -1425,11 +1652,80 @@ static int _reopen_stream(FILE *stream, int fd, const char *mode, const char *na
 	return 1;
 }
 
+static int _init_lvmetad(struct cmd_context *cmd)
+{
+	const struct dm_config_node *cn;
+	const char *lvmetad_socket;
+
+	lvmetad_disconnect();
+
+	lvmetad_socket = getenv("LVM_LVMETAD_SOCKET");
+	if (!lvmetad_socket)
+		lvmetad_socket = DEFAULT_RUN_DIR "/lvmetad.socket";
+
+	/* TODO?
+		lvmetad_socket = find_config_tree_str(cmd, "lvmetad/socket_path",
+						      DEFAULT_RUN_DIR "/lvmetad.socket");
+	*/
+
+	lvmetad_set_socket(lvmetad_socket);
+	cn = find_config_tree_array(cmd, devices_global_filter_CFG, NULL);
+	lvmetad_set_token(cn ? cn->v : NULL);
+
+	if (find_config_tree_int(cmd, global_locking_type_CFG, NULL) == 3 &&
+	    find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL)) {
+		log_warn("WARNING: configuration setting use_lvmetad overridden to 0 due to locking_type 3. "
+			 "Clustered environment not supported by lvmetad yet.");
+		lvmetad_set_active(NULL, 0);
+	} else
+		lvmetad_set_active(NULL, find_config_tree_bool(cmd, global_use_lvmetad_CFG, NULL));
+
+	lvmetad_init(cmd);
+	return 1;
+}
+
+static int _init_lvmpolld(struct cmd_context *cmd)
+{
+	const char *lvmpolld_socket;
+
+	lvmpolld_disconnect();
+
+	lvmpolld_socket = getenv("LVM_LVMPOLLD_SOCKET");
+	if (!lvmpolld_socket)
+		lvmpolld_socket = DEFAULT_RUN_DIR "/lvmpolld.socket";
+	lvmpolld_set_socket(lvmpolld_socket);
+
+	lvmpolld_set_active(find_config_tree_bool(cmd, global_use_lvmpolld_CFG, NULL));
+	return 1;
+}
+
+int init_connections(struct cmd_context *cmd)
+{
+
+	if (!_init_lvmetad(cmd)) {
+		log_error("Failed to initialize lvmetad connection.");
+		goto bad;
+	}
+
+	if (!_init_lvmpolld(cmd)) {
+		log_error("Failed to initialize lvmpolld connection.");
+		goto bad;
+	}
+
+	cmd->initialized.connections = 1;
+	return 1;
+bad:
+	cmd->initialized.connections = 0;
+	return 0;
+}
+
 /* Entry point */
 struct cmd_context *create_toolcontext(unsigned is_long_lived,
 				       const char *system_dir,
 				       unsigned set_buffering,
-				       unsigned threaded)
+				       unsigned threaded,
+				       unsigned set_connections,
+				       unsigned set_filters)
 {
 	struct cmd_context *cmd;
 	FILE *new_stream;
@@ -1550,6 +1846,10 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
 	if (!_init_tags(cmd, cmd->cft))
 		goto_out;
 
+	/* Load lvmlocal.conf */
+	if (*cmd->system_dir && !_load_config_file(cmd, "", 1))
+		goto_out;
+
 	if (!_init_tag_configs(cmd))
 		goto_out;
 
@@ -1563,13 +1863,10 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
 		goto_out;
 
 	if (!(cmd->dev_types = create_dev_types(cmd->proc_dir,
-						find_config_tree_node(cmd, devices_types_CFG, NULL))))
+						find_config_tree_array(cmd, devices_types_CFG, NULL))))
 		goto_out;
 
 	if (!_init_dev_cache(cmd))
-		goto_out;
-
-	if (!_init_filters(cmd, 1))
 		goto_out;
 
 	memlock_init(cmd);
@@ -1590,12 +1887,18 @@ struct cmd_context *create_toolcontext(unsigned is_long_lived,
 
 	_init_globals(cmd);
 
+	if (set_connections && !init_connections(cmd))
+		return_0;
+
+	if (set_filters && !init_filters(cmd, 1))
+		goto_out;
+
 	cmd->default_settings.cache_vgmetadata = 1;
 	cmd->current_settings = cmd->default_settings;
 
-	cmd->config_initialized = 1;
+	cmd->initialized.config = 1;
 out:
-	if (!cmd->config_initialized) {
+	if (!cmd->initialized.config) {
 		destroy_toolcontext(cmd);
 		cmd = NULL;
 	}
@@ -1667,14 +1970,19 @@ static void _destroy_filters(struct cmd_context *cmd)
 		cmd->full_filter->destroy(cmd->full_filter);
 		cmd->lvmetad_filter = cmd->filter = cmd->full_filter = NULL;
 	}
+	cmd->initialized.filters = 0;
 }
 
 int refresh_filters(struct cmd_context *cmd)
 {
 	int r, saved_ignore_suspended_devices = ignore_suspended_devices();
 
+	if (!cmd->initialized.filters)
+		/* if filters not initialized, there's nothing to refresh */
+		return 1;
+
 	_destroy_filters(cmd);
-	if (!(r = _init_filters(cmd, 0)))
+	if (!(r = init_filters(cmd, 0)))
                 stack;
 
 	/*
@@ -1703,7 +2011,6 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	label_exit();
 	_destroy_segtypes(&cmd->segtypes);
 	_destroy_formats(cmd, &cmd->formats);
-	_destroy_filters(cmd);
 
 	if (!dev_cache_exit())
 		stack;
@@ -1721,7 +2028,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
 
 	_destroy_config(cmd);
 
-	cmd->config_initialized = 0;
+	cmd->initialized.config = 0;
 
 	cmd->hosttags = 0;
 
@@ -1754,6 +2061,10 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	if (!_init_tags(cmd, cft_tmp))
 		return_0;
 
+	/* Load lvmlocal.conf */
+	if (*cmd->system_dir && !_load_config_file(cmd, "", 1))
+		return_0;
+
 	/* Doesn't change cmd->cft */
 	if (!_init_tag_configs(cmd))
 		return_0;
@@ -1774,13 +2085,10 @@ int refresh_toolcontext(struct cmd_context *cmd)
 		return_0;
 
 	if (!(cmd->dev_types = create_dev_types(cmd->proc_dir,
-						find_config_tree_node(cmd, devices_types_CFG, NULL))))
+						find_config_tree_array(cmd, devices_types_CFG, NULL))))
 		return_0;
 
 	if (!_init_dev_cache(cmd))
-		return_0;
-
-	if (!_init_filters(cmd, 0))
 		return_0;
 
 	if (!_init_formats(cmd))
@@ -1795,7 +2103,13 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	if (!_init_backup(cmd))
 		return_0;
 
-	cmd->config_initialized = 1;
+	cmd->initialized.config = 1;
+
+	if (cmd->initialized.connections && !init_connections(cmd))
+		return_0;
+
+	if (!refresh_filters(cmd))
+		return_0;
 
 	reset_lvm_errno(1);
 	return 1;
@@ -1864,6 +2178,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
 
 	lvmetad_release_token();
 	lvmetad_disconnect();
+	lvmpolld_disconnect();
 
 	release_log_memory();
 	activation_exit();

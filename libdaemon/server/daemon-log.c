@@ -1,7 +1,23 @@
+/*
+ * Copyright (C) 2011-2012 Red Hat, Inc.
+ *
+ * This copyrighted material is made available to anyone wishing to use,
+ * modify, copy, or redistribute it subject to the terms and conditions
+ * of the GNU Lesser General Public License v.2.1.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+#define _REENTRANT
+
+#include "tool.h"
+
 #include "daemon-server.h"
 #include "daemon-log.h"
+
 #include <syslog.h>
-#include <assert.h>
 
 struct backend {
 	int id;
@@ -20,6 +36,7 @@ static void log_syslog(log_state *s, void **state, int type, const char *message
 	switch (type) {
 	case DAEMON_LOG_INFO: prio = LOG_INFO; break;
 	case DAEMON_LOG_WARN: prio = LOG_WARNING; break;
+	case DAEMON_LOG_ERROR: prio = LOG_ERR; break;
 	case DAEMON_LOG_FATAL: prio = LOG_CRIT; break;
 	default: prio = LOG_DEBUG; break;
 	}
@@ -128,7 +145,9 @@ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *ms
 
 void daemon_log_enable(log_state *s, int outlet, int type, int enable)
 {
-	assert(type < 32);
+	if (type >= 32)
+		return;
+
 	if (enable)
 		s->log_config[type] |= outlet;
 	else

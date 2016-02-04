@@ -15,10 +15,6 @@
 #ifndef _LVM_DAEMON_CONFIG_UTIL_H
 #define _LVM_DAEMON_CONFIG_UTIL_H
 
-#include "libdevmapper.h"
-
-#include <stdarg.h>
-
 struct buffer {
 	int allocated;
 	int used;
@@ -37,10 +33,16 @@ int buffer_line(const char *line, void *baton);
 int set_flag(struct dm_config_tree *cft, struct dm_config_node *parent,
 	     const char *field, const char *flag, int want);
 
+void chain_node(struct dm_config_node *cn,
+                struct dm_config_node *parent,
+                struct dm_config_node *pre_sib);
+
 struct dm_config_node *make_config_node(struct dm_config_tree *cft,
 					const char *key,
 					struct dm_config_node *parent,
 					struct dm_config_node *pre_sib);
+
+int compare_config(struct dm_config_node *a, struct dm_config_node *b);
 
 struct dm_config_node *make_text_node(struct dm_config_tree *cft,
 				      const char *key,

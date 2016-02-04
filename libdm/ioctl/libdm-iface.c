@@ -68,6 +68,7 @@ static unsigned _dm_version = DM_VERSION_MAJOR;
 static unsigned _dm_version_minor = 0;
 static unsigned _dm_version_patchlevel = 0;
 static int _log_suppress = 0;
+static struct dm_timestamp *_dm_ioctl_timestamp = NULL;
 
 /*
  * If the kernel dm driver only supports one major number
@@ -245,7 +246,7 @@ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
 		return -1;
 	}
 
-	if (major && buf.st_rdev != MKDEV((dev_t)major, minor)) {
+	if (major && buf.st_rdev != MKDEV((dev_t)major, (dev_t)minor)) {
 		log_verbose("%s: Wrong device number: (%u, %u) instead of "
 			    "(%u, %u)", control,
 			    MAJOR(buf.st_mode), MINOR(buf.st_mode),
@@ -288,7 +289,7 @@ static int _create_control(const char *control, uint32_t major, uint32_t minor)
 	(void) dm_prepare_selinux_context(control, S_IFCHR);
 	old_umask = umask(DM_CONTROL_NODE_UMASK);
 	if (mknod(control, S_IFCHR | S_IRUSR | S_IWUSR,
-		  MKDEV((dev_t)major, minor)) < 0)  {
+		  MKDEV((dev_t)major, (dev_t)minor)) < 0)  {
 		log_sys_error("mknod", control);
 		(void) dm_prepare_selinux_context(NULL, 0);
 		return 0;
@@ -571,8 +572,9 @@ int dm_check_version(void)
 	dm_get_library_version(libversion, sizeof(libversion));
 
       bad:
-	log_error("Incompatible libdevmapper %s%s and kernel driver %s",
-		  libversion, compat, dmversion);
+	log_error("Incompatible libdevmapper %s%s and kernel driver %s.",
+		  *libversion ? libversion : "(unknown version)", compat,
+		  *dmversion ? dmversion : "(unknown version)");
 
 	_version_ok = 0;
 	return 0;
@@ -600,6 +602,20 @@ static int dm_inactive_supported(void)
 	}
 
 	return inactive_supported;
+}
+
+int dm_message_supports_precise_timestamps(void)
+{
+	/*
+	 * 4.32.0 supports "precise_timestamps" and "histogram:" options
+	 * to @stats_create messages but lacks the ability to report
+	 * these properties via a subsequent @stats_list: require at
+	 * least 4.33.0 in order to use these features.
+	 */
+	if (dm_check_version() && _dm_version >= 4)
+		if (_dm_version_minor >= 33)
+			return 1;
+	return 0;
 }
 
 void *dm_get_next_target(struct dm_task *dmt, void *next,
@@ -665,7 +681,13 @@ int dm_format_dev(char *buf, int bufsize, uint32_t dev_major,
 	return 1;
 }
 
+#if defined(__GNUC__)
+int dm_task_get_info_v1_02_97(struct dm_task *dmt, struct dm_info *info);
+DM_EXPORTED_SYMBOL(dm_task_get_info, 1_02_97);
+int dm_task_get_info_v1_02_97(struct dm_task *dmt, struct dm_info *info)
+#else
 int dm_task_get_info(struct dm_task *dmt, struct dm_info *info)
+#endif
 {
 	if (!dmt->dmi.v4)
 		return 0;
@@ -682,6 +704,7 @@ int dm_task_get_info(struct dm_task *dmt, struct dm_info *info)
 	info->inactive_table = dmt->dmi.v4->flags & DM_INACTIVE_PRESENT_FLAG ?
 	    1 : 0;
 	info->deferred_remove = dmt->dmi.v4->flags & DM_DEFERRED_REMOVE;
+	info->internal_suspend = (dmt->dmi.v4->flags & DM_INTERNAL_SUSPEND_FLAG) ? 1 : 0;
 	info->target_count = dmt->dmi.v4->target_count;
 	info->open_count = dmt->dmi.v4->open_count;
 	info->event_nr = dmt->dmi.v4->event_nr;
@@ -909,6 +932,24 @@ int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr)
 	dmt->event_nr = event_nr;
 
 	return 1;
+}
+
+int dm_task_set_record_timestamp(struct dm_task *dmt)
+{
+	if (!_dm_ioctl_timestamp)
+		_dm_ioctl_timestamp = dm_timestamp_alloc();
+
+	if (!_dm_ioctl_timestamp)
+		return_0;
+
+	dmt->record_timestamp = 1;
+
+	return 1;
+}
+
+struct dm_timestamp *dm_task_get_ioctl_timestamp(struct dm_task *dmt)
+{
+	return dmt->record_timestamp ? _dm_ioctl_timestamp : NULL;
 }
 
 struct target *create_target(uint64_t start, uint64_t len, const char *type,
@@ -1141,7 +1182,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
 		}
 
 		dmi->flags |= DM_PERSISTENT_DEV_FLAG;
-		dmi->dev = MKDEV((dev_t)dmt->major, dmt->minor);
+		dmi->dev = MKDEV((dev_t)dmt->major, (dev_t)dmt->minor);
 	}
 
 	/* Does driver support device number referencing? */
@@ -1708,6 +1749,9 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
 {
 	struct dm_ioctl *dmi;
 	int ioctl_with_uevent;
+	int r;
+
+	dmt->ioctl_errno = 0;
 
 	dmi = _flatten(dmt, buffer_repeat_count);
 	if (!dmi) {
@@ -1793,30 +1837,50 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt, unsigned command,
 			     dmt->sector, _sanitise_message(dmt->message),
 			     dmi->data_size, retry_repeat_count);
 #ifdef DM_IOCTLS
-	if (ioctl(_control_fd, command, dmi) < 0 &&
-	    dmt->expected_errno != errno) {
-		if (errno == ENXIO && ((dmt->type == DM_DEVICE_INFO) ||
-				       (dmt->type == DM_DEVICE_MKNODES) ||
-				       (dmt->type == DM_DEVICE_STATUS)))
+	r = ioctl(_control_fd, command, dmi);
+
+	if (dmt->record_timestamp)
+		if (!dm_timestamp_get(_dm_ioctl_timestamp))
+			stack;
+
+	if (r < 0 && dmt->expected_errno != errno) {
+		dmt->ioctl_errno = errno;
+		if (dmt->ioctl_errno == ENXIO && ((dmt->type == DM_DEVICE_INFO) ||
+						  (dmt->type == DM_DEVICE_MKNODES) ||
+						  (dmt->type == DM_DEVICE_STATUS)))
 			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
 		else {
-			if (_log_suppress)
-				log_verbose("device-mapper: %s ioctl "
+			if (_log_suppress || dmt->ioctl_errno == EINTR)
+				log_verbose("device-mapper: %s ioctl on %s%s%s%.0d%s%.0d%s%s "
 					    "failed: %s",
 				    	    _cmd_data_v4[dmt->type].name,
-					    strerror(errno));
+					    dmi->name, dmi->uuid, 
+					    dmt->major > 0 ? "(" : "",
+					    dmt->major > 0 ? dmt->major : 0,
+					    dmt->major > 0 ? ":" : "",
+					    dmt->minor > 0 ? dmt->minor : 0,
+					    dmt->major > 0 && dmt->minor == 0 ? "0" : "",
+					    dmt->major > 0 ? ")" : "",
+					    strerror(dmt->ioctl_errno));
 			else
-				log_error("device-mapper: %s ioctl on %s "
+				log_error("device-mapper: %s ioctl on %s%s%s%.0d%s%.0d%s%s "
 					  "failed: %s",
 					  _cmd_data_v4[dmt->type].name,
-					  dmi->name, strerror(errno));
+					  dmi->name, dmi->uuid, 
+					  dmt->major > 0 ? "(" : "",
+					  dmt->major > 0 ? dmt->major : 0,
+					  dmt->major > 0 ? ":" : "",
+					  dmt->minor > 0 ? dmt->minor : 0,
+					  dmt->major > 0 && dmt->minor == 0 ? "0" : "",
+					  dmt->major > 0 ? ")" : "",
+					  strerror(dmt->ioctl_errno));
 
 			/*
 			 * It's sometimes worth retrying after EBUSY in case
 			 * it's a transient failure caused by an asynchronous
 			 * process quickly scanning the device.
 			 */
-			*retryable = errno == EBUSY;
+			*retryable = dmt->ioctl_errno == EBUSY;
 
 			goto error;
 		}
@@ -1853,6 +1917,11 @@ void dm_task_update_nodes(void)
 
 #define DM_IOCTL_RETRIES 25
 #define DM_RETRY_USLEEP_DELAY 200000
+
+int dm_task_get_errno(struct dm_task *dmt)
+{
+	return dmt->ioctl_errno;
+}
 
 int dm_task_run(struct dm_task *dmt)
 {
@@ -2019,6 +2088,8 @@ repeat_ioctl:
 void dm_lib_release(void)
 {
 	_close_control_fd();
+	dm_timestamp_destroy(_dm_ioctl_timestamp);
+	_dm_ioctl_timestamp = NULL;
 	update_devs();
 }
 
@@ -2046,6 +2117,12 @@ void dm_lib_exit(void)
 	_version_checked = 0;
 }
 
+#if defined(__GNUC__)
+/*
+ * Maintain binary backward compatibility.
+ * Version script mechanism works with 'gcc' compatible compilers only.
+ */
+
 /*
  * This following code is here to retain ABI compatibility after adding
  * the field deferred_remove to struct dm_info in version 1.02.89.
@@ -2061,16 +2138,31 @@ void dm_lib_exit(void)
  * N.B. Keep this function at the end of the file to make sure that
  * no code in this file accidentally calls it.
  */
-#undef dm_task_get_info
-int dm_task_get_info(struct dm_task *dmt, struct dm_info *info);
-int dm_task_get_info(struct dm_task *dmt, struct dm_info *info)
+
+int dm_task_get_info_base(struct dm_task *dmt, struct dm_info *info);
+DM_EXPORTED_SYMBOL_BASE(dm_task_get_info);
+int dm_task_get_info_base(struct dm_task *dmt, struct dm_info *info)
 {
 	struct dm_info new_info;
 
-	if (!dm_task_get_info_with_deferred_remove(dmt, &new_info))
+	if (!dm_task_get_info_v1_02_97(dmt, &new_info))
 		return 0;
 
 	memcpy(info, &new_info, offsetof(struct dm_info, deferred_remove));
 
 	return 1;
 }
+
+int dm_task_get_info_with_deferred_remove(struct dm_task *dmt, struct dm_info *info);
+int dm_task_get_info_with_deferred_remove(struct dm_task *dmt, struct dm_info *info)
+{
+	struct dm_info new_info;
+
+	if (!dm_task_get_info_v1_02_97(dmt, &new_info))
+		return 0;
+
+	memcpy(info, &new_info, offsetof(struct dm_info, internal_suspend));
+
+	return 1;
+}
+#endif

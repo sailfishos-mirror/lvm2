@@ -16,7 +16,6 @@
 #include "segtype.h"
 #include "display.h"
 #include "text_export.h"
-#include "text_import.h"
 #include "config.h"
 #include "str_list.h"
 #include "targets.h"
@@ -24,15 +23,6 @@
 #include "activate.h"
 #include "metadata.h"
 #include "lv_alloc.h"
-
-/* HM FIXME: REMOVEME: devel output */
-#ifdef USE_PFL
-#define PFL() printf("%s %u\n", __func__, __LINE__);
-#define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
-#else
-#define PFL()
-#define PFLA(format, arg...)
-#endif
 
 static void _raid_display(const struct lv_segment *seg)
 {
@@ -44,7 +34,7 @@ static void _raid_display(const struct lv_segment *seg)
 	}
 
 	if (seg->meta_areas)
-		for (s = 0; seg->meta_areas && s < seg->area_count; ++s)
+		for (s = 0; s < seg->area_count; ++s)
 			log_print("  Raid Metadata LV%2d\t%s", s, seg_metalv(seg, s)->name);
 
 	log_print(" ");
@@ -55,7 +45,7 @@ static int _raid_text_import_area_count(const struct dm_config_node *sn,
 {
 	if (!dm_config_get_uint32(sn, "device_count", area_count) &&
 	    !dm_config_get_uint32(sn, "stripe_count", area_count)) {
-		log_error("Couldn't read '{device|stripe}_count' for "
+		log_error("Couldn't read '(device|stripe)_count' for "
 			  "segment '%s'.", dm_config_parent_name(sn));
 		return 0;
 	}
@@ -135,6 +125,7 @@ static int _raid_text_import(struct lv_segment *seg,
 	} attr_import[] = {
 		{ "region_size",       &seg->region_size },
 		{ "stripe_size",       &seg->stripe_size },
+		{ "data_copies",       &seg->data_copies },
 		{ "writebehind",       &seg->writebehind },
 		{ "min_recovery_rate", &seg->min_recovery_rate },
 		{ "max_recovery_rate", &seg->max_recovery_rate },
@@ -143,11 +134,16 @@ static int _raid_text_import(struct lv_segment *seg,
 	for (i = 0; i < DM_ARRAY_SIZE(attr_import); i++, aip++) {
 		if (dm_config_has_node(sn, aip->name)) {
 			if (!dm_config_get_uint32(sn, aip->name, aip->var)) {
-				log_error("Couldn't read '%s' for segment %s of logical volume %s.",
-					  aip->name, dm_config_parent_name(sn), seg->lv->name);
-				return 0;
-			}
-		}
+				if (!strcmp(aip->name, "data_copies")) {
+					log_error("Couldn't read '%s' for segment %s of logical volume %s.",
+						  aip->name, dm_config_parent_name(sn), seg->lv->name);
+					return 0;
+				}
+			} 
+
+		/* FIXME: only necessary for givne matadata w/o new data_copies */
+		} else if (!strcmp(aip->name, "data_copies"))
+			seg->data_copies = seg_is_raid1(seg) ? seg->area_count : 1;
 	}
 
 	if (!dm_config_get_list(sn, "raids", &cv)) {
@@ -163,13 +159,14 @@ static int _raid_text_import(struct lv_segment *seg,
 	}
 
 	seg->status |= RAID;
-
+	seg->area_len = raid_rimage_extents(seg->segtype, seg->len, seg->area_count - seg->segtype->parity_devs,
+					    seg->segtype->parity_devs ? 1 : seg->data_copies);
 	return 1;
 }
 
 static int _raid_text_export(const struct lv_segment *seg, struct formatter *f)
 {
-	int raid0 = (seg_is_raid0(seg) || seg_is_raid0_meta(seg));
+	int raid0 = seg_is_any_raid0(seg);
 
 	if (raid0)
 		outfc(f, (seg->area_count == 1) ? "# linear" : NULL,
@@ -177,6 +174,8 @@ static int _raid_text_export(const struct lv_segment *seg, struct formatter *f)
 
 	else {
 		outf(f, "device_count = %u", seg->area_count);
+		if (seg->data_copies > 0)
+			outf(f, "data_copies = %" PRIu32, seg->data_copies);
 		if (seg->region_size)
 			outf(f, "region_size = %" PRIu32, seg->region_size);
 	}
@@ -205,7 +204,7 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
 				 struct dm_tree_node *node, uint64_t len,
 				 uint32_t *pvmove_mirror_count __attribute__((unused)))
 {
-	int r, delta_disks = 0, data_offset = 0;
+	int delta_disks = 0, data_offset = 0;
 	uint32_t s;
 	uint64_t flags = 0;
 	uint64_t rebuilds[4];
@@ -278,21 +277,25 @@ PFL();
 		/* RAID 4/5/6 */
 		params.mirrors = 1;
 		params.stripes = seg->area_count - seg->segtype->parity_devs;
+PFLA("mirrors=%u stripes=%u", params.mirrors, params.stripes);
 	} else if (seg_is_any_raid0(seg)) {
 		params.mirrors = 1;
 		params.stripes = seg->area_count;
 PFLA("mirrors=%u stripes=%u", params.mirrors, params.stripes);
-	} else if (seg_is_raid10(seg)) {
-		/* RAID 10 only supports 2 mirrors now */
-		/* FIXME: HM: is this actually a constraint still? */
-		params.mirrors = 2;
-		params.stripes = seg->area_count / 2;
+	} else if (seg_is_any_raid10(seg)) {
+		if (!seg->data_copies)
+			seg->data_copies = 2;
+
+		params.data_copies = seg->data_copies;
+		params.stripes = seg->area_count;
+PFLA("mirrors=%u stripes=%u", params.mirrors, params.stripes);
 	} else {
 		/* RAID 1 */
 		params.mirrors = seg->area_count;
 		params.stripes = 1;
 		params.writebehind = seg->writebehind;
 		memcpy(params.writemostly, writemostly, sizeof(params.writemostly));
+PFLA("mirrors=%u stripes=%u", params.mirrors, params.stripes);
 	}
 
 	/* RAID 0 doesn't have a bitmap, thus no region_size, rebuilds etc. */
@@ -307,14 +310,10 @@ PFLA("mirrors=%u stripes=%u", params.mirrors, params.stripes);
 
 	params.stripe_size = seg->stripe_size;
 	params.flags = flags;
-
 PFL();
 	if (!dm_tree_node_add_raid_target_with_params(node, len, &params))
 		return_0;
 PFL();
-	r = add_areas_line(dm, seg, node, 0u, seg->area_count);
-PFLA("r=%d", r);
-	return r;
 	return add_areas_line(dm, seg, node, 0u, seg->area_count);
 }
 
@@ -353,8 +352,11 @@ static int _raid_target_percent(void **target_state,
 		else
 			break;
 	}
-	if (!pos || (sscanf(pos, "%" PRIu64 "/%" PRIu64 "%n",
-			    &numerator, &denominator, &i) != 2)) {
+
+	if (!pos ||
+	    (sscanf(pos, "%" PRIu64 "/%" PRIu64 "%n",
+		    &numerator, &denominator, &i) != 2) ||
+	    !denominator) {
 		log_error("Failed to parse %s status fraction: %s",
 			  (seg) ? seg->segtype->name : "segment", params);
 		return 0;
@@ -486,30 +488,35 @@ static struct segtype_handler _raid_ops = {
 };
 
 static const struct raid_type {
-	const char name[12];
+	const char name[19];
 	unsigned parity;
 	uint64_t extra_flags;
+	const char *descr; /* HM FIXME: use segtype flags instead and display based on them */
 } _raid_types[] = {
-	{ SEG_TYPE_NAME_RAID0,      0, SEG_RAID0 },
-	{ SEG_TYPE_NAME_RAID0_META, 0, SEG_RAID0_META },
-	{ SEG_TYPE_NAME_RAID1,      0, SEG_RAID1 | SEG_AREAS_MIRRORED },
-	{ SEG_TYPE_NAME_RAID10,     0, SEG_RAID10 | SEG_AREAS_MIRRORED },
-	{ SEG_TYPE_NAME_RAID4,      1, SEG_RAID4 },
-	{ SEG_TYPE_NAME_RAID5,      1, SEG_RAID5 }, /* is raid5_ls */
-	{ SEG_TYPE_NAME_RAID5_N,    1, SEG_RAID5_N },
-	{ SEG_TYPE_NAME_RAID5_LA,   1, SEG_RAID5_LA },
-	{ SEG_TYPE_NAME_RAID5_LS,   1, SEG_RAID5_LS },
-	{ SEG_TYPE_NAME_RAID5_RA,   1, SEG_RAID5_RA },
-	{ SEG_TYPE_NAME_RAID5_RS,   1, SEG_RAID5_RS },
-	{ SEG_TYPE_NAME_RAID6,      2, SEG_RAID6 }, /* is raid6_zr */
-	{ SEG_TYPE_NAME_RAID6_NC,   2, SEG_RAID6_NC },
-	{ SEG_TYPE_NAME_RAID6_NR,   2, SEG_RAID6_NR },
-	{ SEG_TYPE_NAME_RAID6_ZR,   2, SEG_RAID6_ZR },
-	{ SEG_TYPE_NAME_RAID6_LA_6, 2, SEG_RAID6_LA_6 },
-	{ SEG_TYPE_NAME_RAID6_LS_6, 2, SEG_RAID6_LS_6 },
-	{ SEG_TYPE_NAME_RAID6_RA_6, 2, SEG_RAID6_RA_6 },
-	{ SEG_TYPE_NAME_RAID6_RS_6, 2, SEG_RAID6_RS_6 },
-	{ SEG_TYPE_NAME_RAID6_N_6,  2, SEG_RAID6_N_6 },
+	{ SEG_TYPE_NAME_RAID0,         0, SEG_RAID0, "striped/raid4/raid5/raid6/raid10" },
+	{ SEG_TYPE_NAME_RAID0_META,    0, SEG_RAID0_META, "striped/raid4/raid5/raid6/raid10" },
+	{ SEG_TYPE_NAME_RAID1,         0, SEG_RAID1 | SEG_AREAS_MIRRORED, "linear/raid4(2)/raid5(2)/raid10" },
+	{ SEG_TYPE_NAME_RAID01,        0, SEG_RAID01 | SEG_AREAS_MIRRORED, "striped/raid10" },
+	{ SEG_TYPE_NAME_RAID10_NEAR,   0, SEG_RAID10_NEAR | SEG_AREAS_MIRRORED, "raid0/1(!(stripes%mirrors)" },
+	{ SEG_TYPE_NAME_RAID10_FAR,    0, SEG_RAID10_FAR | SEG_AREAS_MIRRORED | SEG_CAN_SPLIT, "striped/raid0" },
+	{ SEG_TYPE_NAME_RAID10_OFFSET, 0, SEG_RAID10_OFFSET | SEG_AREAS_MIRRORED, "raid10_near" },
+	{ SEG_TYPE_NAME_RAID10,        0, SEG_RAID10 | SEG_AREAS_MIRRORED /* is raid10_near */, "raid01(!(stripes%mirrors)" },
+	{ SEG_TYPE_NAME_RAID4,         1, SEG_RAID4, "striped/raid0/raid1(2)/raid5/raid6" },
+	{ SEG_TYPE_NAME_RAID5_N,       1, SEG_RAID5_N, "raid0/striped/raid1(2)/raid4/raid6" },
+	{ SEG_TYPE_NAME_RAID5_LA,      1, SEG_RAID5_LA, "raid5*/raid6" },
+	{ SEG_TYPE_NAME_RAID5_LS,      1, SEG_RAID5_LS, "raid5*/raid6" },
+	{ SEG_TYPE_NAME_RAID5_RA,      1, SEG_RAID5_RA, "raid5*/raid6" },
+	{ SEG_TYPE_NAME_RAID5_RS,      1, SEG_RAID5_RS, "raid5*/raid6" },
+	{ SEG_TYPE_NAME_RAID5,         1, SEG_RAID5 /* is raid5_ls */, "raid5*/raid6" },
+	{ SEG_TYPE_NAME_RAID6_NC,      2, SEG_RAID6_NC, "raid6*" },
+	{ SEG_TYPE_NAME_RAID6_NR,      2, SEG_RAID6_NR, "raid6*" },
+	{ SEG_TYPE_NAME_RAID6_ZR,      2, SEG_RAID6_ZR, "raid6*" },
+	{ SEG_TYPE_NAME_RAID6_LA_6,    2, SEG_RAID6_LA_6, "raid5/raid6*" },
+	{ SEG_TYPE_NAME_RAID6_LS_6,    2, SEG_RAID6_LS_6, "raid5/raid6*" },
+	{ SEG_TYPE_NAME_RAID6_RA_6,    2, SEG_RAID6_RA_6, "raid5/raid6*" },
+	{ SEG_TYPE_NAME_RAID6_RS_6,    2, SEG_RAID6_RS_6, "raid5/raid6*" },
+	{ SEG_TYPE_NAME_RAID6_N_6,     2, SEG_RAID6_N_6, "striped/raid0*/raid5/raid6*" },
+	{ SEG_TYPE_NAME_RAID6,         2, SEG_RAID6 /* is raid6_zr */, "raid6*" },
 };
 
 static struct segment_type *_init_raid_segtype(struct cmd_context *cmd,
@@ -526,6 +533,7 @@ static struct segment_type *_init_raid_segtype(struct cmd_context *cmd,
 
 	segtype->ops = &_raid_ops;
 	segtype->name = rt->name;
+	segtype->descr = rt->descr ?: "";
 	segtype->flags = SEG_RAID | SEG_ONLY_EXCLUSIVE | rt->extra_flags | monitored;
 	segtype->parity_devs = rt->parity;
 

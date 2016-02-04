@@ -1,11 +1,15 @@
 @top_srcdir@/daemons/clvmd/clvm.h
 @top_srcdir@/daemons/dmeventd/libdevmapper-event.h
 @top_srcdir@/daemons/lvmetad/lvmetad-client.h
+@top_srcdir@/daemons/lvmpolld/lvmpolld-protocol.h
+@top_srcdir@/daemons/lvmpolld/polling_ops.h
+@top_srcdir@/daemons/lvmlockd/lvmlockd-client.h
 @top_srcdir@/liblvm/lvm2app.h
 @top_srcdir@/lib/activate/activate.h
 @top_srcdir@/lib/activate/targets.h
 @top_srcdir@/lib/cache/lvmcache.h
 @top_srcdir@/lib/cache/lvmetad.h
+@top_srcdir@/lib/locking/lvmlockd.h
 @top_srcdir@/lib/commands/toolcontext.h
 @top_srcdir@/lib/config/config.h
 @top_srcdir@/lib/config/config_settings.h
@@ -13,6 +17,7 @@
 @top_srcdir@/lib/datastruct/btree.h
 @top_srcdir@/lib/datastruct/str_list.h
 @top_srcdir@/lib/device/dev-cache.h
+@top_srcdir@/lib/device/dev-ext-udev-constants.h
 @top_srcdir@/lib/device/dev-type.h
 @top_srcdir@/lib/device/device.h
 @top_srcdir@/lib/device/device-types.h
@@ -28,6 +33,8 @@
 @top_srcdir@/lib/locking/locking.h
 @top_srcdir@/lib/log/log.h
 @top_srcdir@/lib/log/lvm-logging.h
+@top_srcdir@/lib/lvmpolld/lvmpolld-client.h
+@top_srcdir@/lib/lvmpolld/polldaemon.h
 @top_srcdir@/lib/metadata/lv.h
 @top_srcdir@/lib/metadata/lv_alloc.h
 @top_srcdir@/lib/metadata/metadata.h
@@ -69,3 +76,4 @@
 @top_srcdir@/libdm/misc/kdev_t.h
 @top_srcdir@/po/pogen.h
 @top_srcdir@/tools/lvm2cmd.h
+@top_srcdir@/tools/tool.h

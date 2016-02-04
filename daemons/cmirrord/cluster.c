@@ -104,10 +104,11 @@ static SaVersionT version = { 'B', 1, 1 };
 #endif
 
 #define DEBUGGING_HISTORY 100
+#define DEBUGGING_BUFLEN 128
 #define LOG_SPRINT(cc, f, arg...) do {				\
 		cc->idx++;					\
 		cc->idx = cc->idx % DEBUGGING_HISTORY;		\
-		sprintf(cc->debugging[cc->idx], f, ## arg);	\
+		snprintf(cc->debugging[cc->idx], DEBUGGING_BUFLEN, f, ## arg); \
 	} while (0)
 
 static int log_resp_rec = 0;
@@ -150,7 +151,7 @@ struct clog_cpg {
 	uint32_t checkpoint_requesters[MAX_CHECKPOINT_REQUESTERS];
 	struct checkpoint_data *checkpoint_list;
 	int idx;
-	char debugging[DEBUGGING_HISTORY][128];
+	char debugging[DEBUGGING_HISTORY][DEBUGGING_BUFLEN];
 };
 
 static struct dm_list clog_cpg_list;
@@ -1294,7 +1295,9 @@ static void cpg_join_callback(struct clog_cpg *match,
 	uint32_t my_pid = (uint32_t)getpid();
 	uint32_t lowest = match->lowest_id;
 	struct clog_request *rq;
-	char dbuf[32] = { 0 };
+	char dbuf[64] = { 0 };
+	char *dbuf_p = dbuf;
+	size_t dbuf_rem = sizeof dbuf;
 
 	/* Assign my_cluster_id */
 	if ((my_cluster_id == 0xDEAD) && (joined->pid == my_pid))
@@ -1310,9 +1313,17 @@ static void cpg_join_callback(struct clog_cpg *match,
 	if (joined->nodeid == my_cluster_id)
 		goto out;
 
-	for (i = 0; i < member_list_entries - 1; i++)
-		sprintf(dbuf+strlen(dbuf), "%u-", member_list[i].nodeid);
-	sprintf(dbuf+strlen(dbuf), "(%u)", joined->nodeid);
+	for (i = 0; i < member_list_entries - 1; i++) {
+		int written = snprintf(dbuf_p, dbuf_rem, "%u-", member_list[i].nodeid);
+		if (written < 0) continue; /* impossible */
+		if ((unsigned)written >= dbuf_rem) {
+			dbuf_rem = 0;
+			break;
+		}
+		dbuf_rem -= written;
+		dbuf_p += written;
+	}
+	snprintf(dbuf_p, dbuf_rem, "(%u)", joined->nodeid);
 	LOG_COND(log_checkpoint, "[%s] Joining node, %u needs checkpoint [%s]",
 		 SHORT_UUID(match->name.value), joined->nodeid, dbuf);
 

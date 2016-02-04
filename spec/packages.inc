@@ -77,10 +77,14 @@ fi
 %{_sbindir}/vgs
 %{_sbindir}/vgscan
 %{_sbindir}/vgsplit
+%{_sbindir}/lvmconfig
 %{_sbindir}/lvmconf
 %{_sbindir}/blkdeactivate
 %if %{have_service lvmetad}
  %{_sbindir}/lvmetad
+%endif
+%if %{have_service lvmpolld}
+ %{_sbindir}/lvmpolld
 %endif
 %if %{have_with cache}
   %{_mandir}/man7/lvmcache.7.gz
@@ -88,6 +92,7 @@ fi
 %if %{have_with thin}
   %{_mandir}/man7/lvmthin.7.gz
 %endif
+%{_mandir}/man7/lvmsystemid.7.gz
 %{_mandir}/man5/lvm.conf.5.gz
 %{_mandir}/man8/fsadm.8.gz
 %{_mandir}/man8/lvchange.8.gz
@@ -138,6 +143,8 @@ fi
 %{_mandir}/man8/vgsplit.8.gz
 %{_mandir}/man8/blkdeactivate.8.gz
 %{_mandir}/man8/lvm-dumpconfig.8.gz
+%{_mandir}/man8/lvm-config.8.gz
+%{_mandir}/man8/lvmconfig.8.gz
 %if %{enable_udev}
  %{_udevdir}/11-dm-lvm.rules
  %if %{have_service lvmetad}
@@ -145,17 +152,23 @@ fi
   %{_udevdir}/69-dm-lvm-metad.rules
  %endif
 %endif
+%if %{have_service lvmpolld}
+  %{_mandir}/man8/lvmpolld.8.gz
+  %{_mandir}/man8/lvm-lvpoll.8.gz
+%endif
 %dir %{_sysconfdir}/lvm
 %ghost %{_sysconfdir}/lvm/cache/.cache
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvm.conf
+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/lvmlocal.conf
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/command_profile_template.profile
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/metadata_profile_template.profile
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/thin-generic.profile
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/thin-performance.profile
+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/cache-mq.profile
+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/lvm/profile/cache-smq.profile
 %dir %{_sysconfdir}/lvm/backup
 %dir %{_sysconfdir}/lvm/cache
 %dir %{_sysconfdir}/lvm/archive
-%dir %{_default_locking_dir}
 %dir %{_default_run_dir}
 %if %{enable_systemd}
  %config(noreplace) %{_prefix}/lib/tmpfiles.d/%{name}.conf
@@ -166,11 +179,18 @@ fi
   %{_unitdir}/lvm2-pvscan@.service
   %{_unitdir}/blk-availability.service
  %endif
+ %if %{have_service lvmpolld}
+  %{_unitdir}/lvm2-lvmpolld.service
+  %{_unitdir}/lvm2-lvmpolld.socket
+ %endif
 %else
  %{_sysconfdir}/rc.d/init.d/lvm2-monitor
  %{_sysconfdir}/rc.d/init.d/blk-availability
  %if %{have_service lvmetad}
   %{_sysconfdir}/rc.d/init.d/lvm2-lvmetad
+ %endif
+ %if %{have_service lvmpolld}
+  %{_sysconfdir}/rc.d/init.d/lvm2-lvmpolld
  %endif
 %endif
 
@@ -229,6 +249,46 @@ This package contains shared lvm2 libraries for applications.
 %{_libdir}/libdevmapper-event-lvm2snapshot.so
 %{_libdir}/libdevmapper-event-lvm2raid.so
 
+
+##############################################################################
+# LVM locking daemon
+##############################################################################
+%if %{have_service lvmlockd}
+%package lockd
+Summary: LVM locking daemon
+Group: System Environment/Base
+Requires: lvm2 = %{version}-%{release}
+%if %{enable_lockd_dlm}
+Requires: dlm-lib >= %{dlm_version}
+%endif
+%if %{enable_lockd_sanlock}
+Requires: sanlock-lib >= %{sanlock_version}
+%endif
+Requires(post): systemd-units
+Requires(preun): systemd-units
+Requires(postun): systemd-units
+
+%description lockd
+LVM commands use lvmlockd to coordinate access to shared storage.
+
+%post lockd
+%systemd_post lvm2-lvmlockd.service lvm2-lvmlocking.service
+
+%preun lockd
+%systemd_preun lvm2-lvmlockd.service lvm2-lvmlocking.service
+
+%postun lockd
+%systemd_postun lvm2-lvmlockd.service lvm2-lvmlocking.service
+
+%files lockd
+%{_sbindir}/lvmlockd
+%{_sbindir}/lvmlockctl
+%{_mandir}/man8/lvmlockd.8.gz
+%dir %{_default_locking_dir}
+%{_unitdir}/lvm2-lvmlockd.service
+%{_unitdir}/lvm2-lvmlocking.service
+%endif
+
 ##############################################################################
 # Cluster subpackage
 ##############################################################################
@@ -267,11 +327,12 @@ fi
 %defattr(-,root,root,-)
 %attr(755,root,root) /usr/sbin/clvmd
 %{_mandir}/man8/clvmd.8.gz
-%{_sysconfdir}/rc.d/init.d/clvmd
 %if %{enable_systemd}
   %{_unitdir}/lvm2-clvmd.service
   %{_unitdir}/lvm2-cluster-activation.service
   %{_unitdir}/../lvm2-cluster-activation
+%else
+  %{_sysconfdir}/rc.d/init.d/clvmd
 %endif
 
 %endif
@@ -304,33 +365,10 @@ fi
 %defattr(-,root,root,-)
 %attr(755,root,root) /usr/sbin/cmirrord
 %{_mandir}/man8/cmirrord.8.gz
-%{_sysconfdir}/rc.d/init.d/cmirrord
 %if %{enable_systemd}
   %{_unitdir}/lvm2-cmirrord.service
-%endif
-
-%endif
-
-##############################################################################
-# Legacy SysV init subpackage
-##############################################################################
-%if %{enable_systemd}
-
-%package sysvinit
-Summary: SysV style init script for LVM2.
-Group: System Environment/Base
-Requires: %{name} = %{version}-%{release}
-Requires: initscripts
-
-%description sysvinit
-SysV style init script for LVM2. It needs to be installed only if systemd
-is not used as the system init process.
-
-%files sysvinit
-%{_sysconfdir}/rc.d/init.d/lvm2-monitor
-%{_sysconfdir}/rc.d/init.d/blk-availability
-%if %{have_service lvmetad}
-%{_sysconfdir}/rc.d/init.d/lvm2-lvmetad
+%else
+  %{_sysconfdir}/rc.d/init.d/cmirrord
 %endif
 
 %endif
@@ -362,7 +400,9 @@ for the kernel device-mapper.
 %defattr(-,root,root,-)
 %doc COPYING COPYING.LIB WHATS_NEW_DM VERSION_DM README INSTALL
 %attr(755,root,root) %{_sbindir}/dmsetup
+%{_sbindir}/dmstats
 %{_mandir}/man8/dmsetup.8.gz
+%{_mandir}/man8/dmstats.8.gz
 %if %{enable_udev}
 %doc udev/12-dm-permissions.rules
 %dir %{_udevbasedir}
@@ -494,3 +534,18 @@ the device-mapper event library.
 %{_includedir}/libdevmapper-event.h
 %{_libdir}/pkgconfig/devmapper-event.pc
 
+%if %{enable_testsuite}
+%package testsuite
+Summary: LVM2 Testsuite
+License: LGPLv2
+Group: Development
+
+%description testsuite
+An extensive functional testsuite for LVM2.
+
+%files testsuite
+%defattr(-,root,root,-)
+%{_datadir}/lvm2-testsuite/
+%{_libexecdir}/lvm2-testsuite/
+%{_bindir}/lvm2-testsuite
+%endif

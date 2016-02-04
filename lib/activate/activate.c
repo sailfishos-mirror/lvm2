@@ -180,7 +180,7 @@ int lv_passes_auto_activation_filter(struct cmd_context *cmd, struct logical_vol
 {
 	const struct dm_config_node *cn;
 
-	if (!(cn = find_config_tree_node(cmd, activation_auto_activation_volume_list_CFG, NULL))) {
+	if (!(cn = find_config_tree_array(cmd, activation_auto_activation_volume_list_CFG, NULL))) {
 		log_verbose("activation/auto_activation_volume_list configuration setting "
 			    "not defined: All logical volumes will be auto-activated.");
 		return 1;
@@ -237,6 +237,22 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
 		    struct lvinfo *info, int with_open_count, int with_read_ahead)
 {
 	return 0;
+}
+int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
+			    const struct lv_segment *lv_seg, int use_layer,
+			    struct lv_with_info_and_seg_status *status,
+			    int with_open_count, int with_read_ahead)
+{
+	return 0;
+}
+int lv_status(struct cmd_context *cmd, const struct lv_segment *lv_seg,
+	      int use_layer, struct lv_seg_status *lv_seg_status)
+{
+	return 0;
+}
+int lv_cache_status(const struct logical_volume *cache_lv,
+		    struct lv_status_cache **status)
+{
 }
 int lv_check_not_in_use(const struct logical_volume *lv)
 {
@@ -457,7 +473,7 @@ static int _passes_activation_filter(struct cmd_context *cmd,
 {
 	const struct dm_config_node *cn;
 
-	if (!(cn = find_config_tree_node(cmd, activation_volume_list_CFG, NULL))) {
+	if (!(cn = find_config_tree_array(cmd, activation_volume_list_CFG, NULL))) {
 		log_verbose("activation/volume_list configuration setting "
 			    "not defined: Checking only host tags for %s/%s",
 			    lv->vg->name, lv->name);
@@ -486,7 +502,7 @@ static int _passes_readonly_filter(struct cmd_context *cmd,
 {
 	const struct dm_config_node *cn;
 
-	if (!(cn = find_config_tree_node(cmd, activation_read_only_volume_list_CFG, NULL)))
+	if (!(cn = find_config_tree_array(cmd, activation_read_only_volume_list_CFG, NULL)))
 		return 0;
 
 	return _lv_passes_volumes_filter(cmd, lv, cn, activation_read_only_volume_list_CFG);
@@ -625,7 +641,8 @@ int target_present(struct cmd_context *cmd, const char *target_name,
 
 static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
 		    int use_layer, struct lvinfo *info,
-		    struct lv_segment *seg, struct lv_seg_status *seg_status,
+		    const struct lv_segment *seg,
+		    struct lv_seg_status *seg_status,
 		    int with_open_count, int with_read_ahead)
 {
 	struct dm_info dminfo;
@@ -637,15 +654,20 @@ static int _lv_info(struct cmd_context *cmd, const struct logical_volume *lv,
 	 * in progress - as only those could lead to opened files
 	 */
 	if (with_open_count) {
-		if (locking_is_clustered())
-			sync_local_dev_names(cmd); /* Wait to have udev in sync */
+		if (locking_is_clustered() && !sync_local_dev_names(cmd)) /* Wait to have udev in sync */
+			return_0;
 		else if (fs_has_non_delete_ops())
 			fs_unlock(); /* For non clustered - wait if there are non-delete ops */
 	}
 
 	/* New thin-pool has no layer, but -tpool suffix needs to be queried */
-	if (!use_layer && lv_is_new_thin_pool(lv))
-		use_layer = 1;
+	if (!use_layer && lv_is_new_thin_pool(lv)) {
+		/* Check if there isn't existing old thin pool mapping in the table */
+		if (!dev_manager_info(cmd->mem, lv, NULL, 0, 0, &dminfo, NULL, NULL))
+			return_0;
+		if (!dminfo.exists)
+			use_layer = 1;
+	}
 
 	if (seg_status)
 		seg_status->seg = seg;
@@ -704,13 +726,13 @@ int lv_info_by_lvid(struct cmd_context *cmd, const char *lvid_s, int use_layer,
  * Returns 1 if lv_seg_status structure populated,
  * else 0 on failure or if device not active locally.
  */
-int lv_status(struct cmd_context *cmd, struct lv_segment *lv_seg,
-	      struct lv_seg_status *lv_seg_status)
+int lv_status(struct cmd_context *cmd, const struct lv_segment *lv_seg,
+	      int use_layer, struct lv_seg_status *lv_seg_status)
 {
 	if (!activation())
 		return 0;
 
-	return _lv_info(cmd, lv_seg->lv, 0, NULL, lv_seg, lv_seg_status, 0, 0);
+	return _lv_info(cmd, lv_seg->lv, use_layer, NULL, lv_seg, lv_seg_status, 0, 0);
 }
 
 /*
@@ -718,18 +740,18 @@ int lv_status(struct cmd_context *cmd, struct lv_segment *lv_seg,
  * else 0 on failure or if device not active locally.
  *
  * This is the same as calling lv_info and lv_status,
- * but* it's done in one go with one ioctl if possible!
+ * but* it's done in one go with one ioctl if possible!                                                             ]
  */
 int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume *lv,
-			   struct lv_segment *lv_seg, int use_layer,
-			   struct lvinfo *lvinfo, struct lv_seg_status *lv_seg_status,
-			   int with_open_count, int with_read_ahead)
+			    const struct lv_segment *lv_seg, int use_layer,
+			    struct lv_with_info_and_seg_status *status,
+			    int with_open_count, int with_read_ahead)
 {
 	if (!activation())
 		return 0;
 
 	if (lv == lv_seg->lv)
-		return _lv_info(cmd, lv, use_layer, lvinfo, lv_seg, lv_seg_status,
+		return _lv_info(cmd, lv, use_layer, &status->info, lv_seg, &status->seg_status,
 				with_open_count, with_read_ahead);
 
 	/*
@@ -737,8 +759,8 @@ int lv_info_with_seg_status(struct cmd_context *cmd, const struct logical_volume
 	 * status for segment that belong to another LV,
 	 * we need to acquire info and status separately!
 	 */
-	return _lv_info(cmd, lv, use_layer, lvinfo, NULL, NULL, with_open_count, with_read_ahead) &&
-	       _lv_info(cmd, lv_seg->lv, use_layer, NULL, lv_seg, lv_seg_status, 0, 0);
+	return _lv_info(cmd, lv, use_layer, &status->info, NULL, NULL, with_open_count, with_read_ahead) &&
+	       _lv_info(cmd, lv_seg->lv, use_layer, NULL, lv_seg, &status->seg_status, 0, 0);
 }
 
 #define OPEN_COUNT_CHECK_RETRIES 25
@@ -918,7 +940,8 @@ int lv_raid_offset_and_sectors(const struct logical_volume *lv,
 		stack;
 
 	*data_offset = status->data_offset;
-	*dev_sectors = status->total_dev_sectors;
+	if (dev_sectors)
+		*dev_sectors = status->total_dev_sectors;
 
 	dev_manager_destroy(dm);
 
@@ -1074,7 +1097,8 @@ int lv_raid_message(const struct logical_volume *lv, const char *msg)
 		log_error("\"%s\" is not a supported sync operation.", msg);
 		goto out;
 	}
-	if (strcmp(status->sync_action, "idle")) {
+	if (strcmp(status->sync_action, "idle") &&
+	    strcmp(status->sync_action, "frozen")) {
 		log_error("%s/%s state is currently \"%s\".  Unable to switch to \"%s\".",
 			  lv->vg->name, lv->name, status->sync_action, msg);
 		goto out;
@@ -1804,6 +1828,19 @@ static int _preload_detached_lv(struct logical_volume *lv, void *data)
 	struct detached_lv_data *detached = data;
 	struct lv_list *lvl_pre;
 
+	/* Check and preload removed raid image leg or metadata */
+	if (lv_is_raid_image(lv)) {
+		if ((lvl_pre = find_lv_in_vg_by_lvid(detached->lv_pre->vg, &lv->lvid)) &&
+		    !lv_is_raid_image(lvl_pre->lv) && lv_is_active(lv) &&
+		    !_lv_preload(lvl_pre->lv, detached->laopts, detached->flush_required))
+			return_0;
+	} else if (lv_is_raid_metadata(lv)) {
+		if ((lvl_pre = find_lv_in_vg_by_lvid(detached->lv_pre->vg, &lv->lvid)) &&
+		    !lv_is_raid_metadata(lvl_pre->lv) && lv_is_active(lv) &&
+		    !_lv_preload(lvl_pre->lv, detached->laopts, detached->flush_required))
+			return_0;
+	}
+
 	if ((lvl_pre = find_lv_in_vg(detached->lv_pre->vg, lv->name))) {
 		if (lv_is_visible(lvl_pre->lv) && lv_is_active(lv) &&
 		    (!lv_is_cow(lv) || !lv_is_cow(lvl_pre->lv)) &&
@@ -1839,7 +1876,9 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
 		goto_out;
 
 	/* Ignore origin_only unless LV is origin in both old and new metadata */
-	if (!lv_is_thin_volume(ondisk_lv) && !(lv_is_origin(ondisk_lv) && lv_is_origin(incore_lv)))
+	/* or LV is thin or thin pool volume */
+	if (!lv_is_thin_volume(ondisk_lv) && !lv_is_thin_pool(ondisk_lv) &&
+	    !(lv_is_origin(ondisk_lv) && lv_is_origin(incore_lv)))
 		laopts->origin_only = 0;
 
 	if (test_mode()) {
@@ -2013,7 +2052,6 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
 	const struct logical_volume *lv_to_free = NULL;
 	struct lvinfo info;
 	int r = 0;
-	int messages_only = 0;
 
 	if (!activation())
 		return 1;
@@ -2021,10 +2059,7 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
 	if (!lv && !(lv_to_free = lv = lv_from_lvid(cmd, lvid_s, 0)))
 		goto_out;
 
-	if (lv_is_thin_pool(lv) && laopts->origin_only)
-		messages_only = 1;
-
-	if (!lv_is_origin(lv) && !lv_is_thin_volume(lv))
+	if (!lv_is_origin(lv) && !lv_is_thin_volume(lv) && !lv_is_thin_pool(lv))
 		laopts->origin_only = 0;
 
 	if (test_mode()) {
@@ -2036,13 +2071,15 @@ static int _lv_resume(struct cmd_context *cmd, const char *lvid_s,
 
 	log_debug_activation("Resuming LV %s/%s%s%s%s.", lv->vg->name, lv->name,
 			     error_if_not_active ? "" : " if active",
-			     laopts->origin_only ? " without snapshots" : "",
+			     laopts->origin_only ?
+			     (lv_is_thin_pool(lv) ? " pool only" :
+			      lv_is_thin_volume(lv) ? " thin only" : " without snapshots") : "",
 			     laopts->revert ? " (reverting)" : "");
 
 	if (!lv_info(cmd, lv, laopts->origin_only, &info, 0, 0))
 		goto_out;
 
-	if (!info.exists || !(info.suspended || messages_only)) {
+	if (!info.exists || !info.suspended) {
 		if (error_if_not_active)
 			goto_out;
 		r = 1;
@@ -2264,6 +2301,16 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
 		goto out;
 	}
 
+	/*
+	 * Check if cmirrord is running for clustered mirrors.
+	 */
+	if (!laopts->exclusive && vg_is_clustered(lv->vg) &&
+	    lv_is_mirror(lv) && !lv_is_raid(lv) &&
+	    !cluster_mirror_is_available(lv->vg->cmd)) {
+		log_error("Shared cluster mirrors are not available.");
+		goto out;
+	}
+
 	if (test_mode()) {
 		_skip("Activating '%s'.", lv->name);
 		r = 1;
@@ -2288,6 +2335,7 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
 	if (info.exists && !info.suspended && info.live_table &&
 	    (info.read_only == read_only_lv(lv, laopts))) {
 		r = 1;
+		log_debug_activation("Volume is already active.");
 		goto out;
 	}
 

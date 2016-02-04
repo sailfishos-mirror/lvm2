@@ -34,6 +34,7 @@ static const struct flag _vg_flags[] = {
 	{PVMOVE, "PVMOVE", STATUS_FLAG},
 	{LVM_READ, "READ", STATUS_FLAG},
 	{LVM_WRITE, "WRITE", STATUS_FLAG},
+	{LVM_WRITE_LOCKED, "WRITE_LOCKED", COMPATIBLE_FLAG},
 	{CLUSTERED, "CLUSTERED", STATUS_FLAG},
 	{SHARED, "SHARED", STATUS_FLAG},
 	{PARTIAL_VG, NULL, 0},
@@ -53,6 +54,7 @@ static const struct flag _pv_flags[] = {
 static const struct flag _lv_flags[] = {
 	{LVM_READ, "READ", STATUS_FLAG},
 	{LVM_WRITE, "WRITE", STATUS_FLAG},
+	{LVM_WRITE_LOCKED, "WRITE_LOCKED", COMPATIBLE_FLAG},
 	{FIXED_MINOR, "FIXED_MINOR", STATUS_FLAG},
 	{VISIBLE_LV, "VISIBLE", STATUS_FLAG},
 	{PVMOVE, "PVMOVE", STATUS_FLAG},
@@ -61,11 +63,15 @@ static const struct flag _lv_flags[] = {
 	{LV_REBUILD, "REBUILD", STATUS_FLAG},
 	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", STATUS_FLAG},
 	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", STATUS_FLAG},
+	{LV_RESHAPE_REMOVED, "RESHAPE_REMOVED", STATUS_FLAG},
+	{LV_DUPLICATED, "DUPLICATED", STATUS_FLAG},
 	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
 	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
+	{LV_ERROR_WHEN_FULL, "ERROR_WHEN_FULL", COMPATIBLE_FLAG},
 	{LV_NOSCAN, NULL, 0},
 	{LV_TEMPORARY, NULL, 0},
 	{POOL_METADATA_SPARE, NULL, 0},
+	{LOCKD_SANLOCK_LV, NULL, 0},
 	{RAID, NULL, 0},
 	{RAID_META, NULL, 0},
 	{RAID_IMAGE, NULL, 0},
@@ -91,6 +97,7 @@ static const struct flag _lv_flags[] = {
 	{CACHE_POOL_DATA, NULL, 0},
 	{CACHE_POOL_METADATA, NULL, 0},
 	{LV_PENDING_DELETE, NULL, 0}, /* FIXME Display like COMPATIBLE_FLAG */
+	{LV_REMOVED, NULL, 0},
 	{0, NULL, 0}
 };
 
@@ -155,7 +162,7 @@ int print_flags(uint64_t status, int type, char *buffer, size_t size)
 
 	if (status)
 		log_warn(INTERNAL_ERROR "Metadata inconsistency: "
-			 "Not all flags successfully exported.");
+			 "Not all flags successfully exported (0x%lx).", status);
 
 	return 1;
 }

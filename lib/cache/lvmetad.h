@@ -29,8 +29,7 @@ typedef int (*activation_handler) (struct cmd_context *cmd,
 
 #ifdef LVMETAD_SUPPORT
 /*
- * Initialise the communication with lvmetad. Normally called by
- * lvmcache_init. Sets up a global handle for our process.
+ * Sets up a global handle for our process.
  */
 void lvmetad_init(struct cmd_context *);
 
@@ -59,7 +58,9 @@ int lvmetad_socket_present(void);
 
 /*
  * Check whether lvmetad is active (where active means both that it is running
- * and that we have a working connection with it).
+ * and that we have a working connection with it). It opens new connection
+ * with lvmetad in the process when lvmetad is supposed to be used and the
+ * connection is not open yet.
  */
 int lvmetad_active(void);
 
@@ -70,8 +71,9 @@ int lvmetad_active(void);
 void lvmetad_connect_or_warn(void);
 
 /*
- * Drop connection to lvmetad. A subsequent lvmetad_init() will re-establish
- * the connection (possibly at a different socket path).
+ * Drop connection to lvmetad. A subsequent lvmetad_connect_or_warn or
+ * lvmetad_active will re-establish the connection (possibly at a
+ * different socket path).
  */
 void lvmetad_disconnect(void);
 
@@ -143,6 +145,12 @@ int lvmetad_pv_lookup_by_dev(struct cmd_context *cmd, struct device *dev, int *f
 int lvmetad_vg_list_to_lvmcache(struct cmd_context *cmd);
 
 /*
+ * Request a list of vgid/vgname pairs for all VGs known to lvmetad.
+ * Does not do vg_lookup's on each VG, and does not populate lvmcache.
+ */
+int lvmetad_get_vgnameids(struct cmd_context *cmd, struct dm_list *vgnameids);
+
+/*
  * Find a VG by its ID or its name in the lvmetad cache. Gives NULL if the VG is
  * not found.
  */
@@ -153,9 +161,13 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd,
  * Scan a single device and update lvmetad with the result(s).
  */
 int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
-			  activation_handler handler);
+			  activation_handler handler, int ignore_obsolete);
 
 int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler);
+int lvmetad_pvscan_foreign_vgs(struct cmd_context *cmd, activation_handler handler);
+
+int lvmetad_vg_clear_outdated_pvs(struct volume_group *vg);
+void lvmetad_validate_global_cache(struct cmd_context *cmd, int force);
 
 #  else		/* LVMETAD_SUPPORT */
 
@@ -178,9 +190,13 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, activation_handler handler)
 #    define lvmetad_pv_lookup(cmd, pvid, found)	(0)
 #    define lvmetad_pv_lookup_by_dev(cmd, dev, found)	(0)
 #    define lvmetad_vg_list_to_lvmcache(cmd)	(1)
+#    define lvmetad_get_vgnameids(cmd, vgnameids)       do { } while (0)
 #    define lvmetad_vg_lookup(cmd, vgname, vgid)	(NULL)
-#    define lvmetad_pvscan_single(cmd, dev, handler)	(0)
+#    define lvmetad_pvscan_single(cmd, dev, handler, ignore_obsolete)	(0)
 #    define lvmetad_pvscan_all_devs(cmd, handler)	(0)
+#    define lvmetad_pvscan_foreign_vgs(cmd, handler)	(0)
+#    define lvmetad_vg_clear_outdated_pvs(vg)           (1)
+#    define lvmetad_validate_global_cache(cmd, force)	do { } while (0)
 
 #  endif	/* LVMETAD_SUPPORT */
 

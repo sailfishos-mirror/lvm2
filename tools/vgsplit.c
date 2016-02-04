@@ -350,7 +350,7 @@ static int _move_cache(struct volume_group *vg_from,
 			data = seg_lv(first_seg(seg->pool_lv), 0);
 			meta = first_seg(seg->pool_lv)->metadata_lv;
 			/* Ensure all components are coming along */
-			is_moving = !!_lv_is_in_vg(vg_to, orig);
+			is_moving = _lv_is_in_vg(vg_to, orig);
 		} else {
 			if (!dm_list_empty(&seg->lv->segs_using_this_lv) &&
 			    !(cache_seg = get_only_segment_using_this_lv(seg->lv)))
@@ -364,20 +364,20 @@ static int _move_cache(struct volume_group *vg_from,
 				is_moving = 1;
 		}
 
-		if (orig && (!!_lv_is_in_vg(vg_to, orig) != is_moving)) {
+		if (orig && (_lv_is_in_vg(vg_to, orig) != is_moving)) {
 			log_error("Can't split %s and its origin (%s)"
 				  " into separate VGs", lv->name, orig->name);
 			return 0;
 		}
 
-		if (data && (!!_lv_is_in_vg(vg_to, data) != is_moving)) {
+		if (data && (_lv_is_in_vg(vg_to, data) != is_moving)) {
 			log_error("Can't split %s and its cache pool"
 				  " data LV (%s) into separate VGs",
 				  lv->name, data->name);
 			return 0;
 		}
 
-		if (meta && (!!_lv_is_in_vg(vg_to, meta) != is_moving)) {
+		if (meta && (_lv_is_in_vg(vg_to, meta) != is_moving)) {
 			log_error("Can't split %s and its cache pool"
 				  " metadata LV (%s) into separate VGs",
 				  lv->name, meta->name);
@@ -422,7 +422,7 @@ static struct volume_group *_vgsplit_to(struct cmd_context *cmd,
 	if (vg_read_error(vg_to) == FAILED_EXIST) {
 		*existing_vg = 1;
 		release_vg(vg_to);
-		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0);
+		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0, 0);
 
 		if (vg_read_error(vg_to)) {
 			release_vg(vg_to);
@@ -448,11 +448,18 @@ static struct volume_group *_vgsplit_from(struct cmd_context *cmd,
 
 	log_verbose("Checking for volume group \"%s\"", vg_name_from);
 
-	vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0);
+	vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0, 0);
 	if (vg_read_error(vg_from)) {
 		release_vg(vg_from);
 		return NULL;
 	}
+
+	if (is_lockd_type(vg_from->lock_type)) {
+		log_error("vgsplit not allowed for lock_type %s", vg_from->lock_type);
+		unlock_and_release_vg(cmd, vg_from, vg_name_from);
+		return NULL;
+	}
+
 	return vg_from;
 }
 
@@ -491,6 +498,10 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 			  "physical volumes.");
 		return ECMD_FAILED;
 	}
+
+	/* Needed change the global VG namespace. */
+	if (!lockd_gl(cmd, "ex", LDGL_UPDATE_NAMES))
+		return_ECMD_FAILED;
 
 	if (arg_count(cmd, name_ARG))
 		lv_name = arg_value(cmd, name_ARG);
@@ -570,6 +581,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 		    !vg_set_max_pv(vg_to, vp_new.max_pv) ||
 		    !vg_set_alloc_policy(vg_to, vp_new.alloc) ||
 		    !vg_set_clustered(vg_to, vp_new.clustered) ||
+		    !vg_set_system_id(vg_to, vp_new.system_id) ||
 		    !vg_set_mda_copies(vg_to, vp_new.vgmetadatacopies))
 			goto_bad;
 	}
@@ -661,7 +673,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 	if (!test_mode()) {
 		release_vg(vg_to);
 		vg_to = vg_read_for_update(cmd, vg_name_to, NULL,
-					   READ_ALLOW_EXPORTED);
+					   READ_ALLOW_EXPORTED, 0);
 		if (vg_read_error(vg_to)) {
 			log_error("Volume group \"%s\" became inconsistent: "
 				  "please fix manually", vg_name_to);

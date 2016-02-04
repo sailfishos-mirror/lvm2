@@ -29,9 +29,12 @@
 
 #define DEFAULT_DEV_DIR "/dev"
 #define DEFAULT_PROC_DIR "/proc"
+#define DEFAULT_SYSTEM_ID_SOURCE "none"
 #define DEFAULT_OBTAIN_DEVICE_LIST_FROM_UDEV 1
+#define DEFAULT_EXTERNAL_DEVICE_INFO_SOURCE "none"
 #define DEFAULT_SYSFS_SCAN 1
 #define DEFAULT_MD_COMPONENT_DETECTION 1
+#define DEFAULT_FW_RAID_COMPONENT_DETECTION 0
 #define DEFAULT_MD_CHUNK_ALIGNMENT 1
 #define DEFAULT_IGNORE_LVM_MIRRORS 1
 #define DEFAULT_MULTIPATH_COMPONENT_DETECTION 1
@@ -44,13 +47,17 @@
 #define DEFAULT_PV_MIN_SIZE_KB 2048
 
 #define DEFAULT_LOCKING_LIB "liblvm2clusterlock.so"
+#define DEFAULT_ERROR_WHEN_FULL 0
 #define DEFAULT_FALLBACK_TO_LOCAL_LOCKING 1
 #define DEFAULT_FALLBACK_TO_CLUSTERED_LOCKING 1
 #define DEFAULT_WAIT_FOR_LOCKS 1
+#define DEFAULT_LVMLOCKD_LOCK_RETRIES 3
 #define DEFAULT_PRIORITISE_WRITE_LOCKS 1
 #define DEFAULT_USE_MLOCKALL 0
 #define DEFAULT_METADATA_READ_ONLY 0
 #define DEFAULT_LVDISPLAY_SHOWS_FULL_DEVICE_PATH 0
+
+#define DEFAULT_SANLOCK_LV_EXTEND_MB 256
 
 #define DEFAULT_MIRRORLOG MIRROR_LOG_DISK
 #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
@@ -74,12 +81,17 @@
 #endif
 
 #ifdef THIN_CHECK_NEEDS_CHECK
-#  define DEFAULT_THIN_CHECK_OPTIONS "-q --clear-needs-check-flag"
+#  define DEFAULT_THIN_CHECK_OPTION1 "-q"
+#  define DEFAULT_THIN_CHECK_OPTION2 "--clear-needs-check-flag"
+#  define DEFAULT_THIN_CHECK_OPTIONS_CONFIG "#S" DEFAULT_THIN_CHECK_OPTION1 "#S" DEFAULT_THIN_CHECK_OPTION2
 #else
-#  define DEFAULT_THIN_CHECK_OPTIONS "-q"
+#  define DEFAULT_THIN_CHECK_OPTION1 "-q"
+#  define DEFAULT_THIN_CHECK_OPTION2 ""
+#  define DEFAULT_THIN_CHECK_OPTIONS_CONFIG "#S" DEFAULT_THIN_CHECK_OPTION1
 #endif
 
-#define DEFAULT_THIN_REPAIR_OPTIONS ""
+#define DEFAULT_THIN_REPAIR_OPTION1 ""
+#define DEFAULT_THIN_REPAIR_OPTIONS_CONFIG "#S" DEFAULT_THIN_REPAIR_OPTION1
 #define DEFAULT_THIN_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
 #define DEFAULT_THIN_POOL_MAX_METADATA_SIZE (16 * 1024 * 1024)  /* KB */
 #define DEFAULT_THIN_POOL_MIN_METADATA_SIZE 2048  /* KB */
@@ -91,22 +103,26 @@
 #define DEFAULT_THIN_POOL_ZERO 1
 #define DEFAULT_POOL_METADATA_SPARE 1 /* thin + cache */
 
-#define DEFAULT_CACHE_CHECK_OPTIONS "-q"
-#define DEFAULT_CACHE_REPAIR_OPTIONS ""
+#ifdef CACHE_CHECK_NEEDS_CHECK
+#  define DEFAULT_CACHE_CHECK_OPTION1 "-q"
+#  define DEFAULT_CACHE_CHECK_OPTION2 "--clear-needs-check-flag"
+#  define DEFAULT_CACHE_CHECK_OPTIONS_CONFIG "#S" DEFAULT_CACHE_CHECK_OPTION1 "#S" DEFAULT_CACHE_CHECK_OPTION2
+#else
+#  define DEFAULT_CACHE_CHECK_OPTION1 "-q"
+#  define DEFAULT_CACHE_CHECK_OPTION2 ""
+#  define DEFAULT_CACHE_CHECK_OPTIONS_CONFIG "#S" DEFAULT_CACHE_CHECK_OPTION1
+#endif
+
+#define DEFAULT_CACHE_REPAIR_OPTION1 ""
+#define DEFAULT_CACHE_REPAIR_OPTIONS_CONFIG "#S" DEFAULT_CACHE_REPAIR_OPTION1
 #define DEFAULT_CACHE_POOL_METADATA_REQUIRE_SEPARATE_PVS 0
 #define DEFAULT_CACHE_POOL_CHUNK_SIZE 64 /* KB */
 #define DEFAULT_CACHE_POOL_MIN_METADATA_SIZE 2048  /* KB */
 #define DEFAULT_CACHE_POOL_MAX_METADATA_SIZE (16 * 1024 * 1024)  /* KB */
-#define DEFAULT_CACHE_POOL_CACHEMODE "writethrough"
-#define DEFAULT_CACHE_POOL_POLICY "mq"
+#define DEFAULT_CACHE_POLICY "mq"
+#define DEFAULT_CACHE_MODE "writethrough"
 
 #define DEFAULT_UMASK 0077
-
-#ifdef LVM1_FALLBACK
-#  define DEFAULT_FALLBACK_TO_LVM1 1
-#else
-#  define DEFAULT_FALLBACK_TO_LVM1 0
-#endif
 
 #define DEFAULT_FORMAT "lvm2"
 
@@ -137,10 +153,6 @@
 #ifndef DEFAULT_LOG_FACILITY
 #  define DEFAULT_LOG_FACILITY LOG_USER
 #endif
-
-#define DEFAULT_LOGGED_DEBUG_CLASSES (LOG_CLASS_MEM | LOG_CLASS_DEVS | \
-    LOG_CLASS_ACTIVATION | LOG_CLASS_ALLOC | LOG_CLASS_LVMETAD | \
-    LOG_CLASS_METADATA | LOG_CLASS_CACHE | LOG_CLASS_LOCKING)
 
 #define DEFAULT_SYSLOG 1
 #define DEFAULT_VERBOSE 0
@@ -187,18 +199,19 @@
 #define DEFAULT_REP_QUOTED 1
 #define DEFAULT_REP_SEPARATOR " "
 #define DEFAULT_REP_LIST_ITEM_SEPARATOR ","
+#define DEFAULT_TIME_FORMAT "%Y-%m-%d %T %z"
 
 #define DEFAULT_LVS_COLS "lv_name,vg_name,lv_attr,lv_size,pool_lv,origin,data_percent,metadata_percent,move_pv,mirror_log,copy_percent,convert_lv"
 #define DEFAULT_VGS_COLS "vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free"
 #define DEFAULT_PVS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free"
-#define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,segtype,seg_size"
+#define DEFAULT_SEGS_COLS "lv_name,vg_name,lv_attr,stripes,data_copies,segtype,seg_size"
 #define DEFAULT_PVSEGS_COLS "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
 #define DEFAULT_DEVTYPES_COLS "devtype_name,devtype_max_partitions,devtype_description"
 
 #define DEFAULT_LVS_COLS_VERB "lv_name,vg_name,seg_count,lv_attr,lv_size,lv_major,lv_minor,lv_kernel_major,lv_kernel_minor,pool_lv,origin,data_percent,metadata_percent,move_pv,copy_percent,mirror_log,convert_lv,lv_uuid,lv_profile"
 #define DEFAULT_VGS_COLS_VERB "vg_name,vg_attr,vg_extent_size,pv_count,lv_count,snap_count,vg_size,vg_free,vg_uuid,vg_profile"
 #define DEFAULT_PVS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,dev_size,pv_uuid"
-#define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,segtype,stripesize,chunksize"
+#define DEFAULT_SEGS_COLS_VERB "lv_name,vg_name,lv_attr,seg_start,seg_size,stripes,data_copies,segtype,stripesize,chunksize"
 #define DEFAULT_PVSEGS_COLS_VERB "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"
 #define DEFAULT_DEVTYPES_COLS_VERB "devtype_name,devtype_max_partitions,devtype_description"
 
@@ -215,5 +228,7 @@
 #define DEFAULT_SNAPSHOT_AUTOEXTEND_PERCENT 20
 #define DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD 100
 #define DEFAULT_THIN_POOL_AUTOEXTEND_PERCENT 20
+
+#define DEFAULT_CY_LOCK_TYPE "sanlock"
 
 #endif				/* _LVM_DEFAULTS_H */

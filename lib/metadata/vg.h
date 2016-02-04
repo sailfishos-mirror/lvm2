@@ -44,10 +44,12 @@ struct volume_group {
 	struct cmd_context *cmd;
 	struct dm_pool *vgmem;
 	struct format_instance *fid;
+	const struct format_type *original_fmt;	/* Set when processing backup files */
 	struct lvmcache_vginfo *vginfo;
 	struct dm_list *cmd_vgs;/* List of wanted/locked and opened VGs */
 	uint32_t cmd_missing_vgs;/* Flag marks missing VG */
 	uint32_t seqno;		/* Metadata sequence number */
+	unsigned skip_validate_lock_args : 1;
 
 	/*
 	 * The parsed on-disk copy of this VG; is NULL if this is the on-disk
@@ -67,7 +69,10 @@ struct volume_group {
 	struct id id;
 	const char *name;
 	const char *old_name;		/* Set during vgrename and vgcfgrestore */
-	char *system_id;
+	const char *system_id;
+	char *lvm1_system_id;
+	const char *lock_type;
+	const char *lock_args;
 
 	uint32_t extent_size;
 	uint32_t extent_count;
@@ -86,6 +91,24 @@ struct volume_group {
 	 */
 
 	struct dm_list pvs_to_create;
+
+	/*
+	 * List of physical volumes that carry outdated metadata that belongs
+	 * to this VG. Currently only populated when lvmetad is in use. The PVs
+	 * on this list could still belong to the VG (but their MDA carries an
+	 * out-of-date copy of the VG metadata) or they could no longer belong
+	 * to the VG. With lvmetad, this list is populated with all PVs that
+	 * have a VGID matching ours, but seqno that is smaller than the
+	 * current seqno for the VG. The MDAs on still-in-VG PVs are updated as
+	 * part of the normal vg_write/vg_commit process. The MDAs on PVs that
+	 * no longer belong to the VG are wiped during vg_read.
+	 *
+	 * However, even though still-in-VG PVs *may* be on the list, this is
+	 * not guaranteed. The in-lvmetad list is cleared whenever out-of-VG
+	 * outdated PVs are wiped during vg_read.
+	 */
+
+	struct dm_list pvs_outdated;
 
 	/*
 	 * logical volumes
@@ -110,6 +133,11 @@ struct volume_group {
 	 */
 
 	/*
+	 * List of removed logical volumes by _lv_reduce.
+	 */
+	struct dm_list removed_lvs;
+
+	/*
 	 * List of removed physical volumes by pvreduce.
 	 * They have to get cleared on vg_commit.
 	 */
@@ -125,6 +153,7 @@ struct volume_group {
 
 	struct dm_hash_table *hostnames; /* map of creation hostnames */
 	struct logical_volume *pool_metadata_spare_lv; /* one per VG */
+	struct logical_volume *sanlock_lv; /* one per VG */
 };
 
 struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
@@ -140,10 +169,14 @@ void free_orphan_vg(struct volume_group *vg);
 char *vg_fmt_dup(const struct volume_group *vg);
 char *vg_name_dup(const struct volume_group *vg);
 char *vg_system_id_dup(const struct volume_group *vg);
+char *vg_lock_type_dup(const struct volume_group *vg);
+char *vg_lock_args_dup(const struct volume_group *vg);
 uint32_t vg_seqno(const struct volume_group *vg);
 uint64_t vg_status(const struct volume_group *vg);
 int vg_set_alloc_policy(struct volume_group *vg, alloc_policy_t alloc);
 int vg_set_clustered(struct volume_group *vg, int clustered);
+int vg_set_system_id(struct volume_group *vg, const char *system_id);
+int vg_set_lock_type(struct volume_group *vg, const char *lock_type);
 uint64_t vg_size(const struct volume_group *vg);
 uint64_t vg_free(const struct volume_group *vg);
 uint64_t vg_extent_size(const struct volume_group *vg);

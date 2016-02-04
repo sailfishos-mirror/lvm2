@@ -17,12 +17,13 @@
 
 static int vgdisplay_single(struct cmd_context *cmd, const char *vg_name,
 			    struct volume_group *vg,
-			    void *handle __attribute__((unused)))
+			    struct processing_handle *handle __attribute__((unused)))
 {
 	if (arg_count(cmd, activevolumegroups_ARG) && !lvs_in_vg_activated(vg))
 		return ECMD_PROCESSED;
 
-	vg_check_status(vg, EXPORTED_VG);
+	if (!vg_check_status(vg, EXPORTED_VG))
+		stack;
 
 	if (arg_count(cmd, colon_ARG)) {
 		vgdisplay_colons(vg);
@@ -66,7 +67,6 @@ int vgdisplay(struct cmd_context *cmd, int argc, char **argv)
 		   arg_count(cmd, binary_ARG) ||
 		   arg_count(cmd, noheadings_ARG) ||
 		   arg_count(cmd, options_ARG) ||
-		   arg_count(cmd, select_ARG) ||
 		   arg_count(cmd, separator_ARG) ||
 		   arg_count(cmd, sort_ARG) || arg_count(cmd, unbuffered_ARG)) {
 		log_error("Incompatible options selected");

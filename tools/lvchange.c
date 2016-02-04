@@ -14,27 +14,17 @@
  */
 
 #include "tools.h"
+
 #include "memlock.h"
 
-static int lvchange_permission(struct cmd_context *cmd,
-			       struct logical_volume *lv)
+static int _lvchange_permission(struct cmd_context *cmd,
+				struct logical_volume *lv)
 {
 	uint32_t lv_access;
 	struct lvinfo info;
+	unsigned info_obtained = 0;
 
 	lv_access = arg_uint_value(cmd, permission_ARG, 0);
-
-	if ((lv_access & LVM_WRITE) && (lv->status & LVM_WRITE)) {
-		log_error("Logical volume \"%s\" is already writable",
-			  lv->name);
-		return 0;
-	}
-
-	if (!(lv_access & LVM_WRITE) && !(lv->status & LVM_WRITE)) {
-		log_error("Logical volume \"%s\" is already read only",
-			  lv->name);
-		return 0;
-	}
 
 	if (lv_is_external_origin(lv)) {
 		log_error("Cannot change permissions of external origin "
@@ -42,8 +32,35 @@ static int lvchange_permission(struct cmd_context *cmd,
 		return 0;
 	}
 
+	if (!(lv_access & LVM_WRITE) && !(lv->status & LVM_WRITE)) {
+		/* Refresh if it's read-only in metadata but read-write in kernel */
+		if (lv_info(cmd, lv, 0, &info, 0, 0) &&
+		    (info_obtained = 1, info.exists) && !info.read_only) {
+			log_print_unless_silent("Logical volume \"%s\" is already read-only.  Refreshing kernel state.",
+						lv->name);
+			return lv_refresh(cmd, lv);
+		}
+		log_error("Logical volume \"%s\" is already read only",
+			  lv->name);
+		return 0;
+	}
+
+	if ((lv_access & LVM_WRITE) && (lv->status & LVM_WRITE)) {
+		/* Refresh if it's read-write in metadata but read-only in kernel */
+		if (lv_info(cmd, lv, 0, &info, 0, 0) &&
+		    (info_obtained = 1, info.exists) && info.read_only) {
+			log_print_unless_silent("Logical volume \"%s\" is already writable.  Refreshing kernel state.",
+						lv->name);
+			return lv_refresh(cmd, lv);
+		}
+
+		log_error("Logical volume \"%s\" is already writable",
+			  lv->name);
+		return 0;
+	}
+
 	if (lv_is_mirrored(lv) && vg_is_clustered(lv->vg) &&
-	    lv_info(cmd, lv, 0, &info, 0, 0) && info.exists) {
+	    (info_obtained || lv_info(cmd, lv, 0, &info, 0, 0)) && info.exists) {
 		log_error("Cannot change permissions of mirror \"%s\" "
 			  "while active.", lv->name);
 		return 0;
@@ -79,8 +96,8 @@ static int lvchange_permission(struct cmd_context *cmd,
 	return 1;
 }
 
-static int lvchange_pool_update(struct cmd_context *cmd,
-				struct logical_volume *lv)
+static int _lvchange_pool_update(struct cmd_context *cmd,
+				 struct logical_volume *lv)
 {
 	int update = 0;
 	unsigned val;
@@ -126,8 +143,8 @@ static int lvchange_pool_update(struct cmd_context *cmd,
 	return 1;
 }
 
-static int lvchange_monitoring(struct cmd_context *cmd,
-			       struct logical_volume *lv)
+static int _lvchange_monitoring(struct cmd_context *cmd,
+				struct logical_volume *lv)
 {
 	struct lvinfo info;
 
@@ -148,8 +165,8 @@ static int lvchange_monitoring(struct cmd_context *cmd,
 	return 1;
 }
 
-static int lvchange_background_polling(struct cmd_context *cmd,
-				       struct logical_volume *lv)
+static int _lvchange_background_polling(struct cmd_context *cmd,
+					struct logical_volume *lv)
 {
 	struct lvinfo info;
 
@@ -170,6 +187,19 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
 
 	activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, CHANGE_AY);
 
+	/*
+	 * We can get here in the odd case where an LV is already active in
+	 * a foreign VG, which allows the VG to be accessed by lvchange -a
+	 * so the LV can be deactivated.
+	 */
+	if (lv->vg->system_id && lv->vg->system_id[0] &&
+	    cmd->system_id && cmd->system_id[0] &&
+	    strcmp(lv->vg->system_id, cmd->system_id) &&
+	    is_change_activating(activate)) {
+		log_error("Cannot activate LVs in a foreign VG.");
+		return ECMD_FAILED;
+	}
+
 	if (lv_activation_skip(lv, activate, arg_count(cmd, ignoreactivationskip_ARG)))
 		return 1;
 
@@ -182,6 +212,19 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
 
 	if (!lv_change_activate(cmd, lv, activate))
 		return_0;
+
+	/*
+	 * FIXME: lvchange should defer background polling in a similar
+	 * 	  way as vgchange does. First activate all relevant LVs
+	 * 	  initate background polling later (for all actually
+	 * 	  activated LVs). So we can avoid duplicate background
+	 * 	  polling for pvmove (2 or more locked LVs on single pvmove
+	 * 	  LV)
+	 */
+	if (background_polling() && is_change_activating(activate) &&
+	    (lv_is_pvmove(lv) || lv_is_locked(lv) || lv_is_converting(lv) ||
+	     lv_is_merging(lv)))
+		lv_spawn_background_polling(cmd, lv);
 
 	return 1;
 }
@@ -245,7 +288,7 @@ static int attach_metadata_devices(struct lv_segment *seg, struct dm_list *list)
  *
  * Suspend and resume a logical volume.
  */
-static int lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
+static int _lvchange_refresh(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	log_verbose("Refreshing logical volume \"%s\" (if active)", lv->name);
 
@@ -273,7 +316,7 @@ static int _reactivate_lv(struct logical_volume *lv,
  *
  * Force a mirror or RAID array to undergo a complete initializing resync.
  */
-static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
+static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	int active = 0;
 	int exclusive = 0;
@@ -373,7 +416,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 
 		if (!_reactivate_lv(lv, active, exclusive)) {
 			log_error("Failed to reactivate %s to resynchronize "
-				  "mirror", lv->name);
+				  SEG_TYPE_NAME_MIRROR, lv->name);
 			return 0;
 		}
 
@@ -430,7 +473,12 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 		}
 	}
 
-	sync_local_dev_names(lv->vg->cmd);  /* Wait until devices are away */
+	/* Wait until devices are away */
+	if (!sync_local_dev_names(lv->vg->cmd)) {
+		log_error("Failed to sync local devices after updating %s",
+			  display_lvname(lv));
+		return 0;
+	}
 
 	/* Put metadata sub-LVs back in place */
 	if (!attach_metadata_devices(seg, &device_list)) {
@@ -456,7 +504,7 @@ static int lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	return 1;
 }
 
-static int lvchange_alloc(struct cmd_context *cmd, struct logical_volume *lv)
+static int _lvchange_alloc(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	int want_contiguous = arg_int_value(cmd, contiguous_ARG, 0);
 	alloc_policy_t alloc = (alloc_policy_t)
@@ -487,8 +535,30 @@ static int lvchange_alloc(struct cmd_context *cmd, struct logical_volume *lv)
 	return 1;
 }
 
-static int lvchange_readahead(struct cmd_context *cmd,
-			      struct logical_volume *lv)
+static int _lvchange_errorwhenfull(struct cmd_context *cmd,
+				   struct logical_volume *lv)
+{
+	unsigned ewf = arg_int_value(cmd, errorwhenfull_ARG, 0);
+
+	if (ewf == lv_is_error_when_full(lv)) {
+		log_error("Error when full is already %sset for %s.",
+			  (ewf) ? "" : "un", display_lvname(lv));
+		return 0;
+	}
+
+	if (ewf)
+		lv->status |= LV_ERROR_WHEN_FULL;
+	else
+		lv->status &= ~LV_ERROR_WHEN_FULL;
+
+	if (!lv_update_and_reload(lv))
+		return_0;
+
+	return 1;
+}
+
+static int _lvchange_readahead(struct cmd_context *cmd,
+			       struct logical_volume *lv)
 {
 	unsigned read_ahead = 0;
 	unsigned pagesize = (unsigned) lvm_getpagesize() >> SECTOR_SHIFT;
@@ -532,10 +602,13 @@ static int lvchange_readahead(struct cmd_context *cmd,
 	return 1;
 }
 
-static int lvchange_persistent(struct cmd_context *cmd,
-			       struct logical_volume *lv)
+static int _lvchange_persistent(struct cmd_context *cmd,
+				struct logical_volume *lv)
 {
 	enum activation_change activate = CHANGE_AN;
+
+	/* The LV lock in lvmlockd should remain as it is. */
+	cmd->lockd_lv_disable = 1;
 
 	if (!get_and_validate_major_minor(cmd, lv->vg->fid->fmt,
 					  &lv->major, &lv->minor))
@@ -605,31 +678,33 @@ static int lvchange_persistent(struct cmd_context *cmd,
 	return 1;
 }
 
-static int lvchange_cachepolicy(struct cmd_context *cmd, struct logical_volume *lv)
+static int _lvchange_cachepolicy(struct cmd_context *cmd, struct logical_volume *lv)
 {
-	struct dm_config_tree *policy = NULL;
+	const char *name;
+	struct dm_config_tree *settings = NULL;
 	int r = 0;
 
 	if (!lv_is_cache(lv) && !lv_is_cache_pool(lv)) {
 		log_error("LV %s is not a cache LV.", lv->name);
 		log_error("Only cache or cache pool devices can have --cachepolicy set.");
-		goto_out;
+		goto out;
 	}
 
-	if (!(policy = get_cachepolicy_params(cmd)))
+	if (!get_cache_params(cmd, NULL, &name, &settings))
 		goto_out;
-	if (!lv_cache_setpolicy(lv, policy))
+	if (!cache_set_policy(first_seg(lv), name, settings))
 		goto_out;
 	if (!lv_update_and_reload(lv))
 		goto_out;
 	r = 1;
 out:
-	if (policy)
-		dm_config_destroy(policy);
+	if (settings)
+		dm_config_destroy(settings);
+
 	return r;
 }
 
-static int lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv, int arg)
+static int _lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv, int arg)
 {
 	if (!change_tag(cmd, NULL, lv, NULL, arg))
 		return_0;
@@ -645,7 +720,7 @@ static int lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv, int 
 	return 1;
 }
 
-static int lvchange_writemostly(struct logical_volume *lv)
+static int _lvchange_writemostly(struct logical_volume *lv)
 {
 	int s, pv_count, i = 0;
 	char **pv_names;
@@ -745,7 +820,7 @@ static int lvchange_writemostly(struct logical_volume *lv)
 	return 1;
 }
 
-static int lvchange_recovery_rate(struct logical_volume *lv)
+static int _lvchange_recovery_rate(struct logical_volume *lv)
 {
 	struct cmd_context *cmd = lv->vg->cmd;
 	struct lv_segment *raid_seg = first_seg(lv);
@@ -776,7 +851,7 @@ static int lvchange_recovery_rate(struct logical_volume *lv)
 	return 1;
 }
 
-static int lvchange_profile(struct logical_volume *lv)
+static int _lvchange_profile(struct logical_volume *lv)
 {
 	const char *old_profile_name, *new_profile_name;
 	struct profile *new_profile;
@@ -807,7 +882,7 @@ static int lvchange_profile(struct logical_volume *lv)
 	return 1;
 }
 
-static int lvchange_activation_skip(struct logical_volume *lv)
+static int _lvchange_activation_skip(struct logical_volume *lv)
 {
 	int skip = arg_int_value(lv->vg->cmd, setactivationskip_ARG, 0);
 
@@ -826,7 +901,7 @@ static int lvchange_activation_skip(struct logical_volume *lv)
 
 
 static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
-			   void *handle __attribute__((unused)))
+			    struct processing_handle *handle __attribute__((unused)))
 {
 	int doit = 0, docmds = 0;
 	struct logical_volume *origin;
@@ -883,7 +958,11 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	    !arg_count(cmd, setactivationskip_ARG))
 	    /* Rest can be changed for stacked thin pool meta/data volumes */
 	    ;
+#if 1
+	else if (!lv_is_raid(lv) && !lv_is_visible(lv) && !lv_is_virtual_origin(lv)) {
+#else
 	else if (!lv_is_visible(lv) && !lv_is_virtual_origin(lv)) {
+#endif
 		log_error("Unable to change internal LV %s directly",
 			  lv->name);
 		return ECMD_FAILED;
@@ -910,6 +989,32 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 		}
 	}
 
+	if (arg_is_set(cmd, errorwhenfull_ARG) && !lv_is_thin_pool(lv)) {
+		log_error("Option --errorwhenfull is only supported with thin pools.");
+		return ECMD_FAILED;
+	}
+
+	if (arg_count(cmd, persistent_ARG) && lv_is_pool(lv)) {
+		log_error("Persistent major and minor numbers are not supported with pools.");
+		return ECMD_FAILED;
+	}
+
+	if (!arg_count(cmd, activate_ARG) && !arg_count(cmd, refresh_ARG)) {
+		/*
+		 * If a persistent lv lock already exists from activation
+		 * (with the needed mode or higher), this will be a no-op.
+		 * Otherwise, the lv lock will be taken as non-persistent
+		 * and released when this command exits.
+		 *
+		 * FIXME: use "sh" if the options imply that the lvchange
+		 * operation does not modify the LV.
+		 */
+		if (!lockd_lv(cmd, lv, "ex", 0)) {
+			stack;
+			return ECMD_FAILED;
+		}
+	}
+
 	/*
 	 * FIXME: DEFAULT_BACKGROUND_POLLING should be "unspecified".
 	 * If --poll is explicitly provided use it; otherwise polling
@@ -927,7 +1032,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, permission_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_permission(cmd, lv);
+		doit += _lvchange_permission(cmd, lv);
 		docmds++;
 	}
 
@@ -935,7 +1040,15 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, contiguous_ARG) || arg_count(cmd, alloc_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_alloc(cmd, lv);
+		doit += _lvchange_alloc(cmd, lv);
+		docmds++;
+	}
+
+	/* error when full change */
+	if (arg_count(cmd, errorwhenfull_ARG)) {
+		if (!archive(lv->vg))
+			return_ECMD_FAILED;
+		doit += _lvchange_errorwhenfull(cmd, lv);
 		docmds++;
 	}
 
@@ -943,7 +1056,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, readahead_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_readahead(cmd, lv);
+		doit += _lvchange_readahead(cmd, lv);
 		docmds++;
 	}
 
@@ -951,7 +1064,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, persistent_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_persistent(cmd, lv);
+		doit += _lvchange_persistent(cmd, lv);
 		docmds++;
 		if (sigint_caught())
 			return_ECMD_FAILED;
@@ -961,7 +1074,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	    arg_count(cmd, zero_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_pool_update(cmd, lv);
+		doit += _lvchange_pool_update(cmd, lv);
 		docmds++;
 	}
 
@@ -969,7 +1082,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, addtag_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_tag(cmd, lv, addtag_ARG);
+		doit += _lvchange_tag(cmd, lv, addtag_ARG);
 		docmds++;
 	}
 
@@ -977,7 +1090,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, deltag_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_tag(cmd, lv, deltag_ARG);
+		doit += _lvchange_tag(cmd, lv, deltag_ARG);
 		docmds++;
 	}
 
@@ -985,7 +1098,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_count(cmd, writemostly_ARG) || arg_count(cmd, writebehind_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_writemostly(lv);
+		doit += _lvchange_writemostly(lv);
 		docmds++;
 	}
 
@@ -994,7 +1107,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	    arg_count(cmd, maxrecoveryrate_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_recovery_rate(lv);
+		doit += _lvchange_recovery_rate(lv);
 		docmds++;
 	}
 
@@ -1003,21 +1116,21 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 	    arg_count(cmd, detachprofile_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_profile(lv);
+		doit += _lvchange_profile(lv);
 		docmds++;
 	}
 
 	if (arg_count(cmd, setactivationskip_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_activation_skip(lv);
+		doit += _lvchange_activation_skip(lv);
 		docmds++;
 	}
 
 	if (arg_count(cmd, cachepolicy_ARG) || arg_count(cmd, cachesettings_ARG)) {
 		if (!archive(lv->vg))
 			return_ECMD_FAILED;
-		doit += lvchange_cachepolicy(cmd, lv);
+		doit += _lvchange_cachepolicy(cmd, lv);
 		docmds++;
 	}
 
@@ -1025,7 +1138,7 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 		log_print_unless_silent("Logical volume \"%s\" changed.", lv->name);
 
 	if (arg_count(cmd, resync_ARG) &&
-	    !lvchange_resync(cmd, lv))
+	    !_lvchange_resync(cmd, lv))
 		return_ECMD_FAILED;
 
 	if (arg_count(cmd, syncaction_ARG) &&
@@ -1037,15 +1150,15 @@ static int _lvchange_single(struct cmd_context *cmd, struct logical_volume *lv,
 		if (!_lvchange_activate(cmd, lv))
 			return_ECMD_FAILED;
 	} else if (arg_count(cmd, refresh_ARG)) {
-		if (!lvchange_refresh(cmd, lv))
+		if (!_lvchange_refresh(cmd, lv))
 			return_ECMD_FAILED;
 	} else {
 		if (arg_count(cmd, monitor_ARG) &&
-		    !lvchange_monitoring(cmd, lv))
+		    !_lvchange_monitoring(cmd, lv))
 			return_ECMD_FAILED;
 
 		if (arg_count(cmd, poll_ARG) &&
-		    !lvchange_background_polling(cmd, lv))
+		    !_lvchange_background_polling(cmd, lv))
 			return_ECMD_FAILED;
 	}
 
@@ -1076,6 +1189,7 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
 	int update_partial_unsafe =
 		arg_count(cmd, alloc_ARG) ||
 		arg_count(cmd, discards_ARG) ||
+		arg_count(cmd, errorwhenfull_ARG) ||
 		arg_count(cmd, minrecoveryrate_ARG) ||
 		arg_count(cmd, maxrecoveryrate_ARG) ||
 		arg_count(cmd, resync_ARG) ||
@@ -1088,8 +1202,8 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
 	int update = update_partial_safe || update_partial_unsafe;
 
 	if (!update &&
-            !arg_count(cmd, activate_ARG) && !arg_count(cmd, refresh_ARG) &&
-            !arg_count(cmd, monitor_ARG) && !arg_count(cmd, poll_ARG)) {
+	    !arg_count(cmd, activate_ARG) && !arg_count(cmd, refresh_ARG) &&
+	    !arg_count(cmd, monitor_ARG) && !arg_count(cmd, poll_ARG)) {
 		log_error("Need 1 or more of -a, -C, -M, -p, -r, -Z, "
 			  "--resync, --refresh, --alloc, --addtag, --deltag, "
 			  "--monitor, --poll or --discards");
@@ -1116,8 +1230,8 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
 	if (!update || !update_partial_unsafe)
 		cmd->handles_missing_pvs = 1;
 
-	if (!argc) {
-		log_error("Please give logical volume path(s)");
+	if (!argc && !arg_is_set(cmd, select_ARG)) {
+		log_error("Please give logical volume path(s) or use --select for selection.");
 		return EINVALID_CMD_LINE;
 	}
 
@@ -1169,6 +1283,26 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
 			log_warn("lvmetad is active, skipping direct activation during sysinit");
 			return ECMD_PROCESSED;
 		}
+	}
+
+	/*
+	 * Include foreign VGs that contain active LVs.
+	 * That shouldn't happen in general, but if it does by some
+	 * mistake, then we want to allow those LVs to be deactivated.
+	 */
+	if (arg_is_set(cmd, activate_ARG))
+		cmd->include_active_foreign_vgs = 1;
+
+	/*
+	 * The default vg lock mode for lvchange is ex, but these options
+	 * are cases where lvchange does not modify the vg, so they can use
+	 * the sh lock mode.
+	 */
+	if (arg_count(cmd, activate_ARG) || arg_count(cmd, refresh_ARG)) {
+		cmd->lockd_vg_default_sh = 1;
+		/* Allow deactivating if locks fail. */
+		if (is_change_activating((activation_change_t)arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
+			cmd->lockd_vg_enforce_sh = 1;
 	}
 
 	return process_each_lv(cmd, argc, argv,

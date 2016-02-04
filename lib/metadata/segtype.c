@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -22,6 +22,9 @@ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
 {
 	struct segment_type *segtype;
 
+	if (!strcmp(str, "linear"))
+		str = "striped";
+
 	dm_list_iterate_items(segtype, &cmd->segtypes)
 		if (!strcmp(segtype->name, str))
 			return segtype;
@@ -33,4 +36,16 @@ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
 	log_warn("WARNING: Unrecognised segment type %s", str);
 
 	return segtype;
+}
+
+struct segment_type *get_segtype_from_flag(struct cmd_context *cmd,
+					   uint64_t flag)
+{
+	struct segment_type *segtype;
+
+	dm_list_iterate_items(segtype, &cmd->segtypes)
+		if (flag & segtype->flags)
+			return segtype;
+
+	return get_segtype_from_string(cmd, "");
 }

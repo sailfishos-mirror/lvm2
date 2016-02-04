@@ -12,13 +12,13 @@
  * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#define _REENTRANT
+
+#include "tool.h"
+
 #include "daemon-io.h"
-#include "libdevmapper.h"
 
 #include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
 
 /*
  * Read a single message from a (socket) filedescriptor. Messages are delimited
@@ -49,9 +49,15 @@ int buffer_read(int fd, struct buffer *buffer) {
 		} else if (result == 0) {
 			errno = ECONNRESET;
 			return 0; /* we should never encounter EOF here */
-		} else if (result < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+		} else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
+					   errno == EINTR || errno == EIO)) {
+			fd_set in;
+			FD_ZERO(&in);
+			FD_SET(fd, &in);
+			/* ignore the result, this is just a glorified sleep */
+			select(FD_SETSIZE, &in, NULL, NULL, NULL);
+		} else if (result < 0)
 			return 0;
-		/* TODO call select here if we encountered EAGAIN/EWOULDBLOCK/EINTR */
 	}
 
 	return 1;
@@ -60,8 +66,6 @@ int buffer_read(int fd, struct buffer *buffer) {
 /*
  * Write a buffer to a filedescriptor. Keep trying. Blocks (even on
  * SOCK_NONBLOCK) until all of the write went through.
- *
- * TODO use select on EWOULDBLOCK/EAGAIN/EINTR to avoid useless spinning
  */
 int buffer_write(int fd, const struct buffer *buffer) {
 	static const struct buffer _terminate = { .mem = (char *) "\n##\n", .used = 4 };
@@ -74,7 +78,14 @@ int buffer_write(int fd, const struct buffer *buffer) {
 			result = write(fd, use->mem + written, use->used - written);
 			if (result > 0)
 				written += result;
-			else if (result < 0 && errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR)
+			else if (result < 0 && ( errno == EAGAIN || errno == EWOULDBLOCK ||
+						 errno == EINTR || errno == EIO)) {
+				fd_set out;
+				FD_ZERO(&out);
+				FD_SET(fd, &out);
+				/* ignore the result, this is just a glorified sleep */
+				select(FD_SETSIZE, NULL, &out, NULL, NULL);
+			} else if (result < 0)
 				return 0; /* too bad */
 		}
 	}

@@ -20,15 +20,6 @@
 #include "str_list.h"
 #include "segtype.h"
 
-/* HM FIXME: REMOVEME: devel output */
-#ifdef USE_PFL
-#define PFL() printf("%s %u\n", __func__, __LINE__);
-#define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
-#else
-#define PFL()
-#define PFLA(format, arg...)
-#endif
-
 /*
  * Attempt to merge two adjacent segments.
  * Currently only supports striped segments on AREA_PV.
@@ -102,6 +93,7 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
 					  lv->name);
 				inc_error_count;
 			} else if (!seg_is_thin_volume(first_seg(lv))) {
+PFLA("segtype=%s", lvseg_name(first_seg(lv)));
 				log_error("LV %s is thin volume without first thin volume segment.",
 					  lv->name);
 				inc_error_count;
@@ -139,6 +131,8 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
 	}
 
 	dm_list_iterate_items(seg, &lv->segments) {
+		uint32_t data_copies, data_rimage_count;
+
 		seg_count++;
 		if (seg->le != le) {
 			log_error("LV %s invalid: segment %u should begin at "
@@ -147,13 +141,27 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
 			inc_error_count;
 		}
 
-		area_multiplier = seg_is_striped(seg) ? seg->area_count - seg->segtype->parity_devs : 1;
+		area_multiplier = (seg_is_striped_raid(seg) || seg_is_striped(seg)) ? seg->area_count - seg->segtype->parity_devs : 1;
+		data_rimage_count = seg->area_count - seg->segtype->parity_devs;
 
-PFLA("segtype=%s seg->area_len=%u seg->area_count=%u parity_devs=%u area_multiplier=%u seg->len=%u", seg->segtype->name, seg->area_len, seg->area_count, seg->segtype->parity_devs, area_multiplier, seg->len);
-		if (seg->area_len * area_multiplier != seg->len) { //  - seg->reshape_len) {
-			log_error("LV %s: segment %u has inconsistent "
-				  "area_len %u",
-				  lv->name, seg_count, seg->area_len);
+PFLA("lv=%s segtype=%s seg->len=%u seg->area_len=%u seg->area_count=%u data_rimage_count=%u parity_devs=%u area_multiplier=%u seg->data_copies=%u rimageextents=%u seg->reshape_len=%u", lv->name, seg->segtype->name, seg->len, seg->area_len, seg->area_count, data_rimage_count, seg->segtype->parity_devs, area_multiplier, seg->data_copies, raid_rimage_extents(seg->segtype, seg->len - data_rimage_count * seg->reshape_len, data_rimage_count, seg->data_copies), seg->reshape_len);
+#if 1
+		data_copies = seg_is_any_raid10(seg) ? seg->data_copies : 1;
+		if (raid_rimage_extents(seg->segtype, seg->len - data_rimage_count * seg->reshape_len,
+					data_rimage_count, seg->data_copies) != seg->area_len - data_copies * seg->reshape_len) {
+#else
+		if (seg->area_len * area_multiplier != seg->len) {
+#endif
+			log_error("LV %s: segment %u with len=%u "
+				  " has inconsistent area_len %u",
+				  lv->name, seg_count, seg->len, seg->area_len);
+			inc_error_count;
+		}
+
+		if (lv_is_error_when_full(lv) &&
+		    !seg_can_error_when_full(seg)) {
+			log_error("LV %s: segment %u (%s) does not support flag "
+				  "ERROR_WHEN_FULL.", lv->name, seg_count, seg->segtype->name);
 			inc_error_count;
 		}
 
@@ -211,6 +219,26 @@ PFLA("segtype=%s seg->area_len=%u seg->area_count=%u parity_devs=%u area_multipl
 				}
 
 			}
+			if (seg_is_cache_pool(seg) &&
+			    !dm_list_empty(&seg->lv->segs_using_this_lv)) {
+				switch (seg->feature_flags &
+					(DM_CACHE_FEATURE_PASSTHROUGH |
+					 DM_CACHE_FEATURE_WRITETHROUGH |
+					 DM_CACHE_FEATURE_WRITEBACK)) {
+					 case DM_CACHE_FEATURE_PASSTHROUGH:
+					 case DM_CACHE_FEATURE_WRITETHROUGH:
+					 case DM_CACHE_FEATURE_WRITEBACK:
+						 break;
+					 default:
+						 log_error("LV %s has invalid cache's feature flag.",
+							   lv->name);
+						 inc_error_count;
+				}
+				if (!seg->policy_name) {
+					log_error("LV %s is missing cache policy name.", lv->name);
+					inc_error_count;
+				}
+			}
 			if (seg_is_pool(seg)) {
 				if (seg->area_count != 1 ||
 				    seg_type(seg, 0) != AREA_LV) {
@@ -234,8 +262,7 @@ PFLA("segtype=%s seg->area_len=%u seg->area_count=%u parity_devs=%u area_multipl
 					inc_error_count;
 				}
 
-				if (seg_is_pool(seg) &&
-				    !validate_pool_chunk_size(lv->vg->cmd, seg->segtype, seg->chunk_size)) {
+				if (!validate_pool_chunk_size(lv->vg->cmd, seg->segtype, seg->chunk_size)) {
 					log_error("LV %s: %s segment %u has invalid chunk size %u.",
 						  lv->name, seg->segtype->name, seg_count, seg->chunk_size);
 					inc_error_count;
@@ -413,7 +440,6 @@ PFLA("segtype=%s seg->area_len=%u seg->area_count=%u parity_devs=%u area_multipl
 		for (s = 0; s < seg->area_count; s++) {
 			if (seg_type(seg, s) != AREA_LV)
 				continue;
-PFLA("lv=%s s=%u seg->status=%lX seg_lv(seg, %u)=%s", lv->name, s, seg->status, s, seg_lv(seg, s)->name);
 			/* HM FIXME: TESTME */
 			if (seg_is_raid(seg) && seg->meta_areas && lv == seg_metalv(seg, s))
 {
@@ -486,7 +512,7 @@ PFLA("lv=%s s=%u seg->status=%lX seg_lv(seg, %u)=%s", lv->name, s, seg->status, 
 			inc_error_count;
 		}
 	}
-PFL();
+PFLA("error_count=%u", error_count);
 
 	if (le != lv->le_count) {
 		log_error("LV %s: inconsistent LE count %u != %u",
@@ -521,7 +547,7 @@ static int _lv_split_segment(struct logical_volume *lv, struct lv_segment *seg,
 					   seg->lv, seg->le, seg->len, seg->reshape_len,
 					   seg->status, seg->stripe_size,
 					   seg->log_lv,
-					   seg->area_count, seg->area_len,
+					   seg->area_count, seg->area_len, seg->data_copies,
 					   seg->chunk_size, seg->region_size,
 					   seg->extents_copied, seg->pvmove_source_seg))) {
 		log_error("Couldn't allocate cloned LV segment.");
@@ -533,9 +559,10 @@ static int _lv_split_segment(struct logical_volume *lv, struct lv_segment *seg,
 		return 0;
 	}
 
-	/* In case of a striped segment, the offset has to be / stripes */
+	/* In case of a striped/raid10_far segment, the offset has to be / stripes */
 	area_offset = offset;
-	if (seg_is_striped(seg))
+	if (seg_is_striped(seg) ||
+	    seg_is_raid10_far(seg))
 		area_offset /= seg->area_count;
 
 	split_seg->area_len -= area_offset;

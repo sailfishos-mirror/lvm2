@@ -16,6 +16,7 @@
 #include "properties.h"
 #include "activate.h"
 #include "metadata.h"
+#include "segtype.h"
 
 
 #define GET_VG_NUM_PROPERTY_FN(NAME, VALUE) \
@@ -281,6 +282,8 @@ GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
 GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
 #define _lv_major_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
+#define _lv_when_full_get prop_not_implemented_get
+#define _lv_when_full_set prop_not_implemented_set
 #define _lv_minor_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_read_ahead, lv->read_ahead * SECTOR_SIZE)
 #define _lv_read_ahead_set prop_not_implemented_set
@@ -290,7 +293,7 @@ GET_LV_NUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
 #define _lv_kernel_minor_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_kernel_read_ahead, lv_kernel_read_ahead(lv) * SECTOR_SIZE)
 #define _lv_kernel_read_ahead_set prop_not_implemented_set
-GET_LV_NUM_PROPERTY_FN(lv_size, lv->size * SECTOR_SIZE)
+GET_LV_NUM_PROPERTY_FN(lv_size, (lv->le_count - first_seg(lv)->reshape_len) * lv->vg->extent_size) // lv->size * SECTOR_SIZE)
 #define _lv_size_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(seg_count, dm_list_size(&lv->segments))
 #define _seg_count_set prop_not_implemented_set
@@ -298,6 +301,10 @@ GET_LV_STR_PROPERTY_FN(origin, lv_origin_dup(lv->vg->vgmem, lv))
 #define _origin_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(origin_size, (SECTOR_SIZE * lv_origin_size(lv)))
 #define _origin_size_set prop_not_implemented_set
+#define _lv_ancestors_set prop_not_implemented_set
+#define _lv_ancestors_get prop_not_implemented_get
+#define _lv_descendants_set prop_not_implemented_set
+#define _lv_descendants_get prop_not_implemented_get
 GET_LV_NUM_PROPERTY_FN(snap_percent, _snap_percent(lv))
 #define _snap_percent_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(copy_percent, _copy_percent(lv))
@@ -336,7 +343,7 @@ GET_LV_NUM_PROPERTY_FN(metadata_percent, _metadata_percent(lv))
 #define _metadata_percent_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_metadata_size, lv_metadata_size(lv) * SECTOR_SIZE)
 #define _lv_metadata_size_set prop_not_implemented_set
-GET_LV_STR_PROPERTY_FN(lv_time, lv_time_dup(lv->vg->vgmem, lv))
+GET_LV_STR_PROPERTY_FN(lv_time, lv_time_dup(lv->vg->vgmem, lv, 0))
 #define _lv_time_set prop_not_implemented_set
 GET_LV_STR_PROPERTY_FN(lv_host, lv_host_dup(lv->vg->vgmem, lv))
 #define _lv_host_set prop_not_implemented_set
@@ -344,6 +351,8 @@ GET_LV_STR_PROPERTY_FN(lv_active, lv_active_dup(lv->vg->vgmem, lv))
 #define _lv_active_set prop_not_implemented_set
 GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
 #define _lv_profile_set prop_not_implemented_set
+GET_LV_STR_PROPERTY_FN(lv_lockargs, lv_lock_args_dup(lv->vg->vgmem, lv))
+#define _lv_lockargs_set prop_not_implemented_set
 
 /* VG */
 GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))
@@ -360,6 +369,12 @@ GET_VG_NUM_PROPERTY_FN(vg_free, (SECTOR_SIZE * vg_free(vg)))
 #define _vg_free_set prop_not_implemented_set
 GET_VG_STR_PROPERTY_FN(vg_sysid, vg_system_id_dup(vg))
 #define _vg_sysid_set prop_not_implemented_set
+GET_VG_STR_PROPERTY_FN(vg_systemid, vg_system_id_dup(vg))
+#define _vg_systemid_set prop_not_implemented_set
+GET_VG_STR_PROPERTY_FN(vg_locktype, vg_lock_type_dup(vg))
+#define _vg_locktype_set prop_not_implemented_set
+GET_VG_STR_PROPERTY_FN(vg_lockargs, vg_lock_args_dup(vg))
+#define _vg_lockargs_set prop_not_implemented_set
 GET_VG_NUM_PROPERTY_FN(vg_extent_size, (SECTOR_SIZE * vg->extent_size))
 #define _vg_extent_size_set prop_not_implemented_set
 GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
@@ -394,10 +409,36 @@ GET_VG_STR_PROPERTY_FN(vg_profile, vg_profile_dup(vg))
 #define _vg_profile_set prop_not_implemented_set
 
 /* LVSEG */
-GET_LVSEG_STR_PROPERTY_FN(segtype, lvseg_segtype_dup(lvseg->lv->vg->vgmem, lvseg))
 #define _segtype_set prop_not_implemented_set
+GET_LVSEG_STR_PROPERTY_FN(segtype, lvseg_segtype_dup(lvseg->lv->vg->vgmem, lvseg))
+#define _datacopies_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(datacopies, lvseg->segtype->parity_devs ? lvseg->segtype->parity_devs + 1 : lvseg->data_copies)
+#define _data_copies_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(data_copies, lvseg->segtype->parity_devs ? lvseg->segtype->parity_devs + 1: lvseg->data_copies)
+#define _reshapelen_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(reshapelen, (lvseg->reshape_len *lvseg->area_count / (lvseg->area_count - lvseg->segtype->parity_devs)))
+#define _reshape_len_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(reshape_len, (lvseg->reshape_len *lvseg->area_count / (lvseg->area_count - lvseg->segtype->parity_devs)))
+GET_LVSEG_NUM_PROPERTY_FN(dataoffset, lvseg->data_offset)
+#define _dataoffset_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(data_offset, lvseg->data_offset)
+#define _data_offset_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(newdataoffset, lvseg->data_offset)
+#define _newdataoffset_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(new_data_offset, lvseg->data_offset)
+#define _new_data_offset_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(parity, lvseg->data_offset)
+#define _parity_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(parity_chunks, lvseg->data_offset)
+#define _parity_chunks_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(parity_devs, lvseg->data_offset)
+#define _parity_devs_set prop_not_implemented_set
 GET_LVSEG_NUM_PROPERTY_FN(stripes, lvseg->area_count)
 #define _stripes_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(datastripes, lvseg->area_count - lvseg->segtype->parity_devs)
+#define _datastripes_set prop_not_implemented_set
+GET_LVSEG_NUM_PROPERTY_FN(data_stripes, lvseg->area_count - lvseg->segtype->parity_devs)
+#define _data_stripes_set prop_not_implemented_set
 GET_LVSEG_NUM_PROPERTY_FN(stripesize, (SECTOR_SIZE * lvseg->stripe_size))
 #define _stripesize_set prop_not_implemented_set
 GET_LVSEG_NUM_PROPERTY_FN(stripe_size, (SECTOR_SIZE * lvseg->stripe_size))
@@ -454,7 +495,7 @@ GET_PVSEG_NUM_PROPERTY_FN(pvseg_size, (SECTOR_SIZE * pvseg->len))
 
 struct lvm_property_type _properties[] = {
 #include "columns.h"
-	{ 0, "", 0, 0, 0, { .integer = 0 }, prop_not_implemented_get, prop_not_implemented_set },
+	{ 0, "", 0, 0, 0, 0, { .integer = 0 }, prop_not_implemented_get, prop_not_implemented_set },
 };
 
 #undef STR
@@ -463,6 +504,7 @@ struct lvm_property_type _properties[] = {
 #undef SIZ
 #undef PCT
 #undef STR_LIST
+#undef SNUM
 #undef FIELD
 
 int lvseg_get_property(const struct lv_segment *lvseg,
@@ -474,7 +516,7 @@ int lvseg_get_property(const struct lv_segment *lvseg,
 int lv_get_property(const struct logical_volume *lv,
 		    struct lvm_property_type *prop)
 {
-	return prop_get_property(_properties, lv, prop, LVS);
+	return prop_get_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
 }
 
 int vg_get_property(const struct volume_group *vg,
@@ -498,7 +540,7 @@ int pv_get_property(const struct physical_volume *pv,
 int lv_set_property(struct logical_volume *lv,
 		    struct lvm_property_type *prop)
 {
-	return prop_set_property(_properties, lv, prop, LVS);
+	return prop_set_property(_properties, lv, prop, LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS);
 }
 
 int vg_set_property(struct volume_group *vg,

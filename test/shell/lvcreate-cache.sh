@@ -16,11 +16,14 @@
 
 . lib/inittest
 
+test -e LOCAL_LVMPOLLD && skip
+
 aux have_cache 1 3 0 || skip
 
 # FIXME: parallel cache metadata allocator is crashing when used value 8000!
 aux prepare_vg 5 80000
 
+aux lvmconf 'global/cache_disabled_features = [ "policy_smq" ]'
 
 #######################
 # Cache_Pool creation #
@@ -49,7 +52,7 @@ fail lvcreate -l 1 -H --name $vg/$lv4 --cachepool pool7
 fail lvcreate -l 1 --cachepool pool8 $vg
 
 # no size specified
-invalid lvcreate --cachepool pool $vg |& tee err
+invalid lvcreate --cachepool pool $vg 2>&1 | tee err
 grep "specify either size or extents" err
 
 # Check nothing has been created yet

@@ -20,9 +20,19 @@
 #define _LVM_LIB_H
 
 /* HM FIXME: REMOVEME: devel output */
-#if 1
-#define	USE_PFL
+#if 0
+#include "dump.h"
 #endif
+
+/* HM FIXME: REMOVEME: devel output */
+#if 0
+#define PFL() printf("%s %u\n", __func__, __LINE__);
+#define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
+#else
+#define PFL() ;
+#define PFLA(format, arg...) ;
+#endif
+
 
 #include "configure.h"
 
@@ -30,10 +40,16 @@
 #define _GNU_SOURCE
 #define _FILE_OFFSET_BITS 64
 
-/* Define some portable printing types */
-#define PRIsize_t "zu"
-#define PRIptrdiff_t "td"
-#define PRIpid_t PRId32
+#if defined(__GNUC__)
+#define DM_EXPORTED_SYMBOL(func, ver) \
+	__asm__(".symver " #func "_v" #ver ", " #func "@@DM_" #ver )
+#define DM_EXPORTED_SYMBOL_BASE(func) \
+	__asm__(".symver " #func "_base, " #func "@Base" )
+#else
+#define DM_EXPORTED_SYMBOL(func, ver)
+#define DM_EXPORTED_SYMBOL_BASE(func)
+#endif
+
 
 #include "intl.h"
 #include "libdevmapper.h"

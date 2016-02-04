@@ -12,7 +12,11 @@
 
 # Test creation of thin snapshots using external origin
 
+export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
+
 . lib/inittest
+
+test -e LOCAL_LVMPOLLD && skip
 
 which mkfs.ext2 || skip
 which fsck || skip
@@ -25,6 +29,10 @@ aux have_thin 1 3 0 || skip
 aux prepare_pvs 2 64
 
 vgcreate $vg -s 64K $(cat DEVICES)
+
+# Newer thin-pool target (>= 1.13) supports unaligned external origin
+# But this test is written to test and expect older behavior
+aux lvmconf 'global/thin_disabled_features = [ "external_origin_extend" ]'
 
 # Test validation for external origin being multiple of thin pool chunk size
 lvcreate -L10M -T $vg/pool192 -c 192k

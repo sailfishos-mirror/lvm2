@@ -83,10 +83,12 @@ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
 
  restart:
 	vg_mark_partial_lvs(vg, 1);
+PFL();
 
 	dm_list_iterate_items(lvl, &vg->lvs) {
 		lv = lvl->lv;
 
+PFLA("lv=%s", display_lvname(lv));
 		/* Are any segments of this LV on missing PVs? */
 		if (lv->status & PARTIAL_LV) {
 			if (seg_is_raid(first_seg(lv))) {
@@ -123,7 +125,7 @@ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
 /* Or take pv_name instead? */
 static int _vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
 			    struct physical_volume *pv,
-			    void *handle __attribute__((unused)))
+			    struct processing_handle *handle __attribute__((unused)))
 {
 	int r;
 
@@ -141,6 +143,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct volume_group *vg;
 	const char *vg_name;
+	uint32_t lockd_state = 0;
 	int ret = ECMD_FAILED;
 	int fixed = 1;
 	int repairing = arg_count(cmd, removemissing_ARG);
@@ -195,7 +198,14 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
 	init_ignore_suspended_devices(1);
 	cmd->handles_missing_pvs = 1;
 
-	vg = vg_read_for_update(cmd, vg_name, NULL, READ_ALLOW_EXPORTED);
+	/* Needed to change the set of orphan PVs. */
+	if (!lockd_gl(cmd, "ex", 0))
+		return_ECMD_FAILED;
+
+	if (!lockd_vg(cmd, vg_name, "ex", 0, &lockd_state))
+		return_ECMD_FAILED;
+
+	vg = vg_read_for_update(cmd, vg_name, NULL, READ_ALLOW_EXPORTED, lockd_state);
 	if (vg_read_error(vg) == FAILED_ALLOCATION ||
 	    vg_read_error(vg) == FAILED_NOTFOUND)
 		goto_out;
@@ -218,7 +228,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
 	log_verbose("Trying to open VG %s for recovery...", vg_name);
 
 	vg = vg_read_for_update(cmd, vg_name, NULL,
-				READ_ALLOW_INCONSISTENT | READ_ALLOW_EXPORTED);
+				READ_ALLOW_INCONSISTENT | READ_ALLOW_EXPORTED, lockd_state);
 
 	locked |= !vg_read_error(vg);
 

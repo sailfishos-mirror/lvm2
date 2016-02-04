@@ -17,8 +17,21 @@
 
 static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
 			   struct volume_group *vg,
-			   void *handle __attribute__((unused)))
+			   struct processing_handle *handle __attribute__((unused)))
 {
+	/*
+	 * Though vgremove operates per VG by definition, internally, it
+	 * actually means iterating over each LV it contains to do the remove.
+	 *
+	 * Use processing handle with void_handle.internal_report_for_select=0
+	 * for the process_each_lv_in_vg that is called later in this fn.
+	 * We need to disable internal selection for process_each_lv_in_vg
+	 * here as selection is already done by process_each_vg which calls
+	 * vgremove_single. Otherwise selection would be done per-LV and
+	 * not per-VG as we intend!
+	 */
+	struct processing_handle void_handle = {0};
+
 	/*
 	 * Single force is equivalent to sinle --yes
 	 * Even multiple --yes are equivalent to single --force
@@ -47,12 +60,16 @@ static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
 				return ECMD_FAILED;
 			}
 		}
-		if ((ret = process_each_lv_in_vg(cmd, vg, NULL, NULL, 1, NULL,
+
+		if ((ret = process_each_lv_in_vg(cmd, vg, NULL, NULL, 1, &void_handle,
 						 (process_single_lv_fn_t)lvremove_single)) != ECMD_PROCESSED) {
 			stack;
 			return ret;
 		}
 	}
+
+	if (!lockd_free_vg_before(cmd, vg))
+		return_ECMD_FAILED;
 
 	if (!force && !vg_remove_check(vg))
 		return_ECMD_FAILED;
@@ -62,6 +79,8 @@ static int vgremove_single(struct cmd_context *cmd, const char *vg_name,
 	if (!vg_remove(vg))
 		return_ECMD_FAILED;
 
+	lockd_free_vg_final(cmd, vg);
+
 	return ECMD_PROCESSED;
 }
 
@@ -69,10 +88,25 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
 {
 	int ret;
 
-	if (!argc) {
-		log_error("Please enter one or more volume group paths");
+	if (!argc && !arg_is_set(cmd, select_ARG)) {
+		log_error("Please enter one or more volume group paths "
+			  "or use --select for selection.");
 		return EINVALID_CMD_LINE;
 	}
+
+	/*
+	 * Needed to change the global VG namespace,
+	 * and to change the set of orphan PVs.
+	 */
+	if (!lockd_gl(cmd, "ex", LDGL_UPDATE_NAMES))
+		return ECMD_FAILED;
+
+	/*
+	 * This is a special case: if vgremove is given a tag, it causes
+	 * process_each_vg to do lockd_gl(sh) when getting a list of all
+	 * VG names.  We don't want the gl converted to sh, so disable it.
+	 */
+	cmd->lockd_gl_disable = 1;
 
 	cmd->handles_missing_pvs = 1;
 	ret = process_each_vg(cmd, argc, argv,

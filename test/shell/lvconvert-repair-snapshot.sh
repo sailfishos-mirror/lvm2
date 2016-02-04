@@ -11,9 +11,11 @@
 
 . lib/inittest
 
+test -e LOCAL_LVMPOLLD && skip
+
 aux prepare_vg 5
-aux lvmconf 'allocation/maximise_cling = 0'
-aux lvmconf 'allocation/mirror_logs_require_separate_pvs = 1'
+aux lvmconf 'allocation/maximise_cling = 0' \
+	    'allocation/mirror_logs_require_separate_pvs = 1'
 
 lvcreate -aey --type mirror -m 3 --ignoremonitoring -L 2M -n 4way $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5":0
 lvcreate -s $vg/4way -L 2M -n snap
@@ -26,4 +28,5 @@ aux enable_dev "$dev2" "$dev4"
 lvs -a -o +devices $vg
 check mirror $vg 4way "$dev5"
 
+vgchange -an $vg
 vgremove -ff $vg

@@ -43,18 +43,23 @@ path of \fBlvm\fP.
 The following commands are built into lvm without links normally
 being created in the filesystem for them.
 .TP
-\fBdumpconfig\fP \(em Display the configuration information after
-loading \fBlvm.conf\fP(5) and any other configuration files.
+\fBconfig\fP \(em The same as \fBlvmconfig\fP(8) below.
 .TP
 \fBdevtypes\fP \(em Display the recognised built-in block device types.
+.TP
+\fBdumpconfig\fP \(em The same as \fBlvmconfig\fP(8) below.
 .TP
 \fBformats\fP \(em Display recognised metadata formats.
 .TP
 \fBhelp\fP \(em Display the help text.
 .TP
+\fBlvpoll\fP \(em Internal command used by lvmpolld to complete some Logical Volume operations.
+.TP
 \fBpvdata\fP \(em Not implemented in LVM2.
 .TP
 \fBsegtypes\fP \(em Display recognised Logical Volume segment types.
+.TP
+\fBsystemid\fP \(em Display the system ID, if any, currently set on this host.
 .TP
 \fBtags\fP \(em Display any tags defined on this host.
 .TP
@@ -134,6 +139,9 @@ Volumes.
 .TP
 \fBlvmchange\fP \(em Change attributes of the Logical Volume Manager.
 .TP
+\fBlvmconfig\fP \(em Display the configuration information after
+loading \fBlvm.conf\fP(5) and any other configuration files.
+.TP
 \fBlvmdiskscan\fP \(em Scan for all devices visible to LVM2.
 .TP
 \fBlvmdump\fP \(em Create lvm2 information dumps for diagnostic purposes.
@@ -155,6 +163,10 @@ The following commands are not implemented in LVM2 but might be in the future: l
 The following options are available for many of the commands.
 They are implemented generically and documented here rather
 than repeated on individual manual pages.
+
+Additional hyphens within option names are ignored.  For example,
+\-\-readonly and \-\-read\-only are both accepted.
+
 .TP
 .BR \-h ", " \-? ", " \-\-help
 Display the help text.
@@ -210,8 +222,9 @@ match the original followed by \fBvgcfgrestore\fP(8).
 .BR \-S ", " \-\-select " " \fISelection
 For reporting commands, display only rows that match selection criteria.
 All rows are displayed with the additional "selected" column (\fB-o selected\fP)
-showing 1 if the row matches the Selection and 0 otherwise.
-See \fBSELECTION CRITERIA\fP section of this man page for more
+showing 1 if the row matches the Selection and 0 otherwise. For non-reporting
+commands which process LVM entities, the selection can be used to match items
+to process. See \fBSELECTION CRITERIA\fP section of this man page for more
 information about the way the selection criteria are constructed.
 .TP
 .BR \-M ", " \-\-metadatatype " " \fIType
@@ -241,6 +254,17 @@ Groups when clustered locking is not configured or running.  No attempt
 will be made to communicate with the device-mapper kernel driver, so
 this option is unable to report whether or not Logical Volumes are 
 actually in use.
+.TP
+.B \-\-foreign
+Cause the command to access foreign VGs, that would otherwise be skipped.
+It can be used to report or display a VG that is owned by another host.
+This option can cause a command to perform poorly because lvmetad caching
+is not used and metadata is read from disks.
+.TP
+.B \-\-shared
+Cause the command to access shared VGs, that would otherwise be skipped
+when lvmlockd is not being used.  It can be used to report or display a
+lockd VG without locking.
 .TP
 .B \-\-addtag \fITag
 Add the tag \fITag\fP to a PV, VG or LV.
@@ -291,7 +315,9 @@ placing two stripes on the same Physical Volume.
 .IR \fB\-\-commandprofile " " \fIProfileName
 Selects the command configuration profile to use when processing an LVM command.
 See also \fBlvm.conf\fP(5) for more information about \fBcommand profile config\fP and
-the way it fits with other LVM configuration methods.
+the way it fits with other LVM configuration methods. Using \fB\-\-commandprofile\fP
+option overrides any command profile specified via \fBLVM_COMMAND_PROFILE\fP
+environment variable.
 .TP
 .IR \fB\-\-metadataprofile " " \fIProfileName
 Selects the metadata configuration profile to use when processing an LVM command.
@@ -305,8 +331,8 @@ way it fits with other LVM configuration methods.
 .IR \fB\-\-profile " " \fIProfileName
 A short form of \fB\-\-metadataprofile\fP for \fBvgcreate\fP, \fBlvcreate\fP,
 \fBvgchange\fP and \fBlvchange\fP command and a short form of \fB\-\-commandprofile\fP
-for any other command (with the exception of \fBdumpconfig\fP command where the
-\-\-profile has special meaning, see \fBlvm dumpconfig\fP(8) for more information).
+for any other command (with the exception of \fBlvmconfig\fP command where the
+\-\-profile has special meaning, see \fBlvmconfig\fP(8) for more information).
 .TP
 .IR \fB\-\-config " " \fIConfigurationString
 Uses the ConfigurationString as direct string representation of the configuration
@@ -459,6 +485,10 @@ that can be used in selection, see the output of \fB<lvm reporting command> -S h
 \fB[\fP  \(em List start
 .IP
 \fB]\fP  \(em List end
+.IP
+\fB{\fP  \(em List subset start
+.IP
+\fB}\fP  \(em List subset end
 .LP
 \fBInformal grammar specification\fP:
 .IP
@@ -466,7 +496,11 @@ that can be used in selection, see the output of \fB<lvm reporting command> -S h
 .IP
 .BR VALUE " = " [VALUE " log_op " VALUE]
 .br
-For list-based types: string list. The log_op must always be of one type within the whole list value.
+For list-based types: string list. Matches strictly. The log_op must always be of one type within the whole list value.
+.IP
+.BR VALUE " = " {VALUE " log_op " VALUE}
+.br
+For list-based types: string list. Matches a subset. The log_op must always be of one type within the whole list value.
 .IP
 .BR VALUE " = " value
 .br
@@ -480,13 +514,16 @@ All tools return a status code of zero on success or non-zero on failure.
 Directory containing \fI.lvm_history\fP if the internal readline
 shell is invoked.
 .TP
+.B LVM_COMMAND_PROFILE
+Name of default command profile to use for LVM commands. This profile
+is overriden by direct use of \fB\-\-commandprofile\fP command line option.
+.TP
 .B LVM_SYSTEM_DIR
 Directory containing \fBlvm.conf\fP(5) and other LVM system files.
 Defaults to "#DEFAULT_SYS_DIR#".
 .TP
 .B LVM_SUPPRESS_FD_WARNINGS
-Suppress warnings about openned file descriptors, when lvm command
-is executed.
+Suppress warnings about unexpected file descriptors passed into LVM.
 .TP
 .B LVM_VG_NAME
 The Volume Group name that is assumed for
@@ -494,10 +531,40 @@ any reference to a Logical Volume that doesn't specify a path.
 Not set by default.
 .TP
 .B LVM_LVMETAD_PIDFILE
-Path for the lvmetad pid file.
+Path to the file that stores the lvmetad process ID.
 .TP
 .B LVM_LVMETAD_SOCKET
-Path for the lvmetad socket file.
+Path to the socket used to communicate with lvmetad.
+.TP
+.B LVM_LVMPOLLD_PIDFILE
+Path to the file that stores the lvmpolld process ID.
+.TP
+.B LVM_LVMPOLLD_SOCKET
+Path to the socket used to communicate with lvmpolld..
+.TP
+.B LVM_LOG_FILE_EPOCH
+A string of up to 32 letters appended to the log filename and
+followed by the process ID and a timestamp.  When set, each process logs to a
+separate file.
+.TP
+.B LVM_EXPECTED_EXIT_STATUS
+The status anticipated when the process exits.  Use ">N" to match any
+status greater than N.  If the actual exit status matches and a log
+file got produced, it is deleted.
+
+LVM_LOG_FILE_EPOCH and LVM_EXPECTED_EXIT_STATUS together allow
+automated test scripts to discard uninteresting log data.
+.TP
+.B LVM_SUPPRESS_LOCKING_FAILURE_MESSAGES
+Used to suppress warning messages when the configured locking is known
+to be unavailable.
+.TP
+.B DM_ABORT_ON_INTERNAL_ERRORS
+Abort processing if the code detects a non-fatal internal error.
+.TP
+.B DM_DISABLE_UDEV
+Avoid interaction with udev.  LVM will manage the relevant nodes in /dev
+directly.
 .SH FILES
 .I #DEFAULT_SYS_DIR#/lvm.conf
 .br
@@ -506,7 +573,6 @@ Path for the lvmetad socket file.
 .BR lvm.conf (5),
 .BR lvmcache (7),
 .BR lvmthin (7),
-.BR lvm\ dumpconfig (8),
 .BR clvmd (8),
 .BR dmsetup (8),
 .BR lvchange (8),
@@ -514,6 +580,7 @@ Path for the lvmetad socket file.
 .BR lvdisplay (8),
 .BR lvextend (8),
 .BR lvmchange (8),
+.BR lvmconfig (8),
 .BR lvmdiskscan (8),
 .BR lvreduce (8),
 .BR lvremove (8),

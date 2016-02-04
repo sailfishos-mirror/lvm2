@@ -17,15 +17,6 @@
 
 #include <fcntl.h>
 
-/* HM FIXME: REMOVEME: devel output */
-#ifdef USE_PFL
-#define PFL() printf("%s %u\n", __func__, __LINE__);
-#define PFLA(format, arg...) printf("%s %u " format "\n", __func__, __LINE__, arg);
-#else
-#define PFL()
-#define PFLA(format, arg...)
-#endif
-
 struct lvcreate_cmdline_params {
 	percent_type_t percent;
 	uint64_t size;
@@ -462,24 +453,48 @@ static int _read_mirror_params(struct cmd_context *cmd,
 static int _read_raid_params(struct cmd_context *cmd,
 			     struct lvcreate_params *lp)
 {
-	if ((lp->stripes < 2) && segtype_is_raid10(lp->segtype)) {
-		if (arg_count(cmd, stripes_ARG)) {
-			/* User supplied the bad argument */
-			log_error("Segment type 'raid10' requires 2 or more stripes.");
-			return 0;
+	if (seg_is_any_raid10(lp)) {
+		if (lp->stripes * lp->mirrors < 2) {
+			if (arg_count(cmd, stripes_ARG) || arg_count(cmd, mirrors_ARG)) {
+				/* User supplied the bad argument */
+				log_error("Segment type '%s' requires 3 or more devices.", lp->segtype->name);
+				return 0;
+			}
+
+			/* No stripe argument was given - default to 3 */
+			lp->stripes = 3;
+			log_warn("Defaulting to %u stripes with %s", lp->stripes, lp->segtype->name);
 		}
-		/* No stripe argument was given - default to 2 */
-		lp->stripes = 2;
-		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 	}
+
+	if (seg_is_raid01(lp)) {
+		if (lp->stripes < 2) {
+			lp->stripes = 2;
+			log_warn("Defaulting to %u stripes with %s", lp->stripes, lp->segtype->name);
+		}
+		if (lp->mirrors < 2) {
+			lp->mirrors = 2; 
+			log_warn("Defaulting to %u mirrors with %s", lp->mirrors, lp->segtype->name);
+		}
+	}
+
+	if (!lp->stripe_size && !seg_is_raid1(lp))
+		lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 
 	/*
 	 * RAID1 does not take a stripe arg
 	 */
 	if ((lp->stripes > 1) &&
-	    (seg_is_mirrored(lp) || segtype_is_raid1(lp->segtype)) &&
-	    !segtype_is_raid10(lp->segtype)) {
+	    ((seg_is_mirrored(lp) && !seg_is_raid01(lp)) || seg_is_raid1(lp)) &&
+	    !seg_is_any_raid10(lp)) {
 		log_error("Stripe argument cannot be used with segment type, %s",
+			  lp->segtype->name);
+		return 0;
+	}
+
+	if (arg_count(cmd, mirrors_ARG) &&
+	    !(seg_is_raid1(lp) ||seg_is_raid01(lp) || seg_is_any_raid10(lp))) {
+		log_error("Mirror argument cannot be used with segment type, %s",
 			  lp->segtype->name);
 		return 0;
 	}
@@ -513,6 +528,9 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 		if (segtype_is_raid1(lp->segtype)) {
 			type = SEG_TYPE_NAME_RAID1;
 			max_images = DEFAULT_RAID_MAX_IMAGES;
+		} else if (segtype_is_any_raid10(lp->segtype)) {
+			type = lp->segtype->name;
+			max_images = DEFAULT_RAID_MAX_IMAGES;
 		} else {
 			type = "mirror";
 			max_images = DEFAULT_MIRROR_MAX_IMAGES;
@@ -524,15 +542,10 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 			return 0;
 		}
 
-		if (lp->mirrors > 2 &&
-		    segtype_is_raid10(lp->segtype)) {
-			/*
-			 * FIXME: When RAID10 is no longer limited to
-			 *        2-way mirror, 'lv_mirror_count()'
-			 *        must also change for RAID10.
-			 */
-			log_error("RAID10 currently supports "
-				  "only 2-way mirroring (i.e. '-m 1')");
+PFLA("lp->mirrors=%u lp->stripes=%u", lp->mirrors, lp->stripes);
+		if (segtype_is_any_raid10(lp->segtype) &&
+		    lp->mirrors > lp->stripes) {
+			log_error("RAID10 mirrors have to be less than stripes (i.e. -mN with N < #stripes)");
 			return 0;
 		}
 
@@ -547,12 +560,20 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 		/* Default to 2 mirrored areas if '--type mirror|raid1|raid10' */
 		lp->mirrors = seg_is_mirrored(lp) ? 2 : 1;
 
-PFLA("mirrors=%u stripes=%u", lp->mirrors, lp->stripes);
-	if (lp->stripes < 2 &&
-	    (segtype_is_any_raid0(lp->segtype) || segtype_is_raid10(lp->segtype)))
+PFLA("lp->mirrors=%u lp->stripes=%u", lp->mirrors, lp->stripes);
+	if (lp->stripes < 2 && segtype_is_any_raid0(lp->segtype))
 		if (arg_count(cmd, stripes_ARG)) {
 			/* User supplied the bad argument */
-			log_error("Segment type 'raid(1)0' requires 2 or more stripes.");
+PFL();
+			log_error("Segment type '%s' requires 2 or more stripes.", lp->segtype->name);
+			return 0;
+		}
+
+	if (lp->stripes * lp->mirrors < 2 && segtype_is_raid10_near(lp->segtype))
+		if (arg_count(cmd, stripes_ARG) || arg_count(cmd, mirrors_ARG)) {
+			/* User supplied the bad arguments */
+PFL();
+			log_error("Segment type '%s' requires 2 or more stripes.", lp->segtype->name);
 			return 0;
 		}
 
@@ -567,26 +588,6 @@ PFLA("mirrors=%u stripes=%u", lp->mirrors, lp->stripes);
 	if (lp->region_size & (lp->region_size - 1)) {
 		log_error("Region size (%" PRIu32 ") must be a power of 2",
 			  lp->region_size);
-		return 0;
-	}
-
-	/*
-	 * RAID1 does not take a stripe arg
-	 */
-	if ((lp->stripes > 1) &&
-	    (seg_is_mirrored(lp) || segtype_is_raid1(lp->segtype)) &&
-	    !segtype_is_any_raid0(lp->segtype) &&
-	    !segtype_is_raid10(lp->segtype)) {
-		log_error("Stripe argument cannot be used with segment type, %s",
-			  lp->segtype->name);
-		return 0;
-	}
-
-	if (arg_count(cmd, mirrors_ARG) && segtype_is_raid(lp->segtype) &&
-	    !segtype_is_raid1(lp->segtype) &&
-	    !segtype_is_raid10(lp->segtype)) {
-		log_error("Mirror argument cannot be used with segment type, %s",
-			  lp->segtype->name);
 		return 0;
 	}
 
@@ -609,28 +610,34 @@ PFLA("mirrors=%u stripes=%u", lp->mirrors, lp->stripes);
 static int _read_cache_params(struct cmd_context *cmd,
 			      struct lvcreate_params *lp)
 {
-	const char *cachemode;
-
 	if (!seg_is_cache(lp) && !seg_is_cache_pool(lp))
 		return 1;
 
-	if (!(cachemode = arg_str_value(cmd, cachemode_ARG, NULL)))
-		cachemode = find_config_tree_str(cmd, allocation_cache_pool_cachemode_CFG, NULL);
-
-	if (!set_cache_pool_feature(&lp->feature_flags, cachemode))
+	if (!get_cache_params(cmd,
+			      &lp->cache_mode,
+			      &lp->policy_name,
+			      &lp->policy_settings))
 		return_0;
 
 	return 1;
 }
 
 static int _read_activation_params(struct cmd_context *cmd,
-                                   struct volume_group *vg,
+				   struct volume_group *vg,
 				   struct lvcreate_params *lp)
 {
 	unsigned pagesize = lvm_getpagesize() >> SECTOR_SHIFT;
 
 	lp->activate = (activation_change_t)
 		arg_uint_value(cmd, activate_ARG, CHANGE_AY);
+
+	/* Error when full */
+	if (arg_is_set(cmd, errorwhenfull_ARG)) {
+		lp->error_when_full = arg_uint_value(cmd, errorwhenfull_ARG, 0);
+	} else
+		lp->error_when_full =
+			seg_can_error_when_full(lp) &&
+			find_config_tree_bool(cmd, activation_error_when_full_CFG, NULL);
 
 	/* Read ahead */
 	lp->read_ahead = arg_uint_value(cmd, readahead_ARG,
@@ -906,6 +913,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 					    SIZE_ARGS,
 					    THIN_POOL_ARGS,
 					    chunksize_ARG,
+					    errorwhenfull_ARG,
 					    snapshot_ARG,
 					    thin_ARG,
 					    virtualsize_ARG,
@@ -925,6 +933,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 						SIZE_ARGS,
 						chunksize_ARG,
 						discards_ARG,
+						errorwhenfull_ARG,
 						zero_ARG,
 						-1))
 			return_0;
@@ -991,6 +1000,12 @@ static int _lvcreate_params(struct cmd_context *cmd,
 				 -1))
 		return_0;
 
+	if (!seg_can_error_when_full(lp) && !lp->create_pool &&
+	    arg_is_set(cmd, errorwhenfull_ARG)) {
+		log_error("Segment type %s does not support --errorwhenfull.", lp->segtype->name);
+		return 0;
+	}
+
 	/* Basic segment type validation finished here */
 
 	if (activation() && lp->segtype->ops->target_present) {
@@ -1000,13 +1015,13 @@ static int _lvcreate_params(struct cmd_context *cmd,
 			return 0;
 		}
 
-		if (segtype_is_raid0(lp->segtype) &&
+		if (segtype_is_any_raid0(lp->segtype) &&
 		    !(lp->target_attr & RAID_FEATURE_RAID0)) {
 			log_error("RAID module does not support RAID0.");
 			return 0;
 		}
 
-		if (segtype_is_raid10(lp->segtype) &&
+		if (segtype_is_any_raid10(lp->segtype) &&
 		    !(lp->target_attr & RAID_FEATURE_RAID10)) {
 			log_error("RAID module does not support RAID10.");
 			return 0;
@@ -1068,13 +1083,6 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if ((arg_count(cmd, cachepolicy_ARG) || arg_count(cmd, cachesettings_ARG)) &&
-	    !(lp->cache_policy = get_cachepolicy_params(cmd)))
-	{
-		log_error("Failed to parse cache policy and/or settings.");
-		return 0;
-	}
-
 	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
 		if (!grouped_arg_is_set(current_group->arg_values, addtag_ARG))
 			continue;
@@ -1123,8 +1131,6 @@ static int _determine_cache_argument(struct volume_group *vg,
 		/* If cache args not given, use those from cache pool */
 		if (!arg_is_set(cmd, chunksize_ARG))
 			lp->chunk_size = first_seg(lv)->chunk_size;
-		if (!arg_is_set(cmd, cachemode_ARG))
-			lp->feature_flags = first_seg(lv)->feature_flags;
 	} else if (lv) {
 		/* Origin exists, create cache pool volume */
 		if (!validate_lv_cache_create_origin(lv))
@@ -1237,31 +1243,37 @@ static int _check_raid_parameters(struct volume_group *vg,
 	struct cmd_context *cmd = vg->cmd;
 
 	/*
-	 * If number of devices was not supplied, we can infer from
-	 * the PVs given.
+	 * If number of devices was not supplied, limit
+	 * so we ain't get too many stripes with many PVs
 	 */
 	if (!seg_is_mirrored(lp)) {
 		if (!arg_count(cmd, stripes_ARG) &&
-		    (devs > 2 * lp->segtype->parity_devs)) {
-			lp->stripes = devs - lp->segtype->parity_devs;
-lp->stripes = 2; /* Or stripe bomb with many devs given */
-		}
+		    (devs > 2 * lp->segtype->parity_devs))
+			lp->stripes = devs < 3 ? devs : 3; /* Or stripe bomb with many allocatable PVs given */
 
 		if (!lp->stripe_size)
 			lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 
-		if (lp->stripes < 2) { // <= lp->segtype->parity_devs) {
+		if (lp->stripes < lp->segtype->parity_devs) {
 			log_error("Number of stripes must be at least %d for %s",
-				  lp->segtype->parity_devs + 1,
+				  lp->segtype->parity_devs,
 				  lp->segtype->name);
 			return 0;
 		}
 	} else if (segtype_is_any_raid0(lp->segtype) ||
-		   segtype_is_raid10(lp->segtype)) {
+		   segtype_is_any_raid10(lp->segtype)) {
+PFLA("lp->stripes=%u lp->mirrors=%u", lp->stripes, lp->mirrors);
+
+		if (!lp->mirrors && seg_is_any_raid10(lp))
+			lp->mirrors = 1;
+			
 		if (!arg_count(cmd, stripes_ARG))
-			lp->stripes = devs / lp->mirrors;
+			lp->stripes = devs < 3 ? devs : 3; /* Or stripe bomb with many allocatable PVs given */
+
+PFLA("lp->stripes=%u lp->mirrors=%u", lp->stripes, lp->mirrors);
+
 		if (lp->stripes < 2) {
-			log_error("Unable to create RAID(1)0 LV,"
+			log_error("Unable to create RAID LV,"
 				  " insufficient number of devices.");
 			return 0;
 		}
@@ -1474,9 +1486,10 @@ static int _validate_internal_thin_processing(const struct lvcreate_params *lp)
 
 static void _destroy_lvcreate_params(struct lvcreate_params *lp)
 {
-	if (lp->cache_policy)
-		dm_config_destroy(lp->cache_policy);
-	lp->cache_policy = NULL;
+	if (lp->policy_settings) {
+		dm_config_destroy(lp->policy_settings);
+		lp->policy_settings = NULL;
+	}
 }
 
 int lvcreate(struct cmd_context *cmd, int argc, char **argv)
@@ -1488,19 +1501,24 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 	};
 	struct lvcreate_cmdline_params lcp = { 0 };
 	struct volume_group *vg;
+	uint32_t lockd_state = 0;
 
 	if (!_lvcreate_params(cmd, argc, argv, &lp, &lcp)) {
 		stack;
 		return EINVALID_CMD_LINE;
 	}
+PFLA("lp.stripe_size=%u", lp.stripe_size);
 
 	if (!_check_pool_parameters(cmd, NULL, &lp, &lcp)) {
 		stack;
 		return EINVALID_CMD_LINE;
 	}
 
+	if (!lockd_vg(cmd, lp.vg_name, "ex", 0, &lockd_state))
+		return_ECMD_FAILED;
+
 	log_verbose("Finding volume group \"%s\"", lp.vg_name);
-	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0);
+	vg = vg_read_for_update(cmd, lp.vg_name, NULL, 0, lockd_state);
 	if (vg_read_error(vg)) {
 		release_vg(vg);
 		return_ECMD_FAILED;
@@ -1545,12 +1563,22 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 			    lp.pool_name ? : "with generated name", lp.vg_name, lp.segtype->name);
 	}
 
+	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
+		if (!handle_sanlock_lv(cmd, vg)) {
+			log_error("No space for sanlock lock, extend the internal lvmlock LV.");
+			goto_out;
+		}
+	}
+
 	if (seg_is_thin_volume(&lp))
 		log_verbose("Making thin LV %s in pool %s in VG %s%s%s using segtype %s",
 			    lp.lv_name ? : "with generated name",
 			    lp.pool_name ? : "with generated name", lp.vg_name,
 			    lp.snapshot ? " as snapshot of " : "",
 			    lp.snapshot ? lp.origin_name : "", lp.segtype->name);
+
+	if (is_lockd_type(vg->lock_type))
+		lp.needs_lockd_init = 1;
 
 	if (!lv_create_single(vg, &lp))
 		goto_out;

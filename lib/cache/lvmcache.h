@@ -39,6 +39,27 @@ struct disk_locn;
 
 struct lvmcache_vginfo;
 
+/*
+ * vgsummary represents a summary of the VG that is read
+ * without a lock.  The info does not come through vg_read(),
+ * but through reading mdas.  It provides information about
+ * the VG that is needed to lock the VG and then read it fully
+ * with vg_read(), after which the VG summary should be checked
+ * against the full VG metadata to verify it was correct (since
+ * it was read without a lock.)
+ *
+ * Once read, vgsummary information is saved in lvmcache_vginfo.
+ */
+struct lvmcache_vgsummary {
+	const char *vgname;
+	struct id vgid;
+	uint64_t vgstatus;
+	char *creation_host;
+	const char *lock_type;
+	uint32_t mda_checksum;
+	size_t mda_size;
+};
+
 int lvmcache_init(void);
 void lvmcache_allow_reads_with_lvmetad(void);
 
@@ -58,8 +79,7 @@ void lvmcache_del(struct lvmcache_info *info);
 
 /* Update things */
 int lvmcache_update_vgname_and_id(struct lvmcache_info *info,
-				  const char *vgname, const char *vgid,
-				  uint32_t vgstatus, const char *hostname);
+				  struct lvmcache_vgsummary *vgsummary);
 int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted);
 
 void lvmcache_lock_vgname(const char *vgname, int read_only);
@@ -68,6 +88,7 @@ int lvmcache_verify_lock_order(const char *vgname);
 
 /* Queries */
 const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd, const char *vgname, const char *vgid, unsigned revalidate_labels);
+int lvmcache_lookup_mda(struct lvmcache_vgsummary *vgsummary);
 
 /* Decrement and test if there are still vg holders in vginfo. */
 int lvmcache_vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo);
@@ -97,6 +118,9 @@ struct dm_list *lvmcache_get_vgnames(struct cmd_context *cmd,
 /* If include_internal is not set, return only proper vg ids. */
 struct dm_list *lvmcache_get_vgids(struct cmd_context *cmd,
 				   int include_internal);
+
+int lvmcache_get_vgnameids(struct cmd_context *cmd, int include_internal,
+                          struct dm_list *vgnameids);
 
 /* Returns list of struct dm_str_list containing pool-allocated copy of pvids */
 struct dm_list *lvmcache_get_pvids(struct cmd_context *cmd, const char *vgname,
@@ -156,5 +180,14 @@ int lvmcache_uncertain_ownership(struct lvmcache_info *info);
 unsigned lvmcache_mda_count(struct lvmcache_info *info);
 int lvmcache_vgid_is_cached(const char *vgid);
 uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info);
+
+void lvmcache_replace_dev(struct cmd_context *cmd, struct physical_volume *pv,
+			struct device *dev);
+
+int lvmcache_found_duplicate_pvs(void);
+
+void lvmcache_set_preferred_duplicates(const char *vgid);
+
+int lvmcache_contains_lock_type_sanlock(struct cmd_context *cmd);
 
 #endif
