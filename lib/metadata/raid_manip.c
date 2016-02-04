@@ -3731,6 +3731,7 @@ static int _convert_mirror_to_raid(struct logical_volume *lv,
 	init_mirror_in_sync(1);
 
 	seg->segtype = new_segtype;
+	seg->data_copies = new_image_count;
 	lv->status &= ~(MIRROR | MIRRORED);
 	lv->status |= RAID;
 	seg->status |= RAID;
@@ -3805,6 +3806,7 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
 
 	seg->segtype = new_segtype;
 	seg->region_size = new_region_size;
+	seg->data_copies = new_image_count;
 	lv->status &= ~RAID;
 	seg->status &= ~RAID;
 	lv->status |= (MIRROR | MIRRORED);

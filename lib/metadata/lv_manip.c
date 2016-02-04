@@ -4452,6 +4452,9 @@ int lv_extend(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (segtype_is_mirrored(segtype) || segtype_is_raid1(segtype))
+		stripes = 1;
+
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
 #if 1
@@ -5686,8 +5689,7 @@ PFL();
 
 #if 1
 	/* HM FIXME: sufficient for RAID? */
-	if (seg_is_raid(seg) &&
-	    !seg_is_raid1(seg)) {
+	if (seg_is_striped_raid(seg)) {
 		unsigned stripes = seg->area_count - seg->segtype->parity_devs;
 
 		lp->extents = _round_to_stripe_boundary(lv, lp->extents, stripes,
