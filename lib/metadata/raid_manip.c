@@ -295,8 +295,7 @@ static int is_same_level(const struct segment_type *t1, const struct segment_typ
 	return _cmp_level(t1, t2);
 }
 
-static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
-				     struct logical_volume **tracking)
+static int _lv_is_raid_with_tracking(const struct logical_volume *lv, uint32_t *ss)
 {
 	uint32_t s;
 	const struct lv_segment *seg;
@@ -307,7 +306,9 @@ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
 		for (s = 0; s < seg->area_count; s++)
 			if (lv_is_visible(seg_lv(seg, s))) {
 				if (!(seg_lv(seg, s)->status & LVM_WRITE)) {
-					*tracking = seg_lv(seg, s);
+					if (ss)
+						*ss = s;
+
 					return 1;
 				}
 	
@@ -320,9 +321,7 @@ static int _lv_is_raid_with_tracking(const struct logical_volume *lv,
 /* API function to check for @lv to be a tracking one */
 int lv_is_raid_with_tracking(const struct logical_volume *lv)
 {
-	struct logical_volume *tracking;
-
-	return _lv_is_raid_with_tracking(lv, &tracking);
+	return _lv_is_raid_with_tracking(lv, NULL);
 }
 
 /* HM Helper: return true in case this is a raid1 top-level LV inserted to do synchronization of 2 given sub LVs */
@@ -3230,7 +3229,7 @@ int lv_raid_split(struct logical_volume *lv, int yes,
 		  const char *split_name, uint32_t new_image_count,
 		  struct dm_list *splittable_pvs)
 {
-	uint32_t split_count;
+	uint32_t split_count, s;
 	struct lv_list *lvl;
 	struct dm_list meta_lvs, data_lvs;
 	struct cmd_context *cmd;
@@ -3274,11 +3273,11 @@ int lv_raid_split(struct logical_volume *lv, int yes,
 	 * complete the split of the tracking sub-LV
 	 */
 	log_debug_metadata("Check if LV %s is tracking changes", display_lvname(lv));
-	if (_lv_is_raid_with_tracking(lv, &tracking)) {
-		if (!lv_is_on_pvs(tracking, splittable_pvs)) {
+	if (_lv_is_raid_with_tracking(lv, &s)) {
+		if (!lv_is_on_pvs((tracking = seg_lv(seg, s)), splittable_pvs)) {
 			log_error("Unable to split additional image from %s "
-					"while tracking changes for %s",
-					lv->name, tracking->name);
+				  "while tracking changes for %s",
+				  lv->name, tracking->name);
 			return 0;
 		}
 
@@ -3407,10 +3406,12 @@ int lv_raid_split_and_track(struct logical_volume *lv,
 	int s;
 	struct logical_volume *split_lv;
 	struct lv_segment *seg;
+	struct volume_group *vg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 	RETURN_IF_NONZERO(!seg_is_mirrored(seg) && !seg_is_raid01(seg),
 			  "mirrored/raid10 segment to split off");
+	vg = lv->vg;
 
 	if (!_raid_in_sync(lv)) {
 		log_error("Unable to split image from %s while not in-sync",
@@ -3498,19 +3499,18 @@ int lv_raid_split_and_track(struct logical_volume *lv,
 		return 0;
 	}
 
-	if (!lv_update_and_reload(lv))
+	if (!vg_write(vg) || !vg_commit(vg) || !backup(vg))
 		return_0;
 
-	log_print_unless_silent("%s split from %s for read-only purposes.",
-				split_lv->name, lv->name);
-
 	/* Suspend+resume the tracking LV to create its devnode */
-	if (!suspend_lv(lv->vg->cmd, split_lv) || !resume_lv(lv->vg->cmd, split_lv)) {
+	if (!suspend_lv(vg->cmd, split_lv) || !resume_lv(vg->cmd, split_lv)) {
 		log_error("Failed to suspend+resume %s after committing changes",
 			  display_lvname(split_lv));
 		return 0;
 	}
 
+	log_print_unless_silent("%s split from %s for read-only purposes.",
+				split_lv->name, lv->name);
 	log_print_unless_silent("Use 'lvconvert --merge %s' to merge back into %s",
 				display_lvname(split_lv), display_lvname(lv));
 	return 1;
@@ -3589,13 +3589,12 @@ int lv_raid_merge(struct logical_volume *image_lv)
 			  "mirrored/raid10 to merge into, rejecting request");
 	RETURN_IF_ZERO(seg->meta_areas, "metadata LV areas");
 
-	if (!_lv_is_raid_with_tracking(lv, &tracking)) {
-		log_error("%s is not a tracking LV.",
-			  display_lvname(lv));
+	if (!_lv_is_raid_with_tracking(lv, &s)) {
+		log_error("%s is not a tracking LV.", display_lvname(lv));
 		return 0;
 	}
 
-	if (tracking != image_lv) {
+	if ((tracking = seg_lv(seg, s)) != image_lv) {
 		log_error("%s is not the tracking LV of %s but %s is.",
 			  display_lvname(image_lv), display_lvname(lv), display_lvname(tracking));
 		return 0;
@@ -3614,13 +3613,7 @@ int lv_raid_merge(struct logical_volume *image_lv)
 			  display_lvname(image_lv));
 	}
 
-	for (s = 0; s < seg->area_count; s++)
-		if (seg_lv(seg, s) == image_lv) {
-			meta_lv = seg_metalv(seg, s);
-			break;
-		}
-
-	if (!meta_lv) {
+	if (!(meta_lv = seg_metalv(seg, s))) {
 		log_error("Failed to find metadata LV for %s in %s.",
 			  display_lvname(image_lv), display_lvname(lv));
 		return 0;
@@ -3641,7 +3634,7 @@ int lv_raid_merge(struct logical_volume *image_lv)
 
 	log_print_unless_silent("LV %s successfully merged back into %s",
 				display_lvname(image_lv), display_lvname(lv));
-	return _lv_cond_repair(lv);
+	return 1;
 }
 
 /*
@@ -4351,23 +4344,27 @@ PFLA("lv->size=%s seg->len=%u seg->area_len=%u seg->area_count=%u old_image_coun
  * Reshape: add disks to existing raid lv
  *
  */
-static int _raid_reshape_add_disks(struct logical_volume *lv,
-				   const struct segment_type *new_segtype,
-				   int yes, int force,
-				   uint32_t old_image_count, uint32_t new_image_count,
-			 	   const unsigned new_stripes, const unsigned new_stripe_size,
-		 	 	   struct dm_list *allocate_pvs)
+static int _raid_reshape_add_images(struct logical_volume *lv,
+				    const struct segment_type *new_segtype,
+				    int yes, int force,
+				    uint32_t old_image_count, uint32_t new_image_count,
+			 	    const unsigned new_stripes, const unsigned new_stripe_size,
+		 	 	    struct dm_list *allocate_pvs)
 {
 	uint32_t grown_le_count, current_le_count, s;
+	struct volume_group *vg;
+	struct logical_volume *slv;
 	struct lv_segment *seg;
 	struct lvinfo info = { 0 };
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
+	vg = lv->vg;
 
-	if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
+	if (!lv_info(vg->cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
 		log_error("lv_info failed: aborting");
 		return 0;
 	}
+
 	if (seg->segtype != new_segtype)
 		log_print_unless_silent("Ignoring layout change on device adding reshape");
 PFL();
@@ -4404,7 +4401,7 @@ PFL();
 	if (!_lv_alloc_reshape_space(lv, alloc_begin, NULL, allocate_pvs))
 		return 0;
 
-PFLA("lv->size=%s", display_size(lv->vg->cmd, lv->size));
+PFLA("lv->size=%s", display_size(vg->cmd, lv->size));
 PFLA("lv->le_count=%u", lv->le_count);
 PFLA("seg->len=%u", first_seg(lv)->len);
 	/*
@@ -4415,10 +4412,21 @@ PFLA("seg->len=%u", first_seg(lv)->len);
  	 */
 	log_debug_metadata("Setting delta disk flag on new data LVs of %s",
 			   display_lvname(lv));
-	for (s = old_image_count; s < seg->area_count; s++) {
-PFLA("seg_lv(seg, %u)=%s", s, seg_lv(seg, s)->name);
-		seg_lv(seg, s)->status &= ~LV_REBUILD;
-		seg_lv(seg, s)->status |= LV_RESHAPE_DELTA_DISKS_PLUS;
+	if (old_image_count < seg->area_count) {
+		if (!vg_write(vg) || !vg_commit(vg) || !backup(vg)) {
+			log_error("metadata commit/backup failed");
+			return 0;
+		}
+
+		for (s = old_image_count; s < seg->area_count; s++) {
+			slv = seg_lv(seg, s);
+PFLA("seg_lv(seg, %u)=%s", s, slv);
+			slv->status &= ~LV_REBUILD;
+			slv->status |= LV_RESHAPE_DELTA_DISKS_PLUS;
+			if (!activate_lv_excl_local(vg->cmd, slv) ||
+			    !activate_lv_excl_local(vg->cmd, seg_metalv(seg, s)))
+				return_0;
+		}
 	}
 
 	return 1;
@@ -4430,12 +4438,12 @@ PFLA("seg_lv(seg, %u)=%s", s, seg_lv(seg, s)->name);
  * Reshape: remove disks from existing raid lv
  *
  */
-static int _raid_reshape_remove_disks(struct logical_volume *lv,
-				      const struct segment_type *new_segtype,
-				      int yes, int force,
-				      uint32_t old_image_count, uint32_t new_image_count,
-			 	      const unsigned new_stripes, const unsigned new_stripe_size,
-		 	 	      struct dm_list *allocate_pvs, struct dm_list *removal_lvs)
+static int _raid_reshape_remove_images(struct logical_volume *lv,
+				       const struct segment_type *new_segtype,
+				       int yes, int force,
+				       uint32_t old_image_count, uint32_t new_image_count,
+			 	       const unsigned new_stripes, const unsigned new_stripe_size,
+		 		       struct dm_list *allocate_pvs, struct dm_list *removal_lvs)
 {
 	uint32_t active_lvs, current_le_count, reduced_le_count, removed_lvs, s;
 	uint64_t extend_le_count;
@@ -4928,17 +4936,17 @@ PFLA("devs_in_sync=%u old_image_count=%u new_image_count=%u", devs_in_sync,old_i
 	/* Handle disk addition reshaping */
 	if (old_image_count < new_image_count) {
 PFL();
-		if (!_raid_reshape_add_disks(lv, new_segtype, yes, force,
-					     old_image_count, new_image_count,
-					     new_stripes, new_stripe_size, allocate_pvs))
+		if (!_raid_reshape_add_images(lv, new_segtype, yes, force,
+					      old_image_count, new_image_count,
+					      new_stripes, new_stripe_size, allocate_pvs))
 			return 0;
 
 	/* Handle disk removal reshaping */
 	} else if (old_image_count > new_image_count) {
-		if (!_raid_reshape_remove_disks(lv, new_segtype, yes, force,
-						old_image_count, new_image_count,
-						new_stripes, new_stripe_size,
-						allocate_pvs, &removal_lvs))
+		if (!_raid_reshape_remove_images(lv, new_segtype, yes, force,
+						 old_image_count, new_image_count,
+						 new_stripes, new_stripe_size,
+						 allocate_pvs, &removal_lvs))
 			return 0;
 
 	/*
@@ -9120,7 +9128,7 @@ static int _raid_convert_define_parms(const struct lv_segment *seg,
 	    !segtype_is_raid1(*segtype) &&
 	    !segtype_is_raid01(*segtype)) {
 		if (!segtype_is_any_raid6(*segtype) && *data_copies > *stripes) {
-			log_error("Number of data copies %u is larger than number of stripes %u!",
+			log_error("Number of data copies %u is larger than number of stripes %u",
 				  *data_copies, *stripes);
 			return 0;
 		}
