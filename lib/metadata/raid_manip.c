@@ -1473,6 +1473,25 @@ static char *_generate_raid_name(struct logical_volume *lv,
 	return name;
 }
 
+/* HM Helper: write, commit and backup @vg */
+static int _vg_write_commit_backup(struct volume_group *vg)
+{
+	if (!vg_write(vg)) {
+		log_error("Write of VG %s failed", vg->name);
+		return_0;
+	}
+
+	if (!vg_commit(vg)) {
+		log_error("Commit of VG %s failed", vg->name);
+		return_0;
+	}
+
+	if (!backup(vg))
+		log_error("Backup of VG %s failed after removal of image component LVs", vg->name);
+
+	return 1;
+}
+
 /*
  * Eliminate the extracted LVs on @removal_lvs from @vg incl. vg write, commit and backup 
  */
@@ -1492,13 +1511,9 @@ PFL();
 
 	dm_list_init(removal_lvs);
 PFL();
-	if (vg_write_requested) {
-		if (!vg_write(vg) || !vg_commit(vg))
-			return_0;
-
-		if (!backup(vg))
-			log_error("Backup of VG %s failed after removal of image component LVs", vg->name);
-	}
+	if (vg_write_requested &&
+	    !_vg_write_commit_backup(vg))
+		return 0;
 PFL();
 	return 1;
 }
@@ -2780,18 +2795,10 @@ static int _reset_flags_passed_to_kernel(struct logical_volume *lv, int write_re
 		flags_cleared++;
 	}
 
-	if (write_requested && flags_cleared) {
-		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
-			log_error("Failed to clear flags for %s components in metadata",
-				  display_lvname(lv));
-			return 0;
-		}
-
-		if (!backup(lv->vg)) {
-			log_error("Failed to backup metadata for VG %s", lv->vg->name);
-			return 0;
-		}
-	}
+	if (write_requested &&
+	    flags_cleared &&
+	    !_vg_write_commit_backup(lv->vg))
+		return 0;
 
 	return 1;
 }
@@ -3499,8 +3506,8 @@ int lv_raid_split_and_track(struct logical_volume *lv,
 		return 0;
 	}
 
-	if (!vg_write(vg) || !vg_commit(vg) || !backup(vg))
-		return_0;
+	if (!_vg_write_commit_backup(vg))
+		return 0;
 
 	/* Suspend+resume the tracking LV to create its devnode */
 	if (!suspend_lv(vg->cmd, split_lv) || !resume_lv(vg->cmd, split_lv)) {
@@ -4415,19 +4422,14 @@ PFLA("seg->len=%u", first_seg(lv)->len);
 	log_debug_metadata("Setting delta disk flag on new data LVs of %s",
 			   display_lvname(lv));
 	if (old_image_count < seg->area_count) {
-		if (!vg_write(vg) || !vg_commit(vg) || !backup(vg)) {
-			log_error("metadata commit/backup failed");
+		if (!_vg_write_commit_backup(vg))
 			return 0;
-		}
 
 		for (s = old_image_count; s < seg->area_count; s++) {
 			slv = seg_lv(seg, s);
-PFLA("seg_lv(seg, %u)=%s", s, slv);
+PFLA("seg_lv(seg, %u)=%s", s, display_lvname(slv));
 			slv->status &= ~LV_REBUILD;
 			slv->status |= LV_RESHAPE_DELTA_DISKS_PLUS;
-			if (!activate_lv_excl_local(vg->cmd, slv) ||
-			    !activate_lv_excl_local(vg->cmd, seg_metalv(seg, s)))
-				return_0;
 		}
 	}
 
@@ -4686,12 +4688,12 @@ static int _lv_raid10_resize_data_copies(struct logical_volume *lv,
  * Reshape: keep disks in RAID @lv but change stripe size or data copies
  *
  */
-static int _raid_reshape_keep_disks(struct logical_volume *lv,
-				    const struct segment_type *new_segtype,
-				    int yes, int force,
-				    int *force_repair,
-				    const int new_data_copies, const unsigned new_stripe_size,
-				    struct dm_list *allocate_pvs)
+static int _raid_reshape_keep_images(struct logical_volume *lv,
+				     const struct segment_type *new_segtype,
+				     int yes, int force,
+				     int *force_repair,
+				     const int new_data_copies, const unsigned new_stripe_size,
+				     struct dm_list *allocate_pvs)
 {
 	int alloc_reshape_space = 1;
 	enum alloc_where where = alloc_anywhere;
@@ -4955,8 +4957,8 @@ PFL();
 	 * Handle raid set layout reshaping
 	 * (e.g. raid5_ls -> raid5_n or stripe size change or change #data_copies on raid10)
 	 */
-	} else if (!_raid_reshape_keep_disks(lv, new_segtype, yes, force, &force_repair,
-					     new_data_copies, new_stripe_size, allocate_pvs))
+	} else if (!_raid_reshape_keep_images(lv, new_segtype, yes, force, &force_repair,
+					      new_data_copies, new_stripe_size, allocate_pvs))
 		return 0;
 
 PFL();
