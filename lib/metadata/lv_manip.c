@@ -1437,15 +1437,21 @@ PFLA("lv=%s lv->le_count=%u seg=%p extents=%u stripes=%u data_copies=%u delete=%
 	if (!dont_recurse) {
 		for (s = 0; s < seg->area_count; s++) {
 			if (_is_layered_lv(lv, s)) {
-				uint32_t seg_lv_extents = seg_lv(seg, s)->le_count;
+				uint32_t sub_lv_extents;
+				struct logical_volume *lv1 = seg_lv(seg, s);
+				struct lv_segment *seg1 = last_seg(lv1);
 
-				if (!delete)
-					seg_lv_extents -= lv->le_count - extents;
+				if (delete)
+					sub_lv_extents = lv1->le_count;
+				else
+					sub_lv_extents = lv1->le_count - _round_to_stripe_boundary(lv1, lv1->le_count - extents,
+												   seg1->area_count - seg1->segtype->parity_devs,
+												   0 /* reduce */);
 
-PFLA("recursive seg_lv(seg, %u)=%s", s, display_lvname(seg_lv(seg, s)));
-				if (!_lv_reduce(seg_lv(seg, s), seg_lv_extents, delete))
+PFLA("recursive seg_lv(seg, %u)=%s", s, display_lvname(lv1));
+				if (!_lv_reduce(lv1, sub_lv_extents, delete))
 					return_0;
-PFLA("end recursive seg_lv(seg, %u)=%s", s, display_lvname(seg_lv(seg, s)));
+PFLA("end recursive seg_lv(seg, %u)=%s", s, display_lvname(lv1));
 				reduced++;
 			}
 		}
@@ -3442,8 +3448,8 @@ static int _allocate(struct alloc_handle *ah,
 PFLA("ah->new_extents=%u extents_still_needed=%u rimage_extents=%u", ah->new_extents, ah->new_extents - alloc_state.allocated, rimage_extents);
         if (extents_still_needed > rimage_extents &&
 	    (extents_still_needed % rimage_extents)) {
-		log_error("Number of extents requested (%u) needs to be divisible by %d.",
-			  ah->new_extents - alloc_state.allocated,
+		log_error("Number of extents requested (%u) for LV %s needs to be divisible by %d.",
+			  ah->new_extents - alloc_state.allocated, display_lvname(lv),
 			  rimage_extents);
 		return 0;
 	}
@@ -4437,7 +4443,6 @@ int lv_extend(struct logical_volume *lv,
 {
 	int r = 1;
 	int log_count = 0;
-	int alloc_mirrors = 1;
 	uint32_t area_count, s;
 	struct alloc_handle *ah;
 	uint32_t sub_lv_count;
@@ -4452,24 +4457,36 @@ int lv_extend(struct logical_volume *lv,
 		return 0;
 	}
 
-	if (segtype_is_mirrored(segtype) || segtype_is_raid1(segtype))
+	/* Should be ensured by the caller... */
+#if 0
+	if (!segtype_is_raid01(segtype) &&
+	    (segtype_is_mirrored(segtype) || segtype_is_raid1(segtype)))
 		stripes = 1;
+#endif
 
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
-#if 1
 	/* Check for multi-level stack (e.g. extension of a duplicated LV stack) */
 	if (seg) {
 		int extended = 0;
 
 		for (s = 0; s < seg->area_count; s++) {
 			if (_is_layered_lv(lv, s)) {
+				uint32_t sub_lv_extents, stripes1;
 				struct logical_volume *lv1 = seg_lv(seg, s);
 				struct lv_segment *seg1 = last_seg(lv1);
+	
+				stripes1 = seg1->area_count - seg1->segtype->parity_devs;
+				sub_lv_extents = _round_to_stripe_boundary(lv1, lv->le_count + extents, stripes1, 1 /* extend */);
+				if (sub_lv_extents < lv->le_count)
+					return_0;
 
+				sub_lv_extents -= lv1->le_count;
 PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents);
-				if (extents + lv->le_count > lv1->le_count &&
-				    !lv_extend(lv1, seg1->segtype, seg1->area_count, seg1->stripe_size, seg1->data_copies, seg1->region_size, extents, allocatable_pvs, alloc, approx_alloc))
+				if (sub_lv_extents + lv->le_count > lv1->le_count &&
+				    !lv_extend(lv1, seg1->segtype, stripes1, seg1->stripe_size,
+					       seg1->data_copies, seg1->region_size, sub_lv_extents,
+					       allocatable_pvs, alloc, approx_alloc))
 					return_0;
 
 				extended++;
@@ -4484,9 +4501,10 @@ PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents)
 			lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
 			return 1;
 		}
-#endif
+
 		/* Caller should ensure... */
 		if (seg_is_striped(seg) ||
+		    seg_is_raid01(seg) ||
 		    seg_is_striped_raid(seg)) {
 			area_count = seg->area_count;
 			stripes = area_count - seg->segtype->parity_devs;
@@ -4514,11 +4532,8 @@ PFLA("extents=%u stripe_size=%u", extents, stripe_size);
 		/* FIXME Support striped metadata pool */
 		log_count = 1;
 
-	} else if (segtype_is_striped_raid(segtype)) {
-		/* If only one extent is being requested on a striped raid set, it's reshape space being requested */
-		alloc_mirrors = extents > 1 ? 1 : 0;
+	} else if (segtype_is_striped_raid(segtype))
 		extents = _round_to_stripe_boundary(lv, extents, stripes, 1 /* extend */);
-	}
 
 PFLA("extents=%u segtype=%s mirrors=%u stripes=%u log_count=%u", extents, segtype->name, mirrors, stripes, log_count);
 
@@ -4549,7 +4564,7 @@ PFLA("extents=%u mirrors=%u stripes=%u log_count=%u", extents, mirrors, stripes,
 		return 0;
 	}
 
-	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, alloc_mirrors ? mirrors : 1,
+	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors,
 				    log_count, region_size, extents,
 				    allocatable_pvs, alloc, approx_alloc, NULL)))
 		return_0;

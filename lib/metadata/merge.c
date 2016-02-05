@@ -147,14 +147,27 @@ PFLA("segtype=%s", lvseg_name(first_seg(lv)));
 PFLA("lv=%s segtype=%s seg->len=%u seg->area_len=%u seg->area_count=%u data_rimage_count=%u parity_devs=%u area_multiplier=%u seg->data_copies=%u rimageextents=%u seg->reshape_len=%u", lv->name, seg->segtype->name, seg->len, seg->area_len, seg->area_count, data_rimage_count, seg->segtype->parity_devs, area_multiplier, seg->data_copies, raid_rimage_extents(seg->segtype, seg->len - data_rimage_count * seg->reshape_len, data_rimage_count, seg->data_copies), seg->reshape_len);
 #if 1
 		data_copies = seg_is_any_raid10(seg) ? seg->data_copies : 1;
-		if (raid_rimage_extents(seg->segtype, seg->len - data_rimage_count * seg->reshape_len,
-					data_rimage_count, seg->data_copies) != seg->area_len - data_copies * seg->reshape_len) {
+		if (!raid_rimage_extents(seg->segtype, seg->len - data_rimage_count * seg->reshape_len,
+					 data_rimage_count, seg->data_copies) == seg->area_len - data_copies * seg->reshape_len) {
 #else
 		if (seg->area_len * area_multiplier != seg->len) {
 #endif
 			log_error("LV %s: segment %u with len=%u "
 				  " has inconsistent area_len %u",
 				  lv->name, seg_count, seg->len, seg->area_len);
+			inc_error_count;
+		}
+
+#if 0
+		if (seg_is_any_raid10(seg) && (seg->len % seg->data_copies)) {
+			log_error("raid10 segment length %u of %s not divisible by %u data copies",
+				  seg->len, lv->name, seg->data_copies);
+			inc_error_count;
+		}
+#endif
+		if (seg_is_any_raid10(seg) && (seg->data_copies < 1 || seg->data_copies > seg->area_count)) {
+			log_error("raid10 data copies %u of %s and area count %u missmatch",
+				  seg->data_copies, lv->name, seg->area_count);
 			inc_error_count;
 		}
 

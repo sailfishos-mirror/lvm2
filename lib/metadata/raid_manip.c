@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2011-2016 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -4419,12 +4419,9 @@ PFLA("seg->len=%u", first_seg(lv)->len);
  	 * - reset rebuild flag on new image LVs
  	 * - set delta disks plus flag on new image LVs
  	 */
-	log_debug_metadata("Setting delta disk flag on new data LVs of %s",
-			   display_lvname(lv));
 	if (old_image_count < seg->area_count) {
-		if (!_vg_write_commit_backup(vg))
-			return 0;
-
+		log_debug_metadata("Setting delta disk flag on new data LVs of %s",
+				   display_lvname(lv));
 		for (s = old_image_count; s < seg->area_count; s++) {
 			slv = seg_lv(seg, s);
 PFLA("seg_lv(seg, %u)=%s", s, display_lvname(slv));
@@ -4710,31 +4707,18 @@ PFLA("seg->data_copies=%u new_data_copies=%u", seg->data_copies, new_data_copies
 			return 0;
 PFL();
 	/* Check a request to change the number of data copies in a raid10 LV */
-	if (seg->data_copies != new_data_copies) {
-		if (seg_is_raid10_far(seg)) {
-			/*
-			 * Ensure resynchronisation of new data copies
-			 * No reshape space needed, because raid10_far uses distinct stripe zones
-			 * for its data copies rather than rotating them in individual stripes.
-			 */
-			*force_repair = new_data_copies > seg->data_copies;
-			alloc_reshape_space = 0;
+	if (seg_is_raid10_far(seg) &&
+	    seg->data_copies != new_data_copies) {
+		/*
+		 * Ensure resynchronisation of new data copies
+		 * No reshape space needed, because raid10_far uses distinct stripe zones
+		 * for its data copies rather than rotating them in individual stripes.
+		 */
+		*force_repair = new_data_copies > seg->data_copies;
+		alloc_reshape_space = 0;
 
-			if (!_lv_raid10_resize_data_copies(lv, new_segtype, new_data_copies, allocate_pvs))
-				return 0;
-
-		} else if (seg_is_any_raid10(seg)) {
-			/* Ensure resynchronisation */
-			*force_repair = 1;
-			if (new_data_copies > seg->data_copies) {
-				where = alloc_end;
-				if (!_lv_raid10_resize_data_copies(lv, new_segtype, new_data_copies, allocate_pvs))
-					return 0;
-			} else {
-				where = alloc_begin;
-				seg->data_copies = new_data_copies;
-			}
-		}
+		if (!_lv_raid10_resize_data_copies(lv, new_segtype, new_data_copies, allocate_pvs))
+			return 0;
 	}
 
 	/*
@@ -4796,11 +4780,13 @@ static int _pre_raid_reshape(struct logical_volume *lv, void *data)
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
-	RETURN_IF_ZERO((old_image_count = *((uint32_t *) data)), "proper data argument");
+	RETURN_IF_ZERO(data, "proper data pointer argument");
+	RETURN_IF_ZERO((old_image_count = *((uint32_t *) data)), "proper old image count");
 
 	/* Activate any new image component pairs */
 	if (old_image_count < seg->area_count)
-		return _activate_sub_lvs(lv, old_image_count);
+		return _vg_write_commit_backup(lv->vg) &&
+		       _activate_sub_lvs(lv, old_image_count);
 
 	return 1;
 }
@@ -8451,13 +8437,6 @@ TAKEOVER_HELPER_FN(_r10_r10)
 	if (!_reorder_raid10_near_seg_areas(seg, reorder_from_raid10_near))
 		return 0;
 
-#if 0
-	if (!(seg->segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID4)))
-		return_0;
-
-	seg->data_copies = 1;
-#endif
-
 PFLA("seg->area_count=%u, new_count=%u", seg->area_count, seg->area_count / data_copies * new_data_copies);
 	if (!_lv_change_image_count(lv, seg->area_count / data_copies * new_data_copies,
 				    allocate_pvs, &removal_lvs))
@@ -9484,14 +9463,6 @@ PFL();
 	case 0:
 		break;
 	case 1:
-#if 0
-		if ((rcp.data_copies > 1 || stripes != seg->area_count - seg->segtype->parity_devs) &&
-		    !is_same_level(seg->segtype, new_segtype)) {
-			log_error("Can't reshape and takeover %s at the same time",
-				  display_lvname(lv));
-			return 0;
-		}
-#endif
 		if (!_raid_reshape(lv, new_segtype, rcp.yes, rcp.force,
 				   data_copies, region_size,
 				   stripes, stripe_size, rcp.allocate_pvs))
@@ -10400,7 +10371,7 @@ static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
 	/*
 	 * raid10:
 	 *
-	 * - if #devices is divisable by number of data copies,
+	 lv->* - if #devices is divisable by number of data copies,
 	 *   the data copies form 'mirror groups' like 'AAABBB' for 3 data copies and 6 stripes ->
 	 *   check that each of the mirror groups has at least 2 data copies available
 	 *
@@ -10526,10 +10497,12 @@ static int _raid10_seg_images_sane(struct lv_segment *seg)
 		slv = seg_lv(seg, s);
 		if (len) {
 			RETURN_IF_ZERO((slv->le_count == len), "consistent raid10_far image LV length");
-			RETURN_IF_NONZERO((slv->le_count % seg->data_copies),
-					  "raid10_far image LV length divisibility by #data_copies");
-		} else
+		} else {
 			RETURN_IF_ZERO((len = slv->le_count), "raid10_far image LV length");
+		}
+
+		RETURN_IF_NONZERO((slv->le_count % seg->data_copies),
+				  "raid10_far image LV length divisibility by #data_copies");
 	}
 
 	return 1;
@@ -10566,7 +10539,7 @@ static int _split_lv_data_images(struct logical_volume *lv,
  * Reorder segments for @extents length in @lv;
  * @extend flag indicates extension/reduction request.
  *
- * raid10_far arranges stripe zones with differing data block rotation
+ * raid10_far arranges stripe zones with data block rotation
  * one after the other and does data_copies across them.
  *
  * In order to resize those, we have to split them up by # data copies
