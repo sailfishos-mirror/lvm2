@@ -1401,15 +1401,21 @@ static int _is_layered_lv(struct logical_volume *lv, uint32_t s)
 /* Find smallest one of any sub lvs of @seg */
 static uint32_t _seg_smallest_sub_lv(struct lv_segment *seg)
 {
-	uint32_t r = ~0U, s, lvs = 0;
+	uint32_t cl, r = ~0U, s, lvs = 0;
+	struct logical_volume *lv1;
+	struct lv_segment *seg1;
 
 	/* Find smallest LV and use that for length of top-level LV */
 	for (s = 0; s < seg->area_count; s++) {
 		if (seg_type(seg, s) == AREA_LV) {
-			lvs++;
+			lv1 = seg_lv(seg, s);
+			if ((seg1 = first_seg(lv1))) {
+				lvs++;
 		
-			if (seg_lv(seg, s)->le_count < r)
-				r = seg_lv(seg, s)->le_count;
+				cl = lv1->le_count - seg1->reshape_len * (seg1->area_count - seg1->segtype->parity_devs);
+				if (cl < r)
+					r = cl;
+			}
 		}
 	}
 
@@ -1437,17 +1443,14 @@ PFLA("lv=%s lv->le_count=%u seg=%p extents=%u stripes=%u data_copies=%u delete=%
 	if (!dont_recurse) {
 		for (s = 0; s < seg->area_count; s++) {
 			if (_is_layered_lv(lv, s)) {
-				uint32_t sub_lv_extents;
 				struct logical_volume *lv1 = seg_lv(seg, s);
 				struct lv_segment *seg1 = last_seg(lv1);
+				uint32_t sub_lv_extents = lv1->le_count;
 
-				if (delete)
-					sub_lv_extents = lv1->le_count;
-				else
-					sub_lv_extents = lv1->le_count - _round_to_stripe_boundary(lv1, lv1->le_count - extents,
-												   seg1->area_count - seg1->segtype->parity_devs,
-												   0 /* reduce */);
-
+				if (!delete)
+					sub_lv_extents -= _round_to_stripe_boundary(lv1, lv1->le_count - extents,
+										    seg1->area_count - seg1->segtype->parity_devs,
+										    0 /* reduce */);
 PFLA("recursive seg_lv(seg, %u)=%s", s, display_lvname(lv1));
 				if (!_lv_reduce(lv1, sub_lv_extents, delete))
 					return_0;
@@ -1666,10 +1669,12 @@ int lv_reduce(struct logical_volume *lv, uint32_t extents)
 {
 	int delete = (extents == lv->le_count ? 1 : 0);
 
+#if 0
 	if (!delete && !lv_raid_in_sync(lv)) {
-		log_error("RAID LV %s has to be in-sync to extend its size!", display_lvname(lv));
+		log_error("RAID LV %s has to be in-sync to reduce its size!", display_lvname(lv));
 		return 0;
 	}
+#endif
 
 	return _lv_reduce(lv, extents, delete);
 }
@@ -4457,13 +4462,6 @@ int lv_extend(struct logical_volume *lv,
 		return 0;
 	}
 
-	/* Should be ensured by the caller... */
-#if 0
-	if (!segtype_is_raid01(segtype) &&
-	    (segtype_is_mirrored(segtype) || segtype_is_raid1(segtype)))
-		stripes = 1;
-#endif
-
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
 	/* Check for multi-level stack (e.g. extension of a duplicated LV stack) */
@@ -4477,14 +4475,9 @@ PFLA("extents=%u", extents);
 				struct lv_segment *seg1 = last_seg(lv1);
 	
 				stripes1 = seg1->area_count - seg1->segtype->parity_devs;
-				sub_lv_extents = _round_to_stripe_boundary(lv1, lv->le_count + extents, stripes1, 1 /* extend */);
-				if (sub_lv_extents < lv->le_count)
-					return_0;
-
-				sub_lv_extents -= lv1->le_count;
+				sub_lv_extents = _round_to_stripe_boundary(lv1, lv1->le_count + extents, stripes1, 1 /* extend */) - lv1->le_count;
 PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents);
-				if (sub_lv_extents + lv->le_count > lv1->le_count &&
-				    !lv_extend(lv1, seg1->segtype, stripes1, seg1->stripe_size,
+				if (!lv_extend(lv1, seg1->segtype, stripes1, seg1->stripe_size,
 					       seg1->data_copies, seg1->region_size, sub_lv_extents,
 					       allocatable_pvs, alloc, approx_alloc))
 					return_0;
@@ -4494,9 +4487,8 @@ PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents)
 		}
 
 		if (extended) {
-			seg->len =  _seg_smallest_sub_lv(seg); //  + seg->reshape_len;
-			seg->area_len = _seg_area_len(seg, seg->len); // + seg->reshape_len;
-			// seg->len +=  seg->reshape_len;
+			seg->len = _seg_smallest_sub_lv(seg);
+			seg->area_len = _seg_area_len(seg, seg->len);
 			lv->le_count = seg->len;
 			lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
 			return 1;

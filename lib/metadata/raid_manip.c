@@ -4350,7 +4350,7 @@ PFLA("lv->size=%s seg->len=%u seg->area_len=%u seg->area_count=%u old_image_coun
 /*
  * HM Helper:
  *
- * Reshape: add disks to existing raid lv
+ * Reshape: add immages to existing raid lv
  *
  */
 static int _raid_reshape_add_images(struct logical_volume *lv,
@@ -4436,7 +4436,7 @@ PFLA("seg_lv(seg, %u)=%s", s, display_lvname(slv));
 /*
  * HM Helper:
  *
- * Reshape: remove disks from existing raid lv
+ * Reshape: remove images from existing raid lv
  *
  */
 static int _raid_reshape_remove_images(struct logical_volume *lv,
@@ -4682,7 +4682,7 @@ static int _lv_raid10_resize_data_copies(struct logical_volume *lv,
 /*
  * HM Helper:
  *
- * Reshape: keep disks in RAID @lv but change stripe size or data copies
+ * Reshape: keep images in RAID @lv but change stripe size or data copies
  *
  */
 static int _raid_reshape_keep_images(struct logical_volume *lv,
@@ -4768,7 +4768,7 @@ static int _activate_sub_lvs(struct logical_volume *lv, uint32_t start_idx)
 			return 0;
 	}
 
-	return activate_lv_excl_local(cmd, lv);
+	// return activate_lv_excl_local(cmd, lv);
 
 	return 1;
 }
