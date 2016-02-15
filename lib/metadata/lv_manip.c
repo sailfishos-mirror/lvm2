@@ -1042,8 +1042,9 @@ PFLA("extents=%u stripes=%u", extents, stripes);
 	}
 
 	if (r != extents)
-		log_print_unless_silent("Rounding up size to full stripe size %s",
-			  		display_size(lv->vg->cmd, r * lv->vg->extent_size));
+		log_print_unless_silent("Rounding up size of LV %s to full stripe size %s",
+			  		display_lvname(lv),
+					display_size(lv->vg->cmd, r * lv->vg->extent_size));
 PFLA("r=%u stripes=%u", r, stripes);
 	return r;
 }
@@ -4457,11 +4458,6 @@ int lv_extend(struct logical_volume *lv,
 	struct lv_segment *seg = last_seg(lv);
 
 
-	if (!lv_raid_in_sync(lv)) {
-		log_error("RAID LV %s has to be in-sync to extend its size!", display_lvname(lv));
-		return 0;
-	}
-
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
 	/* Check for multi-level stack (e.g. extension of a duplicated LV stack) */
@@ -4563,17 +4559,6 @@ PFLA("extents=%u mirrors=%u stripes=%u log_count=%u", extents, mirrors, stripes,
 
 	// extents = ah->new_extents - seg->len;
 
-{
-struct alloced_area *aa;
-
-for (s = 0; s < ah->area_count + log_count; s++) {
-dm_list_iterate_items(aa, ah->alloced_areas + s)
-{
-PFLA("%u aa->len=%u", s >= ah->log_area_count ? s - ah->log_area_count : s, aa->len);
-}
-}
-}
-
 	if (segtype_is_pool(segtype)) {
 		if (!(r = create_pool(lv, segtype, ah, stripes, stripe_size)))
 			stack;
@@ -4628,12 +4613,7 @@ PFLA("extents=%u ah->new_extents=%u lv->le_count=%u stripes=%u sub_lv_count=%u",
 		 * and the LV has the LV_NOTSYNCED flag set.
 		 */
 		if (old_extents &&
-#if 1
-		
 		    (segtype_is_mirror(segtype) || segtype_is_raid1(segtype)) &&
-#else
-		    segtype_is_mirrored(segtype) &&
-#endif
 		    (lv->status & LV_NOTSYNCED)) {
 			dm_percent_t sync_percent = DM_PERCENT_INVALID;
 
@@ -4718,7 +4698,7 @@ static int _rename_sub_lv(struct logical_volume *lv,
 	 * The suffix follows lv_name_old and includes '_'.
 	 */
 	len = strlen(lv_name_old);
-PFLA("lv=%s lv_name_old=%s lv_name_new=%s len=%u", display_lvname(lv), lv_name_old, lv_name_new, len);
+PFLA("lv=%s lv_name_old=%s lv_name_new=%s len=%d", display_lvname(lv), lv_name_old, lv_name_new, len);
 	if (strncmp(lv->name, lv_name_old, len) || lv->name[len] != '_') {
 		log_error("Cannot rename \"%s\": name format not recognized "
 			  "for internal LV \"%s\"",
@@ -5518,7 +5498,7 @@ static int _lvresize_adjust_extents(struct cmd_context *cmd, struct logical_volu
 			 *       and data LV could be any type (i.e. mirror)) */
 			dm_list_iterate_items(seg, seg_mirrors > 1 ? &seg_lv(mirr_seg, 0)->segments : &lv->segments) {
 				/* Allow through "striped" and RAID 0/10/4/5/6 */
-PFLA("seg->segtype=%s", seg->segtype->name);
+PFLA("seg->segtype=%s seg->area_count=%u lp->stripes=%u", seg->segtype->name, seg->area_count, lp->stripes);
 				if (!seg_is_striped(seg) &&
 				    (!seg_is_raid(seg) || seg_is_mirrored(seg)) &&
 				    strcmp(seg->segtype->name, _lv_type_names[LV_TYPE_RAID0]) &&
@@ -5694,19 +5674,23 @@ PFL();
 		lp->resize = LV_EXTEND; /* lets pretend zero size extension */
 	}
 
-#if 1
 	/* HM FIXME: sufficient for RAID? */
+	seg = last_seg(lv);
 	if (seg_is_striped_raid(seg)) {
-		unsigned stripes = seg->area_count - seg->segtype->parity_devs;
+		lp->stripes = seg->area_count - seg->segtype->parity_devs;
+PFLA("%s[%u] %s lp->extents=%u lp->stripes=%u seg->area_count=%u seg->segtype->parity_devs=%u", __func__, __LINE__,
+lv->name, lp->extents, lp->stripes, seg->area_count, seg->segtype->parity_devs);
 
-		lp->extents = _round_to_stripe_boundary(lv, lp->extents, stripes,
+		lp->extents = _round_to_stripe_boundary(lv, lp->extents, lp->stripes,
 							lp->extents < existing_physical_extents);
-		lp->extents = raid_total_extents(seg->segtype, lp->extents, stripes,
-					 	 seg->data_copies) / seg->data_copies;
-} else 
-#endif
+		lp->extents = raid_total_extents(seg->segtype, lp->extents, lp->stripes, seg->data_copies);
+		if (seg_is_any_raid10(seg))
+			lp->extents /= seg->data_copies;
+PFLA("%s[%u] lp->extents=%u", __func__, __LINE__, lp->extents);
+
 	/* Perform any rounding to produce complete stripes. */
-	if (lp->stripes > 1) {
+	} else if (lp->stripes > 1) {
+PFLA("%s[%u] %s", __func__, __LINE__, lv->name);
 PFLA("lp->stripes=%u", lp->stripes);
 		if (lp->stripe_size < STRIPE_SIZE_MIN) {
 			log_error("Invalid stripe size %s",
@@ -6715,6 +6699,36 @@ no_remove:
 	return 0;
 }
 
+#if 1
+/* HM Helper: suspend and resume @lv */
+static int _suspend_resume_lv(const struct logical_volume *lv)
+{
+	struct cmd_context *cmd = lv->vg->cmd;
+
+	return suspend_lv(cmd, lv) && resume_lv(cmd, lv);
+}
+
+/* HM Helper: workaround deptree on lvextend of duplicated stack */
+static int _activate_any_sub_lvs(const struct logical_volume *lv)
+{
+	uint32_t s;
+	struct lv_segment *seg = first_seg(lv);
+
+	for (s = 0; s < seg->area_count; s++)
+		if (seg_type(seg, s) == AREA_LV) {
+			if (!_activate_any_sub_lvs(seg_lv(seg, s)))
+				return 0;
+
+			if (!_suspend_resume_lv(seg_lv(seg, s)) ||
+			    (seg->meta_areas && seg_metalv(seg, s) &&
+			     !_suspend_resume_lv(seg_metalv(seg, s))))
+				return_0;
+		}
+
+	return 1;
+}
+#endif
+
 static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
 {
 	struct volume_group *vg = lv->vg;
@@ -6726,26 +6740,25 @@ static int _lv_update_and_reload(struct logical_volume *lv, int origin_only)
 
 	if (!vg_write(vg))
 		return_0;
-PFL();
+
 	if (!(origin_only ? suspend_lv_origin(vg->cmd, lock_lv) : suspend_lv(vg->cmd, lock_lv))) {
-PFL();
+
 		log_error("Failed to lock logical volume %s.",
 			  display_lvname(lock_lv));
 		vg_revert(vg);
 	} else if (!(r = vg_commit(vg)))
-{
-PFL();
 		stack; /* !vg_commit() has implict vg_revert() */
-}
 	else
 		do_backup = 1;
 
 	log_very_verbose("Updating logical volume %s in kernel.",
 			 display_lvname(lock_lv));
-PFL();
-
+#if 1
+	/* On a duplicating LV with raid10 sub LVs, unsafe table loads occur w/o aub LV activations */
+	if (!_activate_any_sub_lvs(lock_lv))
+		return 0;
+#endif
 	if (!(origin_only ? resume_lv_origin(vg->cmd, lock_lv) : resume_lv(vg->cmd, lock_lv))) {
-PFL();
 		log_error("Problem reactivating logical volume %s.",
 			  display_lvname(lock_lv));
 		r = 0;
@@ -6754,7 +6767,6 @@ PFL();
 	if (do_backup)
 		backup(vg);
 
-PFLA("r=%d", r);
 	return r;
 }
 

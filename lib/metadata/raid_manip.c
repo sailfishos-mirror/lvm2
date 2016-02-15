@@ -1474,7 +1474,7 @@ static char *_generate_raid_name(struct logical_volume *lv,
 }
 
 /* HM Helper: write, commit and backup @vg */
-static int _vg_write_commit_backup(struct volume_group *vg)
+static int __vg_write_commit_backup(struct volume_group *vg, int do_backup)
 {
 	if (!vg_write(vg)) {
 		log_error("Write of VG %s failed", vg->name);
@@ -1486,10 +1486,20 @@ static int _vg_write_commit_backup(struct volume_group *vg)
 		return_0;
 	}
 
-	if (!backup(vg))
+	if (do_backup && !backup(vg))
 		log_error("Backup of VG %s failed after removal of image component LVs", vg->name);
 
 	return 1;
+}
+
+static int _vg_write_commit_backup(struct volume_group *vg)
+{
+	return __vg_write_commit_backup(vg, 1);
+}
+
+static int _vg_write_commit(struct volume_group *vg)
+{
+	return __vg_write_commit_backup(vg, 0);
 }
 
 /*
@@ -2143,7 +2153,6 @@ PFLA("count=%u extents=%u lv->le_count=%u seg->area_count=%u seg->area_len=%u da
 			return_0;
 
 		if (!(ah = allocate_extents(lv->vg, NULL, segtype,
-					    // data_copies, 1 /* stripes */, count /* metadata_area_count */,
 					    1 /* stripes */, data_copies, count /* metadata_area_count */,
 					    0 /* region_size */, extents,
 					    allocate_pvs, lv->alloc, 0, parallel_areas)))
@@ -2797,7 +2806,7 @@ static int _reset_flags_passed_to_kernel(struct logical_volume *lv, int write_re
 
 	if (write_requested &&
 	    flags_cleared &&
-	    !_vg_write_commit_backup(lv->vg))
+	    !_vg_write_commit(lv->vg))
 		return 0;
 
 	return 1;
@@ -2822,8 +2831,6 @@ static int _reset_flags_passed_to_kernel(struct logical_volume *lv, int write_re
  * WARNING: needs to be called with at least 3 arguments to suit va_list processing!
  */
 typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
-static int _lv_update_and_reload(struct logical_volume *lv, int recurse);
-static int _vg_write_lv_suspend_vg_commit(struct logical_volume *lv);
 static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, ...)
 {
 	int r = 0;
@@ -2837,6 +2844,8 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 
 	va_start(ap, lv);
 	removal_lvs = va_arg(ap, struct dm_list *);
+
+	/* Retrieve post/pre functions and post/pre data reference from variable arguments, if any */
 	if ((fn_post_on_lv = va_arg(ap, fn_on_lv_t))) {
 		fn_post_data = va_arg(ap, void *);
 		if ((fn_pre_on_lv = va_arg(ap, fn_on_lv_t)))
@@ -2844,11 +2853,18 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 	}
 
 	/* Call any @fn_pre_on_lv before the first update and reload call (e.g. to rename LVs) */
-	if (fn_pre_on_lv && !fn_pre_on_lv(lv, fn_pre_data))
+	if (fn_pre_on_lv && !(r = fn_pre_on_lv(lv, fn_pre_data)))
 		goto err;
 PFL();
+	if (r == 2) {
+		/* Returning 2 -> metadata got updated in pre function above, don't need to do it again */
+		if (!suspend_lv(lv->vg->cmd, lv) || !resume_lv(lv->vg->cmd, lv)) {
+			log_error("Failed to suspend+resume %s", display_lvname(lv));
+			goto err;
+		}
+
 	/* Update metadata and reload mappings including flags (e.g. LV_REBUILD) */
-	if (!lv_update_and_reload(lv))
+	} else if (!lv_update_and_reload(lv))
 		goto err;
 PFL();
 	/* Eliminate any residual LV and don't commit the metadata */
@@ -3858,13 +3874,14 @@ static int _striped_to_raid0_move_segs_to_raid0_lvs(struct logical_volume *lv,
 	if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_STRIPED)))
 		return_0;
 
+	/* Move segment areas across to the N data LVs of the rnew raid0 LV */
 	dm_list_iterate_items(lvl, data_lvs)  {
 		dlv = lvl->lv;
 		le = 0;
 		dm_list_iterate_items(seg_from, &lv->segments) {
 			uint64_t status = RAID | SEG_RAID | (seg_from->status & (LVM_READ | LVM_WRITE));
 
-			/* Allocate a segment with one area for each segment in the striped LV */
+			/* Allocate a data LV segment with one area for each segment in the striped LV */
 			if (!(seg_new = alloc_lv_segment(segtype, dlv,
 							 le, seg_from->area_len,
 							 0 /* reshape_len */, status,
@@ -4009,7 +4026,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 	seg = first_seg(dm_list_item(dm_list_first(&data_lvs), struct lv_list)->lv);
 	if (!(raid0_seg = alloc_lv_segment(segtype, lv,
 					   0 /* le */, lv->le_count /* len */,
-					   0 /* reshape_len */, seg->status,
+					   0 /* reshape_len */, seg->status | SEG_RAID,
 					   stripe_size, NULL /* log_lv */,
 					   area_count, area_len,
 					   1 /* data_copies */, 0 /* chunk_size */,
@@ -4029,7 +4046,8 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 	lv->status |= RAID;
 
 	/* Allocate metadata LVs if requested */
-	if (alloc_metadata_devs && !_raid0_add_or_remove_metadata_lvs(lv, 0, allocate_pvs, NULL))
+	if (alloc_metadata_devs &&
+	    !_raid0_add_or_remove_metadata_lvs(lv, 0, allocate_pvs, NULL))
 		return NULL;
 
 	if (update_and_reload && !lv_update_and_reload(lv))
@@ -4768,7 +4786,13 @@ static int _activate_sub_lvs(struct logical_volume *lv, uint32_t start_idx)
 			return 0;
 	}
 
-	// return activate_lv_excl_local(cmd, lv);
+	return 1;
+}
+
+/* Helper: nord fn to make _lv_update_reload_fns_reset_eliminate_lvs() happy */
+static int _post_raid_reshape(struct logical_volume *lv, void *data)
+{
+	RETURN_IF_ZERO(lv, "lv argument");
 
 	return 1;
 }
@@ -4784,11 +4808,11 @@ static int _pre_raid_reshape(struct logical_volume *lv, void *data)
 	RETURN_IF_ZERO((old_image_count = *((uint32_t *) data)), "proper old image count");
 
 	/* Activate any new image component pairs */
-	if (old_image_count < seg->area_count)
-		return _vg_write_commit_backup(lv->vg) &&
-		       _activate_sub_lvs(lv, old_image_count);
+	if (!_vg_write_commit(lv->vg) ||
+	    !_activate_sub_lvs(lv, old_image_count))
+		return 0;
 
-	return 1;
+	return 2; /* 1: ok, 2: metadata commited */
 }
 
 /*
@@ -4816,6 +4840,7 @@ static int _raid_reshape(struct logical_volume *lv,
 	enum alloc_where where;
 	struct lv_segment *seg;
 	struct dm_list removal_lvs;
+	fn_on_lv_t fn_pre_on_lv = NULL;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
 	if (!seg_is_reshapable_raid(seg))
@@ -4931,6 +4956,8 @@ PFL();
 					      new_stripes, new_stripe_size, allocate_pvs))
 			return 0;
 
+		fn_pre_on_lv = _pre_raid_reshape;
+
 	/* Handle disk removal reshaping */
 	} else if (old_image_count > new_image_count) {
 		if (!_raid_reshape_remove_images(lv, new_segtype, yes, force,
@@ -4957,7 +4984,8 @@ PFLA("new_segtype=%s seg->area_count=%u", new_segtype->name, seg->area_count);
 
 	/* _pre_raid_reshape to acivate any added image component pairs to avoid unsafe table loads */
 	if (!_lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs,
-						       _pre_raid_reshape, &old_image_count, NULL))
+						       _post_raid_reshape, NULL, /* dummy */
+						       fn_pre_on_lv, &old_image_count, NULL))
 		return 0;
 
 	return force_repair ? _lv_cond_repair(lv) : 1;
@@ -6543,7 +6571,10 @@ static int _pre_raid_duplicate_rename_metadata_sub_lvs(struct logical_volume *lv
 		    !_rename_lv(lv1, "_rmeta_", "__rmeta_"))
 			return 0;
 
-	return _activate_sub_lvs(dup_lv, 0);
+	if (!_activate_sub_lvs(dup_lv, 0))
+		return 0;
+
+	return activate_lv_excl_local(lv->vg->cmd, dup_lv);
 }
 
 /* HM Helper: callback function to rename metadata sub LVs of top-level duplicating@lv back */
@@ -6900,7 +6931,7 @@ PFLA("data_copies=%u", new_data_copies);
 
 	/* This helper can be used to convert from striped/raid0* -> raid10 too */
 	if (seg_is_striped(seg)) {
-		log_debug_metadata("Coverting LV %s from %s to %s",
+		log_debug_metadata("Converting LV %s from %s to %s",
 				   display_lvname(lv), SEG_TYPE_NAME_STRIPED, SEG_TYPE_NAME_RAID0);
 		if (!(seg = _convert_striped_to_raid0(lv, 1 /* alloc_metadata_devs */, 0 /* update_and_reload */, allocate_pvs)))
 			return 0;
