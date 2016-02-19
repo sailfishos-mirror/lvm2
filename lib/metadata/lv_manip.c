@@ -1843,11 +1843,17 @@ PFLA("existing_extents=%u, new_extents=%u, area_count=%u mirrors=%u stripes=%u m
 
 	alloc_count = area_count + parity_count;
 
-PFLA("alloc_count=%u parity_count=%u metadata_area_count=%u", alloc_count, parity_count, metadata_area_count);
+printf("alloc_count=%u parity_count=%u area_count=%u metadata_area_count=%u\n", alloc_count, parity_count, area_count, metadata_area_count);
+PFLA("alloc_count=%u parity_count=%u area_count=%u metadata_area_count=%u", alloc_count, parity_count, area_count, metadata_area_count);
 	if (segtype_is_raid(segtype) && metadata_area_count) {
+#if 0
+		/* Does not work yet for raid01 */
+		alloc_count += metadata_area_count;
+#else
 		/* RAID has a meta area for each device */
 		metadata_area_count = alloc_count;
 		alloc_count *= 2;
+#endif
 	} else
 		/* mirrors specify their exact log count */
 		alloc_count += metadata_area_count;
@@ -1912,7 +1918,7 @@ PFLA("area_count=%u metadata_area_count=%u total_extents=%u", area_count, metada
 			 * We need 'log_len' extents for each
 			 * RAID device's metadata_area
 			 */
-			total_extents += ah->log_len * (segtype_is_raid1(segtype) ? 1 : area_count);
+			total_extents += ah->log_len * (segtype_is_raid1(segtype) ? 1 : metadata_area_count - parity_count);
 PFLA("existing_extents=%u new_extents=%u ah->log_len=%u total_extents=%u", existing_extents, new_extents, ah->log_len, total_extents);
 		} else {
 			ah->log_area_count = 0;
@@ -2252,6 +2258,7 @@ PFLA("area_len=%u raid_rimage_extents=%u", area_len, raid_rimage_extents(ah->seg
 	 */
 	len = area_len;
 PFLA("len=%u", len);
+printf("total_area_count=%u\n", total_area_count);
 	for (s = 0; s < total_area_count; s++) {
 		if (s == (ah->area_count + ah->parity_count)) {
 			ix_log_skip = ix_log_offset - ah->area_count;
