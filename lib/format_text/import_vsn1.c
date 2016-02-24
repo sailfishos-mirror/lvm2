@@ -701,7 +701,8 @@ static int _read_lvnames(struct format_instance *fid __attribute__((unused)),
 	if (timestamp && !lv_set_creation(lv, hostname, timestamp))
 		return_0;
 
-	if (!lv_is_visible(lv) && strstr(lv->name, "_dup_"))
+	if (!lv_is_visible(lv) && strstr(lv->name, "_dup_") &&
+	    !(strstr(lv->name, "_rimage_") || strstr(lv->name, "_rmeta_")))
 		lv->status |= LV_DUPLICATED;
 
 	if (!lv_is_visible(lv) && strstr(lv->name, "_pmspare")) {

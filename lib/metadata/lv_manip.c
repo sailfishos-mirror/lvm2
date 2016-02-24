@@ -1843,7 +1843,6 @@ PFLA("existing_extents=%u, new_extents=%u, area_count=%u mirrors=%u stripes=%u m
 
 	alloc_count = area_count + parity_count;
 
-printf("alloc_count=%u parity_count=%u area_count=%u metadata_area_count=%u\n", alloc_count, parity_count, area_count, metadata_area_count);
 PFLA("alloc_count=%u parity_count=%u area_count=%u metadata_area_count=%u", alloc_count, parity_count, area_count, metadata_area_count);
 	if (segtype_is_raid(segtype) && metadata_area_count) {
 #if 0
@@ -2258,7 +2257,7 @@ PFLA("area_len=%u raid_rimage_extents=%u", area_len, raid_rimage_extents(ah->seg
 	 */
 	len = area_len;
 PFLA("len=%u", len);
-printf("total_area_count=%u\n", total_area_count);
+PFLA("total_area_count=%u", total_area_count);
 	for (s = 0; s < total_area_count; s++) {
 		if (s == (ah->area_count + ah->parity_count)) {
 			ix_log_skip = ix_log_offset - ah->area_count;
