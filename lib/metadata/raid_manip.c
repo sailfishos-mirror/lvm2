@@ -6834,7 +6834,7 @@ static int _raid_duplicate(struct logical_volume *lv,
 	if (!set_lv_segment_area_lv(seg, new_area_idx, dup_lv, dup_lv->le_count, dup_lv->status)) {
 		log_error("Failed to add duplicated sub LV %s to LV %s",
 			  display_lvname(dup_lv), display_lvname(lv));
-		goto err;
+		return lv_remove(dup_lv);
 	}
 
 	_allow_pvs(allocate_pvs);
@@ -6845,11 +6845,11 @@ PFLA("seg->area_count=%u", seg->area_count);
 		struct logical_volume *mlv;
 
 		if (!_alloc_rmeta_for_lv_add_set_hidden(lv, 0, allocate_pvs))
-			goto err;
+			return lv_remove(dup_lv);
 
 		mlv = seg_metalv(seg, 0);
 		if (!_avoid_pvs_with_other_images_of_lv(mlv, allocate_pvs))
-			goto err;
+			return lv_remove(dup_lv);
 	}
 
 PFL();
@@ -6871,9 +6871,6 @@ PFLA("lv0->le_count=%u lv1->le_count=%u", seg_lv(seg, 0)->le_count, seg_lv(seg, 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, NULL,
 							 _post_raid_duplicate_rename_metadata_sub_lvs, dup_lv,
 							 _pre_raid_duplicate_rename_metadata_sub_lvs, dup_lv);
-
-err:
-	return lv_remove(dup_lv);
 }
 
 /*
