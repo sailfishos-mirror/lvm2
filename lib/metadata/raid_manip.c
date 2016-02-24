@@ -244,16 +244,6 @@ static int _suspend_resume_lv(struct logical_volume *lv)
 	return 1;
 }
 
-/* HM helper: allow allocaion on list of @pvs */
-static void _pvs_allow_allocation(struct dm_list *pvs)
-{
-	struct pv_list *pvl;
-
-	if (pvs)
-		dm_list_iterate_items(pvl, pvs)
-			pvl->pv->status &= ~PV_ALLOCATION_PROHIBITED;
-}
-
 /* HM Helper: check for @pv listed on @pvs */
 static int _pv_on_list(struct physical_volume *pv, struct dm_list *pvs)
 {
@@ -1011,6 +1001,16 @@ PFLA("new_image_count=%u seg->area_count=%u", new_image_count, seg->area_count);
 		return_0;
 
 	return 1;
+}
+
+/* HM helper: allow allocaion on list of @pvs */
+static void _allow_pvs(struct dm_list *pvs)
+{
+	struct pv_list *pvl;
+
+	if (pvs)
+		dm_list_iterate_items(pvl, pvs)
+			pvl->pv->status &= ~PV_ALLOCATION_PROHIBITED;
 }
 
 /* HM Helper: prohibit allocation on @pv if @lv already has segments allocated on it */
@@ -2076,7 +2076,7 @@ PFLA("lv=%s raid_devs=%u", display_lvname(lv), raid_devs);
 		a++;
 	}
 
-	_pvs_allow_allocation(allocate_pvs);
+	_allow_pvs(allocate_pvs);
 
 	return 1;
 }
@@ -6820,7 +6820,7 @@ static int _raid_duplicate(struct logical_volume *lv,
 		goto err;
 	}
 
-	_pvs_allow_allocation(allocate_pvs);
+	_allow_pvs(allocate_pvs);
 
 PFLA("seg->area_count=%u", seg->area_count);
 	/* If not duplicating yet, allocate first top-level raid1 metadata LV */
@@ -6840,7 +6840,7 @@ PFL();
 	if (!_alloc_rmeta_for_lv_add_set_hidden(lv, new_area_idx, allocate_pvs))
 		return 0;
 PFL();
-	_pvs_allow_allocation(allocate_pvs);
+	_allow_pvs(allocate_pvs);
 
 	for (s = 0; s < new_area_idx; s++)
 		seg_lv(seg, s)->status &= ~LV_REBUILD;
@@ -9795,7 +9795,7 @@ static int _resilient_replacement(struct logical_volume *lv,
 			pv_mc++;
 	}
 
-printf("lv_mc=%u pv_mc=%u\n", lv_mc, pv_mc);
+PFLA("lv_mc=%u pv_mc=%u", lv_mc, pv_mc);
 
 	if (!(lv_mc + pv_mc)) {
 		log_warn("%s does not contain devices specified"
@@ -9881,12 +9881,13 @@ printf("lv_mc=%u pv_mc=%u\n", lv_mc, pv_mc);
 			  display_lvname(lv));
 
 
-	*match_count = lv_mc;
+	*match_count = lv_mc + pv_mc;
+
 	return 1;
 }
 
 /* HM Helper: avoid @remove_pvs allocation */
-static void _avoid_remove_pvs(struct dm_list *pvs)
+static void _avoid_pvs(struct dm_list *pvs)
 {
 	struct pv_list *pvl;
 
@@ -9957,7 +9958,7 @@ PFLA("seg->lv=%s", display_lvname(lv));
 			return 0;
 
 		/* Prevent remove_pvs from being used for allocation */
-		_avoid_remove_pvs(remove_pvs);
+		_avoid_pvs(remove_pvs);
 
 		if ((ah = _allocate_extents(lv, 1, 0, 0 /* region_size */,
 					    1 /* stripes */, 0 /* stripe_size */,
@@ -9973,8 +9974,8 @@ PFLA("seg->lv=%s", display_lvname(lv));
 PFL();
 	}
 PFL();
-	_pvs_allow_allocation(allocate_pvs);
-	_pvs_allow_allocation(remove_pvs);
+	_allow_pvs(allocate_pvs);
+	_allow_pvs(remove_pvs);
 PFLA("Replacing area %u in seg->lv %s", s, display_lvname(lv));
 
 	/* Add a new segment with the just allocated area to the LV */
@@ -9992,7 +9993,7 @@ PFL();
 	if (!move_lv_segment_area(seg, s, last_seg(lv), 0))
 		return_0;
 PFL();
-	/* Remove the new, now empty last segment and reset the grown size caused by adding it. */
+	/* Remove the new, now empty last segment and reset the grown size caused by adding it */
 	dm_list_del(lv->segments.p);
 	lv->le_count = le_count;
 	lv->size = lv_size;
@@ -10087,7 +10088,7 @@ static int _pre_raid_replace_activate_recurse(struct logical_volume *lv)
 			   display_lvname(lv));
 	for (s = 0; s < seg->area_count; s++) {
 		if ((slv = _seg_lv_checked(seg, s))) {
-			/* Recurse into sub LVs */
+			/* Recurse into any sub LVs */
 			if (!_pre_raid_replace_activate_recurse(slv))
 				return 0;
 
@@ -10172,6 +10173,10 @@ PFLA("top_lv=%s replace_lv=%s", display_lvname(top_lv), display_lvname(replace_l
 			vg->cmd->partial_activation = 1;
 	}
 
+	/* How many image component pairs/areas are being removed (none ok) ? */
+	if (!_resilient_replacement(replace_lv, yes, &match_count, &partial_lvs, remove_pvs))
+		return 1;
+
 	/* Recurse into sub LVs in case of a duplicating one */
 	if (_lv_is_duplicating(replace_lv)) {
 		/* Recurse into sub LVs */
@@ -10179,24 +10184,15 @@ PFLA("top_lv=%s replace_lv=%s", display_lvname(top_lv), display_lvname(replace_l
 			if (!_lv_raid_replace(top_lv, seg_lv(seg, s), yes, remove_pvs, allocate_pvs, 1))
 				return 0;
 
-		goto update;
+	} else {
+		/* Replace any failed areas of @replace_lv */
+		if (!_replace_failed_areas(top_lv, replace_lv, NULL, match_count, remove_pvs, allocate_pvs))
+			return 0;
+
+		if (recursive)
+			return 1;
 	}
 
-	/*
-	 * How many image component pairs/areas are being removed?
-	 *
-	 * None is ok.
-	 */
-	if (!_resilient_replacement(replace_lv, yes, &match_count, &partial_lvs, remove_pvs))
-		return 1;
-
-printf("match_count=%u\n", match_count);
-	if (!_replace_failed_areas(top_lv, replace_lv, NULL, match_count, remove_pvs, allocate_pvs))
-		return 0;
-
-	if (recursive)
-		return 1;
-update:
 	return _lv_update_reload_fns_reset_eliminate_lvs(top_lv, NULL,
 							 _post_dummy, NULL,
 							 _pre_raid_replace_activate, &zero);
