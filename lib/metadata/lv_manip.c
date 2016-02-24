@@ -4705,7 +4705,7 @@ static int _rename_sub_lv(struct logical_volume *lv,
 	 * The suffix follows lv_name_old and includes '_'.
 	 */
 	len = strlen(lv_name_old);
-PFLA("lv=%s lv_name_old=%s lv_name_new=%s len=%d", display_lvname(lv), lv_name_old, lv_name_new, len);
+PFLA("lv=%s lv_name_old=%s lv_name_new=%s len=%u", display_lvname(lv), lv_name_old, lv_name_new, len);
 	if (strncmp(lv->name, lv_name_old, len) || lv->name[len] != '_') {
 		log_error("Cannot rename \"%s\": name format not recognized "
 			  "for internal LV \"%s\"",
@@ -4770,7 +4770,6 @@ static int _for_each_sub_lv(struct logical_volume *lv, int skip_pools,
 
 	dm_list_iterate_items(seg, &lv->segments) {
 		if (seg->log_lv) {
-PFL();
 			if (!fn(seg->log_lv, data))
 				return_0;
 			if (!for_each_sub_lv(seg->log_lv, fn, data))
@@ -4779,7 +4778,6 @@ PFL();
 
 		if (!seg_is_thin(seg) && !seg_is_raid(seg)) {
 			if (seg->metadata_lv) {
-PFL();
 				if (!fn(seg->metadata_lv, data))
 					return_0;
 				if (!for_each_sub_lv(seg->metadata_lv, fn, data))
@@ -4787,7 +4785,6 @@ PFL();
 			}
 
 			if (seg->pool_lv && !skip_pools) {
-PFL();
 				if (!fn(seg->pool_lv, data))
 					return_0;
 				if (!for_each_sub_lv(seg->pool_lv, fn, data))
@@ -4796,7 +4793,6 @@ PFL();
 		}
 
 		for (s = 0; s < seg->area_count; s++) {
-PFL();
 			if (seg_type(seg, s) != AREA_LV)
 				continue;
 			if (!fn(seg_lv(seg, s), data))
@@ -4804,14 +4800,11 @@ PFL();
 			if (!for_each_sub_lv(seg_lv(seg, s), fn, data))
 				return_0;
 		}
-PFL();
 		if (!seg_is_raid(seg) || !seg->meta_areas)
 			continue;
-PFL();
 
 		/* RAID has meta_areas */
 		for (s = 0; s < seg->area_count; s++) {
-PFL();
 			if (seg_metatype(seg, s) != AREA_LV)
 				continue;
 			if (!fn(seg_metalv(seg, s), data))
@@ -4820,7 +4813,6 @@ PFL();
 				return_0;
 		}
 	}
-PFL();
 
 	return 1;
 }

@@ -9776,6 +9776,8 @@ static int _resilient_replacement(struct logical_volume *lv,
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
+	RETURN_IF_ZERO(match_count, "match_count pointer argument");
+	RETURN_IF_ZERO(partial_lvs, "partial_vs pointer argument");
 	RETURN_IF_ZERO(remove_pvs , "remove pvs list argument");
 	RETURN_IF_NONZERO(dm_list_empty(remove_pvs), "remove pvs listed");
 
@@ -9795,12 +9797,12 @@ static int _resilient_replacement(struct logical_volume *lv,
 			pv_mc++;
 	}
 
-PFLA("lv_mc=%u pv_mc=%u", lv_mc, pv_mc);
+PFLA("lv=%s lv_mc=%u pv_mc=%u area_count=%u", display_lvname(lv), lv_mc, pv_mc, seg->area_count);
 
 	if (!(lv_mc + pv_mc)) {
 		log_warn("%s does not contain devices specified"
 			 " for replacement", display_lvname(lv));
-		return 0;
+		return 1;
 
 	} else if (lv_mc == seg->area_count) {
 		log_error("Unable to replace PVs in all %s of %s at once.",
@@ -10014,7 +10016,8 @@ static int _replace_failed_areas(struct logical_volume *top_lv,
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(replace_lv, (seg = first_seg(replace_lv)));
-	RETURN_IF_ZERO(match_count, "match count");
+	if (!match_count)
+		return 0;
 
 PFLA("top_lv=%s replace_lv=%s data_lv=%s", display_lvname(top_lv), display_lvname(replace_lv), data_lv ? display_lvname(data_lv) : "");
 
@@ -10132,7 +10135,7 @@ static int _lv_raid_replace(struct logical_volume *top_lv,
 			    struct dm_list *allocate_pvs,
 			    int recursive)
 {
-	uint32_t match_count = 0, partial_lvs = 0, s, zero = 0;
+	uint32_t match_count, partial_lvs = 0, s, zero = 0;
 	struct lv_segment *seg;
 	struct volume_group *vg;
 
@@ -10175,6 +10178,9 @@ PFLA("top_lv=%s replace_lv=%s", display_lvname(top_lv), display_lvname(replace_l
 
 	/* How many image component pairs/areas are being removed (none ok) ? */
 	if (!_resilient_replacement(replace_lv, yes, &match_count, &partial_lvs, remove_pvs))
+		return 0;
+
+	if (!match_count)
 		return 1;
 
 	/* Recurse into sub LVs in case of a duplicating one */
