@@ -4343,7 +4343,7 @@ static void _adjust_region_size(struct logical_volume *lv,
 				log_print_unless_silent("If you want to grow your LV past the"
 							" possible maximum of %s later,",
 						        display_size(lv->vg->cmd, _max_lv_size_for_region_size(*region_size)));
-				log_print_unless_silent("please request an even larger region size (lvcreate -R ...)");
+				log_print_unless_silent("please request an even larger region size (lvcreate -R ... or change it later via lvconvert -R ...)");
 			}
 		}
 	}
@@ -6211,6 +6211,7 @@ PFL();
 		spvs->len = lv->le_count - current_le;
 
 PFLA("dm_list_size(&lv->segments)=%u", dm_list_size(&lv->segments));
+if (seg)
 PFLA("current_le=%u seg->le=%u seg->len=%u seg->area_len=%u", current_le, seg->le, seg->len, seg->area_len);
 		if (use_pvmove_parent_lv &&
 		    !(seg = find_seg_by_le(lv, current_le))) {
