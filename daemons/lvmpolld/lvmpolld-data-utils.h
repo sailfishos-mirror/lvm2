@@ -19,6 +19,9 @@
 
 struct buffer;
 struct lvmpolld_state;
+struct lvmpolld_lv;
+
+typedef void (*lvmpolld_parse_output_fn_t) (struct lvmpolld_lv *pdlv, const char *line);
 
 enum poll_type {
 	PVMOVE = 0,
@@ -54,6 +57,7 @@ struct lvmpolld_lv {
 	const char *const sinterval;
 	const char *const lvm_system_dir_env;
 	struct lvmpolld_store *const pdst;
+	lvmpolld_parse_output_fn_t parse_output_fn;
 	const char *const *cmdargv;
 	const char *const *cmdenvp;
 
@@ -65,12 +69,11 @@ struct lvmpolld_lv {
 
 	/* block of shared variables protected by lock */
 	struct lvmpolld_cmd_stat cmd_state;
+	dm_percent_t percent;
 	unsigned init_rq_count; /* for debuging purposes only */
 	unsigned polling_finished:1; /* no more updates */
 	unsigned error:1; /* unrecoverable error occured in lvmpolld */
 };
-
-typedef void (*lvmpolld_parse_output_fn_t) (struct lvmpolld_lv *pdlv, const char *line);
 
 /* TODO: replace with configuration option */
 #define MIN_POLLING_TIMEOUT 60
@@ -101,7 +104,8 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 			   const char *vgname, const char *lvname,
 			   const char *sysdir, enum poll_type type,
 			   const char *sinterval, unsigned pdtimeout,
-			   struct lvmpolld_store *pdst);
+			   struct lvmpolld_store *pdst,
+			   lvmpolld_parse_output_fn_t parse_fn);
 
 /* only call with appropriate struct lvmpolld_store lock held */
 void pdlv_destroy(struct lvmpolld_lv *pdlv);
@@ -138,6 +142,7 @@ unsigned pdlv_get_polling_finished(struct lvmpolld_lv *pdlv);
 struct lvmpolld_lv_state pdlv_get_status(struct lvmpolld_lv *pdlv);
 void pdlv_set_cmd_state(struct lvmpolld_lv *pdlv, const struct lvmpolld_cmd_stat *cmd_state);
 void pdlv_set_error(struct lvmpolld_lv *pdlv, unsigned error);
+void pdlv_set_percents(struct lvmpolld_lv *pdlv, dm_percent_t percent);
 void pdlv_set_polling_finished(struct lvmpolld_lv *pdlv, unsigned finished);
 
 /*

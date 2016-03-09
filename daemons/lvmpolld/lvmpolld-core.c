@@ -203,6 +203,60 @@ static int read_single_line(struct lvmpolld_thread_data *data, int err)
 	return (r > 0);
 }
 
+static const char *keyword(const enum poll_type type)
+{
+	switch (type) {
+	case PVMOVE:
+		return "Moved";
+	case CONVERT:
+		return "Converted";
+	case MERGE: /* fall through */
+	case MERGE_THIN:
+		return "Merged";
+	default:
+		return NULL;
+	}
+}
+
+static void parse_percents(struct lvmpolld_lv *pdlv, const char *line)
+{
+	char *endptr, *keyw, *nr;
+	dm_percent_t perc;
+	double d;
+
+	if (!(keyw = strstr(line, keyword(pdlv->type))) || keyw == line
+	    || !strchr(keyw, DM_PERCENT_CHAR)) {
+		DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX,
+		     "parsing percentage from lvm2 command failed");
+		return;
+	}
+
+	nr = strpbrk(keyw, "+-0123456789");
+	if (!nr) {
+		DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX,
+		     "parsing percentage from lvm2 command failed");
+		return;
+	}
+
+	d = strtod(nr, &endptr);
+	if (nr == endptr) {
+		DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX,
+		     "parsing percentage from lvm2 command failed");
+		return;
+	} else if (d > 100.0) {
+		WARN(pdlv->ls, "%s: %s", PD_LOG_PREFIX,
+		     "parsing percentage from lvm2 command returned invalid value");
+		return;
+	}
+
+	perc = dm_make_percent((uint64_t)(d * DM_PERCENT_1), DM_PERCENT_100);
+
+	DEBUGLOG(pdlv->ls, "%s: %s %.1f%%", PD_LOG_PREFIX,
+		 "parsed", dm_percent_to_float(perc));
+
+	pdlv_set_percents(pdlv, perc);
+}
+
 static void update_idle_state(struct lvmpolld_state *ls)
 {
 	if (!ls->idle)
@@ -274,6 +328,9 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
 			assert(read_single_line(data, 0)); /* may block indef. anyway */
 			INFO(pdlv->ls, "%s: PID %d: %s: '%s'", LVM2_LOG_PREFIX,
 			     pdlv->cmd_pid, "STDOUT", data->line);
+
+			if (pdlv->parse_output_fn)
+				pdlv->parse_output_fn(pdlv, data->line);
 		} else if (fds[0].revents) {
 			if (fds[0].revents & POLLHUP)
 				DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX, "caught POLLHUP");
@@ -329,6 +386,8 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
 		while (read_single_line(data, 0)) {
 			assert(r > 0);
 			INFO(pdlv->ls, "%s: PID %d: %s: %s", LVM2_LOG_PREFIX, pdlv->cmd_pid, "STDOUT", data->line);
+			if (pdlv->parse_output_fn)
+				pdlv->parse_output_fn(pdlv, data->line);
 		}
 	if (fds[1].fd >= 0)
 		while (read_single_line(data, 1)) {
@@ -562,7 +621,8 @@ static struct lvmpolld_lv *construct_pdlv(request req, struct lvmpolld_state *ls
 	unsigned handle_missing_pvs = daemon_request_int(req, LVMPD_PARM_HANDLE_MISSING_PVS, 0);
 
 	pdlv = pdlv_create(ls, id, vgname, lvname, sysdir, type,
-			   interval, uinterval, pdst);
+			   interval, uinterval, pdst,
+			   abort_polling ? NULL : parse_percents);
 
 	if (!pdlv) {
 		ERROR(ls, "%s: %s", PD_LOG_PREFIX, "failed to create internal LV data structure.");

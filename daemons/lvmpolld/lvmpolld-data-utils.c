@@ -91,7 +91,8 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 			   const char *vgname, const char *lvname,
 			   const char *sysdir, enum poll_type type,
 			   const char *sinterval, unsigned pdtimeout,
-			   struct lvmpolld_store *pdst)
+			   struct lvmpolld_store *pdst,
+			   lvmpolld_parse_output_fn_t parse_fn)
 {
 	char *lvmpolld_id = dm_strdup(id), /* copy */
 	     *full_lvname = _construct_full_lvname(vgname, lvname), /* copy */
@@ -108,7 +109,8 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 		.pdtimeout = pdtimeout < MIN_POLLING_TIMEOUT ? MIN_POLLING_TIMEOUT : pdtimeout,
 		.cmd_state = { .retcode = -1, .signal = 0 },
 		.pdst = pdst,
-		.init_rq_count = 1
+		.init_rq_count = 1,
+		.parse_output_fn = parse_fn
 	}, *pdlv = (struct lvmpolld_lv *) dm_malloc(sizeof(struct lvmpolld_lv));
 
 	if (!pdlv || !tmp.lvid || !tmp.lvname || !tmp.lvm_system_dir_env || !tmp.sinterval)
@@ -180,6 +182,13 @@ void pdlv_set_error(struct lvmpolld_lv *pdlv, unsigned error)
 {
 	pdlv_lock(pdlv);
 	pdlv->error = error;
+	pdlv_unlock(pdlv);
+}
+
+void pdlv_set_percents(struct lvmpolld_lv *pdlv, dm_percent_t percent)
+{
+	pdlv_lock(pdlv);
+	pdlv->percent = percent;
 	pdlv_unlock(pdlv);
 }
 
