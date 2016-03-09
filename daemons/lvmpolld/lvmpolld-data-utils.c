@@ -279,6 +279,8 @@ static void _pdlv_locked_dump(struct buffer *buff, const struct lvmpolld_lv *pdl
 		buffer_append(buff, tmp);
 	if (dm_snprintf(tmp, sizeof(tmp), "\t\tinit_requests_count=%d\n", pdlv->init_rq_count) > 0)
 		buffer_append(buff, tmp);
+	if (dm_snprintf(tmp, sizeof(tmp), "\t\tpercent_complete=%.1f\n", dm_percent_to_float(pdlv->percent)) > 0)
+		buffer_append(buff, tmp);
 
 	/* lvm_commmand-section { */
 	buffer_append(buff, "\t\tlvm_command {\n");
