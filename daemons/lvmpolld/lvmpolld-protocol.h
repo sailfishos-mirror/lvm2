@@ -18,10 +18,11 @@
 #include "polling_ops.h"
 
 #define LVMPOLLD_PROTOCOL "lvmpolld"
-#define LVMPOLLD_PROTOCOL_VERSION 1
+#define LVMPOLLD_PROTOCOL_VERSION 2
 
 #define LVMPD_REQ_CONVERT	CONVERT_POLL
 #define LVMPD_REQ_DUMP		"dump"
+#define LVMPD_REQ_LIST_ACTIVE	"list_active"
 #define LVMPD_REQ_MERGE		MERGE_POLL
 #define LVMPD_REQ_MERGE_THIN	MERGE_THIN_POLL
 #define LVMPD_REQ_PROGRESS	"progress_info"

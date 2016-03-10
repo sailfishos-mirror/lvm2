@@ -173,6 +173,8 @@ void pdst_locked_lock_all_pdlvs(const struct lvmpolld_store *pdst);
 void pdst_locked_unlock_all_pdlvs(const struct lvmpolld_store *pdst);
 void pdst_locked_destroy_all_pdlvs(const struct lvmpolld_store *pdst);
 void pdst_locked_send_cancel(const struct lvmpolld_store *pdst);
+void pdst_locked_list_active(const struct lvmpolld_store *pdst,
+			     struct buffer *buff, const char *sysdir);
 
 static inline void pdst_lock(struct lvmpolld_store *pdst)
 {

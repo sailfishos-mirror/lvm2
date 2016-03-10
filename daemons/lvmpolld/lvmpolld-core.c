@@ -798,6 +798,38 @@ static response dump_state(client_handle h, struct lvmpolld_state *ls, request r
 	return res;
 }
 
+static response list_active(client_handle h, struct lvmpolld_state *ls, request req)
+{
+	response res = { 0 };
+	const char *sysdir = daemon_request_str(req, LVMPD_PARM_SYSDIR, NULL);
+	struct buffer *b = &res.buffer;
+
+	buffer_init(b);
+
+	/* lvid, vg/lv_name, type, cmd */
+
+	_lvmpolld_global_lock(ls);
+
+	if (sysdir) {
+		buffer_append(b, "# Listing for LVM_SYSTEM_DIR=");
+		buffer_append(b, sysdir);
+		buffer_append(b, "\n");
+	}
+
+	buffer_append(b, "# Active polling operations\n\n");
+	buffer_append(b, "poll {\n");
+	pdst_locked_list_active(ls->id_to_pdlv_poll, b, sysdir);
+	buffer_append(b, "}\n\n");
+
+	buffer_append(b, "# Active abort operations\n\n");
+	buffer_append(b, "abort {\n");
+	pdst_locked_list_active(ls->id_to_pdlv_abort, b, sysdir);
+	buffer_append(b, "}");
+	_lvmpolld_global_unlock(ls);
+
+	return res;
+}
+
 static response _handler(struct daemon_state s, client_handle h, request r)
 {
 	struct lvmpolld_state *ls = s.private;
@@ -815,6 +847,8 @@ static response _handler(struct daemon_state s, client_handle h, request r)
 		return progress_info(h, ls, r);
 	else if (!strcmp(rq, LVMPD_REQ_DUMP))
 		return dump_state(h, ls, r);
+	else if (!strcmp(rq, LVMPD_REQ_LIST_ACTIVE))
+		return list_active(h, ls, r);
 	else
 		return reply(LVMPD_RESP_EINVAL, REASON_REQ_NOT_IMPLEMENTED);
 }

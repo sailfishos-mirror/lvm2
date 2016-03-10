@@ -308,6 +308,29 @@ void pdst_locked_dump(const struct lvmpolld_store *pdst, struct buffer *buff)
 		_pdlv_locked_dump(buff, dm_hash_get_data(pdst->store, n));
 }
 
+void pdst_locked_list_active(const struct lvmpolld_store *pdst,
+			     struct buffer *buff, const char *sysdir)
+{
+	const struct lvmpolld_lv *pdlv;
+	struct dm_hash_node *n;
+
+	dm_hash_iterate(n, pdst->store) {
+		pdlv = dm_hash_get_data(pdst->store, n);
+
+		/* match sysdir component of lvmpolld_if */
+		if (sysdir && strncmp(pdlv->lvmpolld_id, sysdir, strlen(sysdir)))
+			continue;
+		if (!sysdir && *pdlv->lvm_system_dir_env)
+			continue;
+
+		/* list active only */
+		if (pdlv->polling_finished || pdlv->error)
+			continue;
+
+		_pdlv_locked_dump(buff, pdlv);
+	}
+}
+
 void pdst_locked_send_cancel(const struct lvmpolld_store *pdst)
 {
 	struct lvmpolld_lv *pdlv;
