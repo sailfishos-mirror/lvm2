@@ -466,7 +466,8 @@ static int _lvmpoll_daemon(struct cmd_context *cmd, struct poll_operation_id *id
 	struct processing_handle *handle = NULL;
 	unsigned finished = 0;
 
-	if (parms->aborting)
+	/* just wait for these to finish, no progress data */
+	if (parms->aborting || (parms->lv_type & THIN_VOLUME))
 		parms->interval = 0;
 
 	if (id) {
