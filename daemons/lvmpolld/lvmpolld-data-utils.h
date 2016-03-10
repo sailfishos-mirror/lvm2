@@ -83,6 +83,7 @@ struct lvmpolld_lv_state {
 	unsigned error:1;
 	unsigned polling_finished:1;
 	struct lvmpolld_cmd_stat cmd_state;
+	dm_percent_t percent;
 };
 
 struct lvmpolld_thread_data {
@@ -162,6 +163,11 @@ static inline int pdlv_locked_polling_finished(const struct lvmpolld_lv *pdlv)
 static inline unsigned pdlv_locked_error(const struct lvmpolld_lv *pdlv)
 {
 	return pdlv->error;
+}
+
+static inline dm_percent_t pdlv_locked_percent(const struct lvmpolld_lv *pdlv)
+{
+	return pdlv->percent;
 }
 
 /* struct lvmpolld_store manipulation routines */

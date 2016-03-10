@@ -170,6 +170,7 @@ struct lvmpolld_lv_state pdlv_get_status(struct lvmpolld_lv *pdlv)
 	r.error = pdlv_locked_error(pdlv);
 	r.polling_finished = pdlv_locked_polling_finished(pdlv);
 	r.cmd_state = pdlv_locked_cmd_state(pdlv);
+	r.percent = pdlv_locked_percent(pdlv);
 	pdlv_unlock(pdlv);
 
 	return r;
