@@ -956,12 +956,58 @@ out_req:
 	return r;
 }
 
+static int action_list_active(void *args __attribute__((unused)))
+{
+	daemon_request req;
+	daemon_reply repl;
+	const char *e = getenv("LVM_SYSTEM_DIR");
+	int r = 0;
+
+	req = daemon_request_make(LVMPD_REQ_LIST_ACTIVE);
+	if (!req.cft) {
+		fprintf(stderr, "Failed to create lvmpolld " LVMPD_REQ_LIST_ACTIVE " request.\n");
+		goto out_req;
+	}
+
+	if (e &&
+	    !(daemon_request_extend(req, LVMPD_PARM_SYSDIR " = %s",
+				    e, NULL))) {
+		fprintf(stderr, "Failed to extend lvmpolld " LVMPD_REQ_LIST_ACTIVE " request.\n");
+		goto out_req;
+	}
+
+	repl = daemon_send(_lvmpolld, req);
+	if (repl.error) {
+		fprintf(stderr, "Failed to send a request or receive response.\n");
+		goto  out_rep;
+	}
+
+	/*
+	 * This is dumb copy & paste from libdaemon log routines.
+	 */
+	if (!printout_raw_response("  ", repl.buffer.mem)) {
+		fprintf(stderr, "Failed to print out the response.\n");
+		goto  out_rep;
+	}
+
+	r = 1;
+
+out_rep:
+	daemon_reply_destroy(repl);
+out_req:
+	daemon_request_destroy(req);
+
+	return r;
+}
+
 enum action_index {
 	ACTION_DUMP = 0,
+	ACTION_LIST_ACTIVE,
 	ACTION_MAX /* keep at the end */
 };
 
-static const action_fn_t actions[ACTION_MAX] = { [ACTION_DUMP] = action_dump };
+static const action_fn_t actions[ACTION_MAX] = { [ACTION_DUMP] = action_dump,
+						 [ACTION_LIST_ACTIVE] = action_list_active };
 
 static int _make_action(enum action_index idx, void *args)
 {
@@ -990,6 +1036,7 @@ static int action_idx = ACTION_MAX;
 static struct option long_options[] = {
 	/* Have actions always at the beginning of the array. */
 	{"dump",	no_argument,		&action_idx,	ACTION_DUMP }, /* or an option_index ? */
+	{"listactive",	no_argument,		&action_idx,	ACTION_LIST_ACTIVE },
 
 	/* other options */
 	{"binary",	required_argument,	0,		'B' },
