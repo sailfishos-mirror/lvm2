@@ -221,7 +221,7 @@ static int _process_poll_init(const struct cmd_context *cmd, const char *poll_ty
 					LVMPD_PARM_VGNAME " = %s", id->vg_name,
 					LVMPD_PARM_LVNAME " = %s", id->lv_name,
 					LVMPD_PARM_INTERVAL " = %s", str,
-					"cmdline = %s", cmd->cmd_line, /* FIXME: debug param only */
+					LVMPD_PARM_CMDLINE " = %s", cmd->cmd_line, /* FIXME: debug param only */
 					NULL)) {
 		log_error("Failed to create %s request.", poll_type);
 		goto out_req;
