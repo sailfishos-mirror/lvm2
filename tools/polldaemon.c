@@ -379,77 +379,6 @@ typedef struct {
 	struct dm_list idls;
 } lvmpolld_parms_t;
 
-static int report_progress(struct cmd_context *cmd, struct poll_operation_id *id,
-			   struct daemon_parms *parms)
-{
-	struct volume_group *vg;
-	struct logical_volume *lv;
-	uint32_t lockd_state = 0;
-	int ret;
-
-	/*
-	 * It's reasonable to expect a lockd_vg("sh") here, but it should
-	 * not actually be needed, because we only report the progress on
-	 * the same host where the pvmove/lvconvert is happening.  This means
-	 * that the local pvmove/lvconvert/lvpoll commands are updating the
-	 * local lvmetad with the latest info they have, and we just need to
-	 * read the latest info that they have put into lvmetad about their
-	 * progress.  No VG lock is needed to protect anything here (we're
-	 * just reading the VG), and no VG lock is needed to force a VG read
-	 * from disk to get changes from other hosts, because the only change
-	 * to the VG we're interested in is the change done locally.
-	 */
-
-	vg = vg_read(cmd, id->vg_name, NULL, 0, lockd_state);
-	if (vg_read_error(vg)) {
-		release_vg(vg);
-		log_error("Can't reread VG for %s", id->display_name);
-		ret = 0;
-		goto out_ret;
-	}
-
-	lv = find_lv(vg, id->lv_name);
-
-	if (lv && id->uuid && strcmp(id->uuid, (char *)&lv->lvid))
-		lv = NULL;
-
-	/*
-	 * CONVERTING is set only during mirror upconversion but we may need to
-	 * read LV's progress info even when it's not converting (linear->mirror)
-	 */
-	if (lv && (parms->lv_type ^ CONVERTING) && !(lv->status & parms->lv_type))
-		lv = NULL;
-
-	if (!lv) {
-		if (parms->lv_type == PVMOVE)
-			log_verbose("%s: No pvmove in progress - already finished or aborted.",
-				    id->display_name);
-		else
-			log_verbose("Can't find LV in %s for %s. Already finished or removed.",
-				    vg->name, id->display_name);
-		ret = 1;
-		goto out;
-	}
-
-	if (!lv_is_active_locally(lv)) {
-		log_verbose("%s: Interrupted: No longer active.", id->display_name);
-		ret = 1;
-		goto out;
-	}
-
-	if (parms->poll_fns->poll_progress(cmd, lv, id->display_name, parms) == PROGRESS_CHECK_FAILED) {
-		ret = 0;
-		goto out;
-	}
-
-	ret = 1;
-
-out:
-	unlock_and_release_vg(cmd, vg, vg->name);
-out_ret:
-	return ret;
-}
-
 static int _lvmpolld_init_poll_vg(struct cmd_context *cmd, const char *vgname,
 			          struct volume_group *vg, struct processing_handle *handle)
 {
@@ -518,8 +447,6 @@ static void _lvmpolld_poll_for_all_vgs(struct cmd_context *cmd,
 						  &finished);
 			if (!r || finished)
 				dm_list_del(&idl->list);
-			else if (!parms->aborting)
-				report_progress(cmd, idl->id, lpdp.parms);
 		}
 
 		if (lpdp.parms->interval)
@@ -547,8 +474,7 @@ static int _lvmpoll_daemon(struct cmd_context *cmd, struct poll_operation_id *id
 		if (r && !parms->background) {
 			while (1) {
 				if (!(r = lvmpolld_request_info(id, parms, &finished)) ||
-				    finished ||
-				    (!parms->aborting && !(r = report_progress(cmd, id, parms))))
+				    finished)
 					break;
 
 				if (parms->interval)

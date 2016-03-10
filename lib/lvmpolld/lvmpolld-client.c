@@ -27,6 +27,7 @@ struct progress_info {
 	unsigned finished:1;
 	int cmd_signal;
 	int cmd_retcode;
+	dm_percent_t percents;
 };
 
 static int _lvmpolld_use;
@@ -167,9 +168,11 @@ static struct progress_info _request_progress_info(const char *uuid, unsigned ab
 	}
 
 	if (!strcmp(daemon_reply_str(rep, "response", ""), LVMPD_RESP_IN_PROGRESS)) {
+		ret.percents = (dm_percent_t) daemon_reply_int(rep, LVMPD_PARM_DATA, -1);
 		ret.finished = 0;
 		ret.error = 0;
 	} else if (!strcmp(daemon_reply_str(rep, "response", ""), LVMPD_RESP_FINISHED)) {
+		ret.percents = (dm_percent_t) daemon_reply_int(rep, LVMPD_PARM_DATA, -1);
 		if (!strcmp(daemon_reply_str(rep, "reason", ""), LVMPD_REAS_SIGNAL))
 			ret.cmd_signal = daemon_reply_int(rep, LVMPD_PARM_VALUE, 0);
 		else
@@ -338,6 +341,22 @@ int lvmpolld_request_info(const struct poll_operation_id *id, const struct daemo
 
 	if (info.error)
 		return_0;
+
+	/*
+	 * not interested in progress info for pvmoves in abort
+	 * or while merging thin snapshot
+	 */
+	if (!parms->aborting && !(parms->lv_type & THIN_VOLUME)) {
+		if (parms->progress_display)
+			log_print_unless_silent("%s: %s: %.1f%%",
+						id->display_name,
+						parms->progress_title,
+						dm_percent_to_float(info.percents));
+		else
+			log_verbose("%s: %s: %.1f%%", id->display_name,
+				    parms->progress_title,
+				    dm_percent_to_float(info.percents));
+	}
 
 	if (info.finished) {
 		if (info.cmd_signal)
