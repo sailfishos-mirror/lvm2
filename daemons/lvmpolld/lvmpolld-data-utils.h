@@ -50,6 +50,7 @@ struct lvmpolld_lv {
 	 */
 	struct lvmpolld_state *const ls;
 	const enum poll_type type;
+	const char *const cmdline; /* full lvm2 command which initiated polling */
 	const char *const lvid;
 	const char *const lvmpolld_id;
 	const char *const lvname; /* full vg/lv name */
@@ -104,7 +105,7 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 			   const char *vgname, const char *lvname,
 			   const char *sysdir, enum poll_type type,
 			   const char *sinterval, unsigned pdtimeout,
-			   struct lvmpolld_store *pdst,
+			   struct lvmpolld_store *pdst, const char *cmd_line,
 			   lvmpolld_parse_output_fn_t parse_fn);
 
 /* only call with appropriate struct lvmpolld_store lock held */

@@ -29,6 +29,7 @@
 #define LVMPD_REQ_PVMOVE	PVMOVE_POLL
 
 #define LVMPD_PARM_ABORT		"abort"
+#define LVMPD_PARM_CMDLINE		"cmdline"
 #define LVMPD_PARM_HANDLE_MISSING_PVS	"handle_missing_pvs"
 #define LVMPD_PARM_INTERVAL		"interval"
 #define LVMPD_PARM_LVID			"lvid"

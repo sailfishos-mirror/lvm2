@@ -91,12 +91,13 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 			   const char *vgname, const char *lvname,
 			   const char *sysdir, enum poll_type type,
 			   const char *sinterval, unsigned pdtimeout,
-			   struct lvmpolld_store *pdst,
+			   struct lvmpolld_store *pdst, const char *cmd_line,
 			   lvmpolld_parse_output_fn_t parse_fn)
 {
 	char *lvmpolld_id = dm_strdup(id), /* copy */
 	     *full_lvname = _construct_full_lvname(vgname, lvname), /* copy */
-	     *lvm_system_dir_env = _construct_lvm_system_dir_env(sysdir); /* copy */
+	     *lvm_system_dir_env = _construct_lvm_system_dir_env(sysdir), /* copy */
+	     *cmdline = cmd_line ? dm_strdup(cmd_line) : NULL; /* copy */
 
 	struct lvmpolld_lv tmp = {
 		.ls = ls,
@@ -109,6 +110,7 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
 		.pdtimeout = pdtimeout < MIN_POLLING_TIMEOUT ? MIN_POLLING_TIMEOUT : pdtimeout,
 		.cmd_state = { .retcode = -1, .signal = 0 },
 		.pdst = pdst,
+		.cmdline = cmdline,
 		.init_rq_count = 1,
 		.parse_output_fn = parse_fn
 	}, *pdlv = (struct lvmpolld_lv *) dm_malloc(sizeof(struct lvmpolld_lv));
@@ -128,6 +130,7 @@ err:
 	dm_free((void *)lvmpolld_id);
 	dm_free((void *)lvm_system_dir_env);
 	dm_free((void *)tmp.sinterval);
+	dm_free((void *)cmdline);
 	dm_free((void *)pdlv);
 
 	return NULL;
@@ -141,6 +144,7 @@ void pdlv_destroy(struct lvmpolld_lv *pdlv)
 	dm_free((void *)pdlv->lvm_system_dir_env);
 	dm_free((void *)pdlv->cmdargv);
 	dm_free((void *)pdlv->cmdenvp);
+	dm_free((void *)pdlv->cmdline);
 
 	pthread_mutex_destroy(&pdlv->lock);
 
@@ -280,6 +284,8 @@ static void _pdlv_locked_dump(struct buffer *buff, const struct lvmpolld_lv *pdl
 	if (dm_snprintf(tmp, sizeof(tmp), "\t\tinit_requests_count=%d\n", pdlv->init_rq_count) > 0)
 		buffer_append(buff, tmp);
 	if (dm_snprintf(tmp, sizeof(tmp), "\t\tpercent_complete=%.1f\n", dm_percent_to_float(pdlv->percent)) > 0)
+		buffer_append(buff, tmp);
+	if (dm_snprintf(tmp, sizeof(tmp), "\t\tinitiating_lvm_cmd=\"%s\"\n", pdlv->cmdline ?: "<undefined>") > 0)
 		buffer_append(buff, tmp);
 
 	/* lvm_commmand-section { */

@@ -618,10 +618,11 @@ static struct lvmpolld_lv *construct_pdlv(request req, struct lvmpolld_state *ls
 {
 	const char **cmdargv, **cmdenvp;
 	struct lvmpolld_lv *pdlv;
+	const char *cmdline = daemon_request_str(req, LVMPD_PARM_CMDLINE, NULL);
 	unsigned handle_missing_pvs = daemon_request_int(req, LVMPD_PARM_HANDLE_MISSING_PVS, 0);
 
 	pdlv = pdlv_create(ls, id, vgname, lvname, sysdir, type,
-			   interval, uinterval, pdst,
+			   interval, uinterval, pdst, cmdline,
 			   abort_polling ? NULL : parse_percents);
 
 	if (!pdlv) {
