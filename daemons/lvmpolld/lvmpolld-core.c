@@ -577,6 +577,7 @@ static response progress_info(client_handle h, struct lvmpolld_state *ls, reques
 		 */
 		st = pdlv_get_status(pdlv);
 
+		/* do not be forgetful
 		if (st.error || st.polling_finished) {
 			INFO(ls, "%s: %s %s", PD_LOG_PREFIX,
 			     "Polling finished. Removing related data structure for LV",
@@ -584,6 +585,7 @@ static response progress_info(client_handle h, struct lvmpolld_state *ls, reques
 			pdst_locked_remove(pdst, id);
 			pdlv_destroy(pdlv);
 		}
+		*/
 	}
 	/* pdlv must not be dereferenced from now on */
 
