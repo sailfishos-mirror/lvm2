@@ -19,4 +19,5 @@ SKIP_WITH_CLVMD=1
 aux prepare_pvs 6
 
 aux prepare_lvmdbusd
+echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
 $test_data_dir/dbus/lvmdbustest.py -v
