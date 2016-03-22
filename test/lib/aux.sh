@@ -305,14 +305,22 @@ prepare_lvmdbusd() {
 	rm -f debug.log_LVMDBUSD_out
 
 	kill_sleep_kill_ LOCAL_LVMDBUSD 0
+	kill_sleep_kill_ LOCAL_DBUSD 0
 
-        # FIXME: This is not correct! Daemon is auto started.
-	echo "checking lvmdbusd is NOT running..."
-	if ps -elf | grep lvmdbusd | grep python3; then
-		echo "Cannot run while existing lvmdbusd process exists"
-		return 1
+	# The session should be better already started, or dbus will try to run
+	# dbus-launch (dbus-x11 package on Fedora). Why not dbus-run-session???
+	export LVMDBUSD_USE_SESSION=True
+
+	if [[ -z $LVMDBUSD_USE_SESSION ]]; then
+		# FIXME: This is not correct! Daemon may be off and started on demand only.
+		# systemd: check the system service is disabled
+		echo "checking lvmdbusd is NOT running..."
+		if ps -elf | grep lvmdbusd | grep python3; then
+			echo "Cannot run while existing lvmdbusd process exists"
+			return 1
+		fi
+		echo ok
 	fi
-	echo ok
 
 	# skip if we don't have our own lvmdbusd...
 	if test -z "${installed_testsuite+varset}"; then
@@ -328,11 +336,27 @@ prepare_lvmdbusd() {
 	which python3 >/dev/null || skip "Missing python3"
 	python3 -c "import pyudev, dbus, gi.repository" || skip "Missing python modules"
 
-        # TODO: Tests should use session bus instead of system bus
-	# Copy the needed file to run on the system bus if it doesn't
-	# already exist
-	if [ ! -f /etc/dbus-1/system.d/com.redhat.lvmdbus1.conf ]; then
-		install -m 644 $abs_top_builddir/scripts/com.redhat.lvmdbus1.conf /etc/dbus-1/system.d/
+	if [[ -z $LVMDBUSD_USE_SESSION ]]; then
+		# Copy the needed file to run on the system bus if it doesn't
+		# already exist
+		if [ ! -f /etc/dbus-1/system.d/com.redhat.lvmdbus1.conf ]; then
+			install -m 644 $abs_top_builddir/scripts/com.redhat.lvmdbus1.conf /etc/dbus-1/system.d/
+		fi
+		echo "Using system DBus session"
+	else
+		# dbus-launch required DISPLAY - because of ...(?)
+		export DISPLAY="${DISPLAY:-":0"}"
+
+		if [[ -z $DBUS_SESSION_BUS_ADDRESS ]]; then
+			which dbus-launch &>/dev/null || skip "Missing dbus-launch"
+			$(dbus-launch)
+			[[ -n $DBUS_SESSION_BUS_ADDRESS ]] || skip "Failed to launch dbus session."
+			export DBUS_SESSION_BUS_ADDRESS
+			echo "Created new DBus session"
+			echo "$DBUS_SESSION_BUS_PID" > LOCAL_DBUSD
+		else
+			echo "Using running DBus session"
+		fi
 	fi
 
 	echo "preparing lvmdbusd..."
@@ -520,6 +544,10 @@ teardown() {
 	}
 
 	kill_sleep_kill_ LOCAL_LVMDBUSD 0
+
+	echo -n .
+
+	kill_sleep_kill_ LOCAL_DBUSD 0
 
 	echo -n .
 
