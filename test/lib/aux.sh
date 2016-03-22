@@ -309,7 +309,7 @@ prepare_lvmdbusd() {
 
 	# The session should be better already started, or dbus will try to run
 	# dbus-launch (dbus-x11 package on Fedora). Why not dbus-run-session???
-	export LVMDBUSD_USE_SESSION=True
+	export LVMDBUSD_USE_SESSION= #True
 
 	if [[ -z $LVMDBUSD_USE_SESSION ]]; then
 		# FIXME: This is not correct! Daemon may be off and started on demand only.
