@@ -20,4 +20,8 @@ aux prepare_pvs 6
 
 aux prepare_lvmdbusd
 echo "DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
+if [[ -f LOCAL_DBUSD ]]; then
+  ps -lfp $(< LOCAL_DBUSD)
+fi
+sleep 5
 $test_data_dir/dbus/lvmdbustest.py -v
