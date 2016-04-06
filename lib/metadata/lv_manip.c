@@ -4343,7 +4343,8 @@ static void _adjust_region_size(struct logical_volume *lv,
 				log_print_unless_silent("If you want to grow your LV past the"
 							" possible maximum of %s later,",
 						        display_size(lv->vg->cmd, _max_lv_size_for_region_size(*region_size)));
-				log_print_unless_silent("please request an even larger region size (lvcreate -R ... or change it later via lvconvert -R ...)");
+				log_print_unless_silent("please request an even larger region size "
+							"(\"lvcreate -R ...\" or change it later via \"lvconvert -R ...\")");
 			}
 		}
 	}
@@ -4356,7 +4357,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 				 uint32_t stripes, uint32_t stripe_size,
 				 struct dm_list *meta_lvs)
 {
-	uint32_t fa, s;
+	uint32_t fa, s, str;
 	uint32_t old_extents = lv->le_count;
 	const struct segment_type *striped_segtype;
 	struct logical_volume *sub_lv, *meta_lv;
@@ -4371,15 +4372,15 @@ PFLA("lv=%s extents=%u mirrors=%u stripes=%u", display_lvname(lv), extents, mirr
 	 * LV.  However, RAID has an LV for each device - making the
 	 * 'stripes' and 'stripe_size' parameters meaningless unless raid01.
 	 */
-	if (seg_is_raid(seg) && !seg_is_raid01(seg)) {
-		stripes = 1;
+	if (seg_is_mirrored(seg) || (seg_is_raid(seg) && !seg_is_raid01(seg))) {
+		str = 1;
 		stripe_size = 0;
 	}
 
 	for (fa = first_area, s = 0; s < seg->area_count; s++) {
 		if (is_temporary_mirror_layer(seg_lv(seg, s))) {
 			if (!_lv_extend_layered_lv(ah, seg_lv(seg, s), extents,
-						   fa, mirrors, stripes, stripe_size, meta_lvs))
+						   fa, mirrors, str, stripe_size, meta_lvs))
 				return_0;
 			fa += lv_mirror_count(seg_lv(seg, s));
 			continue;
@@ -4387,9 +4388,9 @@ PFLA("lv=%s extents=%u mirrors=%u stripes=%u", display_lvname(lv), extents, mirr
 
 		sub_lv = seg_lv(seg, s);
 
-PFLA("extending %s in %s, stripes=%u", display_lvname(sub_lv), lv->name, stripes);
+PFLA("extending %s in %s, str=%u", display_lvname(sub_lv), lv->name, str);
 
-		if (!lv_add_segment(ah, fa, stripes, 1 /* data_copies */,
+		if (!lv_add_segment(ah, fa, str, 1 /* data_copies */,
 				    sub_lv, striped_segtype,
 				    stripe_size, sub_lv->status, 0)) {
 			log_error("Aborting. Failed to extend %s in %s.",
@@ -4410,15 +4411,17 @@ PFLA("last_seg(seg_lv(seg, s))->len=%u last_seg(seg_lv(seg, s))->area_len=%u", l
 				return_0;
 		}
 
-		fa += stripes;
+		fa += str;
 	}
 
 #if 1
-	seg->len += extents;
+	seg->len = raid_total_extents(seg->segtype, stripes * sub_lv->le_count, stripes,
+				      (seg_is_any_raid10(seg) ? 1 : mirrors)) /
+		   (seg_is_any_raid10(seg) ? mirrors : 1);
 	seg->area_len = _seg_area_len(seg, seg->len);
 #endif
 PFLA("segtye=%s lv->le_count=%u seg->len=%u seg->area_len=%u", lvseg_name(seg), lv->le_count, seg->len, seg->area_len);
-	lv->le_count += extents;
+	lv->le_count = seg->len;
 	lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
 PFLA("lv->le_count=%u", lv->le_count);
 

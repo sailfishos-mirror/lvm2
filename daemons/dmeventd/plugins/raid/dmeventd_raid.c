@@ -42,13 +42,13 @@ static int run_repair(const char *device)
 		syslog(LOG_INFO, "Re-scan of RAID device %s failed.", device);
 
 	if (!dmeventd_lvm2_command(dmeventd_lvm2_pool(), cmd_str, sizeof(cmd_str),
-				  "lvconvert --config devices{ignore_suspended_devices=1} "
+				  "/home/mauelsha/git/devel/lvm2/tools/lvconvert -vvvv --config devices{ignore_suspended_devices=1} "
 				  "--repair --use-policies", device))
 		return -1;
 
+syslog(LOG_INFO, "Foobar!!!");
 	/* if repair goes OK, report success even if lvscan has failed */
 	r = dmeventd_lvm2_run(cmd_str);
-
 	if (!r)
 		syslog(LOG_INFO, "Repair of RAID device %s failed.", device);
 

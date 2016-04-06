@@ -502,7 +502,13 @@ PFLA("r=%llu", (unsigned long long) r);
 	return r > UINT_MAX ? 0 : (uint32_t) r;
 }
 
-/* Calculate total extents required to provide @extents to user based on @segtype, @stripes and @data_copies */
+/*
+ * Calculate total brutto extents required to provide requested @extents
+ * based on @segtype, @stripes and @data_copies
+ *
+ * This is extents allocated and has to be devided by # data copies
+ * to get the user visible le count.
+ */
 uint32_t raid_total_extents(const struct segment_type *segtype,
 			    uint32_t extents, uint32_t stripes, uint32_t data_copies)
 {
@@ -755,7 +761,8 @@ static int _lv_is_degraded(struct logical_volume *lv)
  */
 static int _raid_in_sync(const struct logical_volume *lv)
 {
-	dm_percent_t sync_percent;
+	int retries = 6;
+	dm_percent_t sync_percent = DM_PERCENT_0;
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
@@ -763,19 +770,16 @@ static int _raid_in_sync(const struct logical_volume *lv)
 	if (seg_is_striped(seg) || seg_is_any_raid0(seg))
 		return 1;
 
-	if (!lv_raid_percent(lv, &sync_percent)) {
-		log_error("Unable to determine sync status of %s.", display_lvname(lv));
-		return 0;
-	}
 PFLA("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
-	if (sync_percent == DM_PERCENT_0) {
+log_error("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
+	while (sync_percent == DM_PERCENT_0 && retries--) {
+log_error("retries=%d", retries);
 		/*
 		 * FIXME We repeat the status read here to workaround an
 		 * unresolved kernel bug when we see 0 even though the 
 		 * the array is 100% in sync.
 		 * https://bugzilla.redhat.com/1210637
 		 */
-		usleep(500000);
 		if (!lv_raid_percent(lv, &sync_percent)) {
 			log_error("Unable to determine sync status of %s/%s.",
 				  lv->vg->name, lv->name);
@@ -785,6 +789,9 @@ PFLA("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
 		if (sync_percent == DM_PERCENT_100)
 			log_warn("WARNING: Sync status for %s is inconsistent.",
 				 display_lvname(lv));
+		if (sync_percent)
+			break;
+		usleep(500000);
 	}
 
 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
@@ -1380,11 +1387,9 @@ static int _lv_name_get_string_index(struct logical_volume *lv, unsigned *index)
 
 	n = ++numptr;
 
-	while (*n) {
-		if (*n < '0' || *n > '9')
+	while (*n)
+		if (!isdigit(*(n++)))
 			goto err;
-		n++;
-	}
 
 	*index = atoi(numptr);
 	return 1;
@@ -1644,11 +1649,11 @@ static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
 	if (!removal_lvs || dm_list_empty(removal_lvs))
 		return 1;
 
-	sync_local_dev_names(vg->cmd);
 PFL();
 	if (!_deactivate_and_remove_lvs(vg, removal_lvs))
 		return 0;
 
+	sync_local_dev_names(vg->cmd);
 	dm_list_init(removal_lvs);
 PFL();
 	if (vg_write_requested &&
@@ -1853,9 +1858,10 @@ static int _extract_image_component_sublist(struct lv_segment *seg,
 	struct lv_list *lvl;
 
 	RETURN_IF_ZERO(seg, "seg argument");
+printf("seg->area_count=%u end=%u idx=%u", seg->area_count, end, idx);
 	RETURN_IF_SEG_AREA_INDEX_FALSE(seg, idx);
 	RETURN_IF_NONZERO(end > seg->area_count || end <= idx, "area index wrong for segment");
-
+	RETURN_IF_ZERO(seg_lv(seg, idx), "seg LV");
 	if (!(lvl = dm_pool_alloc(seg_lv(seg, idx)->vg->vgmem, sizeof(*lvl) * (end - idx))))
 		return_0;
 
@@ -2465,7 +2471,6 @@ PFL();
 PFL();
 		log_debug("LVs with error segments to be removed: %s %s",
 			  display_lvname(seg_metalv(seg, s)), display_lvname(seg_lv(seg, s)));
-
 PFL();
 		if (!_extract_image_component_pair(seg, s, lvl_pairs, extracted_meta_lvs, extracted_data_lvs, 0))
 			return_0;
@@ -2486,7 +2491,6 @@ PFL();
 		}
 
 		inc = 0;
-
 #if 1
 		if (seg->meta_areas &&
  		    lv_is_on_pvs(seg_metalv(seg, s), target_pvs)) {
@@ -2528,10 +2532,15 @@ PFL();
 		return 0;
 	}
 
+#if 1
+	if (shift) {
+	}
+#else
 	if (shift && !_shift_image_components(seg)) {
 		log_error("Failed to shift and rename image components");
 		return 0;
 	}
+#endif
 
 	return 1;
 }
@@ -2926,6 +2935,9 @@ static struct lv_segment *_convert_lv_to_raid1(struct logical_volume *lv, const 
 	if (!insert_layer_for_lv(lv->vg->cmd, lv, flags, suffix))
 		return NULL;
 
+	if (!_check_and_init_region_size(lv))
+		return 0;
+
 	/* First segment has changed because of layer insertion */
 	RETURN_IF_ZERO((seg = first_seg(lv)), "lv raid segment after layer insertion");
 	RETURN_IF_ZERO(seg_lv(seg, 0), "first sub LV");
@@ -2949,9 +2961,6 @@ PFLA("seg1->lv=%s", display_lvname(seg1->lv));
 
 	lv->status |= RAID;
 	lv->le_count = seg->len = seg->area_len = le_count;
-
-	if (!_check_and_init_region_size(lv))
-		return 0;
 
 	return seg;
 }
@@ -3042,8 +3051,10 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 PFL();
 
 	/* Call any @fn_pre_on_lv before the first update and reload call (e.g. to rename LVs) */
-	if (fn_pre_on_lv && !(r = fn_pre_on_lv(lv, fn_pre_data)))
+	if (fn_pre_on_lv && !(r = fn_pre_on_lv(lv, fn_pre_data))) {
+		log_error("Pre callout function failed");
 		goto err;
+	}
 PFL();
 	if (r == 2) {
 		/* Returning 2 -> lv is suspended and metadata got updated in pre function above, don't need to do it again */
@@ -3074,9 +3085,9 @@ PFL();
 	if (!_reset_flags_passed_to_kernel(lv, &flags_reset))
 		goto err;
 PFL();
-	/* Call any @fn_pre_on_lv before the second update and reload call (e.g. to rename LVs back) */
+	/* Call any @fn_post_on_lv before the second update and reload call (e.g. to rename LVs back) */
 	if (fn_post_on_lv && !(r = fn_post_on_lv(lv, fn_post_data))) {
-		log_error("Post failed");
+		log_error("Post callout function failed");
 		goto err;
 	}
 PFL();
@@ -3478,7 +3489,7 @@ int lv_raid_split(struct logical_volume *lv, int yes,
 	dm_list_init(&data_lvs);
 
 	log_debug_metadata("Extracting image components from LV %s", display_lvname(lv));
-	if (!_raid_extract_images(lv, new_image_count, splittable_pvs, 0 /* Don't shift */,
+	if (!_raid_extract_images(lv, new_image_count, splittable_pvs, 1 /* Don't shift */,
 				  &meta_lvs, &data_lvs)) {
 		log_error("Failed to extract images from %s",
 				display_lvname(lv));
@@ -6135,21 +6146,22 @@ static int _rename_lv(struct logical_volume *lv, const char *from, const char *t
 	return 1;
 }
  
-/* HM Helper: rename all @lv to string @to and replace all sub LV names substring @from to @to */
+/* HM Helper: rename @lv to string @to and replace all its sub LV names substring @from to @to */
 static int _rename_lv_and_sub_lvs(struct logical_volume *lv, const char *from, const char *to)
 {
 	uint32_t s;
-	struct logical_volume *mlv;
+	struct logical_volume *lv1;
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 
 	if (seg->area_count > 1)
 		for (s = 0; s < seg->area_count; s++) {
-			if ((mlv = _seg_metalv_checked(seg, s)) &&
-			    !_rename_lv(mlv, from, to))
+			if ((lv1 = _seg_metalv_checked(seg, s)) &&
+			    !_rename_lv(lv1, from, to))
 				return 0;
-			if (!_rename_lv(seg_lv(seg, s), from, to))
+			if ((lv1 = _seg_lv_checked(seg, s)) &&
+			    !_rename_lv(lv1, from, to))
 				return 0;
 		}
 
@@ -6377,7 +6389,7 @@ static int _post_raid_split_duplicate_rename_lv_and_sub_lvs(struct logical_volum
 {
 	uint32_t s;
 	struct lv_segment *seg;
-	struct logical_volume *split_lv;
+	struct logical_volume *split_lv, *lv1;
 	struct volume_group *vg;
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
@@ -6390,36 +6402,43 @@ static int _post_raid_split_duplicate_rename_lv_and_sub_lvs(struct logical_volum
 	if (!_suspend_resume_lv(split_lv))
 		return_0;
 
+for (s = 0; s < seg->area_count; s++)
+PFLA("seg_lv(seg, %u)=%s", s, _seg_lv_checked(seg, s) ? display_lvname(seg_lv(seg, s)) : "");
+
 	/* Rename all remaning sub LVs temporarilly to allow for name shift w/o name collision */
 	log_debug_metadata("Renaming duplicate LV and sub LVs of %s", display_lvname(lv));
 	for (s = 0; s < seg->area_count; s++)
-		if (_seg_lv_checked(seg, s) &&
-		    !_rename_split_duplicate_lv_and_sub_lvs(seg_lv(seg, s), _seg_metalv_checked(seg, s), from_dup))
+		if ((lv1 = _seg_lv_checked(seg, s)) &&
+		    !_rename_split_duplicate_lv_and_sub_lvs(lv1, _seg_metalv_checked(seg, s), from_dup))
 			return 0;
-
 PFL();
 	/* Shift area numerical indexes down */
+	/* HM FIXME: avoid _prepare_seg_for_name_shift() in favour of better _shift_image_components */
 	log_debug_metadata("Shifting image components of %s", display_lvname(lv));
 	if (!_prepare_seg_for_name_shift(lv) ||
 	    !_shift_image_components(seg))
 		return 0;
+for (s = 0; s < seg->area_count; s++)
+PFLA("seg_lv(seg, %u)=%s", s, _seg_lv_checked(seg, s) ? display_lvname(seg_lv(seg, s)) : "");
+
 PFL();
 	if (!_vg_write_commit(vg))
 		return 0;
 PFL();
 	for (s = 0; s < seg->area_count - 1; s++) {
-		if (_seg_lv_checked(seg, s) &&
-		    !_suspend_resume_lv(seg_lv(seg, s)))
+		if ((lv1 = _seg_lv_checked(seg, s)) &&
+		    !_suspend_resume_lv(lv1))
 			return 0;
-		if (_seg_metalv_checked(seg, s) &&
-		    !_suspend_resume_lv(seg_metalv(seg, s)))
+		if ((lv1 = _seg_metalv_checked(seg, s)) &&
+		    !_suspend_resume_lv(lv1))
 			return 0;
 	}
 
 	if (!backup(vg))
 		log_error("Backup of VG %s failed; continuing", vg->name);
 
-	return 2;
+	return 1;
+	// return 2; /* Fails to remove last sub LVs MDs */
 }
 
 /*
@@ -6563,7 +6582,7 @@ static int _raid_split_duplicate(struct logical_volume *lv, int yes,
 	split_lv->status &= ~(LV_NOTSYNCED | LV_DUPLICATED);
 	lv_set_visible(split_lv);
 
-	/* Shift areas down if split LV wasn't the last one */
+	/* Have to shift areas down if split LV wasn't the last one to avoid areas inconsistency */
 	for ( ; s < seg->area_count; s++) {
 		seg->areas[s] = seg->areas[s + 1];
 		seg->meta_areas[s] = seg->meta_areas[s + 1];
@@ -10341,6 +10360,10 @@ int lv_raid_replace(struct logical_volume *lv,
 		    struct dm_list *remove_pvs,
 		    struct dm_list *allocate_pvs)
 {
+#if 0
+log_error("1 lv_raid_healthy=%d", lv_raid_healthy(lv)); // Yes
+usleep(500000);
+#endif
 	return _lv_raid_replace(lv, lv, yes, remove_pvs, allocate_pvs, 0);
 }
 
