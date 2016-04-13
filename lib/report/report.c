@@ -2097,7 +2097,7 @@ static int __segdata_offset_disp(struct dm_report *rh, struct dm_pool *mem,
 						if (seg_is_reshapable_raid(first_seg(lvl->lv))) {
 							uint64_t data_offset;
 
-							if (lv_raid_offset_and_sectors(lvl->lv, &data_offset, NULL)) {
+							if (lv_raid_data_offset(lvl->lv, &data_offset)) {
 								if (new_data_offset && !lv_raid_image_in_sync(seg->lv))
 									data_offset = data_offset ? 0 :
 										      seg->reshape_len * seg->lv->vg->extent_size;

@@ -486,6 +486,7 @@ uint32_t raid_rimage_extents(const struct segment_type *segtype,
 
 	RETURN_IF_ZERO(segtype, "segtype argument");
 
+PFLA("segtype=%s extents=%u stripes=%u, data_copies=%u", segtype->name, extents, stripes, data_copies);
 	if (!extents ||
 	    segtype_is_mirror(segtype) ||
 	    segtype_is_raid1(segtype) ||
@@ -759,9 +760,10 @@ static int _lv_is_degraded(struct logical_volume *lv)
  *
  * Returns: 1 if in-sync, 0 otherwise.
  */
+#define RAID_IN_SYNC_RETRIES	6
 static int _raid_in_sync(const struct logical_volume *lv)
 {
-	int retries = 6;
+	int retries = RAID_IN_SYNC_RETRIES;
 	dm_percent_t sync_percent = DM_PERCENT_0;
 	struct lv_segment *seg;
 
@@ -770,10 +772,7 @@ static int _raid_in_sync(const struct logical_volume *lv)
 	if (seg_is_striped(seg) || seg_is_any_raid0(seg))
 		return 1;
 
-PFLA("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
-log_error("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
-	while (sync_percent == DM_PERCENT_0 && retries--) {
-log_error("retries=%d", retries);
+	do {
 		/*
 		 * FIXME We repeat the status read here to workaround an
 		 * unresolved kernel bug when we see 0 even though the 
@@ -786,13 +785,15 @@ log_error("retries=%d", retries);
 			return 0;
 		}
 PFLA("sync_percent=%d DM_PERCENT_100=%d", sync_percent, DM_PERCENT_100);
-		if (sync_percent == DM_PERCENT_100)
+		if (sync_percent > DM_PERCENT_0)
+			break;
+		if (!retries)
 			log_warn("WARNING: Sync status for %s is inconsistent.",
 				 display_lvname(lv));
 		if (sync_percent)
 			break;
 		usleep(500000);
-	}
+	} while (retries--);
 
 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
 }
@@ -1858,7 +1859,7 @@ static int _extract_image_component_sublist(struct lv_segment *seg,
 	struct lv_list *lvl;
 
 	RETURN_IF_ZERO(seg, "seg argument");
-printf("seg->area_count=%u end=%u idx=%u", seg->area_count, end, idx);
+PFLA("seg->area_count=%u end=%u idx=%u", seg->area_count, end, idx);
 	RETURN_IF_SEG_AREA_INDEX_FALSE(seg, idx);
 	RETURN_IF_NONZERO(end > seg->area_count || end <= idx, "area index wrong for segment");
 	RETURN_IF_ZERO(seg_lv(seg, idx), "seg LV");
@@ -2772,13 +2773,13 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 
 	/* Get data_offset and dev_sectors from the kernel */
 	/* FIXME: dev_sectors superfluous? */
-	if (!lv_raid_offset_and_sectors(lv, &data_offset, &dev_sectors)) {
+	if (!lv_raid_data_offset(lv, &data_offset)) {
 		log_error("Can't get data offset and dev size for %s from kernel",
 			  display_lvname(lv));
 		return 0;
 	}
 
-PFLA("data_offset=%llu dev_sectors=%llu seg->reshape_len=%u out_of_place_les_per_disk=%u lv->le_count=%u", (unsigned long long) data_offset, (unsigned long long) dev_sectors, seg->reshape_len, out_of_place_les_per_disk, lv->le_count);
+PFLA("data_offset=%llu seg->reshape_len=%u out_of_place_les_per_disk=%u lv->le_count=%u", (unsigned long long) data_offset, seg->reshape_len, out_of_place_les_per_disk, lv->le_count);
 
 	/*
 	 * Check if we have reshape space allocated or extend the LV to have it
@@ -4509,6 +4510,7 @@ static int _reshape_adjust_to_size(struct logical_volume *lv,
 
 	RETURN_IF_LV_SEG_ZERO(lv, (seg = first_seg(lv)));
 
+PFLA("%s lv->le_count=%u seg->len=%u\n", __func__, lv->le_count, seg->len);
 	if (!_lv_reshape_get_new_len(lv, old_image_count, new_image_count, &new_le_count))
 		return 0;
 
@@ -5028,6 +5030,7 @@ static int _raid_reshape(struct logical_volume *lv,
 PFLA("old_image_count=%u new_image_count=%u new_region_size=%u", old_image_count, new_image_count, new_region_size);
 	dm_list_init(&removal_lvs);
 
+	/* No change in layout requested ? */
 	if (seg->segtype == new_segtype &&
 	    seg->data_copies == new_data_copies &&
 	    seg->region_size == new_region_size &&
@@ -5182,6 +5185,9 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), segtype);
+
+	if (seg_is_raid10_near(seg) && segtype_is_raid1(segtype))
+		return 0;
 
 	/* No layout change -> allow for removal of reshape space */
 	if (seg->segtype == segtype &&
@@ -5586,11 +5592,17 @@ static struct possible_takeover_reshape_type _possible_takeover_reshape_types[] 
 	  .current_areas = ~0U,
 	  .options = ALLOW_NONE },
 
-	/* raid10_near <-> raid10_near*/
+	/* raid10_near <-> raid10_near */
 	{ .current_types  = SEG_RAID10_NEAR,
 	  .possible_types = SEG_RAID10_NEAR,
 	  .current_areas = ~0U,
 	  .options = ALLOW_DATA_COPIES|ALLOW_STRIPES },
+
+	/* raid10_near <-> raid1 */
+	{ .current_types  = SEG_RAID10_NEAR,
+	  .possible_types = SEG_RAID1,
+	  .current_areas = ~0U,
+	  .options = ALLOW_NONE },
 
 	/* raid10_far <-> raid10_far */
 	{ .current_types  = SEG_RAID10_FAR,
@@ -8659,16 +8671,31 @@ TAKEOVER_FN(_r10_r0m)
 	return _raid10_striped_r0(lv, new_segtype, yes, 0, 0, 1 /* data_copies */, 0, 0, 0, allocate_pvs, &removal_lvs);
 }
 
-/* raid10 with 2 images -> raid1 */
+/* raid10 with stripes == data_copies images -> raid1 */
 TAKEOVER_FN(_r10_r1)
 {
 	struct lv_segment *seg;
 
 	RETURN_IF_LV_SEG_SEGTYPE_ZERO(lv, (seg = first_seg(lv)), new_segtype);
 PFL();
-	return (seg_is_raid10_near(seg) && seg->data_copies == seg->area_count &&
-	        _raid10_r1456(lv, new_segtype, yes, force, new_image_count, seg->data_copies,
-			     seg->area_count, 0, new_region_size, allocate_pvs));
+	if (!seg_is_raid10_near(seg)) {
+		log_error("Can't convert %s LV %s to raid1",
+			  lvseg_name(seg), display_lvname(lv));
+		goto bad;
+	}
+
+	if (seg->data_copies != seg->area_count) {
+		log_error("Can't convert %s LV %s to raid1 with data_copies != stripes",
+			  lvseg_name(seg), display_lvname(lv));
+		goto bad;
+	}
+
+	return _raid10_r1456(lv, new_segtype, yes, force, new_image_count, seg->data_copies,
+			     seg->area_count, 0, new_region_size, allocate_pvs);
+
+bad:
+	log_error("Please use \"lvconvert --duplicate --type raid1 ... %s\"", display_lvname(lv));
+	return 0;
 }
 
 /* Helper: raid10_near with N images to M images (N != M) */
@@ -9606,7 +9633,7 @@ PFL();
 				   stripes, stripe_size, rcp.allocate_pvs))
 			goto err;
 
-		goto out;;
+		goto out;
 	case 2:
 		/* Error if we got here with stripes and/or stripe size change requested */
 		return 0;

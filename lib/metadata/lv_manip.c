@@ -4398,7 +4398,7 @@ PFLA("extending %s in %s, str=%u", display_lvname(sub_lv), lv->name, str);
 			return 0;
 		}
 
-PFLA("last_seg(seg_lv(seg, s))->len=%u last_seg(seg_lv(seg, s))->area_len=%u", last_seg(seg_lv(seg, s))->len, last_seg(seg_lv(seg, s))->area_len);
+PFLA("sub_lv->le_count=%u last_seg(sub_lv))->len=%u last_seg(sub_lv))->area_len=%u", sub_lv->le_count, last_seg(sub_lv)->len, last_seg(sub_lv)->area_len);
 
 		/* Add any pre-allocated and pre-wiped metadata LVs */
 		if (!dm_list_empty(meta_lvs)) {
@@ -4415,6 +4415,7 @@ PFLA("last_seg(seg_lv(seg, s))->len=%u last_seg(seg_lv(seg, s))->area_len=%u", l
 	}
 
 #if 1
+PFLA("segtype=%s extents=%u lv->le_count=%u seg->len=%u seg->area_len=%u seg->reshape_len=%u", lvseg_name(seg), extents, lvseg_name(seg), lv->le_count, seg->len, seg->area_len, seg->reshape_len);
 	seg->len = raid_total_extents(seg->segtype, stripes * sub_lv->le_count, stripes,
 				      (seg_is_any_raid10(seg) ? 1 : mirrors)) /
 		   (seg_is_any_raid10(seg) ? mirrors : 1);
@@ -4423,7 +4424,7 @@ PFLA("last_seg(seg_lv(seg, s))->len=%u last_seg(seg_lv(seg, s))->area_len=%u", l
 PFLA("segtye=%s lv->le_count=%u seg->len=%u seg->area_len=%u", lvseg_name(seg), lv->le_count, seg->len, seg->area_len);
 	lv->le_count = seg->len;
 	lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
-PFLA("lv->le_count=%u", lv->le_count);
+PFLA("lv->le_count=%u lv->size=%llu", lv->le_count, (unsigned long long) lv->size);
 
 	/*
 	 * The extended image LVs have to be split in #data_copies
@@ -5429,7 +5430,7 @@ static int _lvresize_adjust_extents(struct cmd_context *cmd, struct logical_volu
 	uint32_t area_multiple;
 	uint32_t stripesize_extents;
 	uint32_t size_rest;
-	uint32_t existing_logical_extents = lv->le_count; //  - seg->reshape_len * (seg->area_count - seg->segtype->parity_devs);
+	uint32_t existing_logical_extents = lv->le_count;
 	uint32_t existing_physical_extents, saved_existing_physical_extents;
 	uint32_t seg_size = 0;
 	uint32_t new_extents;

@@ -180,7 +180,12 @@ typedef enum {
 /* Return length of segment depending on type and reshape_len */
 static uint32_t _seg_len(const struct lv_segment *seg)
 {
-	return seg->len - (seg_is_raid(seg) ? ((seg->area_count - seg->segtype->parity_devs) * seg->reshape_len) : 0);
+	uint32_t reshape_len = seg_is_raid(seg) ? ((seg->area_count - seg->segtype->parity_devs) * seg->reshape_len) : 0;
+
+	if (seg_is_any_raid10(seg))
+		reshape_len /= seg->data_copies;
+
+	return seg->len - reshape_len;
 }
 
 static int _info_run(info_type_t type, const char *name, const char *dlid,

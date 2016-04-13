@@ -271,9 +271,7 @@ int lv_raid_percent(const struct logical_volume *lv, dm_percent_t *percent)
 {
 	return 0;
 }
-int lv_raid_offset_and_sectors(const struct logical_volume *lv,
-			       uint64_t *data_offset,
-			       uint64_t *dev_sectors)
+int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
 {
 	return 0;
 }
@@ -919,9 +917,7 @@ int lv_raid_dev_count(const struct logical_volume *lv, uint32_t *dev_cnt)
 	return 1;
 }
 
-int lv_raid_offset_and_sectors(const struct logical_volume *lv,
-			       uint64_t *data_offset,
-			       uint64_t *dev_sectors)
+int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
 {
 	int r;
 	struct dev_manager *dm;
@@ -940,8 +936,6 @@ int lv_raid_offset_and_sectors(const struct logical_volume *lv,
 		stack;
 
 	*data_offset = status->data_offset;
-	if (dev_sectors)
-		*dev_sectors = status->total_dev_sectors;
 
 	dev_manager_destroy(dm);
 
