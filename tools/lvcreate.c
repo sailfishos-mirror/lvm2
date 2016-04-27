@@ -1507,7 +1507,7 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 		stack;
 		return EINVALID_CMD_LINE;
 	}
-PFLA("lp.stripe_size=%u", lp.stripe_size);
+PFLA("lp.stripe_size=%u lp.region_size=%u", lp.stripe_size, lp.region_size);
 
 	if (!_check_pool_parameters(cmd, NULL, &lp, &lcp)) {
 		stack;
