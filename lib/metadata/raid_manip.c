@@ -4859,7 +4859,7 @@ static int _lv_raid10_resize_data_copies(struct logical_volume *lv,
 	RETURN_IF_ZERO((raid0_meta_segtype = get_segtype_from_flag(lv->vg->cmd, SEG_RAID0_META)),
 		       "raid0_meta segment type found?");
 
-	if (new_data_copies < 2 || new_data_copies > seg->area_count) {
+	if (new_data_copies < 1 || new_data_copies > seg->area_count) {
 		log_error("Number of data copies invalid for %s LV %s", lvseg_name(seg), display_lvname(lv));
 		return 0;
 	}
@@ -5250,7 +5250,8 @@ PFL();
 	    (seg_is_raid10_far(seg) && !segtype_is_striped(segtype))) {
 		if (data_copies == seg->data_copies &&
 		    region_size == seg->region_size) {
-			log_error("Can't convert (to) raid10_far");
+			log_error("Can't convert %sraid10_far",
+	    			  seg_is_raid10_far(seg) ? "" : "to ");
 			goto err;
 		}
 	}
@@ -5300,7 +5301,7 @@ PFL();
 			return 0;
 
 		if (seg_is_raid10_far(seg))
-			return 1;
+			return segtype_is_raid10_far(segtype) ? 1 : 0;
 
 		if (seg_is_raid10_offset(seg)) {
 			log_error("Can't change number of data copies on %s LV %s",
@@ -6864,9 +6865,9 @@ static int _pre_raid_duplicate_rename_metadata_sub_lvs(struct logical_volume *lv
 	if (!_activate_sub_lvs(dup_lv, 0))
 		return 0;
 
-	if (seg->area_count == 2 &&
-	    !_activate_sub_lvs(seg_lv(seg, 0), 0))
-		return 0;
+	for (s = 0; s < seg->area_count; s++)
+		if (!_activate_sub_lvs(seg_lv(seg, s), 0))
+			return 0;
 
 	/*
 	 * Optionally pass "nosync" to kernel in case of LV_NOTSYNCED flag;
@@ -7074,10 +7075,12 @@ PFLA("seg->area_count=%u", seg->area_count);
 		return 0;
 	_allow_pvs(allocate_pvs);
 
-	for (s = 0; s < new_area_idx; s++)
+	for (s = 0; s < seg->area_count; s++)
 		seg_lv(seg, s)->status &= ~LV_REBUILD;
 
-	dup_lv->status |= LV_REBUILD;
+	if (seg->area_count > 2)
+		dup_lv->status |= LV_REBUILD;
+
 	dup_lv->status &= ~LV_NOTSYNCED;
 
 	if (segtype_is_any_raid6(new_segtype))
@@ -7089,7 +7092,6 @@ PFLA("lv0->le_count=%u lv1->le_count=%u", seg_lv(seg, 0)->le_count, seg_lv(seg, 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, NULL,
 							 _post_raid_duplicate_rename_metadata_sub_lvs, dup_lv,
 							 _pre_raid_duplicate_rename_metadata_sub_lvs, dup_lv);
-
 err:
 	return lv_remove(dup_lv);
 }
@@ -9329,6 +9331,7 @@ static int _raid_convert_define_parms(const struct lv_segment *seg,
 	*stripe_size = *stripe_size ?: seg->stripe_size;
 	*data_copies = *data_copies > -1 ? *data_copies : (duplicate ? 1 : seg->data_copies);
 	*region_size = *region_size ?: seg->region_size;
+PFLA("*datacpies=%u", *data_copies);
 
 	/* Check region size */
 	if (!*region_size &&
@@ -9349,7 +9352,7 @@ static int _raid_convert_define_parms(const struct lv_segment *seg,
 
 	} else if (segtype_is_mirror(*segtype) ||
 		   segtype_is_raid1(*segtype)) {
-		*data_copies = *data_copies < 2 ? 2 : *data_copies;
+		*data_copies = *data_copies < 1 ? 1 : *data_copies;
 		*stripes = 1;
 		*stripe_size = 0;
 
@@ -9740,7 +9743,7 @@ PFLA("yes=%d new_segtype=%s data_copies=%u stripes=%u stripe_size=%u", rcp.yes, 
 					 rcp.stripes, rcp.stripe_size))
 		return _log_possible_conversion_types(lv, new_segtype);
 
-PFLA("new_segtype=%s image_count=%u stripes=%u stripe_size=%u", new_segtype->name, image_count, stripes, stripe_size);
+PFLA("new_segtype=%s image_count=%u data_copies=%u stripes=%u stripe_size=%u", new_segtype->name, image_count, data_copies, stripes, stripe_size);
 	/*
 	 * Table driven takeover, i.e. conversions from one segment type to another
 	 */
