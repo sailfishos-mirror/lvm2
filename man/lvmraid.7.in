@@ -1,0 +1,498 @@
+.TH "LVMRAID" "7" "LVM TOOLS #VERSION#" "Red Hat, Inc" "\""
+
+.SH NAME
+lvmraid \(em LVM RAID Support
+
+.SH DESCRIPTION
+LVM raid allows to create,convert,extend and reduce redundant LVs.
+Those are capable of standing 1-N disk failures without data loss.
+raid0 as the only exception without redundancy provides pure striping.
+
+The layout of a RAID LV can be defined via the \-\-type option as
+raid0 (striping, resilience 0),
+raid1 (mirroring, no striping, resilience N-1),
+raid4/5 (striping, resilience 1),
+raid6 (striping, resilience 2) and
+raid10 (striping and mirroring, resilience #mirrors - 1).
+
+A RAID LV is a compound of paired data and metadata sub LVs; the
+latter store superblock and bitmap metadata to describe its layout,
+size, state and to keep track about regions to resynchronize.
+The sub LVs are hidden, thus can be listed with "lvs -a".
+
+Metadata sub LVs are optional with raid0, but can be preallocated
+to provide metadata space if a raid level conversion (see below) is
+intended later on. Their size is dynamic depending on the size of
+the bitmap which in turn depends on the region size (option \-\-regionsize).
+
+raid1 mirrors across N data sub LVs.
+
+raid5 has layout algorithms of left/right/symmetric/asymmetric data
+and parity block rotations (raid5_ls,raid5_rs,raid5_la,raid5_ra) and
+raid_n for dedicated last parity disk which is the same layout as raid4.
+A raid5 LV has a minimum of 3 device pairs with parity block xor calculation.
+A special case is a raid4/5 LV with 2 legs which has the same layout as raid1
+for conversion from/to it (see takeover below).
+
+raid6 has layout algorithms of left/right/symmetric/asymmetric with
+dedicated Q-Syndrome sub LV pair, zero restart/N restart/N continue and
+ dedicated parity/Q-Syndrome (raid6_ls_6,raid6_rs_6,raid6_la_6,raid6_ra_6,
+raid6_zr,raid6_nr,raid6_nc and raid6_n_6 respectively).
+A raid6 LV has a minimum of 4 sub LV pairs.
+
+raid10 has layout algorithms of near, far and offset holding at least 2 copies
+of any data blocks defined by the \-\-mirrors option.
+
+RAID LVs can be converted between raid levels or their layout can
+be changed keeping the level (stripesize change, change number of sub LVs).
+The former is a takeover, the latter a reshaping conversion.
+Takeover and reshape conversions are subject to MD RAID kernel restrictions
+(e.g. raid10_far can't be converted at all).
+
+LVM raid also supports LV duplication removing any of such constraints.
+A duplicated LV is a raid1 mirror with N legs with the legs being complex sub LVs
+of almost arbitrary layout; it can be created from almost any arbitrary LV.
+A duplicating LV can be unduplicated keeping any of its sub LVs, thus migrating to
+its layout. Any sub LV can be split off with and without tracking to be
+able to merge one tracked sub LV back into the duplicating LV.
+See further details/examples below.
+
+.SH Raid Terms
+
+.TP
+RaidDataLVs
+.br
+raid data LVs
+.br
+large LVs created in a VG
+.br
+used by raid to store raid data and parity blocks.
+
+.TP
+RaidMetaLV
+.br
+raid metadata LV
+.br
+small LVs created in a VG
+.br
+used to store superblocks and bitmaps paired with each raid data LV;
+dynamically resized when resizing the RAID LV or adjusting the region size.
+
+RaidDataLV and RaidMetaLV are paired to form a "leg" of a raid set.
+They are hidden and can be listed with "lvs \-a".
+
+.TP
+Raid Takeover
+.br
+Change the raid level of an LV (e.g. raid5 -> raid6).
+
+.TP
+Raid Reshape
+.br
+Change the raid layout keeping the level of an LV (e.g. raid5_ls -> raid5_ra
+or stripesize from 32K to 128K or from 3 data stripes to 5).
+
+.SH
+RAID levels and other mappings supporting takeover
+.br
+raid0 <-> raid4/5
+.br
+raid0 <-> raid6
+.br
+raid0 <-> raid10 (with even number of legs)
+.br
+raid1 <-> raid10
+.br
+raid1 (2 legs) <-> raid4/5
+.br
+striped (one stripe zone) <-> raid0
+.br
+striped (one stripe zone) <-> raid4/5
+.br
+striped (one stripe zone) <-> raid6
+.br
+striped (one stripe zone) <-> raid10 near (with even number of legs)
+.br
+striped (one stripe zone) <-> raid10 far
+.br
+mirror <-> raid1 (maximum 7 mirrors or 8 legs)
+.br
+linear <-> mirror/raid1
+.br
+
+.SH
+RAID levels supporting reshape
+.br
+algo = algorithm
+.br
+rs = regionsize
+.br
+ss = stripesize
+.br
+al = add legs
+.br
+rl = remove legs
+.br
+
+.br
+raid1        : rs, al/rl (2 <= legs <= 253)
+.br
+raid4        : ss, rs, al/rl (2 <= legs <= 253)
+.br
+raid5/6      : algo, ss, rs, al/rl (2 <= legs <= 253)
+.br
+raid10_near  : algo -> raid10_offset, ss, rs, al (2 <= legs <= 253)
+.br
+raid10_offset: algo -> raid10_near, ss, rs, al (2 <= legs <= 253)
+.br
+raid10_far   : rs, change number of data copies (2 <= legs <= stripes)
+.br
+
+.SH RAID data (D), parity (P) (and Q-syndrome (Q)) layout across the legs
+"raid4 and raid5_n" stripe the data across the legs with
+the xor parity blocks stored on the last leg,
+.br
+e.g. with 4 legs:
+.br
+D1 D2 D3 P123
+.br
+D4 D5 D6 P456
+.br
+.B ...
+
+"raid5_ls" stripes the data across the legs symmetrically with
+the xor parity blocks rotating to the left,
+.br
+e.g. with 4 legs:
+.br
+D0 D1 D2 P012
+.br
+D4 D5 P345 D3
+.br
+D8 P678 D6 D7
+.br
+.B ...
+
+"raid5_la" stripes the data across the legs asymmetrically with
+the xor parity blocks rotating to the left,
+.br
+e.g. with 4 legs:
+.br
+D0 D1 D2 P012
+.br
+D3 D4 P345 D5
+.br
+D6 P678 D7 D8
+.br
+.B ...
+
+"raid5_rs" stripes the data across the legs symmetrically with
+the xor parity blocks rotating to the right,
+.br
+e.g. with 4 legs:
+.br
+P012 D0 D1 D2
+.br
+D5 P345 D3 D4
+.br
+D7 D8 P678 D6
+.br
+.B ...
+
+"raid5_ra" stripes the data across the legs asymmetrically with
+the xor parity blocks rotating to the right,
+.br
+e.g. with 4 legs:
+.br
+P012 D0 D1 D2
+.br
+D3 P345 D4 D5
+.br
+D6 D7 P678 D8
+.br
+.B ...
+
+"raid6_ls_6, raid6_la_6, raid6_rs_6, raid6_ra_6 and raid6_n_6"
+.br
+have the very same layout on legs 1 - (N-1) as
+.br
+"raid5_ls, raid5_la, raid5_rs, raid6_ra and raid5_n"
+.br
+repectively to allow for takeover, with the Q-syndrome blocks on dedicated leg N,
+.br
+e.g. raid6_ra_6 with 5 legs:
+.br
+P012 D0 D1 D2 Q012
+.br
+D3 P345 D4 D5 Q345
+.br
+D6 D7 P678 D8 Q678
+.br
+.B ...
+
+"raid6_zr" stripes the data across the legs asymmetrically with
+the parity/Q-syndrome blocks rotating to the right,
+.br
+e.g. with 5 legs:
+.br
+P012 Q012 D0 D1 D2
+.br
+D3 P345 Q345 D4 D5
+.br
+D6 D7 P678 Q678 D8
+.br
+.B ...
+
+"raid6_nr" stripes the data across the legs asymmetrically with
+the parity/Q-syndrome blocks rotating to the left,
+.br
+e.g. with 5 legs:
+.br
+D0 D1 D2 P012 Q012
+.br
+D3 D4 P345 Q345 D5
+.br
+D6 P678 Q678 D7 D8
+.br
+.B ...
+
+"raid6_nc" stripes the data across the legs symmetrically with
+the Q-syndrome/parity blocks rotating to the left,
+.br
+e.g. with 5 legs:
+.br
+D0 D1 D2 Q012 P012
+.br
+D4 D5 Q345 P345 D3
+.br
+D8 Q678 P678 D6 D7
+.br
+.B ...
+
+"raid10_near" stripe the data copies on sequent legs wrapped in a rotating layout,
+e.g. with 2 data copies and 3 legs:
+.br
+D1 D1 D2
+.br
+D2 D3 D3
+.br
+.B ...
+
+With "raid10_offset", the data copies are stored on sequent stripes in a rotating layout,
+e.g. with 2 data copies and 3 legs:
+.br
+D1 D2 D3
+.br
+D3 D1 D2
+.br
+.B ...
+
+With "raid10_far", the data copies are stored in sequent stripe zones,
+e.g. with 2 data copies and 3 legs:
+.br
+D1 D2 D3
+.br
+D4 D5 D6
+.br
+.B ...
+.br
+D1 D2 D3
+.br
+D4 D5 D6
+
+.SH Raid Usage
+
+The primary method for using lvm raid:
+
+.SS 1. create raid LV
+
+Create an RAID LV
+
+.B lvcreate \-\-name RaidLV \-L Size \-\-type RaidType [\-\-stripes N] [\-\-stripesize S] [\-\-mirrors M] [\-\-nosync] VG
+
+.I Example
+.br
+# lvcreate \-y \-n myraid \-L 100G \-\-type raid6_nr \-\-stripes 4 vg
+
+creates a raid6 LV with N-restart layout.
+
+.I Example
+.br
+# lvcreate \-y \-n myraid1 \-L 55G \-\-type raid10_offset \-i 5 \-m 2 vg
+
+creates a raid10 LV with offset layout, 5 stripes and 3 rotating data copies.
+
+.SS 2. convert a raid LV
+
+.B lvconvert [\-\-yes] \-\-type RaidType VG/LV
+
+.I Example
+.br
+# lvconvert \-y \-\-stripes 7 vg/myraid
+
+converts (reshapes) the "myraid" LV by adding another 3 sub LV pairs thus growing
+the raid LV size by 7/4 (rounded). 
+
+.I Example
+.br
+# lvconvert \-y \-\-type raid6_n_6 vg/myraid
+
+converts the "myraid" LV from raid6_nr to raid6_n_6, which is a reshape
+changing the layout of the data and parity/Q-Syndrome blocks to store them
+dedicated on the last 2 sub LVs.
+
+.I Example
+.br
+# lvconvert \-y \-\-type raid5 vg/myraid
+
+converts the "myraid" LV from raid6_n_6 to raid5_n, which is a takeover
+removing the last sub LV pair holding the Q-syndrome blocks.
+
+.I Example
+.br
+# lvconvert \-y \-\-type raid0_meta vg/myraid
+
+converts the "myraid" LV from raid5_n to raid0 with metadata sub LVs,
+which is a takeover removing the last sub LV pair holding the xor parity blocks.
+
+
+.I Example
+.br
+It is possible to convert from/to other LV types to/from raid as well:
+
+# lvcreate \-y \-n myraid2 \-i 3 \-L33G vg
+
+creates a striped LV with 3 stripes of 33GiB.
+
+.br
+# lvconvert \-y \-\-type raid6 vg/myraid2
+
+converts the striped LV to raid6_n_6, which is a takeover.
+
+.br
+# lvconvert \-y \-\-stripes 5 vg/myraid2
+
+converts the raid6_n_6 LV from 3 to 5 data stripes, which is a reshape.
+Size grows by 5/3 (rounded).
+
+.br
+# lvconvert \-y \-\-type striped vg/myraid2
+
+converts the raid6_n_6 LV back to striped, thus finishing up our 3 step restripe.
+This is a takeover.
+
+
+.br
+#lvcreate \-y \-n myraid3 \-\-type mirror \-m 1 \-L16G vg
+
+creates an old type mirror with 2 legs and 16GiB size.
+
+.br
+#lvconvert \-\-type raid \-m 3 vg/myraid3
+
+converts vg/myraid3 from mirror to raid1 and adds 2 more legs.
+This is a takeover.
+
+.br
+#lvconvert \-\-splitmirror 2 \-n myraid4 vg/myraid3
+
+splits off 2 legs of vg/myraid3 into new raid1 vg/myraid4,
+thus leaving 2 legs in myraid3.
+
+converts vg/myraid3 from mirror to raid1 and adds 2 more legs.
+This is a takeover.
+
+.SS 3. create a duplicating RAID LV
+.br
+.B lvconvert [\-\-yes] [\-\-force] \-\-duplicate \-\-type Type [\-\-stripes N] [\-\-stripesize S] [\-\-mirrors M] VG/RaidLV [PvList]
+
+.I Example
+.br
+# lvcreate \-y \-n myraid4 \-L 22G vg
+
+creates a linear LV named myraid4 of size 22GiB.
+
+# lvconvert \-y \-\-duplicate \-\-type raid10_offset \-\-stripes 7 \-m 3 vg/myraid4
+
+creates a duplicating LV with the given linear LV as leg 1 and
+a new sub LV of type raid10_offset with 7 stripes and 4 data copies
+as leg 2 keeping LV name vg/myraid4 and synchronizes leg 1 to 2.
+
+# lvconvert \-y \-\-unduplicate \-\-name myraid4_dup_1 vg/myraid4
+
+unduplicates vg/myraid4 (has to be fully synchronized) keeping the
+raid10_offset sub LV removing any other sub LVs (the linear one we
+ started out with in this example).
+
+# lvconvert \-y \-\-duplicate \-\-type raid6 \-\-stripes 3 \-I 128K vg/myraid4
+
+creates a duplicating LV with the given raid10_offset LV as leg 1 and
+a new sub LV of type raid6(_zr) with 3 data stripes (5 total stripes)
+and stripsize 128KiB as leg 2 keeping LV name vg/myraid4.
+
+# lvconvert \-y \-\-duplicate \-\-type striped \-\-stripes 4 \-I 16K vg/myraid4
+
+adds a striped LV with 4 stripes and stripesize 16KiB as leg 3 to the
+fully synchronized duplicating LV vg/myraid4. Now any of the 3 sub LVs
+can be kept when unduplicating after it got fully synchronized or can be
+split of, optionally tracking one of them to be merged back in later on.
+
+.SS Command to repair a raid LV:
+.br
+.B lvconvert \-\-repair VG/RaidLV [PvList]
+
+Repair allocates new RaidDataLV and RaidMetaLV pair(s) for failed ones
+
+
+
+The lvm daemon dmeventd (lvm2-monitor) monitors the redundancy of
+raid LVs warns about any sub LV failures or automaically repairs them
+depending on lvm.conf settings.
+
+.I monitoring
+
+When a raid is activated, dmeventd will begin monitoring it by default.
+
+Command to start or stop dmeventd monitoring a raid pool LV:
+.br
+.B lvchange \-\-monitor {y|n} VG/RaidLV
+
+The current dmeventd monitoring status of a raid LV can be displayed
+with the command lvs -o+seg_monitor.
+
+.BR lvm.conf (5)
+.B thin_pool_autoextend_percent
+.br
+defines how much extra data space should be added to the thin pool LV from
+the VG, in percent of its current size.
+
+.I disabling
+
+There are multiple ways that repair of raid LVs could be prevented:
+
+.IP \[bu] 2
+If the dmeventd daemon is not running, no monitoring or automatic
+repair will occur.
+
+.IP \[bu]
+Even when dmeventd is running, all monitoring can be disabled with the
+lvm.conf monitoring setting.
+
+.IP \[bu]
+To activate or create a raid LV without interacting with dmeventd,
+the --ignoremonitoring option can be used.  With this option, the command
+will not ask dmeventd to monitor the thin pool LV.
+
+
+
+.SH SEE ALSO
+.BR lvm (8),
+.BR lvm.conf (5),
+.BR lvmconfig (8),
+.BR lvcreate (8),
+.BR lvconvert (8),
+.BR lvchange (8),
+.BR lvextend (8),
+.BR lvremove (8),
+.BR lvs (8)
+
