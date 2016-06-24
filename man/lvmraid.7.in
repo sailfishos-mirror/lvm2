@@ -296,9 +296,9 @@ D4 D5 D6
 .br
 .B ...
 .br
-D1 D2 D3
+D3 D1 D2
 .br
-D4 D5 D6
+D6 D4 D5
 
 .SH Raid Usage
 
