@@ -344,7 +344,7 @@ int dm_get_status_cache(struct dm_pool *mem, const char *params,
 /*
  * Snapshot target's format:
  * <= 1.7.0: <used_sectors>/<total_sectors>
- * >= 1.8.0: <used_sectors>/<total_sectors> <metadata_sectors>
+ * >= 1.9.0: <used_sectors>/<total_sectors> <metadata_sectors>
  */
 struct dm_status_snapshot {
 	uint64_t used_sectors;          /* in 512b units */

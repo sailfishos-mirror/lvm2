@@ -4647,7 +4647,7 @@ PFLA("extents=%u ah->new_extents=%u lv->le_count=%u stripes=%u sub_lv_count=%u",
 					  lv->vg->name, lv->name);
 				goto out;
 			} else if (sync_percent == DM_PERCENT_100) {
-				log_verbose("Skipping initial resync for "
+				log_error("Skipping initial resync for "
 					    "extended portion of %s/%s",
 					    lv->vg->name, lv->name);
 				init_mirror_in_sync(1);

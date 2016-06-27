@@ -95,6 +95,7 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
 
 	lp->resizefs = arg_is_set(cmd, resizefs_ARG);
 	lp->nofsck = arg_is_set(cmd, nofsck_ARG);
+	lp->nosync = lp->resize == LV_EXTEND && arg_is_set(cmd, nosync_ARG);
 
 	if (!argc) {
 		log_error("Please provide the logical volume name");

@@ -580,6 +580,7 @@ struct lvresize_params {
 
 	int resizefs;
 	int nofsck;
+	int nosync;
 
 	int argc;
 	char **argv;

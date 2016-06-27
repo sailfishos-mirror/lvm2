@@ -26,8 +26,8 @@
 
 /* HM FIXME: REMOVEME: devel output */
 #if 0
-#define PFL() fprintf(stderr, "%s %u\n", __func__, __LINE__);
-#define PFLA(format, arg...) fprintf(stderr, "%s %u " format "\n", __func__, __LINE__, arg);
+#define PFL() fprintf(stderr, "%s:%u(%s)\n", __FILE__, __LINE__, __func__);
+#define PFLA(format, arg...) fprintf(stderr, "%s:%u(%s) " format "\n", __FILE__, __LINE__, __func__, arg);
 #else
 #define PFL() ;
 #define PFLA(format, arg...) ;

@@ -1597,11 +1597,13 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg, struct lo
 {
 	RETURN_IF_ZERO(vg, "vg argument");
 
+PFL();
 	if (!vg_write(vg)) {
 		log_error("Write of VG %s failed", vg->name);
 		return_0;
 	}
 
+PFL();
 	if (lv && !suspend_lv(vg->cmd, lv)) {
 		log_error("Failed to suspend %s before committing changes",
 			  display_lvname(lv));
@@ -1609,11 +1611,13 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg, struct lo
 		return 0;
 	}
 
+PFL();
 	if (!vg_commit(vg)) {
 		log_error("Commit of VG %s failed", vg->name);
 		return_0;
 	}
 
+PFL();
 	if (do_backup && !backup(vg))
 		log_error("Backup of VG %s failed; continuing", vg->name);
 
@@ -3947,11 +3951,11 @@ static int _convert_mirror_to_raid(struct logical_volume *lv,
 	if (!_alloc_and_add_rmeta_devs_for_lv(lv, allocate_pvs))
 		return 0;
 
-	init_mirror_in_sync(1);
+	init_mirror_in_sync(new_image_count > seg->area_count ? 0 : 1);
 
 	seg->segtype = new_segtype;
 	seg->data_copies = new_image_count;
-	lv->status &= ~(MIRROR | MIRRORED);
+	lv->status &= ~(MIRROR | MIRRORED | LV_NOTSYNCED);
 	lv->status |= RAID;
 	seg->status |= RAID;
 
@@ -4003,6 +4007,8 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
 		return 0;
 	}
 
+	init_mirror_in_sync(new_image_count > seg->area_count ? 0 : 1);
+
 	/* Change image pair count to requested # of images */
 	if (new_image_count != seg->area_count) {
 		log_debug_metadata("Changing image count to %u on %s",
@@ -4010,6 +4016,7 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
 		if (!_lv_change_image_count(lv, new_image_count, allocate_pvs, removal_lvs))
 			return 0;
 	}
+
 
 	/* Remove rmeta LVs */
 	log_debug_metadata("Extracting and renaming metadata LVs");
@@ -4759,7 +4766,9 @@ PFL();
 				active_lvs++;
 		}
 
-		RETURN_IF_ZERO(devs_in_sync == active_lvs, "correct kernel/lvm active LV count");
+PFLA("devs_in_sync=%u active_lvs=%u removed_lvs=%u", devs_in_sync, active_lvs, removed_lvs);
+		RETURN_IF_ZERO(devs_in_sync == new_image_count, "correct kernel/lvm active LV count");
+		// RETURN_IF_ZERO(devs_in_sync == active_lvs, "correct kernel/lvm active LV count");
 		RETURN_IF_ZERO(active_lvs + removed_lvs == old_image_count, "correct kernel/lvm total LV count");
 
 		/* Reshape removing image component pairs -> change sizes accordingly */
@@ -5017,10 +5026,14 @@ static int _pre_raid_reshape(struct logical_volume *lv, void *data)
 	RETURN_IF_ZERO(data, "proper data pointer argument");
 	RETURN_IF_ZERO((old_image_count = *((uint32_t *) data)), "proper old image count");
 
+PFL();
 	/* Activate any new image component pairs */
-	if (!_vg_write_lv_suspend_vg_commit(lv) ||
-	    !_activate_sub_lvs(lv, old_image_count))
+	if (!_vg_write_lv_suspend_vg_commit(lv))
 		return 0;
+PFL();
+	if (!_activate_sub_lvs(lv, old_image_count))
+		return 0;
+PFL();
 
 	return 2; /* 1: ok, 2: metadata commited */
 }
@@ -7258,7 +7271,7 @@ PFL();
 	/* Add metadata LVs */
 	if (seg_is_raid0(seg)) {
 		log_debug_metadata("Adding metadata LVs to %s", display_lvname(lv));
-		if (!_raid0_add_or_remove_metadata_lvs(lv, 0 /* !update_and_reload */, allocate_pvs, NULL))
+		if (!_raid0_add_or_remove_metadata_lvs(lv, 1 /* update_and_reload */, allocate_pvs, NULL))
 			return 0;
 	}
 PFL();
@@ -10428,14 +10441,12 @@ PFLA("top_lv=%s replace_lv=%s", display_lvname(top_lv), display_lvname(replace_l
 			if (!_lv_raid_replace(top_lv, seg_lv(seg, s), yes, remove_pvs, allocate_pvs, 1))
 				return 0;
 
-	} else {
-		/* Replace any failed areas of @replace_lv */
-		if (!_replace_failed_areas(top_lv, replace_lv, NULL, match_count, remove_pvs, allocate_pvs))
-			return 0;
+	/* Replace any failed areas of @replace_lv */
+	} else if (!_replace_failed_areas(top_lv, replace_lv, NULL, match_count, remove_pvs, allocate_pvs))
+		return 0;
 
-		if (recursive)
-			return 1;
-	}
+	if (recursive)
+		return 1;
 
 	return _lv_update_reload_fns_reset_eliminate_lvs(top_lv, NULL,
 							 _post_dummy, NULL,
