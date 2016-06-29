@@ -1029,20 +1029,18 @@ PFLA("extents=%u stripes=%u", extents, stripes);
 	if (!stripes)
 		stripes = 1;
 
-	if (stripes > 1) {
-		uint32_t mod;
+	else if (stripes > 1) {
+		uint32_t mod = r % stripes;
 
-		if ((mod = r % stripes)) {
-			if (extend ||
-			    r < stripes)
+		if (mod)
+			if (extend || r < stripes)
 				r += stripes - mod;
 			else
-				r -= mod;
-		}
+				r -= stripes - mod;
 	}
 
 	if (r != extents)
-		log_print_unless_silent("Rounding up size of LV %s to full stripe size %s",
+		log_print_unless_silent("Rounding size of LV %s to full stripe size %s",
 			  		display_lvname(lv),
 					display_size(lv->vg->cmd, r * lv->vg->extent_size));
 PFLA("r=%u stripes=%u", r, stripes);
