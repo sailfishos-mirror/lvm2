@@ -513,7 +513,11 @@ PFLA("r=%llu", (unsigned long long) r);
 uint32_t raid_total_extents(const struct segment_type *segtype,
 			    uint32_t extents, uint32_t stripes, uint32_t data_copies)
 {
+#if 0
 	uint32_t multiplier = (segtype_is_mirror(segtype) || segtype_is_raid1(segtype) || segtype_is_raid01(segtype)) ? 1 : stripes;
+#else
+	uint32_t multiplier = (segtype_is_striped(segtype) || segtype_is_striped_raid(segtype)) ? stripes : 1;
+#endif
 
 	RETURN_IF_ZERO(segtype, "segtype argument");
 	RETURN_IF_ZERO(extents, "extents > 0");
@@ -4194,6 +4198,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 	if (!_lv_has_one_stripe_zone(lv)) {
 		log_error("Cannot convert striped LV %s with varying stripe count to raid0",
 			  display_lvname(lv));
+		log_error("Please use \"lvconvert --duplicate ...\"");
 		return NULL;
 	}
 
@@ -4496,7 +4501,6 @@ static int _reshaped_state(struct logical_volume *lv, const unsigned dev_count,
 	if (!_get_dev_health(lv, &kernel_devs, devs_health, devs_in_sync, NULL))
 		return 0;
 
-PFLA("kernel_devs=%u dev_count=%u", kernel_devs, dev_count);
 	if (kernel_devs == dev_count)
 		return 1;
 

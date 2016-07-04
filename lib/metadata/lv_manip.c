@@ -1019,24 +1019,31 @@ PFL();
 }
 
 /* Round up @extents to next stripe boundary for number of @stripes */
-static uint32_t _round_to_stripe_boundary(struct logical_volume *lv, uint32_t extents,
-					  uint32_t stripes, int extend)
+static uint32_t _round_to_stripe_boundary(struct logical_volume *lv,
+					  const struct segment_type *segtype,
+					  uint32_t extents,
+					  uint32_t stripes, uint32_t data_copies, int extend)
 {
-	uint32_t r = extents;
+	uint32_t r = extents, rr;
+
+	if (!r)
+		return r;
 
 PFLA("extents=%u stripes=%u", extents, stripes);
 	/* Caller should ensure... */
 	if (!stripes)
 		stripes = 1;
 
-	else if (stripes > 1) {
-		uint32_t mod = r % stripes;
+	if (!data_copies)
+		data_copies = 1;
 
-		if (mod)
-			if (extend || r < stripes)
-				r += stripes - mod;
-			else
-				r -= stripes - mod;
+	if (stripes > 1) {
+		r = raid_total_extents(segtype, extents, stripes, data_copies);
+		rr = extents;
+		while (r % data_copies || r < extents)
+			r = raid_total_extents(segtype, ++rr, stripes, data_copies);
+
+		r /= (segtype_is_any_raid10(segtype) ? data_copies : 1);
 	}
 
 	if (r != extents)
@@ -1397,21 +1404,27 @@ static int _is_layered_lv(struct logical_volume *lv, uint32_t s)
 	       strstr(seg_lv(seg, s)->name, "_dup_");
 }
 
+static uint32_t _lv_reshape_len(struct logical_volume *lv)
+{
+	struct lv_segment *seg = first_seg(lv);
+
+	return seg ? (seg->reshape_len * (seg->area_count - seg->segtype->parity_devs)) : 0;
+}
+
 /* Find smallest one of any sub lvs of @seg */
 static uint32_t _seg_smallest_sub_lv(struct lv_segment *seg)
 {
 	uint32_t cl, r = ~0U, s, lvs = 0;
 	struct logical_volume *lv1;
-	struct lv_segment *seg1;
 
 	/* Find smallest LV and use that for length of top-level LV */
 	for (s = 0; s < seg->area_count; s++) {
 		if (seg_type(seg, s) == AREA_LV) {
 			lv1 = seg_lv(seg, s);
-			if ((seg1 = first_seg(lv1))) {
+			if (first_seg(lv1)) {
 				lvs++;
 		
-				cl = lv1->le_count - seg1->reshape_len * (seg1->area_count - seg1->segtype->parity_devs);
+				cl = lv1->le_count - _lv_reshape_len(lv1);
 				if (cl < r)
 					r = cl;
 			}
@@ -1429,14 +1442,13 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 	int dont_recurse = !delete && extents == lv->le_count;
 	int reduced = 0;
 	struct lv_segment *seg = last_seg(lv);
-	uint32_t count, extents_sav = extents, reduction, s, stripes;
+	uint32_t count, extents_sav = extents, reduction, s;
 	struct logical_volume *pool_lv;
 
 	if (!lv->le_count)
 		return 1;
 
-	stripes = seg->area_count - seg->segtype->parity_devs;
-PFLA("lv=%s lv->le_count=%u seg=%p extents=%u stripes=%u data_copies=%u delete=%u", lv->name, lv->le_count, seg, extents, stripes, seg->data_copies, delete);
+PFLA("lv=%s lv->le_count=%u seg=%p extents=%u stripes=%u data_copies=%u delete=%u", lv->name, lv->le_count, seg, extents, seg->area_count - seg->segtype->parity_devs, seg->data_copies, delete);
 #if 1
 	/* Check for multi-level stack (e.g. reduction of a duplicated LV stack) */
 	if (!dont_recurse) {
@@ -1447,8 +1459,9 @@ PFLA("lv=%s lv->le_count=%u seg=%p extents=%u stripes=%u data_copies=%u delete=%
 				uint32_t sub_lv_extents = lv1->le_count;
 
 				if (!delete)
-					sub_lv_extents -= _round_to_stripe_boundary(lv1, lv1->le_count - extents,
+					sub_lv_extents -= _round_to_stripe_boundary(lv1, seg1->segtype, lv1->le_count - extents,
 										    seg1->area_count - seg1->segtype->parity_devs,
+										    seg1->data_copies,
 										    0 /* reduce */);
 PFLA("recursive seg_lv(seg, %u)=%s", s, display_lvname(lv1));
 				if (!_lv_reduce(lv1, sub_lv_extents, delete))
@@ -1483,7 +1496,7 @@ PFLA("end recursive seg_lv(seg, %u)=%s", s, display_lvname(lv1));
 #if 0
 	if (extents != lv->le_count &&
 	    (seg_is_striped(seg) || seg_is_striped_raid(seg)))
-		extents = _round_to_stripe_boundary(lv, extents, stripes, 0 /* reduce */);
+		extents = _round_to_stripe_boundary(lv, seg->segtype, extents, stripes, seg->data_copies, 0 /* reduce */);
 #endif
 
 	if (extents > extents_sav) {
@@ -1575,7 +1588,7 @@ PFLA("seg->lv=%s reduction=%u", display_lvname(seg->lv), reduction);
 	}
 
 	lv->le_count -= extents;
-	lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
+	lv->size = (uint64_t) (lv->le_count - _lv_reshape_len(lv)) * lv->vg->extent_size;
 
 	if (!delete)
 		return 1;
@@ -1667,13 +1680,6 @@ int lv_refresh_suspend_resume(struct cmd_context *cmd, struct logical_volume *lv
 int lv_reduce(struct logical_volume *lv, uint32_t extents)
 {
 	int delete = (extents == lv->le_count ? 1 : 0);
-
-#if 0
-	if (!delete && !lv_raid_in_sync(lv)) {
-		log_error("RAID LV %s has to be in-sync to reduce its size!", display_lvname(lv));
-		return 0;
-	}
-#endif
 
 	return _lv_reduce(lv, extents, delete);
 }
@@ -4421,7 +4427,7 @@ PFLA("segtype=%s extents=%u lv->le_count=%u seg->len=%u seg->area_len=%u seg->re
 #endif
 PFLA("segtye=%s lv->le_count=%u seg->len=%u seg->area_len=%u", lvseg_name(seg), lv->le_count, seg->len, seg->area_len);
 	lv->le_count = seg->len;
-	lv->size = (uint64_t) lv->le_count * lv->vg->extent_size;
+	lv->size = (uint64_t) (lv->le_count - _lv_reshape_len(lv))* lv->vg->extent_size;
 PFLA("lv->le_count=%u lv->size=%llu", lv->le_count, (unsigned long long) lv->size);
 
 	/*
@@ -4465,7 +4471,6 @@ int lv_extend(struct logical_volume *lv,
 	uint64_t lv_size;
 	struct lv_segment *seg = last_seg(lv);
 
-
 	log_very_verbose("Adding segment of type %s to LV %s.", segtype->name, display_lvname(lv));
 PFLA("extents=%u", extents);
 	/* Check for multi-level stack (e.g. extension of a duplicated LV stack) */
@@ -4479,7 +4484,7 @@ PFLA("extents=%u", extents);
 				struct lv_segment *seg1 = last_seg(lv1);
 	
 				stripes1 = seg1->area_count - seg1->segtype->parity_devs;
-				sub_lv_extents = _round_to_stripe_boundary(lv1, lv1->le_count + extents, stripes1, 1 /* extend */) - lv1->le_count;
+				sub_lv_extents = _round_to_stripe_boundary(lv1, seg1->segtype, lv1->le_count + extents, stripes1, seg1->data_copies, 1 /* extend */) - lv1->le_count;
 PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents);
 				if (!lv_extend(lv1, seg1->segtype, stripes1, seg1->stripe_size,
 					       seg1->data_copies, seg1->region_size, sub_lv_extents,
@@ -4503,7 +4508,7 @@ PFLA("recursive seg_lv(seg, %u)=%s extents=%u", s, display_lvname(lv1), extents)
 		    seg_is_raid01(seg) ||
 		    seg_is_striped_raid(seg)) {
 			area_count = seg->area_count;
-			stripes = area_count - seg->segtype->parity_devs;
+			stripes = stripes ? stripes : area_count - seg->segtype->parity_devs;
 			mirrors = seg->data_copies;
 
 		} else {
@@ -4528,8 +4533,8 @@ PFLA("extents=%u stripe_size=%u", extents, stripe_size);
 		/* FIXME Support striped metadata pool */
 		log_count = 1;
 
-	} else if (segtype_is_striped_raid(segtype))
-		extents = _round_to_stripe_boundary(lv, extents, stripes, 1 /* extend */);
+	} else if (segtype_is_striped(segtype) || segtype_is_striped_raid(segtype))
+		extents = _round_to_stripe_boundary(lv, segtype, extents, stripes, mirrors, 1 /* extend */);
 
 PFLA("extents=%u segtype=%s mirrors=%u stripes=%u log_count=%u", extents, segtype->name, mirrors, stripes, log_count);
 
@@ -5681,11 +5686,13 @@ PFL();
 PFLA("%s[%u] %s lp->extents=%u lp->stripes=%u seg->area_count=%u seg->segtype->parity_devs=%u", __func__, __LINE__,
 lv->name, lp->extents, lp->stripes, seg->area_count, seg->segtype->parity_devs);
 
-		lp->extents = _round_to_stripe_boundary(lv, lp->extents, lp->stripes,
+		lp->extents = _round_to_stripe_boundary(lv, seg->segtype, lp->extents, lp->stripes, lp->mirrors,
 							lp->extents < existing_physical_extents);
+#if 0
 		lp->extents = raid_total_extents(seg->segtype, lp->extents, lp->stripes, seg->data_copies);
 		if (seg_is_any_raid10(seg))
 			lp->extents /= seg->data_copies;
+#endif
 PFLA("%s[%u] lp->extents=%u", __func__, __LINE__, lp->extents);
 
 	/* Perform any rounding to produce complete stripes. */
@@ -5866,13 +5873,13 @@ static struct logical_volume *_lvresize_volume(struct cmd_context *cmd,
 
 PFLA("lp->extents=%u, lv->le_count=%u", lp->extents, lv->le_count);
 	if (lp->resize == LV_REDUCE) {
-		if (!lv_reduce(lv, lv->le_count - lp->extents))
+		if (!lv_reduce(lv, lv->le_count - _lv_reshape_len(lv) - lp->extents))
 			return_NULL;
 	} else if (lp->extents > lv->le_count && /* Ensure we extend */
 		   !lv_extend(lv, lp->segtype,
 			      lp->stripes, lp->stripe_size,
 			      lp->mirrors, first_seg(lv)->region_size,
-			      lp->extents - lv->le_count,
+			      lp->extents - (lv->le_count - _lv_reshape_len(lv)),
 			      pvh, alloc, lp->approx_alloc))
 		return_NULL;
 	else if (!pool_check_overprovisioning(lv))
@@ -6012,6 +6019,10 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
 
 	log_print_unless_silent("Logical volume %s successfully resized.", lp->lv_name);
 
+#if 1
+	if (lp->resize == LV_EXTEND)
+		lp->extents = lv->size / lv->vg->extent_size;
+#endif
 	if (lp->resizefs && (lp->resize == LV_EXTEND) &&
 	    !_fsadm_cmd(cmd, vg, lp, FSADM_CMD_RESIZE, NULL))
 		return_0;
@@ -6213,8 +6224,9 @@ PFL();
 		spvs->len = lv->le_count - current_le;
 
 PFLA("dm_list_size(&lv->segments)=%u", dm_list_size(&lv->segments));
-if (seg)
+if (seg) {
 PFLA("current_le=%u seg->le=%u seg->len=%u seg->area_len=%u", current_le, seg->le, seg->len, seg->area_len);
+}
 		if (use_pvmove_parent_lv &&
 		    !(seg = find_seg_by_le(lv, current_le))) {
 			log_error("Failed to find segment for %s extent %" PRIu32,
