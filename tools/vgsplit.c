@@ -75,6 +75,13 @@ static int _move_one_lv(struct volume_group *vg_from,
 		return 0;
 	}
 
+	/* Bail out, if any allocations of @lv are still on PVs of @vg_from */
+	if (lv_is_on_pvs(lv, &vg_from->pvs)) {
+		log_error("Can't split LV %s between "
+			  "two Volume Groups", lv->name);
+		return 0;
+	}
+
 	if (!_lv_tree_move(lvh, vg_from, vg_to))
 		return 0;
 
@@ -298,13 +305,6 @@ static int _move_raids(struct volume_group *vg_from,
 		/* Ignore, if no allocations on PVs of @vg_to */
 		if (!lv_is_on_pvs(lv, &vg_to->pvs))
 			continue;
-
-		/* Bail out, if any allocations of @lv are still on PVs of @vg_from */
-		if (lv_is_on_pvs(lv, &vg_from->pvs)) {
-			log_error("Can't split RAID %s between "
-				  "two Volume Groups", lv->name);
-			return 0;
-		}
 
 		/* All allocations are on PVs of @vg_to -> move RAID LV stack across */
 		if (!_move_one_lv(vg_from, vg_to, lvh))
@@ -663,7 +663,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 
 	/*
 	 * First move any required RAID LVs across recursivly.
-	 * Reject in case they get split between VGs.
+	 * Reject if they get split between VGs.
 	 *
 	 * This moves the whole LV stack across, thus _move_lvs() below
 	 * ain't hit any of their sub LVs any more but'll still work for
@@ -707,7 +707,7 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 	/*
 	 * First, write out the new VG as EXPORTED.  We do this first in case
 	 * there is a crash - we will still have the new VG information, in an
-	 * exported state.  Recovery after this point would imporing and removal
+	 * exported state.  Recovery after this point would importing and removal
 	 * of the new VG and redoing the vgsplit.
 	 * FIXME: recover automatically or instruct the user?
 	 */
