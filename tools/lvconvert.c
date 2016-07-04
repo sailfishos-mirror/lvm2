@@ -18,6 +18,25 @@
 #include "lv_alloc.h"
 #include "lvconvert_poll.h"
 
+/*
+ * Guidelines for mapping options to operations.
+ *
+ * There should be a clear and unique correspondence between an option
+ * name and the operation to be performed.
+ *
+ * An option with a given name should always perform the same operation.
+ * If the same operation applies to two types of LV, then the same option
+ * name can be used with both LV types.  But, a given option name should
+ * not be used to perform different operations depending on the LV type it
+ * is used with.
+ *
+ * --merge and --split are examples where a single option name has been
+ * overloaded with different operations.  The case of --split has been
+ * corrected with the clear and unique variations --splitcache,
+ * --splitsnapshot, --splitmirror, which should allow --split to be
+ * deprecated.  (The same is still needed for --merge.)
+ */
+
 struct lvconvert_params {
 	/* Exactly one of these options is chosen */
 	int merge;		/* Either merge_snapshot or merge_mirror is also set */
@@ -266,7 +285,7 @@ static int _check_conversion_type(struct cmd_context *cmd, const char *type_str)
 	}
 
 	/* FIXME: Check thin-pool and thin more thoroughly! */
-	if (!strcmp(type_str, "snapshot") ||
+	if (!strcmp(type_str, "snapshot") || !strcmp(type_str, "linear") ||
 	    !strcmp(type_str, "striped") ||
 	    !strncmp(type_str, "raid", 4) ||
 	    !strcmp(type_str, "cache-pool") || !strcmp(type_str, "cache") ||
@@ -285,7 +304,7 @@ static int _snapshot_type_requested(struct cmd_context *cmd, const char *type_st
 
 static int _raid0_type_requested(struct cmd_context *cmd, const char *type_str)
 {
-	return (!strcmp(type_str, "raid0"));
+	return (!strcmp(type_str, "raid0") || !strcmp(type_str, "raid0_meta"));
 }
 
 /* mirror/raid* (1,10,4,5,6 and their variants) reshape */
@@ -297,7 +316,12 @@ static int _mirror_or_raid_type_requested(struct cmd_context *cmd, const char *t
 
 static int _striped_type_requested(struct cmd_context *cmd, const char *type_str)
 {
-	return (!strcmp(type_str, "striped"));
+	return (!strcmp(type_str, SEG_TYPE_NAME_STRIPED) || !strcmp(type_str, SEG_TYPE_NAME_LINEAR));
+}
+
+static int _linear_type_requested(const char *type_str)
+{
+	return (!strcmp(type_str, SEG_TYPE_NAME_LINEAR));
 }
 
 static int _read_pool_params(struct cmd_context *cmd, int *pargc, char ***pargv,
@@ -565,7 +589,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	     lp->repair || arg_is_set(cmd, thinpool_ARG) || _raid0_type_requested(cmd, lp->type_str) ||
 	     _striped_type_requested(cmd, lp->type_str))) {
 		log_error("--snapshot/--type snapshot or --merge argument "
-			  "cannot be mixed with --mirrors/--type mirror/--type raid*/--stripes/--type striped, "
+			  "cannot be mixed with --mirrors/--type mirror/--type raid*/--stripes/--type striped/--type linear, "
 			  "--mirrorlog, --repair or --thinpool.");
 		return 0;
 	}
@@ -574,7 +598,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	    !(_mirror_or_raid_type_requested(cmd, lp->type_str) || _striped_type_requested(cmd, lp->type_str) ||
 	      _raid0_type_requested(cmd, lp->type_str) || lp->repair || arg_is_set(cmd, thinpool_ARG))) {
 		log_error("--stripes or --stripesize argument is only valid "
-			  "with --mirrors/--type mirror/--type raid*/--type striped, --repair and --thinpool");
+			  "with --mirrors/--type mirror/--type raid*/--type striped/--type linear, --repair and --thinpool");
 		return 0;
 	}
 
@@ -650,7 +674,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 
 		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
 		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
-		    (lp->chunk_size & (lp->chunk_size - 1))) {
+		    !is_power_of_2(lp->chunk_size)) {
 			log_error("Chunk size must be a power of 2 in the "
 				  "range 4K to 512K");
 			return 0;
@@ -724,7 +748,7 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 			return 0;
 		}
 
-		if (lp->region_size & (lp->region_size - 1)) {
+		if (!is_power_of_2(lp->region_size)) {
 			log_error("Region size (%" PRIu32
 				  ") must be a power of 2", lp->region_size);
 			return 0;
@@ -750,14 +774,19 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 			if (!(lp->segtype = get_segtype_from_string(cmd, arg_str_value(cmd, type_ARG, find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL)))))
 				return_0;
 		} 
-	} else if (_raid0_type_requested(cmd, lp->type_str) || _striped_type_requested(cmd, lp->type_str)) { /* striped or raid0 */
-		if (arg_from_list_is_set(cmd, "cannot be used with --type raid0 or --type striped",
+	} else if (_raid0_type_requested(cmd, lp->type_str) || _striped_type_requested(cmd, lp->type_str)) { /* striped or linear or raid0 */
+		if (arg_from_list_is_set(cmd, "cannot be used with --type raid0 or --type striped or --type linear",
 					 chunksize_ARG, corelog_ARG, mirrors_ARG, mirrorlog_ARG, regionsize_ARG, zero_ARG,
 					 -1))
 			return_0;
 
 		if (!get_stripe_params(cmd, &lp->stripes, &lp->stripe_size))
 			return_0;
+
+		/* FIXME Shouldn't need to override get_stripe_params which defaults to 1 stripe (i.e. linear)! */
+		/* The default keeps existing number of stripes, handled inside the library code */
+		if (!arg_is_set(cmd, stripes_long_ARG) && !_linear_type_requested(lp->type_str))
+			lp->stripes = 0;
 
 		if (!(lp->segtype = get_segtype_from_string(cmd, lp->type_str)))
 			return_0;
@@ -2023,64 +2052,6 @@ static int _lvconvert_split_cached(struct cmd_context *cmd,
 	return 1;
 }
 
-static int _lvconvert_splitcache(struct cmd_context *cmd,
-				 struct logical_volume *lv,
-				 struct lvconvert_params *lp)
-{
-	struct lv_segment *seg;
-
-	if (lv_is_thin_pool(lv))
-		lv = seg_lv(first_seg(lv), 0); /* cached _tdata ? */
-
-	/* When passed used cache-pool of used cached LV -> split cached LV */
-	if (lv_is_cache_pool(lv) &&
-	    (dm_list_size(&lv->segs_using_this_lv) == 1) &&
-	    (seg = get_only_segment_using_this_lv(lv)) &&
-	    seg_is_cache(seg))
-		lv = seg->lv;
-
-	/* Supported LV types for split */
-	if (!lv_is_cache(lv)) {
-		log_error("Split of %s is not cache.", display_lvname(lv));
-		return 0;
-	}
-
-	if (!_lvconvert_split_cached(cmd, lv))
-		return_0;
-
-	return 1;
-}
-
-static int _lvconvert_split(struct cmd_context *cmd,
-			    struct logical_volume *lv,
-			    struct lvconvert_params *lp)
-{
-	struct lv_segment *seg;
-
-	if (lv_is_thin_pool(lv) &&
-	    lv_is_cache(seg_lv(first_seg(lv), 0)))
-		lv = seg_lv(first_seg(lv), 0); /* cached _tdata ? */
-
-	/* When passed used cache-pool of used cached LV -> split cached LV */
-	if (lv_is_cache_pool(lv) &&
-	    (dm_list_size(&lv->segs_using_this_lv) == 1) &&
-	    (seg = get_only_segment_using_this_lv(lv)) &&
-	    seg_is_cache(seg))
-		lv = seg->lv;
-
-	/* Supported LV types for split */
-	if (lv_is_cache(lv)) {
-		if (!_lvconvert_split_cached(cmd, lv))
-			return_0;
-	/* Add more types here */
-	} else {
-		log_error("Split of %s is unsupported.", display_lvname(lv));
-		return 0;
-	}
-
-	return 1;
-}
-
 static int _lvconvert_uncache(struct cmd_context *cmd,
 			      struct logical_volume *lv,
 			      struct lvconvert_params *lp)
@@ -3337,161 +3308,1097 @@ static int _lvconvert_cache(struct cmd_context *cmd,
 	return 1;
 }
 
+/*
+ * Functions called to perform a specific operation on a specific LV type.
+ *
+ * _convert_<lvtype>_<operation>
+ *
+ * For cases where an operation does not apply to the LV itself, but
+ * is implicitly redirected to a sub-LV, these functions locate the
+ * correct sub-LV and call the operation on that sub-LV.  If a sub-LV
+ * of the proper type is not found, these functions report the error.
+ *
+ * FIXME: the _lvconvert_foo() functions can be cleaned up since they
+ * are now only called for valid combinations of LV type and operation.
+ * After that happens, the code remaining in those functions can be
+ * moved into the _convert_lvtype_operation() functions below.
+ */
+
+/*
+ * Separate a COW snapshot LV from its origin.
+ * lvconvert --splitsnapshot LV
+ */
+
+static int _convert_cow_snapshot_splitsnapshot(struct cmd_context *cmd, struct logical_volume *lv,
+			                       struct lvconvert_params *lp)
+{
+	return _lvconvert_splitsnapshot(cmd, lv, lp);
+}
+
+/*
+ * Merge a COW snapshot LV into its origin.
+ * lvconvert --merge LV
+ */
+
+static int _convert_cow_snapshot_merge(struct cmd_context *cmd, struct logical_volume *lv,
+			               struct lvconvert_params *lp)
+{
+	return _lvconvert_merge_old_snapshot(cmd, lv, lp);
+}
+
+/*
+ * Merge a snapshot thin LV into its origin.
+ * lvconvert --merge LV
+ */
+
+static int _convert_thin_volume_merge(struct cmd_context *cmd, struct logical_volume *lv,
+			              struct lvconvert_params *lp)
+{
+	return _lvconvert_merge_thin_snapshot(cmd, lv, lp);
+}
+
+/*
+ * Split and preserve a cache pool from the data portion of a thin pool LV.
+ * lvconvert --splitcache LV
+ */
+
+static int _convert_thin_pool_splitcache(struct cmd_context *cmd, struct logical_volume *lv,
+				         struct lvconvert_params *lp)
+{
+	struct logical_volume *sublv1;
+
+	sublv1 = seg_lv(first_seg(lv), 0); /* cached _tdata ? */
+
+	if (!lv_is_cache(sublv1)) {
+		log_error("Sub LV %s must be cache.", display_lvname(sublv1));
+		return 0;
+	}
+
+	return _lvconvert_split_cached(cmd, sublv1);
+}
+
+/*
+ * Split and remove a cache pool from the data portion of a thin pool LV.
+ * lvconvert --uncache LV
+ */
+
+static int _convert_thin_pool_uncache(struct cmd_context *cmd, struct logical_volume *lv,
+				      struct lvconvert_params *lp)
+{
+	struct logical_volume *sublv1 = NULL;
+
+	sublv1 = seg_lv(first_seg(lv), 0); /* cached _tdata ? */
+
+	if (!lv_is_cache(sublv1)) {
+		log_error("Sub LV %s must be cache.", display_lvname(sublv1));
+		return 0;
+	}
+
+	return _lvconvert_uncache(cmd, sublv1, lp);
+}
+
+/*
+ * Repair a thin pool LV.
+ * lvconvert --repair LV
+ */
+
+static int _convert_thin_pool_repair(struct cmd_context *cmd, struct logical_volume *lv,
+			             struct lvconvert_params *lp)
+{
+	return _lvconvert_thin_pool_repair(cmd, lv, lp);
+}
+
+/*
+ * Convert the data portion of a thin pool LV to a cache LV.
+ * lvconvert --type cache LV
+ *
+ * Required options:
+ * --cachepool LV
+ *
+ * Auxiliary operation:
+ * Converts the --cachepool arg to a cache pool if it is not already.
+ *
+ * Alternate syntax:
+ * lvconvert --cache LV
+ */
+
+static int _convert_thin_pool_cache(struct cmd_context *cmd, struct logical_volume *lv,
+			            struct lvconvert_params *lp)
+{
+	/* lvconvert --type cache includes an implicit conversion of the cachepool arg to type cache-pool. */
+	if (!_lvconvert_pool(cmd, lv, lp)) {
+		log_error("Implicit conversion of --cachepool arg to type cache-pool failed.");
+		return 0;
+	}
+
+	/* Do we need to grab the tdata sub LV to pass on? */
+
+	return _lvconvert_cache(cmd, lv, lp);
+}
+
+/*
+ * Replace the metadata LV in a thin pool LV.
+ * lvconvert --poolmetadata NewLV --thinpool LV
+ * FIXME: this will change so --swap-poolmetadata defines the operation.
+ * FIXME: should be lvconvert --swap-poolmetadata NewLV LV
+ */
+
+static int _convert_thin_pool_swapmetadata(struct cmd_context *cmd, struct logical_volume *lv,
+			                   struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Split and preserve a cache pool from a cache LV.
+ * lvconvert --splitcache LV
+ */
+
+static int _convert_cache_volume_splitcache(struct cmd_context *cmd, struct logical_volume *lv,
+			                    struct lvconvert_params *lp)
+{
+	return _lvconvert_split_cached(cmd, lv);
+}
+
+/*
+ * Split and remove a cache pool from a cache LV.
+ * lvconvert --uncache LV
+ */
+
+static int _convert_cache_volume_uncache(struct cmd_context *cmd, struct logical_volume *lv,
+			                 struct lvconvert_params *lp)
+{
+	return _lvconvert_uncache(cmd, lv, lp);
+}
+
+/*
+ * Split images from the raid1|mirror origin of a cache LV and use them to create a new LV.
+ * lvconvert --splitmirrors Number LV
+ *
+ * Required options:
+ * --trackchanges | --name Name
+ */
+
+static int _convert_cache_volume_splitmirrors(struct cmd_context *cmd, struct logical_volume *lv,
+			                     struct lvconvert_params *lp)
+{
+	struct logical_volume *sublv1;
+
+	sublv1 = seg_lv(first_seg(lv), 0);
+
+	if (lv_is_raid(sublv1))
+		return _lvconvert_raid(sublv1, lp);
+
+	if (lv_is_mirror(sublv1))
+		return _lvconvert_mirrors(cmd, lv, lp);
+
+	log_error("Sub LV %s must be raid or mirror.", display_lvname(sublv1));
+	return 0;
+}
+
+/*
+ * Convert a cache LV to a thin pool (using the cache LV for thin pool data).
+ * lvconvert --type thin-pool LV
+ *
+ * Alternate syntax:
+ * This is equivalent to above, but not preferred because it's ambiguous and inconsistent.
+ * lvconvert --thinpool LV
+ */
+
+static int _convert_cache_volume_thin_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			                   struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Split a cache volume from a cache pool LV.
+ * lvconvert --splitcache LV
+ */
+
+static int _convert_cache_pool_splitcache(struct cmd_context *cmd, struct logical_volume *lv,
+					  struct lvconvert_params *lp)
+{
+	struct logical_volume *sublv1;
+	struct lv_segment *seg;
+
+	/* When passed used cache-pool of used cached LV -> split cached LV */
+
+	if ((dm_list_size(&lv->segs_using_this_lv) == 1) &&
+	    (seg = get_only_segment_using_this_lv(lv)) &&
+	    seg_is_cache(seg))
+		sublv1 = seg->lv;
+	else {
+		log_error("Sub LV of cache type not found.");
+		return 0;
+	}
+
+	if (!lv_is_cache(sublv1)) {
+		log_error("Sub LV %s must be cache.", display_lvname(sublv1));
+		return 0;
+	}
+
+	return _lvconvert_split_cached(cmd, sublv1);
+}
+
+/*
+ * Replace the metadata LV in a cache pool LV.
+ * lvconvert --poolmetadata NewLV --cachepool LV
+ * FIXME: this will change so --swap-poolmetadata defines the operation.
+ * FIXME: should be lvconvert --swap-poolmetadata NewLV LV
+ */
+
+static int _convert_cache_pool_swapmetadata(struct cmd_context *cmd, struct logical_volume *lv,
+			                    struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Change the number of images in a mirror LV.
+ * lvconvert --mirrors Number LV
+ */
+
+static int _convert_mirror_number(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	return _lvconvert_mirrors(cmd, lv, lp);
+}
+
+/*
+ * Split images from a mirror LV and use them to create a new LV.
+ * lvconvert --splitmirrors Number LV
+ *
+ * Required options:
+ * --name Name
+ */
+
+static int _convert_mirror_splitmirrors(struct cmd_context *cmd, struct logical_volume *lv,
+			                struct lvconvert_params *lp)
+{
+	return _lvconvert_mirrors(cmd, lv, lp);
+}
+
+/*
+ * Change the type of log used by a mirror LV.
+ * lvconvert --mirrorlog Type LV
+ */
+
+static int _convert_mirror_log(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	return _lvconvert_mirrors(cmd, lv, lp);
+}
+
+/*
+ * Replace failed PVs in a mirror LV.
+ * lvconvert --repair LV
+ *
+ * Auxiliary operation:
+ * Removes missing, empty PVs from the VG, like vgreduce.
+ */
+
+static int _convert_mirror_repair(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	struct dm_list *failed_pvs;
+	int ret;
+
+	ret = _lvconvert_mirrors_repair(cmd, lv, lp);
+
+	if (ret && arg_is_set(cmd, usepolicies_ARG)) {
+		if ((failed_pvs = _failed_pv_list(lv->vg)))
+			_remove_missing_empty_pv(lv->vg, failed_pvs);
+	}
+
+	return ret;
+}
+
+/*
+ * Convert mirror LV to raid1 LV.
+ * lvconvert --type raid1 LV
+ *
+ * FIXME: this is not yet implemented in the raid code.
+ */
+
+static int _convert_mirror_raid(struct cmd_context *cmd, struct logical_volume *lv,
+			        struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Change the number of images in a raid1 LV.
+ * lvconvert --mirrors Number LV
+ */
+
+static int _convert_raid_number(struct cmd_context *cmd, struct logical_volume *lv,
+			        struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Split images from a raid1 LV and use them to create a new LV.
+ * lvconvert --splitmirrors Number LV
+ *
+ * Required options:
+ * --trackchanges | --name Name
+ */
+
+static int _convert_raid_splitmirrors(struct cmd_context *cmd, struct logical_volume *lv,
+			    	      struct lvconvert_params *lp)
+{
+	/* FIXME: split the splitmirrors section out of _lvconvert_raid and call it here. */
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Merge a raid1 LV into originalLV if the raid1 LV was
+ * previously split from the originalLV using --trackchanges.
+ * lvconvert --merge LV
+ */
+
+static int _convert_raid_merge(struct cmd_context *cmd, struct logical_volume *lv,
+			       struct lvconvert_params *lp)
+{
+	/* FIXME: split the merge section out of _lvconvert_raid and call it here. */
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Replace failed PVs in a raid* LV.
+ * lvconvert --repair LV
+ *
+ * Auxiliary operation:
+ * Removes missing, empty PVs from the VG, like vgreduce.
+ */
+
+static int _convert_raid_repair(struct cmd_context *cmd, struct logical_volume *lv,
+			        struct lvconvert_params *lp)
+{
+	struct dm_list *failed_pvs;
+	int ret;
+
+	/* FIXME: split the repair section out of _lvconvert_raid and call it here. */
+	ret = _lvconvert_raid(lv, lp);
+
+	if (ret && arg_is_set(cmd, usepolicies_ARG)) {
+		if ((failed_pvs = _failed_pv_list(lv->vg)))
+			_remove_missing_empty_pv(lv->vg, failed_pvs);
+	}
+
+	return ret;
+}
+
+/*
+ * Replace a specific PV in a raid* LV with another PV.
+ * lvconvert --replace PV LV 
+ */
+
+static int _convert_raid_replace(struct cmd_context *cmd, struct logical_volume *lv,
+			         struct lvconvert_params *lp)
+{
+	/* FIXME: remove the replace section from _lvconvert_raid */
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Combine a raid* LV with a snapshot LV that was previously
+ * split from the raid* LV using --splitsnapshot.
+ * lvconvert --type snapshot LV SnapshotLV
+ *
+ * Alternate syntax:
+ * lvconvert --snapshot LV SnapshotLV
+ */
+
+static int _convert_raid_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	return _lvconvert_snapshot(cmd, lv, lp);
+}
+
+/*
+ * Convert a raid* LV to a thin LV with an external origin.
+ * lvconvert --type thin LV
+ *
+ * Required options:
+ * --thinpool LV
+ *
+ * Auxiliary operation:
+ * Converts the --thinpool arg to a thin pool if it is not already.
+ *
+ * Alternate syntax:
+ * lvconvert --thin LV
+ */
+
+static int _convert_raid_thin(struct cmd_context *cmd, struct logical_volume *lv,
+			      struct lvconvert_params *lp)
+{
+	/* lvconvert --thin includes an implicit conversion of the thinpool arg to type thin-pool. */
+	if (!_lvconvert_pool(cmd, lv, lp)) {
+		log_error("Implicit conversion of --thinpool arg to type thin-pool failed.");
+		return 0;
+	}
+
+	return _lvconvert_thin(cmd, lv, lp);
+}
+
+/*
+ * Convert a raid* LV to a cache LV.
+ * lvconvert --type cache LV
+ *
+ * Required options:
+ * --cachepool LV
+ *
+ * Auxiliary operation:
+ * Converts the --cachepool arg to a cache pool if it is not already.
+ *
+ * Alternate syntax:
+ * lvconvert --cache LV
+ */
+
+static int _convert_raid_cache(struct cmd_context *cmd, struct logical_volume *lv,
+			       struct lvconvert_params *lp)
+{
+	/* lvconvert --type cache includes an implicit conversion of the cachepool arg to type cache-pool. */
+	if (!_lvconvert_pool(cmd, lv, lp)) {
+		log_error("Implicit conversion of --cachepool arg to type cache-pool failed.");
+		return 0;
+	}
+
+	return _lvconvert_cache(cmd, lv, lp);
+}
+
+/*
+ * Convert a raid* LV to a thin-pool LV.
+ * lvconvert --type thin-pool LV
+ *
+ * Alternate syntax:
+ * This is equivalent to above, but not preferred because it's ambiguous and inconsistent.
+ * lvconvert --thinpool LV
+ */
+
+static int _convert_raid_thin_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			           struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Convert a raid* LV to cache-pool LV.
+ * lvconvert --type cache-pool LV
+ */
+
+static int _convert_raid_cache_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			            struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Convert a raid* LV to use a different raid level.
+ * lvconvert --type raid* LV
+ */
+
+static int _convert_raid_raid(struct cmd_context *cmd, struct logical_volume *lv,
+			      struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Convert a raid* LV to a striped LV.
+ * lvconvert --type striped LV
+ *
+ * FIXME: this is not yet implemented in the raid code.
+ */
+
+static int _convert_raid_striped(struct cmd_context *cmd, struct logical_volume *lv,
+			         struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Convert a raid* LV to a linear LV.
+ * lvconvert --type linear LV
+ *
+ * FIXME: this is not yet implemented in the raid code.
+ */
+
+static int _convert_raid_linear(struct cmd_context *cmd, struct logical_volume *lv,
+			        struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Merge a striped/linear LV into a raid1 LV if the striped/linear LV was
+ * previously split from the raid1 LV using --trackchanges.
+ * lvconvert --merge LV
+ */
+
+static int _convert_striped_merge(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Combine a linear/striped LV with a snapshot LV that was previously
+ * split from the linear/striped LV using --splitsnapshot.
+ * lvconvert --type snapshot LV SnapshotLV
+ *
+ * Alternate syntax:
+ * lvconvert --snapshot LV SnapshotLV
+ */
+
+static int _convert_striped_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
+			             struct lvconvert_params *lp)
+{
+	return _lvconvert_snapshot(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a thin LV with an external origin.
+ * lvconvert --type thin LV
+ *
+ * Required options:
+ * --thinpool LV
+ *
+ * Auxiliary operation:
+ * Converts the --thinpool arg to a thin pool if it is not already.
+ *
+ * Alternate syntax:
+ * lvconvert --thin LV
+ */
+
+static int _convert_striped_thin(struct cmd_context *cmd, struct logical_volume *lv,
+			         struct lvconvert_params *lp)
+{
+	/* lvconvert --thin includes an implicit conversion of the thinpool arg to type thin-pool. */
+	if (!_lvconvert_pool(cmd, lv, lp)) {
+		log_error("Implicit conversion of --thinpool arg to type thin-pool failed.");
+		return 0;
+	}
+
+	return _lvconvert_thin(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a cache LV.
+ * lvconvert --type cache LV
+ *
+ * Required options:
+ * --cachepool LV
+ *
+ * Auxiliary operation:
+ * Converts the --cachepool arg to a cache pool if it is not already.
+ *
+ * Alternate syntax:
+ * lvconvert --cache LV
+ */
+
+static int _convert_striped_cache(struct cmd_context *cmd, struct logical_volume *lv,
+			          struct lvconvert_params *lp)
+{
+	/* lvconvert --cache includes an implicit conversion of the cachepool arg to type cache-pool. */
+	if (!_lvconvert_pool(cmd, lv, lp)) {
+		log_error("Implicit conversion of --cachepool arg to type cache-pool failed.");
+		return 0;
+	}
+
+	return _lvconvert_cache(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a thin-pool LV.
+ * lvconvert --type thin-pool LV
+ *
+ * Alternate syntax:
+ * This is equivalent to above, but not preferred because it's ambiguous and inconsistent.
+ * lvconvert --thinpool LV
+ */
+
+static int _convert_striped_thin_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			              struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a cache-pool LV.
+ * lvconvert --type cache-pool LV
+ */
+
+static int _convert_striped_cache_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			               struct lvconvert_params *lp)
+{
+	return _lvconvert_pool(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a mirror LV.
+ * lvconvert --type mirror LV
+ *
+ * Required options:
+ * --mirrors Number
+ *
+ * Alternate syntax:
+ * This is equivalent to above when global/mirror_segtype_default="mirror".
+ * lvconvert --mirrors Number LV
+ */
+
+static int _convert_striped_mirror(struct cmd_context *cmd, struct logical_volume *lv,
+			           struct lvconvert_params *lp)
+{
+	return _lvconvert_mirrors(cmd, lv, lp);
+}
+
+/*
+ * Convert a striped/linear LV to a raid* LV.
+ * lvconvert --type raid* LV
+ *
+ * Required options:
+ * --mirrors Number
+ *
+ * Alternate syntax:
+ * This is equivalent to above when global/mirror_segtype_default="raid1".
+ * lvconvert --mirrors Number LV
+ */
+
+static int _convert_striped_raid(struct cmd_context *cmd, struct logical_volume *lv,
+			         struct lvconvert_params *lp)
+{
+	return _lvconvert_raid(lv, lp);
+}
+
+/*
+ * Functions called to perform all valid operations on a given LV type.
+ *
+ * _convert_<lvtype>
+ */
+
+static int _convert_cow_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
+		                 struct lvconvert_params *lp)
+{
+	if (arg_is_set(cmd, splitsnapshot_ARG))
+		return _convert_cow_snapshot_splitsnapshot(cmd, lv, lp);
+
+	/* FIXME: add --merge-snapshot to make this distinct from --merge-mirror. */
+	if (arg_is_set(cmd, merge_ARG))
+		return _convert_cow_snapshot_merge(cmd, lv, lp);
+
+	log_error("Operation not permitted on COW snapshot LV %s", display_lvname(lv));
+	log_error("Operations permitted on a COW snapshot LV are:\n"
+		  "  --splitsnapshot\n"
+		  "  --merge\n");
+	return 0;
+}
+
+static int _convert_thin_volume(struct cmd_context *cmd, struct logical_volume *lv,
+				struct lvconvert_params *lp)
+{
+	/* FIXME: add --merge-snapshot to make this distinct from --merge-mirror. */
+	if (arg_is_set(cmd, merge_ARG))
+		return _convert_thin_volume_merge(cmd, lv, lp);
+
+	log_error("Operation not permitted on thin LV %s", display_lvname(lv));
+	log_error("Operations permitted on a thin LV are:\n"
+		  "  --merge\n");
+	return 0;
+}
+
+static int _convert_thin_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			      struct lvconvert_params *lp)
+{
+	const char *new_type = arg_str_value(cmd, type_ARG, NULL);
+
+	if (arg_is_set(cmd, splitcache_ARG))
+		return _convert_thin_pool_splitcache(cmd, lv, lp);
+
+	if (arg_is_set(cmd, split_ARG)) {
+		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
+		return _convert_thin_pool_splitcache(cmd, lv, lp);
+	}
+
+	if (arg_is_set(cmd, uncache_ARG))
+		return _convert_thin_pool_uncache(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_CACHE)) || arg_is_set(cmd, cache_ARG))
+		return _convert_thin_pool_cache(cmd, lv, lp);
+
+	if (arg_is_set(cmd, repair_ARG))
+		return _convert_thin_pool_repair(cmd, lv, lp);
+
+	/* FIXME: swapping the thin pool metadata LV needs a specific option like --swapmetadata */
+	if (arg_is_set(cmd, poolmetadata_ARG))
+		return _convert_thin_pool_swapmetadata(cmd, lv, lp);
+
+	/* FIXME: add --swapmetadata to list of permitted operations. */
+
+	log_error("Operation not permitted on thin pool LV %s", display_lvname(lv));
+	log_error("Operations permitted on a thin pool LV are:\n"
+		  "  --splitcache           (operates on cache sub LV)\n"
+		  "  --uncache              (operates on cache sub LV)\n"
+		  "  --type cache | --cache (operates on data sub LV)\n"
+		  "  --repair\n");
+	return 0;
+}
+
+static int _convert_cache_volume(struct cmd_context *cmd, struct logical_volume *lv,
+			         struct lvconvert_params *lp)
+{
+	const char *new_type = arg_str_value(cmd, type_ARG, NULL);
+
+	if (arg_is_set(cmd, splitcache_ARG))
+		return _convert_cache_volume_splitcache(cmd, lv, lp);
+
+	if (arg_is_set(cmd, split_ARG)) {
+		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
+		return _convert_cache_volume_splitcache(cmd, lv, lp);
+	}
+
+	if (arg_is_set(cmd, uncache_ARG))
+		return _convert_cache_volume_uncache(cmd, lv, lp);
+
+	if (arg_is_set(cmd, splitmirrors_ARG))
+		return _convert_cache_volume_splitmirrors(cmd, lv, lp);
+
+	/* Using --thinpool is ambiguous and not preferred. */
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_THIN_POOL)) || arg_is_set(cmd, thinpool_ARG))
+		return _convert_cache_volume_thin_pool(cmd, lv, lp);
+
+	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
+
+	log_error("Operation not permitted on cache LV %s", display_lvname(lv));
+	log_error("Operations permitted on a cache LV are:\n"
+		  "  --splitcache\n"
+		  "  --uncache\n"
+		  "  --splitmirrors (operates on mirror or raid sub LV)\n"
+		  "  --type thin-pool\n");
+	return 0;
+}
+
+static int _convert_cache_pool(struct cmd_context *cmd, struct logical_volume *lv,
+			       struct lvconvert_params *lp)
+{
+	if (arg_is_set(cmd, splitcache_ARG))
+		return _convert_cache_pool_splitcache(cmd, lv, lp);
+
+	if (arg_is_set(cmd, split_ARG)) {
+		log_warn("WARNING: Using --splitcache which has replaced the --split option.");
+		return _convert_cache_pool_splitcache(cmd, lv, lp);
+	}
+
+	/* FIXME: swapping the cache pool metadata LV needs a specific option like --swapmetadata */
+	if (arg_is_set(cmd, poolmetadata_ARG))
+		return _convert_cache_pool_swapmetadata(cmd, lv, lp);
+
+	/* FIXME: add --swapmetadata to list of permitted operations. */
+
+	log_error("Operation not permitted on cache pool LV %s", display_lvname(lv));
+	log_error("Operations permitted on a cache pool LV are:\n"
+		  "  --splitcache        (operates on cache LV)\n");
+	return 0;
+}
+
+static int _convert_mirror(struct cmd_context *cmd, struct logical_volume *lv,
+			   struct lvconvert_params *lp)
+{
+	const char *new_type = arg_str_value(cmd, type_ARG, NULL);
+	const struct segment_type *new_segtype = NULL;
+
+	if (new_type)
+		new_segtype = get_segtype_from_string(cmd, new_type);
+
+	if (arg_is_set(cmd, mirrors_ARG))
+		return _convert_mirror_number(cmd, lv, lp);
+
+	if (arg_is_set(cmd, splitmirrors_ARG))
+		return _convert_mirror_splitmirrors(cmd, lv, lp);
+
+	if (arg_is_set(cmd, mirrorlog_ARG) || arg_is_set(cmd, corelog_ARG))
+		return _convert_mirror_log(cmd, lv, lp);
+
+	if (arg_is_set(cmd, repair_ARG))
+		return _convert_mirror_repair(cmd, lv, lp);
+
+	if (new_type && new_segtype && segtype_is_raid(new_segtype))
+		return _convert_mirror_raid(cmd, lv, lp);
+
+	/*
+	 * FIXME: this is here to preserve old behavior, but an
+	 * explicit option should be added to enable this case,
+	 * rather than making it the result of an ambiguous
+	 * "lvconvert vg/lv" command.
+	 * Add 'lvconvert --poll-mirror vg/lv' for this case.
+	 *
+	 * Old behavior was described as:
+	 *   "Collapsing a stack of mirrors.
+	 *    If called with no argument, try collapsing the resync layers"
+	 */
+	log_debug("Checking if LV %s is converting.", display_lvname(lv));
+	if (lv_is_converting(lv)) {
+		lp->need_polling = 1;
+		return 1;
+	}
+
+	log_error("Operation not permitted on mirror LV %s", display_lvname(lv));
+	log_error("Operations permitted on a mirror LV are:\n"
+		  "  --mirrors\n"
+		  "  --splitmirrors\n"
+		  "  --mirrorlog\n"
+		  "  --repair\n"
+		  "  --type raid*\n");
+	return 0;
+}
+
+static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
+			 struct lvconvert_params *lp)
+{
+	const char *new_type = arg_str_value(cmd, type_ARG, NULL);
+	const struct segment_type *new_segtype = NULL;
+
+	if (new_type)
+		new_segtype = get_segtype_from_string(cmd, new_type);
+
+	if (arg_is_set(cmd, mirrors_ARG))
+		return _convert_raid_number(cmd, lv, lp);
+
+	if (arg_is_set(cmd, splitmirrors_ARG))
+		return _convert_raid_splitmirrors(cmd, lv, lp);
+
+	if (arg_is_set(cmd, merge_ARG))
+		return _convert_raid_merge(cmd, lv, lp);
+
+	if (arg_is_set(cmd, repair_ARG))
+		return _convert_raid_repair(cmd, lv, lp);
+
+	if (arg_is_set(cmd, replace_ARG))
+		return _convert_raid_replace(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_SNAPSHOT)) || arg_is_set(cmd, snapshot_ARG))
+		return _convert_raid_snapshot(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_THIN)) || arg_is_set(cmd, thin_ARG))
+		return _convert_raid_thin(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_CACHE)) || arg_is_set(cmd, cache_ARG))
+		return _convert_raid_cache(cmd, lv, lp);
+
+	/* Using --thinpool is ambiguous and not preferred. */
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_THIN_POOL)) || arg_is_set(cmd, thinpool_ARG))
+		return _convert_raid_thin_pool(cmd, lv, lp);
+
+	if (new_type && !strcmp(new_type, SEG_TYPE_NAME_CACHE_POOL))
+		return _convert_raid_cache_pool(cmd, lv, lp);
+
+	if (new_type && new_segtype && segtype_is_raid(new_segtype))
+		return _convert_raid_raid(cmd, lv, lp);
+
+	if (new_type && !strcmp(new_type, SEG_TYPE_NAME_STRIPED))
+		return _convert_raid_striped(cmd, lv, lp);
+
+	if (new_type && !strcmp(new_type, SEG_TYPE_NAME_LINEAR))
+		return _convert_raid_linear(cmd, lv, lp);
+
+	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
+
+	log_error("Operation not permitted on raid LV %s", display_lvname(lv));
+	log_error("Operations permitted on a raid LV are:\n"
+		  "  --mirrors\n"
+		  "  --splitmirrors\n"
+		  "  --merge\n"
+		  "  --repair\n"
+		  "  --replace\n"
+		  "  --type snapshot | --snapshot\n"
+		  "  --type thin | --thin\n"
+		  "  --type cache | --cache\n"
+		  "  --type thin-pool\n"
+		  "  --type cache-pool\n"
+		  "  --type raid*\n"
+		  "  --type striped\n"
+		  "  --type linear\n");
+	return 0;
+}
+
+static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
+			    struct lvconvert_params *lp)
+{
+	const char *new_type = arg_str_value(cmd, type_ARG, NULL);
+	const struct segment_type *new_segtype = NULL;
+	const char *mirrors_type = find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL);
+
+	if (new_type)
+		new_segtype = get_segtype_from_string(cmd, new_type);
+
+	/* FIXME: add --merge-mirror to make this distinct from --merge-snapshot. */
+	if (arg_is_set(cmd, merge_ARG))
+		return _convert_striped_merge(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_SNAPSHOT)) || arg_is_set(cmd, snapshot_ARG))
+		return _convert_striped_snapshot(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_THIN)) || arg_is_set(cmd, thin_ARG))
+		return _convert_striped_thin(cmd, lv, lp);
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_CACHE)) || arg_is_set(cmd, cache_ARG))
+		return _convert_striped_cache(cmd, lv, lp);
+
+	/* Using --thinpool is ambiguous and not preferred. */
+
+	if ((new_type && !strcmp(new_type, SEG_TYPE_NAME_THIN_POOL)) || arg_is_set(cmd, thinpool_ARG))
+		return _convert_striped_thin_pool(cmd, lv, lp);
+
+	if (new_type && !strcmp(new_type, SEG_TYPE_NAME_CACHE_POOL))
+		return _convert_striped_cache_pool(cmd, lv, lp);
+
+	if (new_type && !strcmp(new_type, SEG_TYPE_NAME_MIRROR))
+		return _convert_striped_mirror(cmd, lv, lp);
+
+	if (new_type && new_segtype && segtype_is_raid(new_segtype))
+		return _convert_striped_raid(cmd, lv, lp);
+
+	/* --mirrors can mean --type mirror or --type raid1 depending on config setting. */
+
+	if (arg_is_set(cmd, mirrors_ARG) && mirrors_type && !strcmp(mirrors_type, SEG_TYPE_NAME_MIRROR))
+		return _convert_striped_mirror(cmd, lv, lp);
+
+	if (arg_is_set(cmd, mirrors_ARG) && mirrors_type && !strcmp(mirrors_type, SEG_TYPE_NAME_RAID1))
+		return _convert_striped_raid(cmd, lv, lp);
+
+	/* The --thinpool alternative for --type thin-pool is not preferred, so not shown. */
+
+	log_error("Operation not permitted on striped or linear LV %s", display_lvname(lv));
+	log_error("Operations permitted on a striped or linear LV are:\n"
+		  "  --merge\n"
+		  "  --type snapshot | --snapshot\n"
+		  "  --type thin | --thin\n"
+		  "  --type cache | --cache\n"
+		  "  --type thin-pool\n"
+		  "  --type cache-pool\n"
+		  "  --type mirror | --mirrors\n"
+		  "  --type raid* | --mirrors\n");
+	return 0;
+}
+
+/*
+ * lvconvert performs a specific <operation> on a specific <lv_type>.
+ *
+ * The <operation> is specified by command line args.
+ * The <lv_type> is found using lv_is_foo(lv) functions.
+ *
+ * for each lvtype,
+ *     _convert_lvtype();
+ *         for each arg_is_set(operation)
+ *             _convert_lvtype_operation();
+ *
+ */
+
 static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
 		      struct lvconvert_params *lp)
 {
-	struct logical_volume *origin = NULL;
-	struct dm_list *failed_pvs;
+	struct lv_segment *lv_seg = first_seg(lv);
+	int ret = 0;
+
+	/*
+	 * Check some conditions that can never be processed.
+	 */
 
 	if (lv_is_locked(lv)) {
 		log_error("Cannot convert locked LV %s.", display_lvname(lv));
-		return ECMD_FAILED;
-	}
-
-	if (lv_is_cow(lv) && !lp->merge_snapshot && !lp->splitsnapshot) {
-		log_error("Cannot convert snapshot logical volume %s.",
-			  display_lvname(lv));
-		return ECMD_FAILED;
+		ret = 0;
+		goto out;
 	}
 
 	if (lv_is_pvmove(lv)) {
-		log_error("Unable to convert pvmove LV %s.",
-			  display_lvname(lv));
-		return ECMD_FAILED;
+		log_error("Cannot convert pvmove LV %s.", display_lvname(lv));
+		ret = 0;
+		goto out;
 	}
 
-	if (lp->splitsnapshot) {
-		if (!_lvconvert_splitsnapshot(cmd, lv, lp))
-			return_ECMD_FAILED;
-		return ECMD_PROCESSED;
-	}
-
-	if (lp->splitcache) {
-		if (!_lvconvert_splitcache(cmd, lv, lp))
-			return_ECMD_FAILED;
-		return ECMD_PROCESSED;
-	}
-
-	if (lp->split) {
-		if (!_lvconvert_split(cmd, lv, lp))
-			return_ECMD_FAILED;
-		return ECMD_PROCESSED;
-	}
-
-	if (lp->uncache) {
-		if (!_lvconvert_uncache(cmd, lv, lp))
-			return_ECMD_FAILED;
-		return ECMD_PROCESSED;
-	}
-
-	/* Validate origin prior we start conversion of pool */
-	if (lp->cache &&
-	    !validate_lv_cache_create_origin(lv))
-		return_ECMD_FAILED;
-
-	if (lp->thin) {
-		if (lv_is_cache_type(lv) ||
-		    lv_is_pool(lv) ||
-		    lv_is_thin_pool_data(lv) ||
-		    lv_is_thin_pool_metadata(lv)) {
-			log_error("Can't convert %s %s to external origin.",
-				  first_seg(lv)->segtype->name,
-				  display_lvname(lv));
-			return ECMD_FAILED;
-		}
-	}
-
-	if (lp->repair) {
-		if (lv_is_pool(lv)) {
-			if (lv_is_cache_pool(lv)) {
-				log_error("Repair for cache pool %s not yet implemented.",
-					  display_lvname(lv));
-				return ECMD_FAILED;
-			}
-			if (!_lvconvert_thin_pool_repair(cmd, lv, lp))
-				return_ECMD_FAILED;
-			return ECMD_PROCESSED;
-		}
-		if (!lv_is_mirrored(lv) && !lv_is_raid(lv)) {
-			if (arg_is_set(cmd, usepolicies_ARG))
-				return ECMD_PROCESSED; /* nothing to be done here */
-			log_error("Cannot repair logical volume %s of segtype %s.",
-				  display_lvname(lv), lvseg_name(first_seg(lv)));
-			return ECMD_FAILED;
-		}
-	}
-
-	/* forward splitmirror operations to the cache origin, which may be raid
-	 * or old-style mirror */
-	if (lp->keep_mimages && lv_is_cache_type(lv) &&
-	    (origin = seg_lv(first_seg(lv), 0)) && lv_is_cache_origin(origin)) {
-		log_warn("WARNING: Selected operation does not work with cache-type LVs.");
-		log_warn("WARNING: Proceeding using the cache origin volume %s instead.",
-			 display_lvname(origin));
-		lv = origin;
-	}
-
-	if (!lp->segtype) {
-		/* segtype not explicitly set in _read_params */
-		lp->segtype = first_seg(lv)->segtype;
-
+	if (!lv_is_visible(lv)) {
 		/*
-		 * If we are converting to mirror/raid1 and
-		 * the segtype was not specified, then we need
-		 * to consult the default.
+		 * FIXME: there are some exceptions to the rule of only
+		 * operating on visible LVs.  These should be fixed by running
+		 * the command on the visible LV with an option indicating
+		 * which sub LV is intended rather than naming the !visible LV.
 		 */
-		if (lp->mirrors_supplied && !lv_is_mirrored(lv)) {
-			if (!(lp->segtype = get_segtype_from_string(cmd, find_config_tree_str(cmd, global_mirror_segtype_default_CFG, NULL))))
-				return_ECMD_FAILED;
+		if (!lv_is_cache_pool_metadata(lv) &&
+		    !lv_is_cache_pool_data(lv) &&
+		    !lv_is_thin_pool_metadata(lv) &&
+		    !lv_is_thin_pool_data(lv) &&
+		    !lv_is_raid_image(lv)) {
+			log_error("Cannot convert internal LV %s.", display_lvname(lv));
+			ret = 0;
+			goto out;
 		}
 	}
-	if (lp->merge_snapshot) {
-		if ((lv_is_thin_volume(lv) && !_lvconvert_merge_thin_snapshot(cmd, lv, lp)) ||
-		    (!lv_is_thin_volume(lv) && !_lvconvert_merge_old_snapshot(cmd, lv, lp))) {
-			log_print_unless_silent("Unable to merge volume %s into its origin.",
-						display_lvname(lv));
-			return ECMD_FAILED;
-		}
-	} else if (lp->snapshot) {
-		if (!_lvconvert_snapshot(cmd, lv, lp))
-			return_ECMD_FAILED;
-	} else if (segtype_is_pool(lp->segtype) || lp->thin || lp->cache) {
-		if (!_lvconvert_pool(cmd, lv, lp))
-			return_ECMD_FAILED;
 
-		if ((lp->thin && !_lvconvert_thin(cmd, lv, lp)) ||
-		    (lp->cache && !_lvconvert_cache(cmd, lv, lp)))
-			return_ECMD_FAILED;
-	} else if (segtype_is_raid(lp->segtype) ||
-		   (lv->status & RAID) || lp->merge_mirror) {
-		if (!archive(lv->vg))
-			return_ECMD_FAILED;
+	/*
+	 * Each LV type that can be converted.
+	 * (The existing type of the LV, not a requested type.)
+	 */
 
-		if (!_lvconvert_raid(lv, lp))
-			return_ECMD_FAILED;
-
-		if (!(failed_pvs = _failed_pv_list(lv->vg)))
-			return_ECMD_FAILED;
-
-		/* If repairing and using policies, remove missing PVs from VG */
-		if (lp->repair && arg_is_set(cmd, usepolicies_ARG))
-			_remove_missing_empty_pv(lv->vg, failed_pvs);
-	} else if (lp->mirrors_supplied || lp->keep_mimages || lv_is_mirrored(lv)) {
-		if (!archive(lv->vg))
-			return_ECMD_FAILED;
-
-		if (!_lvconvert_mirrors(cmd, lv, lp))
-			return_ECMD_FAILED;
-
-		if (!(failed_pvs = _failed_pv_list(lv->vg)))
-			return_ECMD_FAILED;
-
-		/* If repairing and using policies, remove missing PVs from VG */
-		if (lp->repair && arg_is_set(cmd, usepolicies_ARG))
-			_remove_missing_empty_pv(lv->vg, failed_pvs);
+	if (lv_is_cow(lv)) {
+		ret = _convert_cow_snapshot(cmd, lv, lp);
+		goto out;
 	}
 
-	return ECMD_PROCESSED;
+	if (lv_is_thin_volume(lv)) {
+		ret = _convert_thin_volume(cmd, lv, lp);
+		goto out;
+	}
+
+	if (lv_is_thin_pool(lv)) {
+		ret = _convert_thin_pool(cmd, lv, lp);
+		goto out;
+	}
+
+	if (lv_is_cache(lv)) {
+		ret = _convert_cache_volume(cmd, lv, lp);
+		goto out;
+	}
+
+	if (lv_is_cache_pool(lv)) {
+		ret = _convert_cache_pool(cmd, lv, lp);
+		goto out;
+	}
+
+	if (lv_is_mirror(lv)) {
+		ret = _convert_mirror(cmd, lv, lp);
+		goto out;
+	}
+
+	if (lv_is_raid(lv)) {
+		ret = _convert_raid(cmd, lv, lp);
+		goto out;
+	}
+
+	/*
+	 * FIXME: add lv_is_striped() and lv_is_linear()?
+	 * This does not include raid0.
+	 * If operations differ between striped and linear, split this case.
+	 */
+	if (segtype_is_striped(lv_seg->segtype) || segtype_is_linear(lv_seg->segtype)) {
+		ret = _convert_striped(cmd, lv, lp);
+		goto out;
+	}
+
+	/*
+	 * The intention is to explicitly check all cases above and never
+	 * reach here, but this covers anything that was missed.
+	 */
+	log_error("Cannot convert LV %s.", display_lvname(lv));
+	ret = 0;
+
+out:
+	return ret ? ECMD_PROCESSED : ECMD_FAILED;
+
 }
 
 static struct convert_poll_id_list* _convert_poll_id_list_create(struct cmd_context *cmd,
