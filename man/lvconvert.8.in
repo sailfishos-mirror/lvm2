@@ -274,7 +274,12 @@ uses this granularity to track which regions are in sync.
 Used to convert a logical volume to another segment type, like
 .IR cache ,
 .IR cache-pool ,
+.IR raid0 ,
 .IR raid1 ,
+.IR raid4 ,
+.IR raid5 ,
+.IR raid6 ,
+.IR raid10 ,
 .IR snapshot ,
 .IR thin ,
 or
