@@ -8823,6 +8823,7 @@ PFLA("seg->area_count=%u, new_count=%u", seg->area_count, seg->area_count / data
 				    allocate_pvs, &removal_lvs))
 		return 0;
 PFL();
+	/* Have to memorize segtype and set to raid0_meta for reordering of areas */
 	seg->data_copies = new_data_copies;
 	if (!(seg->segtype = get_segtype_from_flag(lv->vg->cmd, SEG_RAID0_META)))
 		return_0;
@@ -8932,7 +8933,7 @@ PFL();
 					 1 /* start */, new_data_copies, allocate_pvs))
 		return 0;
 PFL();
-	return lv_update_and_reload(lv) && _lv_cond_repair(lv);
+	return _lv_update_reload_fns_reset_eliminate_lvs(lv, NULL, NULL);
 }
 
 /* Helper: find any one synced sub LV in @seg and return it or NULL */
