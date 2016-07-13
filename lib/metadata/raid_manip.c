@@ -3930,7 +3930,7 @@ static int _convert_mirror_to_raid(struct logical_volume *lv,
 
 	new_image_count = new_image_count ?: seg->area_count;
 	if (new_image_count < 2) {
-		log_error("can't reduce to lees than 2 data_copies");
+		log_error("can't convert %s to fewer than 2 data_copies", display_lvname(lv));
 		return 0;
 	}
 
@@ -3999,7 +3999,7 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
 	}
 
 	if ((new_image_count = new_image_count ?: seg->area_count) < 2) {
-		log_error("can't reduce to lees than 2 data_copies");
+		log_error("can't convert %s to fewer than 2 data_copies", display_lvname(lv));
 		return 0;
 	}
 
@@ -5470,7 +5470,7 @@ static struct possible_takeover_reshape_type _possible_takeover_reshape_types[] 
 	{ .current_types  = SEG_AREAS_STRIPED, /* linear, i.e. seg->area_count = 1 */
 	  .possible_types = SEG_RAID1,
 	  .current_areas = 1,
-	  .options = ALLOW_REGION_SIZE|ALLOW_DATA_COPIES },
+	  .options = ALLOW_DATA_COPIES|ALLOW_REGION_SIZE },
 	{ .current_types  = SEG_AREAS_STRIPED, /* linear, i.e. seg->area_count = 1 */
 	  .possible_types = SEG_RAID0|SEG_RAID0_META,
 	  .current_areas = 1,
@@ -5537,15 +5537,22 @@ static struct possible_takeover_reshape_type _possible_takeover_reshape_types[] 
 	  .current_areas = ~0U,
 	  .options = ALLOW_DATA_COPIES },
 
-	/* mirror -> raid1 */
+	/* mirror -> raid1 with arbitrary number of legs */
 	{ .current_types  = SEG_MIRROR,
 	  .possible_types = SEG_MIRROR|SEG_RAID1,
 	  .current_areas = ~0U,
-	  .options = ALLOW_DATA_COPIES },
+	  .options = ALLOW_DATA_COPIES|ALLOW_REGION_SIZE },
+
+	/* mirror -> raid4/5 with 2 legs */
+	{ .current_types  = SEG_MIRROR,
+	  .possible_types = SEG_RAID10_NEAR|SEG_RAID4| \
+			    SEG_RAID5_LS|SEG_RAID5_LA|SEG_RAID5_RS|SEG_RAID5_RA|SEG_RAID5_N,
+	  .current_areas = 2,
+	  .options = ALLOW_REGION_SIZE },
 
 	/* raid4 */
 	{ .current_types  = SEG_RAID4,
-	  .possible_types = SEG_RAID1,
+	  .possible_types = SEG_MIRROR|SEG_RAID1,
 	  .current_areas = 2,
 	  .options = ALLOW_NONE },
 	{ .current_types  = SEG_RAID4,
@@ -7329,6 +7336,7 @@ PFL();
 	}
 
 PFL();
+	seg = first_seg(lv);
 	seg->segtype = new_segtype;
 	seg->data_copies = new_data_copies;
 	seg->region_size = new_region_size;
@@ -7423,6 +7431,7 @@ TAKEOVER_HELPER_FN(_raid0_mirror)
 			       new_stripe_size, new_region_size, allocate_pvs))
 		return 0;
 
+	seg = first_seg(lv);
 	seg->region_size = new_region_size;
 
 	/* ...second convert to mirror */
@@ -7516,6 +7525,7 @@ TAKEOVER_HELPER_FN(_mirror_raid0)
 			return 0;
 	}
 
+	seg = first_seg(lv);
 	seg->segtype = new_segtype;
 	seg->region_size = 0;
 
@@ -7532,8 +7542,8 @@ TAKEOVER_HELPER_FN(_mirror_r45)
 
 	dm_list_init(&removal_lvs);
 
-	if (!seg_is_mirror(seg) ||
-	    seg->area_count != 2) {
+	if (seg->area_count != 2 ||
+	    !(seg_is_mirror(seg) || seg_is_raid4(seg) || seg_is_any_raid5(seg))) {
 		log_error("Can't convert %s between %s and %s/%s with != 2 images",
 			  display_lvname(lv), SEG_TYPE_NAME_MIRROR,
 			  SEG_TYPE_NAME_RAID4, SEG_TYPE_NAME_RAID5);
@@ -7562,10 +7572,14 @@ TAKEOVER_HELPER_FN(_mirror_r45)
 					      0 /* !update_and_reload */, &removal_lvs))
 			return 0;
 
-	} else if (!_convert_mirror_to_raid(lv, new_segtype, 0, new_region_size, NULL, 0 /* update_and_reaload */, NULL))
+	} else if (!_convert_mirror_to_raid(lv, new_segtype, 0, new_region_size, allocate_pvs,
+					    0 /* update_and_reaload */, &removal_lvs))
 		return 0;
 
+	seg = first_seg(lv);
 	seg->region_size = new_region_size;
+	if (segtype_is_raid4(new_segtype) || segtype_is_any_raid5(new_segtype))
+		seg->stripe_size = new_stripe_size ?: DEFAULT_STRIPESIZE;
 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs, NULL);
 }
@@ -7605,6 +7619,7 @@ TAKEOVER_HELPER_FN(_raid1_raid0)
 			return 0;
 	}
 
+	seg = first_seg(lv);
 	seg->region_size = 0;
 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs, NULL);
@@ -7712,7 +7727,8 @@ PFL();
 	if (!_convert_raid_to_linear(lv, &removal_lvs))
 		return_0;
 
-	first_seg(lv)->region_size = 0;
+	seg = first_seg(lv);
+	seg->region_size = 0;
 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs, NULL);
 }
@@ -7749,6 +7765,7 @@ TAKEOVER_HELPER_FN(_raid145_raid1_raid6)
 	} else
 		seg->data_copies = new_data_copies;
 
+	seg = first_seg(lv);
 	seg->region_size = new_region_size;
 
 	return _lv_update_reload_fns_reset_eliminate_lvs(lv, &removal_lvs, NULL);
@@ -7811,6 +7828,7 @@ TAKEOVER_HELPER_FN(_raid145_raid4510)
 	} else
 		seg->segtype = new_segtype;
 
+	seg = first_seg(lv);
 	seg->stripe_size = new_stripe_size ?: DEFAULT_STRIPESIZE;
 	seg->region_size = new_region_size;
 
@@ -7910,6 +7928,7 @@ PFLA("seg->len=%u seg->area_len=%u seg->area_count=%u", seg->len, seg->area_len,
 
 PFLA("seg->stripe_size=%u", seg->stripe_size);
 PFLA("seg->chunk_size=%u", seg->chunk_size);
+	seg = first_seg(lv);
 	seg->segtype = new_segtype;
 	seg->region_size = 0;
 
@@ -7965,6 +7984,7 @@ TAKEOVER_HELPER_FN(_raid10_r1456)
 		return 0;
 	}
 
+	seg = first_seg(lv);
 	seg->segtype = new_segtype;
 	seg->region_size = new_region_size;
 
