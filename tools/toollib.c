@@ -801,10 +801,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (arg_is_set(cmd, metadatacopies_ARG))
-		vp_new->vgmetadatacopies = arg_int_value(cmd, metadatacopies_ARG,
-							DEFAULT_VGMETADATACOPIES);
-	else if (arg_is_set(cmd, vgmetadatacopies_ARG))
+	if (arg_is_set(cmd, vgmetadatacopies_ARG))
 		vp_new->vgmetadatacopies = arg_int_value(cmd, vgmetadatacopies_ARG,
 							DEFAULT_VGMETADATACOPIES);
 	else
@@ -2350,8 +2347,12 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	struct dm_str_list *sl;
 	struct dm_list final_lvs;
 	struct lv_list *final_lvl;
+	struct dm_list found_arg_lvnames;
 	struct glv_list *glvl, *tglvl;
 	int do_report_ret_code = 1;
+	uint32_t lv_types;
+	struct logical_volume *lv;
+	struct lv_segment *seg;
 
 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LV);
 
@@ -2360,6 +2361,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		stack;
 
 	dm_list_init(&final_lvs);
+	dm_list_init(&found_arg_lvnames);
 
 	if (!vg_check_status(vg, EXPORTED_VG)) {
 		ret_max = ECMD_FAILED;
@@ -2453,6 +2455,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		if (lvargs_supplied && str_list_match_item(arg_lvnames, lvl->lv->name)) {
 			/* Remove LV from list of unprocessed LV names */
 			str_list_del(arg_lvnames, lvl->lv->name);
+			str_list_add(cmd->mem, &found_arg_lvnames, lvl->lv->name);
 			process_lv = 1;
 		}
 
@@ -2499,6 +2502,68 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		 */
 		if (lv_is_removed(lvl->lv))
 			continue;
+
+		/*
+		 * If the command definition specifies one required positional
+		 * LV (possibly repeatable), and specifies accepted LV types,
+		 * then verify that the LV being processed matches one of those
+		 * types.
+		 *
+		 * process_each_lv() can only be used for commands that have
+		 * one positional LV arg (optionally repeating, where each is
+		 * processed independently.)  It cannot work for commands that
+		 * have different required LVs in designated positions, like
+		 * 'lvrename LV1 LV2', where each LV is not processed
+		 * independently.  That means that this LV type check only
+		 * needs to check the lv_type of the first positional arg.
+		 *
+		 * There is one command that violates this rule by stealing
+		 * the first positional LV arg before calling process_each_lv:
+		 * lvconvert --type snapshot LV_linear_striped_raid LV_snapshot
+		 * This code cannot validate that case.  process_each_lv() sees
+		 * a single LV name arg, but it's in pos 2.  Could we work around
+		 * this by looking at the final positional arg rather than always
+		 * looking at pos 1?
+		 *
+		 * This only validates types for required LV positional args
+		 * (currently there are no command specifications that include
+		 * specific LV types in optional positional args.)
+		 */
+
+		if ((cmd->command->rp_count == 1) &&
+		     val_bit_is_set(cmd->command->required_pos_args[0].def.val_bits, lv_VAL) &&
+		     cmd->command->required_pos_args[0].def.lv_types) {
+
+			lv_types = cmd->command->required_pos_args[0].def.lv_types;
+			lv = lvl->lv;
+			seg = first_seg(lv);
+
+			if ((lv_is_cow(lv) && !(lv_types & ARG_DEF_LV_SNAPSHOT)) ||
+			    (lv_is_thin_volume(lv) && !(lv_types & ARG_DEF_LV_THIN)) ||
+			    (lv_is_thin_pool(lv) && !(lv_types & ARG_DEF_LV_THINPOOL)) ||
+			    (lv_is_cache(lv) && !(lv_types & ARG_DEF_LV_CACHE)) ||
+			    (lv_is_cache_pool(lv) && !(lv_types & ARG_DEF_LV_CACHEPOOL)) ||
+			    (lv_is_mirror(lv) && !(lv_types & ARG_DEF_LV_MIRROR)) ||
+			    (lv_is_raid(lv) && !(lv_types & (ARG_DEF_LV_RAID | ARG_DEF_LV_RAID0 | ARG_DEF_LV_RAID1 | ARG_DEF_LV_RAID4 | ARG_DEF_LV_RAID5 | ARG_DEF_LV_RAID6 | ARG_DEF_LV_RAID10))) ||
+			    (segtype_is_striped(seg->segtype) && !(lv_types & ARG_DEF_LV_STRIPED)) ||
+			    (segtype_is_linear(seg->segtype) && !(lv_types & ARG_DEF_LV_LINEAR))) {
+				/*
+				 * If a named LV arg cannot be processed it's an error, otherwise
+				 * the LV is skipped and doesn't cause the command to fail.
+				 */
+				if (str_list_match_item(&found_arg_lvnames, lv->name)) {
+					log_error("Operation not permitted (%s %d) on LV %s with type %s.",
+						  cmd->command->command_line_id, cmd->command->command_line_enum,
+						  display_lvname(lv), seg->segtype->name);
+					ret_max = ECMD_FAILED;
+				} else {
+					log_warn("Operation not permitted (%s %d) on LV %s with type %s.",
+						  cmd->command->command_line_id, cmd->command->command_line_enum,
+						  display_lvname(lv), seg->segtype->name);
+				}
+				continue;
+			}
+		}
 
 		log_very_verbose("Processing LV %s in VG %s.", lvl->lv->name, vg->name);
 
@@ -3935,11 +4000,6 @@ int pvcreate_params_from_args(struct cmd_context *cmd, struct pvcreate_params *p
 	pp->pva.pvmetadatacopies = arg_int_value(cmd, pvmetadatacopies_ARG, -1);
 	if (pp->pva.pvmetadatacopies < 0)
 		pp->pva.pvmetadatacopies = find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG, NULL);
-
-	if (pp->pva.pvmetadatacopies > 2) {
-		log_error("Metadatacopies may only be 0, 1 or 2");
-		return 0;
-	}
 
 	pp->pva.ba_size = arg_uint64_value(cmd, bootloaderareasize_ARG, pp->pva.ba_size);
 
