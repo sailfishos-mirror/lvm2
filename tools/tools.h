@@ -50,19 +50,26 @@
 #define CMD_LEN 256
 #define MAX_ARGS 64
 
-/* command functions */
-typedef int (*command_fn) (struct cmd_context * cmd, int argc, char **argv);
+/* define the enums for the values accepted by command line --options */
+enum {
+#define val(a, b, c, d) a ,
+#include "vals.h"
+#undef val
+};
 
-#define xx(a, b...) int a(struct cmd_context *cmd, int argc, char **argv);
-#include "commands.h"
-#undef xx
-
-/* define the enums for the command line switches */
+/* define the enums for the command line --options */
 enum {
 #define arg(a, b, c, d, e, f) a ,
 #include "args.h"
 #undef arg
 };
+
+/* command functions */
+#define xx(a, b...) int a(struct cmd_context *cmd, int argc, char **argv);
+#include "commands.h"
+#undef xx
+
+#include "command.h"
 
 #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
 #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
@@ -79,13 +86,13 @@ struct arg_values {
 /*	void *ptr; // Currently not used. */
 };
 
-/* a global table of possible arguments */
+/* a global table of possible --option's */
 struct arg_props {
+	int arg_enum; /* foo_ARG from args.h */
 	const char short_arg;
 	char _padding[7];
 	const char *long_arg;
-
-	int (*fn) (struct cmd_context *cmd, struct arg_values *av);
+	int val_enum; /* foo_VAL from vals.h */
 	uint32_t flags;
 	uint32_t prio;
 };
@@ -94,6 +101,14 @@ struct arg_value_group_list {
         struct dm_list list;
         struct arg_values arg_values[0];
 	uint32_t prio;
+};
+
+/* a global table of possible --option values */
+struct val_props {
+	int val_enum; /* foo_VAL from vals.h */
+	int (*fn) (struct cmd_context *cmd, struct arg_values *av);
+	const char *name;
+	const char *usage;
 };
 
 #define CACHE_VGMETADATA	0x00000001
@@ -118,19 +133,6 @@ struct arg_value_group_list {
 #define ENABLE_DUPLICATE_DEVS    0x00000400
 /* Command does not accept tags as args. */
 #define DISALLOW_TAG_ARGS        0x00000800
- 
-/* a register of the lvm commands */
-struct command {
-	const char *name;
-	const char *desc;
-	const char *usage;
-	command_fn fn;
-
-	unsigned flags;
-
-	int num_args;
-	int *valid_args;
-};
 
 void usage(const char *name);
 
