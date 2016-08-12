@@ -81,7 +81,8 @@ lvcreate -l1 -s -n inval $vg/$lv3
 lvcreate -l4 -I4 -i2 -n stripe $vg
 # Invalidate snapshot
 not dd if=/dev/zero of="$DM_DEV_DIR/$vg/inval" bs=4K
-invalid lvscan "$dev1"
+# ignores unused positional arg dev1
+lvscan "$dev1"
 lvdisplay --maps
 lvscan --all
 
