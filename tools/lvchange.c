@@ -1409,3 +1409,286 @@ int lvchange(struct cmd_context *cmd, int argc, char **argv)
 			       update ? READ_FOR_UPDATE : 0, NULL,
 			       &_lvchange_single);
 }
+
+#if 0
+/*
+ * Check if the status of the LV allows running lvchange.
+ *
+ * FIXME: check for invalid VG/LV properties in a way that is not prone
+ * to missing some.  Currently, there are some checks here, some in the
+ * functions above, some in process_each, and some may be missing.
+ */
+static int _lvchange_status_is_valid(struct cmd_context *cmd, struct logical_volume *lv)
+{
+	if (!(lv->vg->status & LVM_WRITE)) {
+		log_error("Operation not permitted on LV %s: writable VG required.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_pvmove(lv)) {
+		log_error("Operation not permitted on LV %s: used for pvmove.",
+			  display_lvname(lv));
+		if (arg_is_set(cmd, activate_ARG))
+			log_error("Use 'pvmove --abort' to abandon a pvmove");
+		return 0;
+	}
+
+	if (lv_is_mirror_log(lv)) {
+		log_error("Operation not permitted on LV %s: is mirror log.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_mirror_image(lv)) {
+		log_error("Operation not permitted on LV %s: is mirror image.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_origin(lv) && !lv_is_thin_volume(lv)) {
+		log_error("Operation not permitted on LV %s: is under snapshot.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int _lvchange_properties_single(struct cmd_context *cmd,
+			               struct logical_volume *lv,
+			               struct processing_handle *handle)
+{
+	int doit = 0, docmds = 0;
+
+	/* FIXME: sort out hidden/internal LVs, e.g. _lvchange_hidden_is_valid() */
+
+	if (!_lvchange_status_is_valid(cmd, lv))
+		return_ECMD_FAILED;
+
+	if (arg_is_set(cmd, persistent_ARG) && lv_is_pool(lv)) {
+		log_error("Operation not permitted on LV %s: persistent device numbers are not supported with pools.",
+			  display_lvname(lv));
+		return ECMD_FAILED;
+	}
+
+	/*
+	 * If a persistent lv lock already exists from activation
+	 * (with the needed mode or higher), this will be a no-op.
+	 * Otherwise, the lv lock will be taken as non-persistent
+	 * and released when this command exits.
+	 */
+	if (!lockd_lv(cmd, lv, "ex", 0)) {
+		stack;
+		return ECMD_FAILED;
+	}
+
+	for (i = 0; i < cmd->command->ro_count; i++) {
+		opt_enum = cmd->command->required_opt_args[i].opt;
+
+		if (!arg_is_set(cmd, opt_enum))
+			continue;
+
+		if (!archive(lv->vg))
+			return_ECMD_FAILED;
+
+		docmds++;
+
+		switch (opt_enum) {
+		case permission_ARG:
+			doit += _lvchange_permission(cmd, lv);
+			break;
+
+		case alloc_ARG:
+		case contiguous_ARG:
+			doit += _lvchange_alloc(cmd, lv);
+			break;
+
+		case errorwhenfull_ARG:
+			doit += _lvchange_errorwhenfull(cmd, lv);
+			break;
+
+		case readahead_ARG:
+			doit += _lvchange_readahead(cmd, lv);
+			break;
+
+		case persistent_ARG:
+			doit += _lvchange_persistent(cmd, lv);
+			break;
+
+		case discards_ARG:
+		case zero_ARG:
+			doit += _lvchange_pool_update(cmd, lv);
+			break;
+
+		case addtag_ARG:
+		case deltag_ARG:
+			doit += _lvchange_tag(cmd, lv, opt_enum);
+			break;
+
+		case writemostly_ARG:
+		case writebehind_ARG:
+			doit += _lvchange_writemostly(lv);
+			break;
+
+		case minrecoveryrate_ARG:
+		case maxrecoveryrate_ARG:
+			doit += _lvchange_recovery_rate(lv);
+			break;
+
+		case profile_ARG:
+		case metadataprofile_ARG:
+		case detachprofile_ARG:
+			doit += _lvchange_profile(lv);
+			break;
+
+		case setactivationskip_ARG:
+			doit += _lvchange_activation_skip(lv);
+			break;
+
+		case cachemode_ARG:
+		case cachepolicy_ARG:
+		case cachesettings_ARG:
+			doit += _lvchange_cache(cmd, lv);
+			break;
+
+		default:
+			log_error(INTERNAL_ERROR "Failed to check for option %s",
+				  arg_long_option_name(i));
+	}
+
+	if (doit)
+		log_print_unless_silent("Logical volume %s changed.", display_lvname(lv));
+
+	if (doit != docmds)
+		return_ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle = init_processing_handle(cmd, NULL);
+	int ret;
+
+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, handle, _lvchange_properties_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+
+static int _lvchange_activate_single(struct cmd_context *cmd,
+				     struct logical_volume *lv,
+				     struct processing_handle *handle)
+{
+	struct logical_volume *origin;
+	char snaps_msg[128];
+
+	/* FIXME: sort out hidden/internal LVs, e.g. _lvchange_hidden_is_valid() */
+
+	if (!_lvchange_status_is_valid(cmd, lv))
+		return_ECMD_FAILED;
+
+	/* FIXME: untangle the proper logic for cow / sparse / virtual origin */
+
+	/* If LV is sparse, activate origin instead */
+	if (lv_is_cow(lv) && lv_is_virtual_origin(origin = origin_from_cow(lv)))
+		lv = origin;
+
+	if (lv_is_cow(lv)) {
+		origin = origin_from_cow(lv);
+		if (origin->origin_count < 2)
+			snaps_msg[0] = '\0';
+		else if (dm_snprintf(snaps_msg, sizeof(snaps_msg),
+				     " and %u other snapshot(s)",
+				     origin->origin_count - 1) < 0) {
+			log_error("Failed to prepare message.");
+			return ECMD_FAILED;
+		}
+
+		if (!arg_is_set(cmd, yes_ARG) &&
+		    (yes_no_prompt("Change of snapshot %s will also change its "
+				   "origin %s%s. Proceed? [y/n]: ",
+				   display_lvname(lv), display_lvname(origin),
+				   snaps_msg) == 'n')) {
+			log_error("Logical volume %s not changed.", display_lvname(lv));
+			return ECMD_FAILED;
+		}
+	}
+
+	/*
+	 * If --sysinit -aay is used and at the same time lvmetad is used,
+	 * we want to rely on autoactivation to take place. Also, we
+	 * need to take special care here as lvmetad service does
+	 * not neet to be running at this moment yet - it could be
+	 * just too early during system initialization time.
+	 */
+	if (arg_is_set(cmd, sysinit_ARG) && (arg_uint_value(cmd, activate_ARG, 0) == CHANGE_AAY)) {
+		if (lvmetad_used()) {
+			log_warn("WARNING: lvmetad is active, skipping direct activation during sysinit.");
+			return ECMD_PROCESSED;
+		}
+	}
+
+	if (!_lvchange_activate(cmd, lv))
+		return_ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle = init_processing_handle(cmd, NULL);
+
+	cmd->handles_missing_pvs = 1;
+	cmd->lockd_vg_default_sh = 1;
+
+	/*
+	 * Include foreign VGs that contain active LVs.
+	 * That shouldn't happen in general, but if it does by some
+	 * mistake, then we want to allow those LVs to be deactivated.
+	 */
+	cmd->include_active_foreign_vgs = 1;
+
+	/* Allow deactivating if locks fail. */
+	if (is_change_activating((activation_change_t)arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
+		cmd->lockd_vg_enforce_sh = 1;
+
+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, 0, handle, _lvchange_activate_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+
+static int _lvchange_refresh_single(struct cmd_context *cmd,
+				    struct logical_volume *lv,
+				    struct processing_handle *handle)
+{
+	/* FIXME: sort out hidden/internal LVs, e.g. _lvchange_hidden_is_valid() */
+
+	if (!_lvchange_status_is_valid(cmd, lv))
+		return_ECMD_FAILED;
+
+	log_verbose("Refreshing logical volume %s (if active).", display_lvname(lv));
+
+	if (!_lv_refresh(cmd, lv))
+		return_ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle = init_processing_handle(cmd, NULL);
+	int ret;
+
+	cmd->handles_missing_pvs = 1;
+	cmd->lockd_vg_default_sh = 1;
+
+	ret = process_each_lv(cmd, argc, argv, NULL, NULL, 0, handle, _lvchange_refresh_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+#endif
+
