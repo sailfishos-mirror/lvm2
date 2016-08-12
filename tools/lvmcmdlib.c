@@ -57,7 +57,7 @@ int lvm2_run(void *handle, const char *cmdline)
 
 	cmd = (struct cmd_context *) handle;
 
-	cmd->argv = argv;
+	cmd->pos_arg_values = argv;
 
 	if (!(cmdcopy = dm_strdup(cmdline))) {
 		log_error("Cmdline copy failed.");
