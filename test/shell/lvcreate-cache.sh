@@ -41,9 +41,9 @@ invalid lvcreate -l 1 --type cache $vg
 invalid lvcreate -l 1 -i 2 --type cache-pool $vg
 # Fails as it needs to see VG content
 fail lvcreate -l 1 --type cache --cachepool $vg/pool1
-fail lvcreate -l 1 --type cache --cachepool pool2 $vg
+invalid lvcreate -l 1 --type cache --cachepool pool2 $vg
 fail lvcreate -l 1 --cache $vg/pool3
-fail lvcreate -l 1 -H --cachepool pool4 $vg
+invalid lvcreate -l 1 -H --cachepool pool4 $vg
 fail lvcreate -l 1 -H --name $lv2 $vg/pool5
 fail lvcreate -l 1 -H --name $lv3 --cachepool $vg/pool6
 fail lvcreate -l 1 -H --name $vg/$lv4 --cachepool pool7
@@ -52,11 +52,11 @@ fail lvcreate -l 1 -H --name $vg/$lv4 --cachepool pool7
 # So we require cache pool to exist and need to fail when it's missing.
 #
 # --cachepool gives implicit --cache
-fail lvcreate -l 1 --cachepool pool8 $vg
+invalid lvcreate -l 1 --cachepool pool8 $vg
 
 # no size specified
 invalid lvcreate --cachepool pool $vg 2>&1 | tee err
-grep "specify either size or extents" err
+# grep "specify either size or extents" err
 
 # Check nothing has been created yet
 check vg_field $vg lv_count 0
