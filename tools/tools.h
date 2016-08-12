@@ -50,19 +50,19 @@
 #define CMD_LEN 256
 #define MAX_ARGS 64
 
-/* command functions */
-typedef int (*command_fn) (struct cmd_context * cmd, int argc, char **argv);
-
-#define xx(a, b...) int a(struct cmd_context *cmd, int argc, char **argv);
-#include "commands.h"
-#undef xx
-
 /* define the enums for the command line switches */
 enum {
 #define arg(a, b, c, d, e, f) a ,
 #include "args.h"
 #undef arg
 };
+
+/* command functions */
+#define xx(a, b...) int a(struct cmd_context *cmd, int argc, char **argv);
+#include "commands.h"
+#undef xx
+
+#include "command.h"
 
 #define ARG_COUNTABLE 0x00000001	/* E.g. -vvvv */
 #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
@@ -81,6 +81,7 @@ struct arg_values {
 
 /* a global table of possible arguments */
 struct arg_props {
+	int enum_val;
 	const char short_arg;
 	char _padding[7];
 	const char *long_arg;
@@ -118,19 +119,6 @@ struct arg_value_group_list {
 #define ENABLE_DUPLICATE_DEVS    0x00000400
 /* Command does not accept tags as args. */
 #define DISALLOW_TAG_ARGS        0x00000800
- 
-/* a register of the lvm commands */
-struct command {
-	const char *name;
-	const char *desc;
-	const char *usage;
-	command_fn fn;
-
-	unsigned flags;
-
-	int num_args;
-	int *valid_args;
-};
 
 void usage(const char *name);
 
