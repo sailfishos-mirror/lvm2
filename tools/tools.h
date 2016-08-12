@@ -44,6 +44,8 @@
 #include "toollib.h"
 #include "lvmnotify.h"
 
+#include "command.h"
+
 #include <ctype.h>
 #include <sys/types.h>
 
@@ -51,8 +53,6 @@
 #define MAX_ARGS 64
 
 /* command functions */
-typedef int (*command_fn) (struct cmd_context * cmd, int argc, char **argv);
-
 #define xx(a, b...) int a(struct cmd_context *cmd, int argc, char **argv);
 #include "commands.h"
 #undef xx
@@ -118,19 +118,6 @@ struct arg_value_group_list {
 #define ENABLE_DUPLICATE_DEVS    0x00000400
 /* Command does not accept tags as args. */
 #define DISALLOW_TAG_ARGS        0x00000800
- 
-/* a register of the lvm commands */
-struct command {
-	const char *name;
-	const char *desc;
-	const char *usage;
-	command_fn fn;
-
-	unsigned flags;
-
-	int num_args;
-	int *valid_args;
-};
 
 void usage(const char *name);
 
