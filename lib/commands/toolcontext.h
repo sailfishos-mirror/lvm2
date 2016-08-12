@@ -90,7 +90,7 @@ struct cmd_context {
 	const char *cmd_line;
 	struct command *command;
 	char **argv;
-	struct arg_values *arg_values;
+	struct arg_values *opt_arg_values;
 	struct dm_list arg_value_groups;
 
 	/*
