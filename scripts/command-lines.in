@@ -1,0 +1,1252 @@
+#
+# When this file is changed, tools/command-lines.h
+# and tools/command-lines-count.h must be regenerated
+# with:
+#
+# scripts/create-commands --output count scripts/command-lines.in > tools/command-lines-count.h
+# scripts/create-commands --output struct scripts/command-lines.in > tools/command-lines.h
+#
+
+#
+# Syntax
+#
+# A new command has a unique combination of:
+# command name, required option args and required
+# positional args.
+#
+# To define a new command, begin a single line with a
+# command name, followed by required options/args,
+# (e.g. --foo, or --foo val), followed by required
+# positional args, (e.g. VG)
+#
+# After the single line of required elements are lines
+# of optional elements:
+# OO: <optional --option args>
+# OP: <optional positional args>
+#
+# command_name required_opt_arg ... required_pos_arg ...
+# OO: optional_opt_arg, ...
+# OP: optional_pos_arg ...
+#
+# required_opt_arg/optional_opt_arg must begin with the
+# long form option name, e.g. --foo.  If the option name
+# takes a value, then the type of value is specified,
+# e.g. --foo String.
+#
+# Possible option names are listed in args.h
+#
+# Use --foo_long to specify that only the long form of
+# --foo is accepted by the command.  (This is uncommon.)
+#
+# Possible option arg types are shown in tools/vals.h,
+# e.g. Bool, String, VG, SizeMB.
+#
+# --option args outside the list of types in vals.h are treated
+# as literal (non-variable) strings or numbers.
+#
+# positional args can be multiple types separated by |, e.g. VG|LV|Tag
+#
+# If a positional arg is repeatable, it is followed by ..., e.g. VG|LV|Tag ...
+#
+# LV can have a suffix indicating the LV type, e.g. LV_linear, LV_thinpool.
+# LV_raid represents any raidN.  LV_type1_type2_type3 when the LV is
+# limited to multiple specific types.
+#
+# Note that two commands whose required paramters differ only by
+# the LV types they accept are ambiguous.  That is, they cannot be
+# distinguished by just looking at the command, but require reading
+# the VG to find the LV type.  So, command definitions that differ
+# only in accepted LV types are not allowed.  It would be best to
+# distinguish them by using different option names.
+# There are FIXME's below for some of these cases.
+#
+# VG, LV can have the suffix _new, indicating the named VG or LV
+# does not yet exist.
+#
+# If Select is included in pos_arg, it means that the pos_arg
+# may be empty if the --select option is used.
+#
+# --size and --extents are interchangable, but only --size is used
+# in these definitions to keep them simpler.  --extents is
+# automatically included and recognized as an alternative to --size.
+#
+# Some options have multiple names, but only one form of the name
+# is used in these definitions.  Synonyms will be recognized when
+# matching a command to a command definition.
+#
+# used in definitions below (equivalent but not used in definitions)
+# mirrorlog core (corelog)
+# resizeable (resizable)
+# allocatable (allocation)
+# resizeable (allocation)
+# activate (available)
+# rebuild (raidrebuild)
+# syncaction (raidsyncaction)
+# writemostly (raidwritemostly)
+# minrecoveryrate (raidminrecoveryrate)
+# maxrecoveryrate (raidmaxrecoveryrate)
+# writebehind (raidwritebehind)
+#
+#
+# "---" is like a comment line, used to separate text for readability
+#
+# ID: A unique string identifying the command.
+# DESC: A description of the command.
+#
+
+#
+# For efficiency, sets of options can be defined and reused
+# in multiple command definitions.
+#
+# To define a common set of options:
+# OO_NAME: --foo, --bar String
+#
+# To use this set of options, include it on the OO: line, e.g.
+# OO: --example, OO_NAME
+#
+# which is expaneded to
+# OO: --example, --foo, --bar String
+#
+# Including OO_NAME after a command name on the required line
+# means that any one of the options is required and the rest
+# are optional.  The usage syntax for this case is printed as:
+# command (--foo A, --bar B)
+#
+
+#
+# OO_ALL is included in every command automatically.
+# FIXME: add --force and --test to OO_ALL so that all commands will
+# accept them even if they are not used?
+#
+OO_ALL: --commandprofile String, --config String, --debug,
+--driverloaded Bool, --help, --profile String, --quiet,
+--verbose, --version, --yes
+
+#
+# This list only applies to printing the usage text.
+# These common options are displayed once at the end of
+# a given command's usage.  This is done to avoid excessive
+# repetition of common options, which may obscure the more
+# interesting and relevant parts of a common prototype.
+# This definition is *only* used when generating the command
+# usage strings, and is the basis for the division between
+# the "usage" and "usage_common" strings. This OO defn does
+# not relate to which optional opts are accepted by commands,
+# which is defined by the OO line.
+#
+OO_USAGE_COMMON: OO_ALL, --force, --test, --noudevsync
+
+#
+# options for pvs, lvs, vgs, fullreport
+#
+OO_REPORT: --aligned, --all, --binary, --configreport String, --foreign,
+--ignorelockingfailure, --ignoreskippedcluster, --logonly,
+--nameprefixes, --noheadings, --nolocking, --nosuffix,
+--options String, --partial, --readonly, --reportformat String, --rows,
+--select String, --separator String, --shared, --sort String,
+--trustcache, --unbuffered, --units Units, --unquoted
+
+#
+# options for config, dumpconfig, lvmconfig
+#
+OO_CONFIG: --atversion String, --typeconfig String, --file String, --ignoreadvanced,
+--ignoreunsupported, --ignorelocal, --list, --mergedconfig, --metadataprofile String,
+--sinceversion String, --showdeprecated, --showunsupported, --validate, --withsummary,
+--withcomments, --withspaces, --unconfigured, --withversions
+
+---
+
+# None of these can function as a required option for lvchange.
+
+OO_LVCHANGE: --autobackup Bool, --force, --ignorelockingfailure,
+--ignoremonitoring, --ignoreskippedcluster, --noudevsync,
+--reportformat String, --sysinit, --test, --select String
+
+# Any of these can function as a required option for lvchange.
+# profile is also part of OO_ALL, but is repeated in OO_LVCHANGE_META
+# because it can function as a required opt.
+
+OO_LVCHANGE_META: --addtag Tag, --deltag Tag,
+--alloc Alloc, --contiguous Bool,
+--detachprofile, --metadataprofile String, --profile String,
+--permission Permission, --readahead Readahead, --setactivationskip Bool,
+--errorwhenfull Bool, --discards Discards, --zero Bool,
+--cachemode CacheMode, --cachepolicy String, --cachesettings String,
+--minrecoveryrate SizeKB, --maxrecoveryrate SizeKB,
+--writebehind Number, --writemostly PV
+
+lvchange OO_LVCHANGE_META VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_properties
+DESC: Change a general LV property.
+
+lvchange --resync VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_resync
+
+lvchange --syncaction String VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_syncaction
+
+lvchange --rebuild PV VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_rebuild
+
+lvchange --activate Active VG|LV|Tag|Select ...
+OO: --activationmode ActivationMode, --partial, --ignoreactivationskip, OO_LVCHANGE_META, OO_LVCHANGE
+ID: lvchange_activate
+DESC: Activate or deactivate an LV.
+
+lvchange --refresh VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_refresh
+
+lvchange --monitor Bool VG|LV|Tag|Select ...
+OO: --poll Bool, OO_LVCHANGE
+ID: lvchange_monitor
+DESC: Monitor or unmonitor an LV.
+
+lvchange --poll Bool VG|LV|Tag|Select ...
+OO: --monitor Bool, OO_LVCHANGE
+ID: lvchange_poll
+
+lvchange --persistent Bool VG|LV|Tag|Select ...
+OO: --minor Number, --major Number, OO_LVCHANGE
+ID: lvchange_persistent
+
+---
+
+OO_LVCONVERT_RAID: --mirrors SNumber, --stripes_long Number,
+--stripesize SizeKB, --regionsize SizeMB
+
+OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,
+--poolmetadataspare Bool, --readahead Readahead, --chunksize SizeKB
+
+OO_LVCONVERT: --alloc Alloc, --background, --force, --noudevsync,
+--test, --usepolicies
+
+---
+
+# FIXME: lvconvert --merge is an extremely ambiguous command.
+# It can do very different operations, but which one depends
+# on knowing the LV type.  So, the command doesn't know what
+# it's actually doing until quite late, when processing a
+# single LV.
+#
+# Use different option names for different merge operations
+# so that we can have different command definitions,
+# different behaviors, different optional options, etc:
+#
+# lvconvert --merge-mirror LV_linear_striped_raid ...
+# DESC: Merge LV that was previously split from a mirror.
+#
+# lvconvert --merge-thin LV_thin
+# DESC: Merge thin LV into its origin LV.
+#
+# lvconvert --merge-snapshot LV_snapshot
+# DESC: Merge COW snapshot LV into its origin.
+#
+# Then we could add VG|Tag to --merge-mirror arg pos 1, because
+# "lvconvert --merge VG|Tag" is a terrible command.  It will do
+# different operations on each LV it finds, depending on the
+# current LV type.
+
+lvconvert --merge LV_linear_striped_raid_thin_snapshot|VG|Tag ...
+OO: --background, --interval Number
+ID: lvconvert_merge
+DESC: Merge LV that was previously split from a mirror.
+DESC: Merge thin LV into its origin LV.
+DESC: Merge COW snapshot LV into its origin.
+
+---
+
+# FIXME: by using two different positional args, this is the
+# single violation of the standard method of using process_each_lv().
+# Before calling process_each, it steals the first positional arg
+# and adjusts argv/argc so it's not seen by process_each.
+
+lvconvert --type snapshot LV_linear_striped_raid LV_snapshot
+OO: --chunksize SizeKB, --zero Bool, OO_LVCONVERT
+ID: lvconvert_combine_split_snapshot
+DESC: Combine LV with a previously split snapshot LV.
+
+---
+
+lvconvert --type thin --thinpool LV LV_linear_striped_raid
+OO: --thin, --originname LV_new, OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_thin_with_external
+DESC: Convert LV to type thin with an external origin.
+
+# alternate form of lvconvert --type thin
+lvconvert --thin --thinpool LV LV_linear_striped_raid
+OO: --type thin, --originname LV_new, OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_thin_with_external
+DESC: Convert LV to type thin with an external origin
+DESC: (variant, infers --type thin).
+
+---
+
+lvconvert --type cache --cachepool LV LV_linear_striped_raid_thinpool
+OO: --cache, --cachepolicy String, --cachesettings String, OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_cache_vol
+DESC: Convert LV to type cache.
+
+# alternate form of lvconvert --type cache
+lvconvert --cache --cachepool LV LV_linear_striped_raid_thinpool
+OO: --type cache, --cachepolicy String, --cachesettings String, OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_cache_vol
+DESC: Convert LV to type cache (variant, infers --type cache).
+
+---
+
+lvconvert --type thin-pool LV_linear_striped_raid_cache
+OO: --discards Discards, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_thinpool
+DESC: Convert LV to type thin-pool.
+
+# alternate form of lvconvert --type thin-pool
+# deprecated because of non-standard syntax (missing positional arg)
+lvconvert --thinpool LV
+OO: OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_thinpool
+DESC: Convert LV to type thin-pool (variant, use --type thin-pool).
+
+---
+
+lvconvert --type cache-pool LV_linear_striped_raid
+OO: OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_cachepool
+DESC: Convert LV to type cache-pool.
+
+# alternate form of lvconvert --type cache-pool
+# deprecated because of non-standard syntax (missing positional arg)
+lvconvert --cachepool LV
+OO: OO_LVCONVERT_POOL, OO_LVCONVERT
+ID: lvconvert_to_cachepool
+DESC: Convert LV to type cache-pool (variant, use --type cache-pool).
+
+---
+
+lvconvert --type mirror --mirrors SNumber LV_linear_striped
+OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_to_mirror
+DESC: Convert LV to type mirror, adding mirror images.
+
+# alternate form of lvconvert --type raid1|mirror
+lvconvert --mirrors SNumber LV_linear_striped
+OO: --type raid1, --type mirror, OO_LVCONVERT_RAID, OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_to_mirror_or_raid1
+DESC: Convert LV to type raid1 or mirror
+DESC: (variant, infers --type raid1|mirror).
+
+---
+
+lvconvert --type mirror LV_raid1
+OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+ID: lvconvert_raid1_to_mirror
+DESC: Convert LV to type mirror, keeping mirror images.
+
+lvconvert --type raid1 LV_mirror
+OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+ID: lvconvert_mirror_to_raid1
+DESC: Convert LV to type raid1, keeping mirror images.
+
+---
+
+# FIXME: by using specific raid levels, e.g. raid1, we could
+# specify other required options, e.g. --mirrors.  This may
+# help the second fixme...
+#
+# FIXME: there are two different operations here, and it would
+# be nice to split them into to unambiguous command lines:
+#
+# 1. lvconvert --type raid LV_linear_striped
+#    DESC: Convert LV to type raid.
+#
+# 2. lvconvert --type raid LV_raid
+#    DESC: Change LV raid type.
+
+lvconvert --type raid LV_linear_striped_raid
+OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_general_to_raid
+DESC: Convert LV to type raid.
+DESC: Change LV raid type.
+
+---
+
+lvconvert --mirrors SNumber LV_raid_mirror
+OO: OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_change_mirror_images
+DESC: Change the number of mirror images in the LV.
+
+---
+
+lvconvert --type striped LV_raid
+OO: OO_LVCONVERT_RAID, OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_raid_to_striped
+DESC: Convert LV to type striped.
+
+---
+
+lvconvert --type linear LV_raid_mirror
+OO: OO_LVCONVERT
+ID: lvconvert_raid_or_mirror_to_linear
+DESC: Convert LV to type linear.
+
+---
+
+lvconvert --splitmirrors Number --name LV_new LV_raid1_mirror_cache
+OO: OO_LVCONVERT
+ID: lvconvert_split_mirror_images_to_new
+DESC: Split images from a raid1 or mirror LV and use them to create a new LV.
+
+lvconvert --splitmirrors Number --trackchanges LV_raid1_cache
+OO: OO_LVCONVERT
+ID: lvconvert_split_mirror_images_and_track
+DESC: Split images from a raid1 LV and track changes to origin.
+
+---
+
+# FIXME: use specific option names to distinguish these two
+# very different commands, e.g.
+#
+# lvconvert --repair-pvs LV_raid_mirror
+# DESC: Replace failed PVs in a raid or mirror LV.
+#
+# lvconvert --repair-thinpool LV_thinpool
+# DESC: Repair a thin pool.
+#
+# lvm may want to do different things, or allow different options 
+# depending on which operation is being run, but as it stands, it
+# cannot do anything operation-specific until after the VG is read
+# and the LV type is known.
+
+lvconvert --repair LV_raid_mirror_thinpool
+OO: OO_LVCONVERT
+ID: lvconvert_repair_pvs_or_thinpool
+DESC: Replace failed PVs in a raid or mirror LV.
+DESC: Repair a thin pool.
+
+---
+
+lvconvert --replace PV LV_raid
+OO: OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_replace_pv
+DESC: Replace specific PV(s) in a raid* LV with another PV.
+
+---
+
+lvconvert --mirrorlog MirrorLog LV_mirror
+OO: OO_LVCONVERT
+ID: lvconvert_change_mirrorlog
+DESC: Change the type of log used by LV.
+
+---
+
+lvconvert --splitcache LV_cachepool_cache_thinpool
+OO: OO_LVCONVERT
+ID: lvconvert_split_and_keep_cachepool
+DESC: Separate and preserve a cache pool from a cache LV.
+
+---
+
+lvconvert --uncache LV_cache_thinpool
+OO: OO_LVCONVERT
+ID: lvconvert_split_and_delete_cachepool
+DESC: Separate and remove a cache pool from a cache LV.
+
+---
+
+lvconvert --splitsnapshot LV_snapshot
+OO: OO_LVCONVERT
+ID: lvconvert_split_cow_snapshot
+DESC: Separate a COW snapshot from its origin LV.
+
+---
+
+# FIXME: add a new option defining this operation, e.g. --poll-mirror
+# The purpose of this command is not entirely clear.
+
+lvconvert LV_mirror
+ID: lvconvert_poll_mirror
+DESC: Poll LV to collapse resync layers.
+
+---
+
+# FIXME: add a new option defining this operation, e.g. --swapmetadata
+
+lvconvert --poolmetadata LV LV_thinpool_cachepool
+ID: lvconvert_swap_pool_metadata
+DESC: Swap metadata LV in a thin pool or cache pool (temporary command).
+
+---
+
+# --extents is not specified; it's an automatic alternative for --size
+
+OO_LVCREATE: --addtag Tag, --alloc Alloc, --autobackup Bool, --activate Active,
+--contiguous Bool, --ignoreactivationskip, --ignoremonitoring, --major Number,
+--metadataprofile String, --minor Number, --monitor Bool, --name String, --nosync,
+--noudevsync, --permission Permission, --persistent Bool, --readahead Readahead,
+--reportformat String, --setactivationskip Bool, --test, --wipesignatures Bool,
+--zero Bool
+
+OO_LVCREATE_CACHE: --cachemode CacheMode, --cachepolicy String, --cachesettings String
+
+OO_LVCREATE_POOL: --poolmetadatasize SizeMB, --poolmetadataspare Bool, --chunksize SizeKB
+
+OO_LVCREATE_THIN: --discards Discards, --errorwhenfull Bool
+
+OO_LVCREATE_RAID: --mirrors SNumber, --stripes Number, --stripesize SizeKB,
+--regionsize SizeMB, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB
+
+---
+
+lvcreate --type error --size SizeMB VG
+OO: OO_LVCREATE
+ID: lvcreate_error_vol
+DESC: Create an LV that returns errors when used.
+
+---
+
+lvcreate --type zero --size SizeMB VG
+OO: OO_LVCREATE
+ID: lvcreate_zero_vol
+DESC: Create an LV that returns zeros when read.
+
+---
+
+lvcreate --type linear --size SizeMB VG
+OO: OO_LVCREATE
+OP: PV ...
+ID: lvcreate_linear
+DESC: Create a linear LV.
+
+lvcreate --size SizeMB VG
+OO: --type linear, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_linear
+DESC: Create a linear LV  (default --type linear).
+DESC: When --name is omitted, the name is generated.
+
+---
+
+lvcreate --type striped --size SizeMB VG
+OO: --stripes Number, --stripesize SizeKB, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_striped
+DESC: Create a striped LV.
+
+lvcreate --stripes Number --size SizeMB VG
+OO: --type striped, --stripesize SizeKB, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_striped
+DESC: Create a striped LV (infers --type striped).
+
+---
+
+lvcreate --type mirror --size SizeMB VG
+OO: --mirrors SNumber, --mirrorlog MirrorLog, --corelog, --regionsize SizeMB, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_mirror
+DESC: Create a mirror LV.
+
+# alternate form of lvcreate --type raid1|mirror
+lvcreate --mirrors SNumber --size SizeMB VG
+OO: --type raid1, --type mirror, --mirrorlog MirrorLog, --corelog, OO_LVCREATE_RAID, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_mirror
+DESC: Create a raid1 or mirror LV (variant, infers --type raid1|mirror).
+
+---
+
+lvcreate --type raid --size SizeMB VG
+OO: OO_LVCREATE_RAID, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_raid_any
+DESC: Create a raid LV (a specific raid level must be used, e.g. raid1.)
+
+---
+
+lvcreate --type snapshot --size SizeMB LV
+OO: --snapshot, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cow_snapshot
+DESC: Create a COW snapshot LV from an origin LV.
+
+# alternate form of lvcreate --type snapshot
+lvcreate --snapshot --size SizeMB LV
+OO: --type snapshot, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cow_snapshot
+DESC: Create a COW snapshot LV from an origin LV
+DESC: (infers --type snapshot).
+
+---
+
+lvcreate --type snapshot --size SizeMB --virtualsize SizeMB VG
+OO: --virtualoriginsize SizeMB, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cow_snapshot_with_virtual_origin
+DESC: Create a sparse COW snapshot LV of a virtual origin LV.
+
+---
+
+lvcreate --type thin-pool --size SizeMB VG
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thinpool
+DESC: Create a thin pool.
+
+# alternate form of lvcreate --type thin-pool
+lvcreate --thin --size SizeMB VG
+OO: --type thin-pool, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thinpool
+DESC: Create a thin pool (variant, infers --type thin-pool).
+
+---
+
+lvcreate --type cache-pool --size SizeMB VG
+OO: OO_LVCREATE_POOL, OO_LVCREATE_CACHE, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cachepool
+DESC: Create a cache pool.
+
+# alternate form of lvcreate --type cache-pool
+lvcreate --cache --size SizeMB VG
+OO: --type cache-pool, OO_LVCREATE_POOL, OO_LVCREATE_CACHE, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cachepool
+DESC: Create a cache pool (variant, infers --type cache-pool).
+
+---
+
+lvcreate --type thin --virtualsize SizeMB --thinpool LV_thinpool
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_vol
+DESC: Create a thin LV in a thin pool.
+
+# alternate form of lvcreate --type thin
+lvcreate --virtualsize SizeMB --thinpool LV_thinpool
+OO: --type thin, OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_vol
+DESC: Create a thin LV in a thin pool (variant, infers --type thin).
+
+---
+
+lvcreate --type thin LV_thin
+OO: OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_snapshot
+DESC: Create a thin LV that is a snapshot of an existing thin LV.
+
+# alternate form of lvcreate --type thin LV_thin
+lvcreate --snapshot LV_thin
+OO: --type thin, OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_snapshot
+DESC: Create a thin LV that is a snapshot of an existing thin LV
+DESC: (infers --type thin).
+
+lvcreate --type thin --thinpool LV_thinpool LV
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_snapshot_of_external
+DESC: Create a thin LV that is a snapshot of an external origin LV.
+
+# alternate form of lvcreate --type thin --thinpool LV_thinpool LV
+lvcreate --snapshot --thinpool LV_thinpool LV
+OO: --type thin, OO_LVCREATE_THIN, OO_LVCREATE
+ID: lvcreate_thin_snapshot_of_external
+DESC: Create a thin LV that is a snapshot of an external origin LV
+DESC: (infers --type thin).
+
+---
+
+lvcreate --type thin --virtualsize SizeMB --size SizeMB --thinpool LV_new
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool
+DESC: Create a thin LV, first creating a thin pool for it,
+DESC: where the new thin pool is named by the --thinpool arg.
+
+# alternate form of lvcreate --type thin
+lvcreate --thin --virtualsize SizeMB --size SizeMB --thinpool LV_new
+OO: --type thin, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool
+DESC: Create a thin LV, first creating a thin pool for it,
+DESC: where the new thin pool is named by the --thinpool arg,
+DESC: (variant, infers --type thin).
+
+lvcreate --type thin --virtualsize SizeMB --size SizeMB LV_new
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool
+DESC: Create a thin LV, first creating a thin pool for it,
+DESC: where the new thin pool is named in arg pos 1.
+
+lvcreate --thin --virtualsize SizeMB --size SizeMB LV_new
+OO: --type thin, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool
+DESC: Create a thin LV, first creating a thin pool for it,
+DESC: where the new thin pool is named in arg pos 1,
+DESC: (variant, infers --type thin).
+
+lvcreate --type thin --virtualsize SizeMB --size SizeMB VG
+OO: OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool
+DESC: Create a thin LV, first creating a thin pool for it.
+
+---
+
+lvcreate --size SizeMB --virtualsize SizeMB VG
+OO: --type thin, --type snapshot, --thin, --snapshot,
+--virtualoriginsize SizeMB, OO_LVCREATE_POOL, OO_LVCREATE_THIN, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_thin_vol_with_thinpool_or_sparse_snapshot
+DESC: Create a thin LV, first creating a thin pool for it
+DESC: (infers --type thin).
+DESC: Create a sparse snapshot of a virtual origin LV
+DESC: (infers --type snapshot).
+DESC: Infers --type thin or --type snapshot according to
+DESC: confing setting sparse_segtype_default.
+
+---
+
+# FIXME: this should be done by lvconvert, and this command deprecated
+
+lvcreate --type cache --size SizeMB LV
+OO: OO_LVCREATE_POOL, OO_LVCREATE_CACHE, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_convert_to_cache_vol_with_cachepool
+DESC: Convert the specified LV to type cache after creating a new
+DESC: cache pool LV to use.
+
+---
+
+lvcreate --type cache --size SizeMB --cachepool LV_cachepool
+OO: OO_LVCREATE_POOL, OO_LVCREATE_CACHE, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cache_vol_with_new_origin
+DESC: Create a cache LV, first creating a new origin LV,
+DESC: then combining it with the existing cache pool in arg pos 1.
+
+lvcreate --size SizeMB --cachepool LV_cachepool
+OO: --type cache, OO_LVCREATE_CACHE, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_cache_vol_with_new_origin
+DESC: Create a cache LV, first creating a new origin LV,
+DESC: then combining it with the existing cache pool in arg pos 1.
+DESC: (variant, infers --type cache).
+
+---
+
+lvdisplay
+OO: --aligned, --all, --binary, --colon, --columns,
+--configreport String, --foreign, --history, --ignorelockingfailure,
+--ignoreskippedcluster, --logonly, --maps, --noheadings,
+--nosuffix, --options String, --sort String, --partial, --readonly,
+--reportformat String, --segments, --select String, --separator String,
+--shared, --unbuffered, --units Units
+OP: VG|LV|Tag ...
+ID: lvdisplay_general
+
+---
+
+# --extents is not specified; it's an automatic alternative for --size
+
+lvextend --size SizeMB LV
+OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+--nofsck, --nosync, --noudevsync, --reportformat String, --resizefs,
+--stripes Number, --stripesize SizeKB, --test, --poolmetadatasize SizeMB
+OP: PV ...
+ID: lvextend_by_size
+
+lvextend LV PV ...
+OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+--nofsck, --nosync, --noudevsync,
+--reportformat String, --resizefs, --stripes Number, --stripesize SizeKB,
+--test
+ID: lvextend_by_pv
+
+lvextend --poolmetadatasize SizeMB LV_thinpool
+OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+--nofsck, --nosync, --noudevsync,
+--reportformat String, --stripes Number, --stripesize SizeKB,
+--test
+OP: PV ...
+ID: lvextend_pool_metadata_by_size
+
+lvextend --usepolicies LV_thinpool_snapshot
+OO: --alloc Alloc, --autobackup Bool, --force, --mirrors SNumber,
+--nofsck, --nosync, --noudevsync,
+--reportformat String, --resizefs,
+--test
+ID: lvextend_by_policy
+
+---
+
+lvmconfig
+OO: OO_CONFIG
+ID: lvmconfig_general
+
+---
+
+lvreduce --size SizeMB LV
+OO: --autobackup Bool, --force, --nofsck, --noudevsync,
+--reportformat String, --resizefs, --test
+ID: lvreduce_general
+
+---
+
+lvremove VG|LV|Tag|Select ...
+OO: --autobackup Bool, --force, --nohistory, --noudevsync,
+--reportformat String, --select String, --test
+ID: lvremove_general
+
+---
+
+lvrename VG LV LV_new
+OO: --autobackup Bool, --noudevsync, --reportformat String, --test
+ID: lvrename_vg_lv_lv
+
+lvrename LV LV_new
+OO: --autobackup Bool, --noudevsync, --reportformat String, --test
+ID: lvrename_lv_lv
+
+---
+
+lvresize --size SizeMB LV
+OO: --alloc Alloc, --autobackup Bool, --force,
+--nofsck, --nosync, --noudevsync, --reportformat String, --resizefs,
+--stripes Number, --stripesize SizeKB, --test, --poolmetadatasize SizeMB
+OP: PV ...
+ID: lvresize_by_size
+DESC: Resize an LV by a specified size.
+
+lvresize LV PV ...
+OO: --alloc Alloc, --autobackup Bool, --force,
+--nofsck, --nosync, --noudevsync,
+--reportformat String, --resizefs, --stripes Number, --stripesize SizeKB,
+--test
+ID: lvresize_by_pv
+DESC: Resize an LV by a specified PV.
+
+lvresize --poolmetadatasize SizeMB LV_thinpool
+OO: --alloc Alloc, --autobackup Bool, --force,
+--nofsck, --nosync, --noudevsync,
+--reportformat String, --stripes Number, --stripesize SizeKB,
+--test
+OP: PV ...
+ID: lvresize_pool_metadata_by_size
+DESC: Resize the metadata SubLV of a pool LV.
+
+---
+
+lvs
+OO: --history, --segments, OO_REPORT
+OP: VG|LV|Tag ...
+ID: lvs_general
+
+---
+
+lvscan
+OO: --all, --blockdevice, --ignorelockingfailure, --partial,
+--readonly, --reportformat String, --cache_long
+ID: lvscan_general
+
+---
+
+# None of these can function as a required option for pvchange.
+OO_PVCHANGE: --autobackup Bool, --force, --ignoreskippedcluster,
+--reportformat String, --test, --uuid
+
+# Any of these can function as a required option for pvchange.
+OO_PVCHANGE_META: --allocatable Bool, --addtag Tag, --deltag Tag,
+--uuid, --metadataignore Bool
+
+pvchange OO_PVCHANGE_META --all
+OO: OO_PVCHANGE
+ID: pvchange_properties_all
+
+pvchange OO_PVCHANGE_META PV|Select ...
+OO: --select String, OO_PVCHANGE
+ID: pvchange_properties_some
+
+---
+
+pvresize PV ...
+OO: --setphysicalvolumesize SizeMB, --reportformat String, --test
+ID: pvresize_general
+
+---
+
+pvck PV ...
+OO: --labelsector Number
+ID: pvck_general
+
+---
+
+# Use --uuidstr here which will be converted to uuidstr_ARG
+# which is actually --uuid string on the command line.
+
+pvcreate PV ...
+OO: --dataalignment SizeKB, --dataalignmentoffset SizeKB, --bootloaderareasize SizeMB,
+--force, --test, --labelsector Number, --metadatatype MetadataType,
+--pvmetadatacopies Number, --metadatasize SizeMB, --metadataignore Bool,
+--norestorefile, --setphysicalvolumesize SizeMB,
+--reportformat String, --restorefile String, --uuidstr String, --zero Bool
+ID: pvcreate_general
+
+---
+
+pvdisplay
+OO: --aligned, --all, --binary, --colon, --columns, --configreport String,
+--foreign, --ignorelockingfailure, --ignoreskippedcluster,
+--logonly, --maps, --noheadings, --nosuffix, --options String,
+--readonly, --reportformat String, --select String, --separator String, --shared,
+--short, --sort String, --unbuffered, --units Units
+OP: PV|Tag ...
+ID: pvdisplay_general
+
+---
+
+pvmove PV
+OO: --abort, --alloc Alloc, --atomic, --autobackup Bool, --background,
+--interval Number, --name LV, --noudevsync, --reportformat String, --test
+OP: PV ...
+ID: pvmove_one
+
+pvmove
+OO: --abort, --background, --test
+ID: pvmove_any
+
+---
+
+pvremove PV ...
+OO: --force, --reportformat String, --test
+ID: pvremove_general
+
+---
+
+pvs
+OO: --segments, OO_REPORT
+OP: PV|Tag ...
+ID: pvs_general
+
+---
+
+pvscan
+OO: --ignorelockingfailure, --reportformat String, --exported, --novolumegroup,
+--short, --uuid
+ID: pvscan_show
+
+pvscan --cache_long
+OO: --ignorelockingfailure, --reportformat String, --background,
+--activate Active, --major Number, --minor Number,
+OP: PV|String ...
+ID: pvscan_cache
+
+---
+
+vgcfgbackup
+OO: --file String, --foreign, --ignorelockingfailure, --partial, --readonly,
+--reportformat String
+ID: vgcfgbackup_general
+
+---
+
+vgcfgrestore VG
+OO: --file String, --force_long, --list, --metadatatype MetadataType, --test
+ID: vgcfgrestore_by_vg
+
+vgcfgrestore --list --file String
+ID: vgcfgrestore_by_file
+
+---
+
+# None of these can function as a required option for vgchange.
+
+OO_VGCHANGE: --autobackup Bool, --ignoremonitoring, --ignoreskippedcluster,
+--noudevsync, --reportformat String, --select String, --test, --force
+
+# Any of these can function as a required option for vgchange.
+# profile is also part of OO_ALL, but is repeated in OO_VGCHANGE_META
+# because it can function as a required opt.
+
+OO_VGCHANGE_META: --addtag Tag, --deltag Tag,
+--logicalvolume Number, --maxphysicalvolumes Number, --alloc Alloc, --uuid,
+--clustered Bool, --metadatacopies MetadataCopies, --vgmetadatacopies MetadataCopies,
+--physicalextentsize SizeMB, --resizeable Bool, --systemid String, --locktype LockType,
+--profile String, --detachprofile, --metadataprofile String,
+
+vgchange OO_VGCHANGE_META
+OO: OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_properties
+
+vgchange --monitor Bool
+OO: --sysinit, --ignorelockingfailure, --poll Bool, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_monitor
+
+vgchange --poll Bool
+OO: --ignorelockingfailure, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_poll
+
+vgchange --activate Active
+OO: --activationmode ActivationMode, --ignoreactivationskip, --partial, --sysinit,
+--ignorelockingfailure, --monitor Bool, --poll Bool, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_activate
+
+vgchange --refresh
+OO: --sysinit, --ignorelockingfailure, --monitor Bool, --poll Bool, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_refresh
+
+vgchange --lockstart
+OO: --lockopt String, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_lockstart
+
+vgchange --lockstop
+OO: --lockopt String, OO_VGCHANGE_META, OO_VGCHANGE
+OP: VG|Tag ...
+ID: vgchange_lockstop
+
+---
+
+vgck
+OO: --reportformat String
+OP: VG|Tag ...
+ID: vgck_general
+
+---
+
+vgconvert VG ...
+OO: --force, --test, --labelsector Number, --bootloaderareasize SizeMB,
+--metadatatype MetadataType, --pvmetadatacopies Number,
+--metadatasize SizeMB, --reportformat String
+ID: vgconvert_general
+
+---
+
+vgcreate VG_new PV ...
+OO: --addtag Tag, --alloc Alloc, --autobackup Bool, --clustered Bool, --maxlogicalvolumes Number,
+--maxphysicalvolumes Number, --metadataprofile String, --metadatatype MetadataType,
+--physicalextentsize SizeMB, --test, --force, --zero Bool, --labelsector Number,
+--metadatasize SizeMB, --pvmetadatacopies Number, --reportformat String, --metadatacopies MetadataCopies,
+--vgmetadatacopies MetadataCopies, --dataalignment SizeKB, --dataalignmentoffset SizeKB,
+--shared, --systemid String, --locktype LockType, --lockopt String
+ID: vgcreate_general
+
+---
+
+vgdisplay
+OO: --activevolumegroups, --aligned, --binary, --colon, --columns,
+--configreport String, --foreign, --ignorelockingfailure,
+--ignoreskippedcluster, --logonly, --noheadings, --nosuffix,
+--options String, --partial, --readonly, --reportformat String, --select String,
+--shared, --short, --separator String, --sort String, --unbuffered, --units Units
+OP: VG|Tag ...
+ID: vgdisplay_general
+
+---
+
+OO_VGEXPORT: --reportformat String, --test
+
+vgexport VG|Tag|Select ...
+OO: --select String, OO_VGEXPORT
+ID: vgexport_some
+
+vgexport --all
+OO: OO_VGEXPORT
+ID: vgexport_all
+
+---
+
+vgextend VG PV ...
+OO: --autobackup Bool, --test,
+--force, --zero Bool, --labelsector Number, --metadatatype MetadataType,
+--metadatasize SizeMB, --pvmetadatacopies Number,
+--metadataignore Bool, --dataalignment SizeKB, --dataalignmentoffset SizeKB,
+--reportformat String, --restoremissing
+ID: vgextend_general
+
+---
+
+OO_VGIMPORT: --force, --reportformat String, --test
+
+vgimport VG|Tag|Select ...
+OO: --select String, OO_VGIMPORT
+ID: vgimport_some
+
+vgimport --all
+OO: OO_VGIMPORT
+ID: vgimport_all
+
+---
+
+vgimportclone PV ...
+OO: --basevgname VG, --test, --import
+ID: vgimportclone_general
+
+---
+
+vgmerge VG VG
+OO: --autobackup Bool, --list, --test
+ID: vgmerge_general
+
+---
+
+vgmknodes
+OO: --ignorelockingfailure, --refresh, --reportformat String
+OP: VG|LV|Tag ...
+ID: vgmknodes_general
+
+---
+
+OO_VGREDUCE: --autobackup Bool, --force, --reportformat String, --test
+
+vgreduce VG PV ...
+OO: OO_VGREDUCE
+ID: vgreduce_by_pv
+
+vgreduce --all VG
+OO: OO_VGREDUCE
+ID: vgreduce_all
+
+vgreduce --removemissing VG
+OO: --mirrorsonly, OO_VGREDUCE
+ID: vgreduce_missing
+
+---
+
+vgremove VG|Tag|Select ...
+OO: --force, --noudevsync, --reportformat String, --select String, --test
+ID: vgremove_general
+
+---
+
+vgrename VG VG_new
+OO: --autobackup Bool, --force, --reportformat String, --test
+ID: vgrename_by_name
+
+vgrename String VG_new
+OO: --autobackup Bool, --force, --reportformat String, --test
+ID: vgrename_by_uuid
+
+---
+
+vgs
+OO: OO_REPORT
+OP: VG|Tag ...
+ID: vgs_general
+
+---
+
+vgscan
+OO: --cache_long, --ignorelockingfailure, --mknodes, --notifydbus,
+--partial, --reportformat String
+ID: vgscan_general
+
+---
+
+OO_VGSPLIT: --autobackup Bool, --test
+
+OO_VGSPLIT_NEW: --alloc Alloc, --clustered Bool,
+--maxlogicalvolumes Number, --maxphysicalvolumes Number,
+--metadatatype MetadataType, --vgmetadatacopies MetadataCopies
+
+vgsplit VG VG PV ...
+OO: OO_VGSPLIT
+ID: vgsplit_by_pv_to_existing
+
+vgsplit --name LV VG VG
+OO: OO_VGSPLIT
+ID: vgsplit_by_lv_to_existing
+
+vgsplit VG VG_new PV ...
+OO: OO_VGSPLIT, OO_VGSPLIT_NEW
+ID: vgsplit_by_pv_to_new
+
+vgsplit --name LV VG VG_new
+OO: OO_VGSPLIT, OO_VGSPLIT_NEW
+ID: vgsplit_by_lv_to_new
+
+---
+
+# built-in and deprecated commands
+
+config
+OO: OO_CONFIG
+OP: String ...
+ID: lvmconfig_general
+
+dumpconfig
+OO: OO_CONFIG
+OP: String ...
+ID: lvmconfig_general
+
+devtypes
+OO: --aligned, --binary, --nameprefixes, --noheadings,
+--nosuffix, --options String, --reportformat String, --rows,
+--select String, --separator String, --sort String, --unbuffered, --unquoted
+ID: devtypes_general
+
+fullreport
+OO: OO_REPORT
+OP: VG ...
+ID: fullreport_general
+
+lastlog
+OO: --reportformat String, --select String
+ID: lastlog_general
+
+lvpoll --polloperation String LV ...
+OO: --abort, --autobackup Bool, --handlemissingpvs, --interval Number, --test
+ID: lvpoll_general
+
+formats
+ID: formats_general
+
+help
+ID: help_general
+
+version
+ID: version_general
+
+pvdata
+ID: pvdata_general
+
+segtypes
+ID: segtypes_general
+
+systemid
+ID: systemid_general
+
+tags
+ID: tags_general
+
+lvmchange
+ID: lvmchange_general
+
+lvmdiskscan
+OO: --lvmpartition, --readonly
+ID: lvmdiskscan_general
+
+lvmsadc
+ID: lvmsadc_general
+
+lvmsar
+OO: --full, --stdin
+ID: lvmsar_general
+
