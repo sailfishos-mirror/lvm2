@@ -81,7 +81,8 @@ lvcreate -l1 -s -n inval $vg/$lv3
 lvcreate -l4 -I4 -i2 -n stripe $vg
 # Invalidate snapshot
 not dd if=/dev/zero of="$DM_DEV_DIR/$vg/inval" bs=4K
-invalid lvscan "$dev1"
+# ignores unused positional arg dev1
+lvscan "$dev1"
 lvdisplay --maps
 lvscan --all
 
@@ -108,13 +109,16 @@ vgmknodes --refresh
 lvscan
 lvmdiskscan
 
-invalid pvscan "$dev1"
+# ignores unused arg
+pvscan "$dev1"
 invalid pvscan -aay
 invalid pvscan --major 254
 invalid pvscan --minor 0
 invalid pvscan --novolumegroup -e
-invalid vgscan $vg
-invalid lvscan $vg
+# ignores unsed arg
+vgscan $vg
+# ignroes unused arg
+lvscan $vg
 
 if aux have_readline; then
 cat <<EOF | lvm
