@@ -49,21 +49,43 @@ extern char *optarg;
 #  define OPTIND_INIT 1
 #endif
 
+#include "command-lines-count.h" /* #define COMMAND_COUNT, generated from command-lines.in */
+
 /*
  * Table of valid switches
  */
 static struct arg_props _arg_props[ARG_COUNT + 1] = {
-#define arg(a, b, c, d, e, f) {b, "", "--" c, d, e, f},
+#define arg(a, b, c, d, e, f) {a, b, "", "--" c, d, e, f},
 #include "args.h"
 #undef arg
 };
 
+/*
+ * Table of valid command names
+ */
+#define MAX_COMMAND_NAMES 64
+struct command_name {
+	const char *name;
+	const char *desc;
+	unsigned int flags;
+};
+
+struct command_name command_names[MAX_COMMAND_NAMES] = {
+#define xx(a, b, c...) { # a, b, c },
+#include "commands.h"
+#undef xx
+};
+
+/*
+ * Table of valid command lines
+ */
+static struct command commands[COMMAND_COUNT];
 static struct cmdline_context _cmdline;
 
 /* Command line args */
 unsigned arg_count(const struct cmd_context *cmd, int a)
 {
-	return cmd->arg_values ? cmd->arg_values[a].count : 0;
+	return cmd->opt_arg_values ? cmd->opt_arg_values[a].count : 0;
 }
 
 unsigned grouped_arg_count(const struct arg_values *av, int a)
@@ -182,12 +204,12 @@ const char *arg_long_option_name(int a)
 
 const char *arg_value(const struct cmd_context *cmd, int a)
 {
-	return cmd->arg_values ? cmd->arg_values[a].value : NULL;
+	return cmd->opt_arg_values ? cmd->opt_arg_values[a].value : NULL;
 }
 
 const char *arg_str_value(const struct cmd_context *cmd, int a, const char *def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].value : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].value : def;
 }
 
 const char *grouped_arg_str_value(const struct arg_values *av, int a, const char *def)
@@ -217,44 +239,44 @@ int32_t first_grouped_arg_int_value(const struct cmd_context *cmd, int a, const 
 int32_t arg_int_value(const struct cmd_context *cmd, int a, const int32_t def)
 {
 	return (_cmdline.arg_props[a].flags & ARG_GROUPABLE) ?
-		first_grouped_arg_int_value(cmd, a, def) : (arg_is_set(cmd, a) ? cmd->arg_values[a].i_value : def);
+		first_grouped_arg_int_value(cmd, a, def) : (arg_is_set(cmd, a) ? cmd->opt_arg_values[a].i_value : def);
 }
 
 uint32_t arg_uint_value(const struct cmd_context *cmd, int a, const uint32_t def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].ui_value : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].ui_value : def;
 }
 
 int64_t arg_int64_value(const struct cmd_context *cmd, int a, const int64_t def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].i64_value : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].i64_value : def;
 }
 
 uint64_t arg_uint64_value(const struct cmd_context *cmd, int a, const uint64_t def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].ui64_value : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].ui64_value : def;
 }
 
 /* No longer used.
 const void *arg_ptr_value(struct cmd_context *cmd, int a, const void *def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].ptr : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].ptr : def;
 }
 */
 
 sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].sign : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].sign : def;
 }
 
 percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def)
 {
-	return arg_is_set(cmd, a) ? cmd->arg_values[a].percent : def;
+	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].percent : def;
 }
 
 int arg_count_increment(struct cmd_context *cmd, int a)
 {
-	return cmd->arg_values[a].count++;
+	return cmd->opt_arg_values[a].count++;
 }
 
 int yes_no_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
@@ -709,104 +731,258 @@ int metadatacopies_arg(struct cmd_context *cmd, struct arg_values *av)
 	return int_arg(cmd, av);
 }
 
-static void __alloc(int size)
+static struct command_name *_find_command_name(const char *name)
 {
-	if (!(_cmdline.commands = dm_realloc(_cmdline.commands, sizeof(*_cmdline.commands) * size))) {
-		log_fatal("Couldn't allocate memory.");
-		exit(ECMD_FAILED);
+	int i;
+	
+	for (i = 0; i < MAX_COMMAND_NAMES; i++) {
+		if (!command_names[i].name)
+			break;
+		if (!strcmp(command_names[i].name, name))
+			return &command_names[i];
 	}
-
-	_cmdline.commands_size = size;
+	return NULL;
 }
 
-static void _alloc_command(void)
+static void _define_commands(void)
 {
-	if (!_cmdline.commands_size)
-		__alloc(32);
-
-	if (_cmdline.commands_size <= _cmdline.num_commands)
-		__alloc(2 * _cmdline.commands_size);
-}
-
-static void _create_new_command(const char *name, command_fn command,
-				unsigned flags,
-				const char *desc, const char *usagestr,
-				int nargs, int *args)
-{
-	struct command *nc;
-
-	_alloc_command();
-
-	nc = _cmdline.commands + _cmdline.num_commands++;
-
-	nc->name = name;
-	nc->desc = desc;
-	nc->usage = usagestr;
-	nc->fn = command;
-	nc->flags = flags;
-	nc->num_args = nargs;
-	nc->valid_args = args;
-}
-
-static void _register_command(const char *name, command_fn fn, const char *desc,
-			      unsigned flags, const char *usagestr, ...)
-{
-	int nargs = 0, i;
-	int *args;
-	va_list ap;
-
-	/* count how many arguments we have */
-	va_start(ap, usagestr);
-	while (va_arg(ap, int) >= 0)
-		 nargs++;
-	va_end(ap);
-
-	/* allocate space for them */
-	if (!(args = dm_malloc(sizeof(*args) * nargs))) {
-		log_fatal("Out of memory.");
-		exit(ECMD_FAILED);
-	}
-
-	/* fill them in */
-	va_start(ap, usagestr);
-	for (i = 0; i < nargs; i++)
-		args[i] = va_arg(ap, int);
-	va_end(ap);
-
-	/* enter the command in the register */
-	_create_new_command(name, fn, flags, desc, usagestr, nargs, args);
+/* command-lines.h defines command[] structs, generated from command-lines.in */
+#include "command-lines.h" /* generated from command-lines.in */
 }
 
 void lvm_register_commands(void)
 {
-#define xx(a, b, c, d...) _register_command(# a, a, b, c, ## d, \
-					    driverloaded_ARG, \
-					    debug_ARG, help_ARG, help2_ARG, \
-					    version_ARG, verbose_ARG, \
-					    yes_ARG, \
-					    quiet_ARG, config_ARG, \
-					    commandprofile_ARG, \
-					    profile_ARG, -1);
-#include "commands.h"
-#undef xx
+	struct command_name *cname;
+	int i;
+
+	memset(&commands, 0, sizeof(commands));
+
+	_define_commands();
+
+	_cmdline.commands = commands;
+	_cmdline.num_commands = COMMAND_COUNT;
+
+	for (i = 0; i < COMMAND_COUNT; i++) {
+		if (!(cname = _find_command_name(commands[i].name)))
+			log_error(INTERNAL_ERROR "Failed to find command name %s.", commands[i].name);
+		commands[i].flags = cname->flags;
+	}
 }
 
-static struct command *_find_command(const char *name)
+/*
+ * Match what the user typed with a one specific command definition/prototype
+ * from commands[].  If nothing matches, it's not a valid command.  The match
+ * is based on command name, required opt args and required pos args.
+ *
+ * Find an entry in the commands array that matches based the arg values.
+ *
+ * If the cmd has opt or pos args set that are not accepted by command,
+ * we can: silently ignore them, warn they are not being used, or fail.
+ * Default should probably be to warn and continue.
+ *
+ * For each command[i], check how many required opt/pos args cmd matches.
+ * Save the command[i] that matches the most.
+ *
+ * commands[i].cmd_flags & CMD_FLAG_ONE_REQUIRED_OPT means
+ * any one item from commands[i].required_opt_args needs to be
+ * set to match.
+ *
+ * required_pos_args[0].flags & ARG_DEF_TYPE_SELECT means
+ * cmd->pos_arg_values[0] can be NULL if arg_is_set(select_ARG)
+ */
+
+static int _opt_equivalent_is_set(struct cmd_context *cmd, int opt)
 {
-	int i;
-	const char *base;
+	if ((opt == mirrorlog_ARG) && arg_is_set(cmd, corelog_ARG))
+		return 1;
 
-	base = last_path_component(name);
+	if ((opt == resizeable_ARG) && arg_is_set(cmd, resizable_ARG))
+		return 1;
 
-	for (i = 0; i < _cmdline.num_commands; i++) {
-		if (!strcmp(base, _cmdline.commands[i].name))
-			break;
+	if ((opt == allocatable_ARG) && arg_is_set(cmd, allocation_ARG))
+		return 1;
+
+	if ((opt == resizeable_ARG) && arg_is_set(cmd, allocation_ARG))
+		return 1;
+
+	if ((opt == activate_ARG) && arg_is_set(cmd, available_ARG))
+		return 1;
+
+	if ((opt == rebuild_ARG) && arg_is_set(cmd, raidrebuild_ARG))
+		return 1;
+
+	if ((opt == syncaction_ARG) && arg_is_set(cmd, raidsyncaction_ARG))
+		return 1;
+
+	if ((opt == writemostly_ARG) && arg_is_set(cmd, raidwritemostly_ARG))
+		return 1;
+
+	if ((opt == minrecoveryrate_ARG) && arg_is_set(cmd, raidminrecoveryrate_ARG))
+		return 1;
+
+	if ((opt == maxrecoveryrate_ARG) && arg_is_set(cmd, raidmaxrecoveryrate_ARG))
+		return 1;
+
+	if ((opt == writebehind_ARG) && arg_is_set(cmd, raidwritebehind_ARG))
+		return 1;
+
+	return 0;
+}
+
+static int _command_required_opt_matches(struct cmd_context *cmd, int ci, int ro)
+{
+	if (arg_is_set(cmd, commands[ci].required_opt_args[ro].opt))
+		return 1;
+
+	/*
+	 * For some commands, --size and --extents are interchanable,
+	 * but command[] definitions use only --size.
+	 */
+	if ((commands[ci].required_opt_args[ro].opt == size_ARG) && arg_is_set(cmd, extents_ARG)) {
+		if (!strcmp(commands[ci].name, "lvcreate") ||
+		    !strcmp(commands[ci].name, "lvresize") ||
+		    !strcmp(commands[ci].name, "lvextend") ||
+		    !strcmp(commands[ci].name, "lvreduce"))
+			return 1;
 	}
 
-	if (i >= _cmdline.num_commands)
-		return 0;
+	/* TODO: for lvmconfig, recognize --type in place of --typeconfig? */
 
-	return _cmdline.commands + i;
+	if (_opt_equivalent_is_set(cmd, commands[ci].required_opt_args[ro].opt))
+		return 1;
+
+	return 0;
+}
+
+static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp)
+{
+	if (cmd->pos_arg_values[rp]) {
+		/* FIXME: can we match object type better than just checking something exists? */
+		/* Some cases could be validated by looking at defs.types and at the value. */
+		return 1;
+	}
+
+	/*
+	 * If Select is specified as a pos arg, then that pos arg can be
+	 * empty if --select is used.
+	 */
+	if ((commands[ci].required_pos_args[rp].def.types & ARG_DEF_TYPE_SELECT) &&
+	    arg_is_set(cmd, select_ARG))
+		return 1;
+
+	return 0;
+}
+
+static struct command *_find_command(struct cmd_context *cmd, const char *path)
+{
+	const char *name;
+	int match_count, mismatch_count;
+	int best_match_i = 0, best_match_count = 0;
+	int closest_i = 0, closest_count = 0;
+	int ro_matches;
+	int ro, rp;
+	int i;
+
+	name = last_path_component(path);
+
+	for (i = 0; i < COMMAND_COUNT; i++) {
+		if (strcmp(name, commands[i].name))
+			continue;
+
+		match_count = 0;
+		mismatch_count = 0;
+		ro_matches = 0;
+
+		/* if the command name alone is enough, then that's a match */
+
+		if (!commands[i].ro_count && !commands[i].rp_count) {
+			/* log_warn("match %d command name %s", i, name); */
+			match_count = 1;
+		}
+
+		/* match required_opt_args */
+
+		for (ro = 0; ro < commands[i].ro_count; ro++) {
+			if (_command_required_opt_matches(cmd, i, ro)) {
+				/* log_warn("match %d ro opt %d", i, commands[i].required_opt_args[ro].opt); */
+				match_count++;
+				ro_matches++;
+			} else {
+				/* cmd is missing a required opt arg */
+				/* log_warn("mismatch %d ro opt %d", i, commands[i].required_opt_args[ro].opt); */
+				mismatch_count++;
+			}
+		}
+
+		/*
+		 * Special case where missing required_opt_arg's does not matter
+		 * if one required_opt_arg did match.
+		 */
+		if (commands[i].cmd_flags & CMD_FLAG_ONE_REQUIRED_OPT) {
+			if (ro_matches) {
+				/* one or more of the required_opt_args is used */
+				mismatch_count = 0;
+			} else {
+				/* not even one of the required_opt_args is used */
+				mismatch_count = 1;
+			}
+		}
+
+		/* match required_pos_args */
+
+		for (rp = 0; rp < commands[i].rp_count; rp++) {
+			if (_command_required_pos_matches(cmd, i, rp)) {
+				/* log_warn("match %d rp %d", i, commands[i].required_pos_args[rp].pos); */
+				match_count++;
+			} else {
+				/* cmd is missing a required pos arg */
+				/* log_warn("mismatch %d rp %d", i, commands[i].required_pos_args[rp].pos); */
+				mismatch_count++;
+			}
+		}
+
+		/* if cmd is missing any required opt/pos args, it can't be this command. */
+
+		if (mismatch_count) {
+			/* save i/match_count for "closest" command that doesn't match */
+			if (!closest_count || (match_count > closest_count)) {
+				closest_i = i;
+				closest_count = match_count;
+			}
+			continue;
+		}
+
+		/* use command that has the most matching required opt/pos */
+
+		if (!best_match_count || (match_count > best_match_count)) {
+			/* log_warn("match best i %d count %d", i, match_count); */
+			best_match_i = i;
+			best_match_count = match_count;
+		}
+	}
+
+	if (!best_match_count) {
+		/* cmd did not have all the required opt/pos args of any command */
+		log_error("Failed to find a matching command definition.");
+		if (closest_count) {
+			log_warn("Closest command usage is:");
+			/* FIXME: _print_usage_required(commands[closest_i].usage); with new lines, aligned, etc */
+			log_warn("%s", commands[closest_i].usage);
+		}
+		return NULL;
+	}
+
+	/*
+	 * Check if all arg_is_set values from cmd are accepted as
+	 * optional_opt_args, and warn (or fail per config?) if options are set
+	 * in cmd that are not accepted by the chosen command[i].
+	 *
+	 * Same for pos args.
+	 */
+
+	/* log_warn("command matched: %.256s ...", commands[best_match_i].usage); */
+
+	return &commands[best_match_i];
 }
 
 static void _short_usage(const char *name)
@@ -816,65 +992,97 @@ static void _short_usage(const char *name)
 
 static int _usage(const char *name)
 {
-	struct command *com = _find_command(name);
+	struct command_name *cname = _find_command_name(name);
 
-	if (!com) {
+	if (!cname) {
 		log_print("%s: no such command.", name);
 		return 0;
 	}
 
-	log_print("%s: %s\n\n%s", com->name, com->desc, com->usage);
+	/* FIXME: print usage strings from matching commands[] entries? */
+
+	log_print("%s: %s", cname->name, cname->desc);
 	return 1;
 }
 
 /*
+ * Sets up the arguments to pass to getopt_long().
+ *
+ * getopt_long() takes a string of short option characters
+ * where the char is followed by ":" if the option takes an arg,
+ * e.g. "abc:d:"  This string is created in optstrp.
+ *
+ * getopt_long() also takes an array of struct option which
+ * has the name of the long option, if it takes an arg, etc,
+ * e.g.
+ *
+ * option long_options[] = {
+ * 	{ "foo", required_argument, 0,  0  },
+ * 	{ "bar", no_argument,       0, 'b' }
+ * };
+ *
+ * this array is created in longoptsp.
+ *
+ * Original comment:
  * Sets up the short and long argument.  If there
  * is no short argument then the index of the
  * argument in the the_args array is set as the
  * long opt value.  Yuck.  Of course this means we
  * can't have more than 'a' long arguments.
  */
-static void _add_getopt_arg(int arg, char **ptr, struct option **o)
+
+static void _add_getopt_arg(int arg_enum, char **optstrp, struct option **longoptsp)
 {
-	struct arg_props *a = _cmdline.arg_props + arg;
+	struct arg_props *a = _cmdline.arg_props + arg_enum;
 
 	if (a->short_arg) {
-		*(*ptr)++ = a->short_arg;
+		*(*optstrp)++ = a->short_arg;
 
 		if (a->fn)
-			*(*ptr)++ = ':';
+			*(*optstrp)++ = ':';
 	}
 #ifdef HAVE_GETOPTLONG
+	/* long_arg is "--foo", so +2 is the offset of the name after "--" */
+
 	if (*(a->long_arg + 2)) {
-		(*o)->name = a->long_arg + 2;
-		(*o)->has_arg = a->fn ? 1 : 0;
-		(*o)->flag = NULL;
+		(*longoptsp)->name = a->long_arg + 2;
+		(*longoptsp)->has_arg = a->fn ? 1 : 0;
+		(*longoptsp)->flag = NULL;
+
+		/*
+		 * When getopt_long() sees an option that has an associated
+		 * single letter, it returns the ascii value of that letter.
+		 * e.g. getopt_long() returns 100 for '-d' or '--debug'
+		 * (100 is the ascii value of 'd').
+		 *
+		 * When getopt_long() sees an option that does not have an
+		 * associated single letter, it returns the value of the
+		 * the enum for that long option name plus 128.
+		 * e.g. getopt_long() returns 139 for --cachepool
+		 * (11 is the enum value for --cachepool, so 11+128)
+		 */
+
 		if (a->short_arg)
-			(*o)->val = a->short_arg;
+			(*longoptsp)->val = a->short_arg;
 		else
-			(*o)->val = arg + 128;
-		(*o)++;
+			(*longoptsp)->val = arg_enum + 128;
+		(*longoptsp)++;
 	}
 #endif
 }
 
-static int _find_arg(struct command *com, int opt)
+static int _find_arg(int goval)
 {
-	struct arg_props *a;
-	int i, arg;
+	int i;
 
-	for (i = 0; i < com->num_args; i++) {
-		arg = com->valid_args[i];
-		a = _cmdline.arg_props + arg;
+	for (i = 0; i < ARG_COUNT; i++) {
+		/* the value returned by getopt matches the ascii value of single letter option */
+		if (_cmdline.arg_props[i].short_arg && (goval == _cmdline.arg_props[i].short_arg))
+			return _cmdline.arg_props[i].enum_val;
 
-		/*
-		 * opt should equal either the
-		 * short arg, or the index into
-		 * the_args.
-		 */
-		if ((a->short_arg && (opt == a->short_arg)) ||
-		    (!a->short_arg && (opt == (arg + 128))))
-			return arg;
+		/* the value returned by getopt matches the enum value plus 128 */
+		if (!_cmdline.arg_props[i].short_arg && (goval == _cmdline.arg_props[i].enum_val + 128))
+			return _cmdline.arg_props[i].enum_val;
 	}
 
 	return -1;
@@ -883,21 +1091,27 @@ static int _find_arg(struct command *com, int opt)
 static int _process_command_line(struct cmd_context *cmd, int *argc,
 				 char ***argv)
 {
-	int i, opt, arg;
 	char str[((ARG_COUNT + 1) * 2) + 1], *ptr = str;
 	struct option opts[ARG_COUNT + 1], *o = opts;
 	struct arg_props *a;
 	struct arg_values *av;
 	struct arg_value_group_list *current_group = NULL;
+	int arg_enum; /* e.g. foo_ARG */
+	int goval;    /* the number returned from getopt_long identifying what it found */
+	int i;
 
-	if (!(cmd->arg_values = dm_pool_zalloc(cmd->mem, sizeof(*cmd->arg_values) * ARG_COUNT))) {
+	if (!(cmd->opt_arg_values = dm_pool_zalloc(cmd->mem, sizeof(*cmd->opt_arg_values) * ARG_COUNT))) {
 		log_fatal("Unable to allocate memory for command line arguments.");
 		return 0;
 	}
 
-	/* fill in the short and long opts */
-	for (i = 0; i < cmd->command->num_args; i++)
-		_add_getopt_arg(cmd->command->valid_args[i], &ptr, &o);
+	/*
+	 * create the short-form character array (str) and the long-form option
+	 * array (opts) to pass to the getopt_long() function.  IOW we generate
+	 * the arguments to pass to getopt_long() from the args.h/arg_props data.
+	 */
+	for (i = 0; i < ARG_COUNT; i++)
+		_add_getopt_arg(_cmdline.arg_props[i].enum_val, &ptr, &o);
 
 	*ptr = '\0';
 	memset(o, 0, sizeof(*o));
@@ -905,19 +1119,23 @@ static int _process_command_line(struct cmd_context *cmd, int *argc,
 	/* initialise getopt_long & scan for command line switches */
 	optarg = 0;
 	optind = OPTIND_INIT;
-	while ((opt = GETOPTLONG_FN(*argc, *argv, str, opts, NULL)) >= 0) {
+	while ((goval = GETOPTLONG_FN(*argc, *argv, str, opts, NULL)) >= 0) {
 
-		if (opt == '?')
+		if (goval == '?')
 			return 0;
 
-		if ((arg = _find_arg(cmd->command, opt)) < 0) {
+		/*
+		 * translate the option value used by getopt into the enum
+		 * value (e.g. foo_ARG) from the args array....
+		 */
+		if ((arg_enum = _find_arg(goval)) < 0) {
 			log_fatal("Unrecognised option.");
 			return 0;
 		}
 
-		a = _cmdline.arg_props + arg;
+		a = _cmdline.arg_props + arg_enum;
 
-		av = &cmd->arg_values[arg];
+		av = &cmd->opt_arg_values[arg_enum];
 
 		if (a->flags & ARG_GROUPABLE) {
 			/*
@@ -927,10 +1145,10 @@ static int _process_command_line(struct cmd_context *cmd, int *argc,
 			 *   - or if argument has higher priority than current group.
 			 */
 			if (!current_group ||
-			    (current_group->arg_values[arg].count && !(a->flags & ARG_COUNTABLE)) ||
+			    (current_group->arg_values[arg_enum].count && !(a->flags & ARG_COUNTABLE)) ||
 			    (current_group->prio < a->prio)) {
 				/* FIXME Reduce size including only groupable args */
-				if (!(current_group = dm_pool_zalloc(cmd->mem, sizeof(struct arg_value_group_list) + sizeof(*cmd->arg_values) * ARG_COUNT))) {
+				if (!(current_group = dm_pool_zalloc(cmd->mem, sizeof(struct arg_value_group_list) + sizeof(*cmd->opt_arg_values) * ARG_COUNT))) {
 					log_fatal("Unable to allocate memory for command line arguments.");
 					return 0;
 				}
@@ -940,7 +1158,7 @@ static int _process_command_line(struct cmd_context *cmd, int *argc,
 			}
 			/* Maintain total argument count as well as count within each group */
 			av->count++;
-			av = &current_group->arg_values[arg];
+			av = &current_group->arg_values[arg_enum];
 		}
 
 		if (av->count && !(a->flags & ARG_COUNTABLE)) {
@@ -1002,12 +1220,12 @@ static int _merge_synonym(struct cmd_context *cmd, int oldarg, int newarg)
 	/* Not groupable? */
 	if (!(_cmdline.arg_props[oldarg].flags & ARG_GROUPABLE)) {
 		if (arg_is_set(cmd, oldarg))
-			_copy_arg_values(cmd->arg_values, oldarg, newarg);
+			_copy_arg_values(cmd->opt_arg_values, oldarg, newarg);
 		return 1;
 	}
 
 	if (arg_is_set(cmd, oldarg))
-		cmd->arg_values[newarg].count = cmd->arg_values[oldarg].count;
+		cmd->opt_arg_values[newarg].count = cmd->opt_arg_values[oldarg].count;
 
 	/* Groupable */
 	dm_list_iterate_items(current_group, &cmd->arg_value_groups) {
@@ -1431,7 +1649,7 @@ static int _prepare_profiles(struct cmd_context *cmd)
 		log_debug(_setting_global_profile_msg, _command_profile_source_name, profile->name);
 		cmd->profile_params->global_command_profile = profile;
 
-		if (!cmd->arg_values)
+		if (!cmd->opt_arg_values)
 			cmd->profile_params->shell_profile = profile;
 	}
 
@@ -1502,6 +1720,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct dm_config_tree *config_string_cft, *config_profile_command_cft, *config_profile_metadata_cft;
 	const char *reason = NULL;
+	const char *cmd_name;
 	int ret = 0;
 	int locking_type;
 	int monitoring;
@@ -1514,6 +1733,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 
 	/* each command should start out with sigint flag cleared */
 	sigint_clear();
+
+	cmd_name = strdup(argv[0]);
 
 	/* eliminate '-' from all options starting with -- */
 	for (i = 1; i < argc; i++) {
@@ -1553,15 +1774,15 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 
 	log_debug("Parsing: %s", cmd->cmd_line);
 
-	if (!(cmd->command = _find_command(argv[0])))
-		return ENO_SUCH_CMD;
-
 	if (!_process_command_line(cmd, &argc, &argv)) {
 		log_error("Error during parsing of command line.");
 		return EINVALID_CMD_LINE;
 	}
 
-	set_cmd_name(cmd->command->name);
+	if (!(cmd->command = _find_command(cmd, cmd_name)))
+		return ENO_SUCH_CMD;
+
+	set_cmd_name(cmd_name);
 
 	if (arg_is_set(cmd, backgroundfork_ARG)) {
 		if (!become_daemon(cmd, 1)) {
@@ -2040,23 +2261,8 @@ struct cmd_context *init_lvm(unsigned set_connections, unsigned set_filters)
 	return cmd;
 }
 
-static void _fin_commands(void)
-{
-	int i;
-
-	for (i = 0; i < _cmdline.num_commands; i++)
-		dm_free(_cmdline.commands[i].valid_args);
-
-	dm_free(_cmdline.commands);
-
-	_cmdline.commands = NULL;
-	_cmdline.num_commands = 0;
-	_cmdline.commands_size = 0;
-}
-
 void lvm_fin(struct cmd_context *cmd)
 {
-	_fin_commands();
 	destroy_toolcontext(cmd);
 	udev_fin_library_context();
 }
@@ -2202,7 +2408,8 @@ int lvm2_main(int argc, char **argv)
 	if (!(cmd = init_lvm(0, 0)))
 		return -1;
 
-	cmd->argv = argv;
+	cmd->pos_arg_values = argv;
+
 	lvm_register_commands();
 
 	if (_lvm1_fallback(cmd)) {

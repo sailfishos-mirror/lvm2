@@ -55,10 +55,11 @@ static char *_list_cmds(const char *text, int state)
 /* List matching arguments */
 static char *_list_args(const char *text, int state)
 {
+#if 0 /* FIXME: just go through args.h */
+
 	static int match_no = 0;
 	static size_t len = 0;
 	static struct command *com;
-
 	/* Initialise if this is a new completion attempt */
 	if (!state) {
 		char *s = rl_line_buffer;
@@ -118,7 +119,7 @@ static char *_list_args(const char *text, int state)
 		if (*(l + 2) && !strncmp(text, l, len))
 			return strdup(l);
 	}
-
+#endif
 	return NULL;
 }
 

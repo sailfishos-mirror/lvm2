@@ -22,7 +22,6 @@ struct cmdline_context {
         struct arg_props *arg_props;
         struct command *commands;
         int num_commands;
-        int commands_size;
 };
 
 int lvm2_main(int argc, char **argv);
