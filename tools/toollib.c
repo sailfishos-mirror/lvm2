@@ -801,10 +801,7 @@ int vgcreate_params_set_from_args(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (arg_is_set(cmd, metadatacopies_ARG))
-		vp_new->vgmetadatacopies = arg_int_value(cmd, metadatacopies_ARG,
-							DEFAULT_VGMETADATACOPIES);
-	else if (arg_is_set(cmd, vgmetadatacopies_ARG))
+	if (arg_is_set(cmd, vgmetadatacopies_ARG))
 		vp_new->vgmetadatacopies = arg_int_value(cmd, vgmetadatacopies_ARG,
 							DEFAULT_VGMETADATACOPIES);
 	else
@@ -2329,6 +2326,464 @@ static struct lv_segment _historical_lv_segment = {
 	.origin_list = DM_LIST_HEAD_INIT(_historical_lv_segment.origin_list),
 };
 
+static void lvp_bits_to_str(uint64_t bits, char *buf, int len)
+{
+	struct lv_props *prop;
+	int lvp_enum;
+	int pos = 0;
+	int ret;
+
+	for (lvp_enum = 0; lvp_enum < LVP_COUNT; lvp_enum++) {
+		if (!(prop = get_lv_prop(lvp_enum)))
+			continue;
+
+		if (lvp_bit_is_set(bits, lvp_enum)) {
+			ret = snprintf(buf + pos, len - pos, "%s ", prop->name);
+			if (ret >= len - pos)
+				break;
+			pos += ret;
+		}
+	}
+	buf[len - 1] = '\0';
+}
+
+static void lvt_bits_to_str(uint64_t bits, char *buf, int len)
+{
+	struct lv_types *type;
+	int lvt_enum;
+	int pos = 0;
+	int ret;
+
+	for (lvt_enum = 0; lvt_enum < LVT_COUNT; lvt_enum++) {
+		if (!(type = get_lv_type(lvt_enum)))
+			continue;
+
+		if (lvt_bit_is_set(bits, lvt_enum)) {
+			ret = snprintf(buf + pos, len - pos, "%s ", type->name);
+			if (ret >= len - pos)
+				break;
+			pos += ret;
+		}
+	}
+	buf[len - 1] = '\0';
+}
+
+/*
+ * This is the lv_prop function pointer used for lv_is_foo() #defines.
+ * Alternatively, lv_is_foo() could all be turned into functions.
+ */
+
+static int _lv_is_prop(struct cmd_context *cmd, struct logical_volume *lv, int lvp_enum)
+{
+	switch (lvp_enum) {
+	case is_locked_LVP:
+		return lv_is_locked(lv);
+	case is_partial_LVP:
+		return lv_is_partial(lv);
+	case is_virtual_LVP:
+		return lv_is_virtual(lv);
+	case is_merging_LVP:
+		return lv_is_merging(lv);
+	case is_merging_origin_LVP:
+		return lv_is_merging_origin(lv);
+	case is_converting_LVP:
+		return lv_is_converting(lv);
+	case is_external_origin_LVP:
+		return lv_is_external_origin(lv);
+	case is_virtual_origin_LVP:
+		return lv_is_virtual_origin(lv);
+	case is_not_synced_LVP:
+		return lv_is_not_synced(lv);
+	case is_pending_delete_LVP:
+		return lv_is_pending_delete(lv);
+	case is_error_when_full_LVP:
+		return lv_is_error_when_full(lv);
+	case is_pvmove_LVP:
+		return lv_is_pvmove(lv);
+	case is_removed_LVP:
+		return lv_is_removed(lv);
+	case is_vg_writable_LVP:
+		return (lv->vg->status & LVM_WRITE) ? 1 : 0;
+	case is_thinpool_data_LVP:
+		return lv_is_thin_pool_data(lv);
+	case is_thinpool_metadata_LVP:
+		return lv_is_thin_pool_metadata(lv);
+	case is_cachepool_data_LVP:
+		return lv_is_cache_pool_data(lv);
+	case is_cachepool_metadata_LVP:
+		return lv_is_cache_pool_metadata(lv);
+	case is_mirror_image_LVP:
+		return lv_is_mirror_image(lv);
+	case is_mirror_log_LVP:
+		return lv_is_mirror_log(lv);
+	case is_raid_image_LVP:
+		return lv_is_raid_image(lv);
+	case is_raid_metadata_LVP:
+		return lv_is_raid_metadata(lv);
+	case is_origin_LVP: /* use lv_is_thick_origin */
+		return lv_is_origin(lv);
+	case is_thick_origin_LVP:
+		return lv_is_thick_origin(lv);
+	case is_thick_snapshot_LVP:
+		return lv_is_thick_snapshot(lv);
+	case is_thin_origin_LVP:
+		return lv_is_thin_origin(lv, NULL);
+	case is_thin_snapshot_LVP:
+		return lv_is_thin_snapshot(lv);
+	case is_cache_origin_LVP:
+		return lv_is_cache_origin(lv);
+	case is_merging_cow_LVP:
+		return lv_is_merging_cow(lv);
+	case is_cow_covering_origin_LVP:
+		return lv_is_cow_covering_origin(lv);
+	case is_visible_LVP:
+		return lv_is_visible(lv);
+	case is_historical_LVP:
+		return lv_is_historical(lv);
+	case is_raid_with_tracking_LVP:
+		return lv_is_raid_with_tracking(lv);
+	default:
+		log_error(INTERNAL_ERROR "unknown lv property value lvp_enum %d", lvp_enum);
+	}
+
+	return 0;
+}
+
+/*
+ * Check if an LV matches a given LV type enum.
+ */
+
+static int _lv_is_type(struct cmd_context *cmd, struct logical_volume *lv, int lvt_enum)
+{
+	struct lv_segment *seg = first_seg(lv);
+
+	switch (lvt_enum) {
+	case striped_LVT:
+		return seg_is_striped(seg);
+	case linear_LVT:
+		return seg_is_linear(seg);
+	case snapshot_LVT:
+		return lv_is_cow(lv);
+	case thin_LVT:
+		return lv_is_thin_volume(lv);
+	case thinpool_LVT:
+		return lv_is_thin_pool(lv);
+	case cache_LVT:
+		return lv_is_cache(lv);
+	case cachepool_LVT:
+		return lv_is_cache_pool(lv);
+	case mirror_LVT:
+		return lv_is_mirror(lv);
+	case raid_LVT:
+		return lv_is_raid(lv);
+	case raid0_LVT:
+		return seg_is_raid0(seg);
+	case raid1_LVT:
+		return seg_is_raid1(seg);
+	case raid4_LVT:
+		return seg_is_raid4(seg);
+#if 0
+	case raid5_LVT:
+		return seg_is_raid5(seg);
+	case raid6_LVT:
+		return seg_is_raid6(seg);
+#endif
+	case raid10_LVT:
+		return seg_is_raid10(seg);
+	default:
+		log_error(INTERNAL_ERROR "unknown lv type value lvt_enum %d", lvt_enum);
+	}
+
+	return 0;
+}
+
+static int _get_lvt_enum(struct logical_volume *lv)
+{
+	struct lv_segment *seg = first_seg(lv);
+
+	if (seg_is_striped(seg))
+		return striped_LVT;
+	if (seg_is_linear(seg))
+		return linear_LVT;
+	if (lv_is_cow(lv))
+		return snapshot_LVT;
+	if (lv_is_thin_volume(lv))
+		return thin_LVT;
+	if (lv_is_thin_pool(lv))
+		return thinpool_LVT;
+	if (lv_is_cache(lv))
+		return cache_LVT;
+	if (lv_is_cache_pool(lv))
+		return cachepool_LVT;
+	if (lv_is_mirror(lv))
+		return mirror_LVT;
+	if (lv_is_raid(lv))
+		return raid_LVT;
+	if (seg_is_raid0(seg))
+		return raid0_LVT;
+	if (seg_is_raid1(seg))
+		return raid1_LVT;
+	if (seg_is_raid4(seg))
+		return raid4_LVT;
+#if 0
+	if (seg_is_raid5(seg))
+		return raid5_LVT;
+	if (seg_is_raid6(seg))
+		return raid6_LVT;
+#endif
+	if (seg_is_raid10(seg))
+		return raid10_LVT;
+
+	log_error(INTERNAL_ERROR "unknown lv type for %s", display_lvname(lv));
+	return 0;
+}
+
+/*
+ * Call lv_is_<type> for each <type>_LVT bit set in lvt_bits.
+ * If lv matches one of the specified lv types, then return 1.
+ */
+
+static int _lv_types_match(struct cmd_context *cmd, struct logical_volume *lv, uint64_t lvt_bits,
+			   uint64_t *match_bits, uint64_t *unmatch_bits)
+{
+	struct lv_types *type;
+	int lvt_enum;
+	int found_a_match = 0;
+	int match;
+
+	if (match_bits)
+		*match_bits = 0;
+	if (unmatch_bits)
+		*unmatch_bits = 0;
+
+	for (lvt_enum = 1; lvt_enum < LVT_COUNT; lvt_enum++) {
+		if (!lvt_bit_is_set(lvt_bits, lvt_enum))
+			continue;
+
+		if (!(type = get_lv_type(lvt_enum)))
+			continue;
+
+		/*
+		 * All types are currently handled by _lv_is_type()
+		 * because lv_is_type() are #defines and not exposed
+		 * in tools.h
+		 */
+
+		if (!type->fn)
+			match = _lv_is_type(cmd, lv, lvt_enum);
+		else
+			match = type->fn(cmd, lv);
+
+		if (match)
+			found_a_match = 1;
+
+		if (match_bits && match)
+			*match_bits |= lvt_enum_to_bit(lvt_enum);
+
+		if (unmatch_bits && !match)
+			*unmatch_bits |= lvt_enum_to_bit(lvt_enum);
+	}
+
+	return found_a_match;
+}
+
+/*
+ * Call lv_is_<prop> for each <prop>_LVP bit set in lvp_bits.
+ * If lv matches all of the specified lv properties, then return 1.
+ */
+
+static int _lv_props_match(struct cmd_context *cmd, struct logical_volume *lv, uint64_t lvp_bits,
+			   uint64_t *match_bits, uint64_t *unmatch_bits)
+{
+	struct lv_props *prop;
+	int lvp_enum;
+	int found_a_mismatch = 0;
+	int match;
+
+	if (match_bits)
+		*match_bits = 0;
+	if (unmatch_bits)
+		*unmatch_bits = 0;
+
+	for (lvp_enum = 1; lvp_enum < LVP_COUNT; lvp_enum++) {
+		if (!lvp_bit_is_set(lvp_bits, lvp_enum))
+			continue;
+
+		if (!(prop = get_lv_prop(lvp_enum)))
+			continue;
+
+		if (!prop->fn)
+			match = _lv_is_prop(cmd, lv, lvp_enum);
+		else
+			match = prop->fn(cmd, lv);
+
+		if (!match)
+			found_a_mismatch = 1;
+
+		if (match_bits && match)
+			*match_bits |= lvp_enum_to_bit(lvp_enum);
+
+		if (unmatch_bits && !match)
+			*unmatch_bits |= lvp_enum_to_bit(lvp_enum);
+	}
+
+	return !found_a_mismatch;
+}
+
+/*
+ * If the command definition specifies one required positional
+ * LV (possibly repeatable), and specifies accepted LV types,
+ * then verify that the LV being processed matches one of those
+ * types.
+ *
+ * process_each_lv() can only be used for commands that have
+ * one positional LV arg (optionally repeating, where each is
+ * processed independently.)  It cannot work for commands that
+ * have different required LVs in designated positions, like
+ * 'lvrename LV1 LV2', where each LV is not processed
+ * independently.  That means that this LV type check only
+ * needs to check the lv_type of the first positional arg.
+ */
+
+static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv)
+{
+	int ret = 1;
+
+	if ((cmd->command->rp_count == 1) &&
+	    val_bit_is_set(cmd->command->required_pos_args[0].def.val_bits, lv_VAL) &&
+	    cmd->command->required_pos_args[0].def.lvt_bits) {
+		ret = _lv_types_match(cmd, lv, cmd->command->required_pos_args[0].def.lvt_bits, NULL, NULL);
+		if (!ret) {
+			int lvt_enum = _get_lvt_enum(lv);
+			struct lv_types *type = get_lv_type(lvt_enum);
+			log_warn("Operation on LV %s which has invalid type %s.",
+				 display_lvname(lv), type ? type->name : "unknown");
+		}
+	}
+
+	return ret;
+}
+
+/* Check if LV passes each rule specified in command definition. */
+
+static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
+{
+	char buf[64];
+	struct cmd_rule *rule;
+	struct lv_types *lvtype = NULL;
+	uint64_t lv_props_match_bits, lv_props_unmatch_bits;
+	uint64_t lv_types_match_bits, lv_types_unmatch_bits;
+	int lvt_enum;
+	int opt_is_set;
+	int ret = 1;
+	int i;
+
+	lvt_enum = _get_lvt_enum(lv);
+	if (lvt_enum)
+		lvtype = get_lv_type(lvt_enum);
+
+
+	for (i = 0; i < cmd->command->rule_count; i++) {
+		rule = &cmd->command->rules[i];
+
+		/*
+		 * For the rule to apply, any option, LV type or LV property
+		 * that is specified before the not|and rule needs to match the
+		 * command/LV.  If multiple LV types are specifed, one needs to
+		 * match for the rule to apply.  If multiple LV properties are
+		 * specified, all need to match for the rule to apply.
+		 *
+		 * If all qualifications are zero (!opt && !lvt_bits && !lvp_bits),
+		 * then there are no qualifications and the rule always applies.
+		 */
+
+		if (rule->opt && !arg_is_set(cmd, rule->opt))
+			continue;
+
+		/* If LV matches one type in lvt_bits, this returns 1. */
+		if (rule->lvt_bits && !_lv_types_match(cmd, lv, rule->lvt_bits, NULL, NULL))
+			continue;
+
+		/* If LV matches all properties in lvp_bits, this returns 1. */
+		if (rule->lvp_bits && !_lv_props_match(cmd, lv, rule->lvp_bits, NULL, NULL))
+			continue;
+
+		/*
+		 * Check the option, LV types, LV properties specified after
+		 * the not|and rule.
+		 */
+
+		if (rule->check_opt)
+			opt_is_set = arg_is_set(cmd, rule->check_opt);
+
+		if (rule->check_lvt_bits)
+			_lv_types_match(cmd, lv, rule->check_lvt_bits, &lv_types_match_bits, &lv_types_unmatch_bits);
+
+		if (rule->check_lvp_bits)
+			_lv_props_match(cmd, lv, rule->check_lvp_bits, &lv_props_match_bits, &lv_props_unmatch_bits);
+		
+		/*
+		 * Evaluate if the check results pass based on the rule.
+		 * The options are checked again here because the previous
+		 * option validation (during command matching) does not cover
+		 * cases where the option is combined with qualifying LV types
+		 * or properties.
+		 */
+
+		if (rule->check_opt && (rule->rule == RULE_INVALID) && opt_is_set) {
+			log_warn("Command option %s invalid with option %s",
+				 arg_long_option_name(rule->opt), arg_long_option_name(rule->check_opt));
+			ret = 0;
+		}
+
+		if (rule->check_opt && (rule->rule == RULE_REQUIRE) && !opt_is_set)  {
+			log_warn("Command option %s requires option %s",
+				 arg_long_option_name(rule->opt), arg_long_option_name(rule->check_opt));
+			ret = 0;
+		}
+
+		/* Fail if the LV matches any of the invalid LV types. */
+
+		if (rule->check_lvt_bits && (rule->rule == RULE_INVALID) && lv_types_match_bits) {
+			log_warn("Command on LV %s with invalid type: %s",
+				 display_lvname(lv), lvtype ? lvtype->name : "unknown");
+			ret = 0;
+		}
+
+		/* Fail if the LV does not match any of the required LV types. */
+
+		if (rule->check_lvt_bits && (rule->rule == RULE_REQUIRE) && !lv_types_match_bits) {
+			memset(buf, 0, sizeof(buf));
+			lvt_bits_to_str(rule->check_lvt_bits, buf, sizeof(buf));
+			log_warn("Command on LV %s with type %s does not match required type: %s",
+				 display_lvname(lv), lvtype ? lvtype->name : "unknown", buf);
+			ret = 0;
+		}
+
+		/* Fail if the LV matches any of the invalid LV properties. */
+
+		if (rule->check_lvp_bits && (rule->rule == RULE_INVALID) && lv_props_match_bits) {
+			memset(buf, 0, sizeof(buf));
+			lvp_bits_to_str(lv_props_match_bits, buf, sizeof(buf));
+			log_warn("Command on LV %s with invalid properties: %s",
+				 display_lvname(lv), buf);
+			ret = 0;
+		}
+
+		/* Fail if the LV does not match any of the required LV properties. */
+
+		if (rule->check_lvp_bits && (rule->rule == RULE_REQUIRE) && lv_props_unmatch_bits) {
+			memset(buf, 0, sizeof(buf));
+			lvp_bits_to_str(lv_props_unmatch_bits, buf, sizeof(buf));
+			log_warn("Command on LV %s requires properties: %s",
+				 display_lvname(lv), buf);
+			ret = 0;
+		}
+	}
+
+	return ret;
+}
+
 int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			  struct dm_list *arg_lvnames, const struct dm_list *tags_in,
 			  int stop_on_error,
@@ -2350,6 +2805,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	struct dm_str_list *sl;
 	struct dm_list final_lvs;
 	struct lv_list *final_lvl;
+	struct dm_list found_arg_lvnames;
 	struct glv_list *glvl, *tglvl;
 	int do_report_ret_code = 1;
 
@@ -2360,6 +2816,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		stack;
 
 	dm_list_init(&final_lvs);
+	dm_list_init(&found_arg_lvnames);
 
 	if (!vg_check_status(vg, EXPORTED_VG)) {
 		ret_max = ECMD_FAILED;
@@ -2453,6 +2910,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		if (lvargs_supplied && str_list_match_item(arg_lvnames, lvl->lv->name)) {
 			/* Remove LV from list of unprocessed LV names */
 			str_list_del(arg_lvnames, lvl->lv->name);
+			str_list_add(cmd->mem, &found_arg_lvnames, lvl->lv->name);
 			process_lv = 1;
 		}
 
@@ -2499,6 +2957,45 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		 */
 		if (lv_is_removed(lvl->lv))
 			continue;
+
+		/*
+		 * The command definition may include restrictions on the
+		 * types and properties of LVs that can be processed.
+		 */
+
+		if (!_check_lv_types(cmd, lvl->lv)) {
+			/* FIXME: include this result in report log? */
+			/* FIXME: avoid duplicating message for each level */
+
+			if (str_list_match_item(&found_arg_lvnames, lvl->lv->name)) {
+				log_error("Operation not permitted (%s %d) on LV %s.",
+					  cmd->command->command_line_id, cmd->command->command_line_enum,
+					  display_lvname(lvl->lv));
+				ret_max = ECMD_FAILED;
+			} else {
+				log_warn("Operation not permitted (%s %d) on LV %s.",
+					 cmd->command->command_line_id, cmd->command->command_line_enum,
+					 display_lvname(lvl->lv));
+			}
+			continue;
+		}
+
+		if (!_check_lv_rules(cmd, lvl->lv)) {
+			/* FIXME: include this result in report log? */
+			/* FIXME: avoid duplicating message for each level */
+
+			if (str_list_match_item(&found_arg_lvnames, lvl->lv->name)) {
+				log_error("Operation not permitted (%s %d) on LV %s.",
+					  cmd->command->command_line_id, cmd->command->command_line_enum,
+					  display_lvname(lvl->lv));
+				ret_max = ECMD_FAILED;
+			} else {
+				log_warn("Operation not permitted (%s %d) on LV %s.",
+					 cmd->command->command_line_id, cmd->command->command_line_enum,
+					 display_lvname(lvl->lv));
+			}
+			continue;
+		}
 
 		log_very_verbose("Processing LV %s in VG %s.", lvl->lv->name, vg->name);
 
@@ -3935,11 +4432,6 @@ int pvcreate_params_from_args(struct cmd_context *cmd, struct pvcreate_params *p
 	pp->pva.pvmetadatacopies = arg_int_value(cmd, pvmetadatacopies_ARG, -1);
 	if (pp->pva.pvmetadatacopies < 0)
 		pp->pva.pvmetadatacopies = find_config_tree_int(cmd, metadata_pvmetadatacopies_CFG, NULL);
-
-	if (pp->pva.pvmetadatacopies > 2) {
-		log_error("Metadatacopies may only be 0, 1 or 2");
-		return 0;
-	}
 
 	pp->pva.ba_size = arg_uint64_value(cmd, bootloaderareasize_ARG, pp->pva.ba_size);
 
