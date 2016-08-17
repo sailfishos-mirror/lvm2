@@ -36,6 +36,7 @@
 #define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
 #define MAX_EXTENT_SIZE ((uint32_t) -1)
 #define MIN_NON_POWER2_EXTENT_SIZE (128U * 2U)	/* 128KB in sectors */
+#define	RAID_ALLOC_CHUNK_SECTORS	(64 * 2) /* Allocate RAID in these minimal chunks to ensure page io doesn't fail */
 
 #define HISTORICAL_LV_PREFIX "-"
 
@@ -832,6 +833,12 @@ uint32_t extents_from_percent_size(struct volume_group *vg, const struct dm_list
 				   uint32_t extents, int roundup,
 				   percent_type_t percent, uint64_t size);
 
+/* Round @extents to stripe and/or RAID io boundary */
+uint32_t extents_round_to_boundary(struct volume_group *vg,
+				   const struct segment_type *segtype,
+				   uint32_t extents, uint32_t stripes,
+				   int extend);
+
 struct logical_volume *find_pool_lv(const struct logical_volume *lv);
 int pool_is_active(const struct logical_volume *pool_lv);
 int pool_supports_external_origin(const struct lv_segment *pool_seg, const struct logical_volume *external_lv);
@@ -1209,6 +1216,7 @@ int lv_raid_replace(struct logical_volume *lv, struct dm_list *remove_pvs,
 		    struct dm_list *allocate_pvs);
 int lv_raid_remove_missing(struct logical_volume *lv);
 int partial_raid_lv_supports_degraded_activation(const struct logical_volume *lv);
+uint32_t lv_raid_metadata_area_len(uint32_t extent_size);
 /* --  metadata/raid_manip.c */
 
 /* ++  metadata/cache_manip.c */

@@ -151,6 +151,14 @@ int lv_is_raid_with_tracking(const struct logical_volume *lv)
 	return _lv_is_raid_with_tracking(lv, &tracking);
 }
 
+/* FIXME: remove lv_raid_metadata_area_len() after defining 'lv_raid_rmeta_extents'*/
+uint32_t lv_raid_metadata_area_len(uint32_t extent_size)
+{
+	/* Ensure 4 MiB until we get dynamic rmeta resizing... */
+	// return max((4 * 2048 / extent_size), (uint32_t) 1);
+	return max((2*12 / extent_size), (uint32_t) 1);
+}
+
 uint32_t lv_raid_image_count(const struct logical_volume *lv)
 {
 	struct lv_segment *seg = first_seg(lv);
@@ -737,7 +745,7 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
 
 	if (!(ah = allocate_extents(data_lv->vg, NULL, seg->segtype, 0, 1, 0,
 				    seg->region_size,
-				    1 /*RAID_METADATA_AREA_LEN*/,
+				    lv_raid_metadata_area_len(data_lv->vg->extent_size),
 				    allocate_pvs, data_lv->alloc, 0, NULL)))
 		return_0;
 
@@ -845,7 +853,7 @@ static int _raid_add_images_without_commit(struct logical_volume *lv,
 		lv->status |= RAID;
 		seg = first_seg(lv);
 		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
-		seg->region_size = get_default_region_size(lv->vg->cmd);
+		seg->region_size = min((uint64_t) get_default_region_size(lv->vg->cmd), lv->size);
 
 		/* MD's bitmap is limited to tracking 2^21 regions */
 		while (seg->region_size < (lv->size / (1 << 21))) {
@@ -953,6 +961,21 @@ static int _raid_add_images(struct logical_volume *lv,
 	int rebuild_flag_cleared = 0;
 	struct lv_segment *seg = first_seg(lv);
 	uint32_t s;
+
+	if (seg_is_linear(seg) &&
+	    lv->size % RAID_ALLOC_CHUNK_SECTORS) {
+		uint64_t size = lv->le_count * lv->vg->extent_size;
+		uint32_t extents;
+
+		size += RAID_ALLOC_CHUNK_SECTORS - size % RAID_ALLOC_CHUNK_SECTORS;
+		extents = extents_from_size(lv->vg->cmd, size, lv->vg->extent_size) - lv->le_count;
+		log_print_unless_silent("Resizing LV %s to RAID boundary %s before conversion to raid1", 
+					display_lvname(lv), display_size(lv->vg->cmd, size));
+		if (!lv_extend(lv, seg->segtype, 1, 0, 1, 0, extents, pvs, lv->alloc, 0))
+			return 0;
+		if (!lv_update_and_reload_origin(lv))
+			return_0;
+	}
 
 	if (!_raid_add_images_without_commit(lv, new_count, pvs, use_existing_area_len))
 		return_0;
