@@ -895,7 +895,7 @@ uint32_t extents_round_to_boundary(struct volume_group *vg,
 
 		if (ensure_raid_min) {
 			/* Require multiples of 64 KiB to not fail in kernel RAID page size IO */
-			if ((new_extents * vg->extent_size / (stripes ?: 1)) % RAID_ALLOC_CHUNK_SECTORS)
+			if ((new_extents * vg->extent_size) % ((stripes ?: 1) * RAID_ALLOC_CHUNK_SECTORS))
 				extend ? new_extents++ : new_extents--;
 			else
 				ensure_raid_min = 0;
@@ -3959,8 +3959,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 #define	RAID_HEADER_SIZE	(2 * 4096) /* dm-raid superblock and bitmap superblock */
 static uint32_t _max_raid_extents(struct logical_volume *lv)
 {
-	uint32_t r;
-	uint64_t mlv_sectors, max_image_size;
+	uint64_t max_image_size;
 	uint64_t mlv_bytes; /* dm-raid superblock and bitmap superblock */
 	struct lv_segment *seg = first_seg(lv);
 	struct logical_volume *mlv;
