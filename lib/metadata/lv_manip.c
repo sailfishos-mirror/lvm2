@@ -38,9 +38,6 @@ typedef enum {
 	NEXT_AREA
 } area_use_t;
 
-/* FIXME: remove RAID_METADATA_AREA_LEN macro after defining 'raid_log_extents'*/
-#define RAID_METADATA_AREA_LEN 1
-
 /* FIXME These ended up getting used differently from first intended.  Refactor. */
 /* Only one of A_CONTIGUOUS_TO_LVSEG, A_CLING_TO_LVSEG, A_CLING_TO_ALLOCED may be set */
 #define A_CONTIGUOUS_TO_LVSEG	0x01	/* Must be contiguous to an existing segment */
@@ -878,22 +875,51 @@ dm_percent_t copy_percent(const struct logical_volume *lv)
 	return denominator ? dm_make_percent(numerator, denominator) : DM_PERCENT_100;
 }
 
-/* Round up extents to next stripe boundary for number of stripes */
-static uint32_t _round_to_stripe_boundary(struct volume_group *vg, uint32_t extents,
-					  uint32_t stripes, int extend)
+/* Round any tiny extents to multiples of 4K */
+#define MINIMUM_ALLOCATION_SECTORS 8
+static uint32_t _round_extents(uint32_t extents, uint32_t extent_size, int extend)
+{
+	uint64_t size = (uint64_t) extents * extent_size;
+	uint64_t rest = size % MINIMUM_ALLOCATION_SECTORS;
+
+	if (!rest)
+		return extents;
+
+	if (!size)
+		return 0;
+
+	rest = MINIMUM_ALLOCATION_SECTORS - rest;
+
+	return (size + (extend ? rest : -(MINIMUM_ALLOCATION_SECTORS - rest))) / extent_size;
+}
+
+/* Round up extents to next stripe boundary for number of stripes and ensure minimum sizes */
+static uint32_t _round_extents_to_boundary(struct volume_group *vg, uint32_t extents,
+					   uint32_t stripes, uint32_t stripe_size, int extend)
 {
 	uint32_t size_rest, new_extents = extents;
 
-	if (!stripes)
-		return extents;
+	if (stripes < 2)
+		return _round_extents(extents, vg->extent_size, extend);
 
+redo:
 	/* Round up extents to stripe divisible amount */
-	if ((size_rest = extents % stripes)) {
+	if ((size_rest = new_extents % stripes))
 		new_extents += extend ? stripes - size_rest : -size_rest;
-		log_print_unless_silent("Rounding size %s (%d extents) up to stripe boundary size %s (%d extents).",
+
+	if (stripes > 1 && stripe_size > 1) {
+		uint32_t tmp = new_extents;
+
+		if ((new_extents = _round_extents(tmp / stripes, vg->extent_size, extend) * stripes) != tmp)
+			goto redo;
+	}
+
+	log_debug("Adjusted allocation request of %" PRIu32 " to %" PRIu32 " logical extents.", extents, new_extents);
+
+	if (new_extents != extents) 
+		log_print_unless_silent("Rounding size %s (%d extents) up to boundary size %s (%d extents).",
 					display_size(vg->cmd, (uint64_t) extents * vg->extent_size), extents,
 					display_size(vg->cmd, (uint64_t) new_extents * vg->extent_size), new_extents);
-	}
 
 	return new_extents;
 }
@@ -1581,11 +1607,13 @@ static uint32_t _mirror_log_extents(uint32_t region_size, uint32_t pe_size, uint
 
 /* Is there enough total space or should we give up immediately? */
 static int _sufficient_pes_free(struct alloc_handle *ah, struct dm_list *pvms,
-				uint32_t allocated, uint32_t extents_still_needed)
+				uint32_t allocated, uint32_t extents_still_needed,
+				uint32_t extent_size)
 {
 	uint32_t area_extents_needed = (extents_still_needed - allocated) * ah->area_count / ah->area_multiple;
 	uint32_t parity_extents_needed = (extents_still_needed - allocated) * ah->parity_count / ah->area_multiple;
-	uint32_t metadata_extents_needed = ah->alloc_and_split_meta ? 0 : ah->metadata_area_count * RAID_METADATA_AREA_LEN; /* One each */
+	uint32_t metadata_extents_needed = ah->alloc_and_split_meta ? 0 :
+					   ah->metadata_area_count * lv_raid_metadata_area_len(ah->region_size, extent_size);
 	uint32_t total_extents_needed = area_extents_needed + parity_extents_needed + metadata_extents_needed;
 	uint32_t free_pes = pv_maps_size(pvms);
 
@@ -3059,7 +3087,7 @@ static int _allocate(struct alloc_handle *ah,
 		old_allocated = alloc_state.allocated;
 		log_debug_alloc("Trying allocation using %s policy.", get_alloc_string(alloc));
 
-		if (!ah->approx_alloc && !_sufficient_pes_free(ah, pvms, alloc_state.allocated, ah->new_extents))
+		if (!ah->approx_alloc && !_sufficient_pes_free(ah, pvms, alloc_state.allocated, ah->new_extents, vg->extent_size))
 			goto_out;
 
 		_init_alloc_parms(ah, &alloc_parms, alloc, prev_lvseg,
@@ -3252,7 +3280,7 @@ static struct alloc_handle *_alloc_init(struct cmd_context *cmd,
 			ah->metadata_area_count = area_count;
 			ah->alloc_and_split_meta = 1;
 
-			ah->log_len = RAID_METADATA_AREA_LEN;
+			ah->log_len = lv_raid_metadata_area_len(ah->region_size, extent_size);
 
 			/*
 			 * We need 'log_len' extents for each
@@ -3955,6 +3983,79 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 	return 1;
 }
 
+/* Adjust region and stripe size on very small LVs */
+static void _lv_adjust_region_and_stripe_size(struct logical_volume *lv)
+{
+	uint32_t size;
+	struct lv_segment *seg = first_seg(lv);
+
+	if (!seg)
+		return;
+
+	if (seg->region_size > seg_lv(seg, 0)->size) {
+		size = _round_down_pow2(seg_lv(seg, 0)->size);
+		log_warn("Region size %s too large for LV %s size %s, rounded down to %s",
+			 display_size(lv->vg->cmd, seg->region_size),
+			 display_lvname(lv),
+			 display_size(lv->vg->cmd, lv->size),
+			 display_size(lv->vg->cmd, size));
+		seg->region_size = size;
+	}
+
+	if (seg->stripe_size > seg_lv(seg, 0)->size) {
+		size = _round_down_pow2(seg_lv(seg, 0)->size);
+		log_warn("Stripe size %s too large for LV %s size %s, rounded down to %s",
+			 display_size(lv->vg->cmd, seg->stripe_size),
+			 display_lvname(lv),
+			 display_size(lv->vg->cmd, lv->size),
+			 display_size(lv->vg->cmd, size));
+		seg->stripe_size = size;
+	}
+}
+
+/* Check MetaLV size is sufficient fro RaidLV @lv size */
+#define        RAID_SUPERBLOCKS_SIZE        (2 * 4096) /* dm-raid superblock and bitmap superblock */
+static int _raid_rmeta_size_sufficient(struct logical_volume *lv)
+{
+	uint32_t area_multiple;
+	uint64_t max_rimage_size;
+	uint64_t mlv_bytes; /* dm-raid superblock and bitmap superblock */
+	struct lv_segment *seg = first_seg(lv);
+	struct logical_volume *mlv;
+
+	if (!seg ||
+	    !seg_is_raid(seg) ||
+	    !seg->region_size ||
+	    !seg->meta_areas ||
+	    !(mlv = seg_metalv(seg, 0)))
+		return 1;
+
+	mlv_bytes = mlv->size << SECTOR_SHIFT;
+	if (mlv_bytes < RAID_SUPERBLOCKS_SIZE) {
+		log_error("Metadata LV %s too small to even hold the RAID headers",
+			  display_lvname(mlv));
+		return 0;
+	}
+
+	/*
+	* Subtract space for 2 headers (superblock and bitmap)
+	* and calculate max image size in sectors
+	*/
+	max_rimage_size = (mlv_bytes - RAID_SUPERBLOCKS_SIZE) * 8 * seg->region_size;
+
+	/* Calculate the maximum possible LV size */
+	/* FIXME: area_multiple needs to change once we support odd number of stripes in raid10 */
+	area_multiple = _calc_area_multiple(seg->segtype, seg->area_count, 0);
+	if (max_rimage_size * area_multiple < lv->size) {
+		log_error("Can't extend LV %s larger than %s because of MetaLV size",
+			  display_lvname(lv),
+			  display_size(lv->vg->cmd, max_rimage_size * area_multiple));
+		return 0;
+	}
+
+	return 1;
+}
+
 /*
  * Entry point for single-step LV allocation + extension.
  * Extents is the number of logical extents to append to the LV unless
@@ -3972,7 +4073,7 @@ int lv_extend(struct logical_volume *lv,
 	      struct dm_list *allocatable_pvs, alloc_policy_t alloc,
 	      int approx_alloc)
 {
-	int r = 1;
+	int r = 1, empty = 0;
 	int log_count = 0;
 	struct alloc_handle *ah;
 	uint32_t sub_lv_count;
@@ -3985,6 +4086,8 @@ int lv_extend(struct logical_volume *lv,
 		return lv_add_virtual_segment(lv, 0u, extents, segtype);
 
 	if (!lv->le_count) {
+		empty = 1;
+
 		if (segtype_is_pool(segtype))
 			/*
 			 * Pool allocations treat the metadata device like a mirror log.
@@ -4015,6 +4118,8 @@ int lv_extend(struct logical_volume *lv,
 		if (!(r = lv_add_segment(ah, 0, ah->area_count, lv, segtype,
 					 stripe_size, 0u, 0)))
 			stack;
+		if (empty)
+			_lv_adjust_region_and_stripe_size(lv);
 	} else {
 		/*
 		 * For RAID, all the devices are AREA_LV.
@@ -4039,6 +4144,17 @@ int lv_extend(struct logical_volume *lv,
 		if (!(r = _lv_extend_layered_lv(ah, lv, new_extents - lv->le_count, 0,
 						stripes, stripe_size)))
 			goto_out;
+
+		if (empty)
+			_lv_adjust_region_and_stripe_size(lv);
+
+		if (!(r = _raid_rmeta_size_sufficient(lv))) {
+			if (!old_extents &&
+			    (!lv_remove(lv) || !vg_write(lv->vg) || !vg_commit(lv->vg)))
+				return_0;
+
+			goto_out;
+		}
 
 		/*
 		 * If we are expanding an existing mirror, we can skip the
@@ -4842,6 +4958,10 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 	if (lp->sign == SIGN_MINUS ||
 	    (lp->sign == SIGN_NONE && (lp->extents < existing_extents)))
 		reducing = 1;
+
+	lp->extents = _round_extents_to_boundary(lv->vg, lp->extents,
+						 seg_is_mirrored(seg_last) ? 1 : seg_last->area_count - seg_last->segtype->parity_devs,
+						 seg_last->stripe_size, !reducing);
 
 	/* If extending, find properties of last segment */
 	if (!reducing) {
@@ -7101,6 +7221,17 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 	}
 
+#if 1
+	/* FIXME: minimum 1K extent size??? */
+	if (lp->stripe_size > vg->extent_size &&
+	    !seg_is_raid(lp)) {
+		log_print_unless_silent("Reducing requested stripe size %s to maximum, "
+					"physical extent size %s.",
+					display_size(cmd, (uint64_t) lp->stripe_size),
+					display_size(cmd, (uint64_t) vg->extent_size));
+		lp->stripe_size = vg->extent_size;
+	}
+#else
 	if (lp->stripe_size > vg->extent_size) {
 		if (seg_is_raid(lp) && (vg->extent_size < STRIPE_SIZE_MIN)) {
 			/*
@@ -7122,8 +7253,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 					display_size(cmd, (uint64_t) vg->extent_size));
 		lp->stripe_size = vg->extent_size;
 	}
+#endif
 
-	lp->extents = _round_to_stripe_boundary(vg, lp->extents, lp->stripes, 1);
+	lp->extents = _round_extents_to_boundary(vg, lp->extents, lp->stripes, lp->stripe_size, 1);
 
 	if (!lp->extents && !seg_is_thin_volume(lp)) {
 		log_error(INTERNAL_ERROR "Unable to create new logical volume with no extents.");
@@ -7275,6 +7407,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			status |= LV_NOTSYNCED;
 		}
 
+		if (!seg_is_raid(lp))
 		lp->region_size = adjusted_mirror_region_size(vg->extent_size,
 							      lp->extents,
 							      lp->region_size, 0,

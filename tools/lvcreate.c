@@ -514,6 +514,8 @@ static int _read_raid_params(struct cmd_context *cmd,
 				  lp->segtype->name);
 			return 0;
 		}
+	} else if (!lp->stripe_size) {
+		; // lp->stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 	}
 
 	if (arg_is_set(cmd, mirrors_ARG) && segtype_is_raid(lp->segtype) &&
@@ -545,7 +547,6 @@ static int _read_raid_params(struct cmd_context *cmd,
 static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 					struct lvcreate_params *lp)
 {
-	int pagesize = lvm_getpagesize();
 	unsigned max_images;
 
 	if (seg_is_raid(lp)) {
@@ -622,12 +623,20 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 		return 0;
 	}
 
+#if 1
+	if (lp->region_size && !is_power_of_2(lp->region_size)) {
+		log_error("Region size (%" PRIu32 ") must be power of 2",
+			  lp->region_size);
+		return 0;
+	}
+#else
 	if (lp->region_size % (pagesize >> SECTOR_SHIFT)) {
 		log_error("Region size (%" PRIu32 ") must be a multiple of "
 			  "machine memory page size (%d)",
 			  lp->region_size, pagesize >> SECTOR_SHIFT);
 		return 0;
 	}
+#endif
 
 	if (seg_is_mirror(lp) && !_read_mirror_params(cmd, lp))
                 return_0;
@@ -1274,16 +1283,9 @@ static int _check_raid_parameters(struct volume_group *vg,
 				  struct lvcreate_cmdline_params *lcp)
 {
 	unsigned devs = lcp->pv_count ? : dm_list_size(&vg->pvs);
-	uint64_t page_sectors = lvm_getpagesize() >> SECTOR_SHIFT;
 	struct cmd_context *cmd = vg->cmd;
 	int old_stripes = !arg_is_set(cmd, stripes_ARG) &&
 			  find_config_tree_bool(cmd, allocation_raid_stripe_all_devices_CFG, NULL);
-
-	if (vg->extent_size < page_sectors) {
-		log_error("Unable to create RAID LV: requires minimum VG extent size %s",
-			  display_size(vg->cmd, page_sectors));
-		return 0;
-	}
 
 	/*
 	 * If we requested the previous behaviour by setting

@@ -151,6 +151,26 @@ int lv_is_raid_with_tracking(const struct logical_volume *lv)
 	return _lv_is_raid_with_tracking(lv, &tracking);
 }
 
+/* FIXME: remove lv_raid_metadata_area_len() after defining 'lv_raid_rmeta_extents'*/
+uint32_t lv_raid_metadata_area_len(uint32_t region_size, uint32_t extent_size)
+{
+	uint32_t r;
+	uint64_t max_lv_size;
+
+	if (!region_size)
+		region_size++;
+
+	/* Ensure senseful minimum metadata device size until we get dynamic rmeta resizing... */
+	max_lv_size = UINT32_MAX / 2;
+	max_lv_size *= extent_size;
+	max_lv_size = min(max_lv_size, (uint64_t) 2048 * 1024 * 1024 * 128);
+	r = (max_lv_size / region_size / (8*2048*extent_size) ?: 1);
+	if (r * extent_size < 2 * 12)
+		r = 2 * 12;
+
+	return r;
+}
+
 uint32_t lv_raid_image_count(const struct logical_volume *lv)
 {
 	struct lv_segment *seg = first_seg(lv);
@@ -709,6 +729,7 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
 			       struct logical_volume **meta_lv,
 			       struct dm_list *allocate_pvs)
 {
+	uint32_t region_size;
 	struct dm_list allocatable_pvs;
 	struct alloc_handle *ah;
 	struct lv_segment *seg = first_seg(data_lv);
@@ -735,9 +756,10 @@ static int _alloc_rmeta_for_lv(struct logical_volume *data_lv,
 	if (!(base_name = top_level_lv_name(data_lv->vg, data_lv->name)))
 		return_0;
 
+	region_size = seg->region_size ?: get_default_region_size(data_lv->vg->cmd);
 	if (!(ah = allocate_extents(data_lv->vg, NULL, seg->segtype, 0, 1, 0,
 				    seg->region_size,
-				    1 /*RAID_METADATA_AREA_LEN*/,
+				    lv_raid_metadata_area_len(region_size, data_lv->vg->extent_size),
 				    allocate_pvs, data_lv->alloc, 0, NULL)))
 		return_0;
 
@@ -845,7 +867,9 @@ static int _raid_add_images_without_commit(struct logical_volume *lv,
 		lv->status |= RAID;
 		seg = first_seg(lv);
 		seg_lv(seg, 0)->status |= RAID_IMAGE | LVM_READ | LVM_WRITE;
-		seg->region_size = get_default_region_size(lv->vg->cmd);
+		if (!seg->region_size)
+			seg->region_size = get_default_region_size(lv->vg->cmd);
+		seg->stripe_size = 0;
 
 		/* MD's bitmap is limited to tracking 2^21 regions */
 		while (seg->region_size < (lv->size / (1 << 21))) {
