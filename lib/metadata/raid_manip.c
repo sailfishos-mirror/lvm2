@@ -648,6 +648,9 @@ static int _alloc_image_components(struct logical_volume *lv,
 	else
 		region_size = seg->region_size;
 
+	if (!region_size)
+		region_size = get_default_region_size(lv->vg->cmd);
+
 	if (seg_is_raid(seg))
 		segtype = seg->segtype;
 	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID1)))
