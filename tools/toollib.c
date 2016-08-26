@@ -1304,7 +1304,6 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 	}
 #endif
 
-printf("stripe_size_required=%d\n", stripe_size_required);
 	if (stripe_size_required) {
 		if (!*stripe_size) {
 			*stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;

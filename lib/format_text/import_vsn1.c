@@ -391,7 +391,7 @@ static int _read_segment(struct logical_volume *lv, const struct dm_config_node 
 
 	if (!(seg = alloc_lv_segment(segtype, lv, start_extent,
 				     extent_count, 0, 0, NULL, area_count,
-				     extent_count, 0, 0, 0, NULL))) {
+				     segtype->parity_devs ? (extent_count / (area_count - segtype->parity_devs)) : extent_count, 0, 0, 0, NULL))) {
 		log_error("Segment allocation failed");
 		return 0;
 	}

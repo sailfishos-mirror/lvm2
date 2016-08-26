@@ -1259,13 +1259,13 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
 
 	/* Caller must ensure exact divisibility */
 	if (seg_is_striped(seg) || (seg_is_raid(seg) && !seg_is_raid1(seg))) {
-		if (reduction % seg->area_count) {
+		if (reduction % (seg->area_count - seg->segtype->parity_devs)) {
 			log_error("Segment extent reduction %" PRIu32
 				  " not divisible by #stripes %" PRIu32,
 				  reduction, seg->area_count);
 			return 0;
 		}
-		area_reduction = (reduction / (seg->area_count - seg->segtype->parity_devs));
+		area_reduction = reduction / (seg->area_count - seg->segtype->parity_devs);
 	} else
 		area_reduction = reduction;
 
@@ -3878,7 +3878,6 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 		stripes = 1;
 		stripe_size = 0;
 		area_multiple = _calc_area_multiple(seg->segtype, seg->area_count, seg_is_raid1(seg) ? 1 : seg->area_count - seg->segtype->parity_devs);
-printf("area_multiple=%u\n", area_multiple);
 	}
 
 	for (fa = first_area, s = 0; s < seg->area_count; s++) {
@@ -4005,12 +4004,15 @@ printf("area_multiple=%u\n", area_multiple);
 void lv_adjust_region_and_stripe_size(struct logical_volume *lv)
 {
 	uint32_t size;
+	uint64_t area_size;
 	struct lv_segment *seg = first_seg(lv);
 
 	if (!seg)
 		return;
 
-	if (seg->region_size > seg_lv(seg, 0)->size) {
+	area_size = (uint64_t) seg->area_len * lv->vg->extent_size;
+
+	if (seg->region_size > area_size) {
 		size = _round_down_pow2(seg_lv(seg, 0)->size);
 		log_warn("Region size %s too large for LV %s size %s, rounded down to %s",
 			 display_size(lv->vg->cmd, seg->region_size),
@@ -4020,7 +4022,7 @@ void lv_adjust_region_and_stripe_size(struct logical_volume *lv)
 		seg->region_size = size;
 	}
 
-	if (seg->stripe_size > seg_lv(seg, 0)->size) {
+	if (seg->stripe_size > area_size) {
 		size = _round_down_pow2(seg_lv(seg, 0)->size);
 		log_warn("Stripe size %s too large for LV %s size %s, rounded down to %s",
 			 display_size(lv->vg->cmd, seg->stripe_size),
@@ -4484,6 +4486,7 @@ static int _validate_stripesize(const struct volume_group *vg,
 		return 0;
 	}
 
+	/* Limit stripe size to extent size for non-RAID */
 	if (lp->stripe_size > vg->extent_size) {
 		log_print_unless_silent("Reducing stripe size %s to maximum, "
 					"physical extent size %s.",

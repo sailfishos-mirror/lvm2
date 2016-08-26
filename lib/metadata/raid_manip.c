@@ -652,7 +652,6 @@ static int _alloc_image_components(struct logical_volume *lv,
 		region_size = get_default_region_size(lv->vg->cmd);
 
 	if (seg_is_raid(seg))
-	if (seg_is_raid(seg))
 		segtype = seg->segtype;
 	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID1)))
 		return_0;
@@ -2548,7 +2547,7 @@ static struct possible_takeover_reshape_type _possible_takeover_reshape_types[] 
 	  .current_areas = 1,
 	  .options = ALLOW_STRIPE_SIZE },
 	{ .current_types  = SEG_STRIPED_TARGET, /* striped, i.e. seg->area_count > 1 */
-	  .possible_types = SEG_RAID0|SEG_RAID0_META,
+	  .possible_types = SEG_RAID0|SEG_RAID0_META|SEG_RAID4,
 	  .current_areas = ~0U,
 	  .options = ALLOW_NONE },
 	/* raid0* -> */
@@ -2914,7 +2913,7 @@ static int _raid456_to_raid0_or_striped_wrapper(TAKEOVER_FN_ARGS)
 		return_0;
 
 	/* FIXME Hard-coded raid4 to raid0 */
-	seg->area_len = seg->extents_copied = seg->area_len / seg->area_count;
+	seg->area_len = seg->extents_copied = seg->len / (seg->area_count - seg->segtype->parity_devs);
 
 	if (segtype_is_striped_target(new_segtype)) {
 		if (!_convert_raid0_to_striped(lv, 0, &removal_lvs))
@@ -2986,11 +2985,6 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
 			return 0;
 	}
 
-	/* FIXME Hard-coded raid0/4/5/6 */
-	/* Be prepared for any image addition -> raid5/6 */
-	if (seg_is_any_raid0(seg))
-		seg->area_len = seg->extents_copied = seg->len / seg->area_count;
-
 	/* Add the additional component LV pairs */
 	log_debug_metadata("Adding %" PRIu32 " component LV pair(s) to %s", new_image_count - lv_raid_image_count(lv),
 			   display_lvname(lv));
@@ -3005,6 +2999,10 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
 
 	seg->segtype = new_segtype;
 	seg->region_size = new_region_size;
+
+	/* FIXME Hard-coded raid0 -> raid4 */
+	if (seg_is_any_raid0(seg))
+		seg->area_len = seg->extents_copied = seg->len / (seg->area_count - seg->segtype->parity_devs);
 
 	_check_and_adjust_region_size(lv);
 	lv_adjust_region_and_stripe_size(lv);
@@ -3097,7 +3095,7 @@ static int _takeover_from_raid0_to_raid10(TAKEOVER_FN_ARGS)
 
 static int _takeover_from_raid0_to_raid45(TAKEOVER_FN_ARGS)
 {
-	return _striped_or_raid0_to_raid45610_wrapper(lv, new_segtype, yes, force, first_seg(lv)->area_count + 1, 1 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
+	return _striped_or_raid0_to_raid45610_wrapper(lv, new_segtype, yes, force, first_seg(lv)->area_count + 1, 2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
 }
 
 static int _takeover_from_raid0_to_raid6(TAKEOVER_FN_ARGS)
@@ -3143,7 +3141,7 @@ static int _takeover_from_raid0_meta_to_raid10(TAKEOVER_FN_ARGS)
 
 static int _takeover_from_raid0_meta_to_raid45(TAKEOVER_FN_ARGS)
 {
-	return _striped_or_raid0_to_raid45610_wrapper(lv, new_segtype, yes, force, first_seg(lv)->area_count + 1, 1 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
+	return _striped_or_raid0_to_raid45610_wrapper(lv, new_segtype, yes, force, first_seg(lv)->area_count + 1, 2 /* data_copies */, 0, 0, new_region_size, allocate_pvs);
 }
 
 static int _takeover_from_raid0_meta_to_raid6(TAKEOVER_FN_ARGS)

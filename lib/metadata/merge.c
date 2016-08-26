@@ -413,8 +413,8 @@ int check_lv_segments(struct logical_volume *lv, int complete_vg)
 			inc_error_count;
 		}
 
-		area_multiplier = segtype_is_striped(seg->segtype) ?
-					seg->area_count : 1;
+		area_multiplier = (segtype_is_striped(seg->segtype) || (seg_is_raid(seg) && !seg_is_raid1(seg))) ?
+					(seg->area_count - seg->segtype->parity_devs) : 1;
 		if (seg->area_len * area_multiplier != seg->len) {
 			log_error("LV %s: segment %u has inconsistent "
 				  "area_len %u",
