@@ -1229,6 +1229,8 @@ static uint32_t _calc_area_multiple(const struct segment_type *segtype,
 	}
 
 	/*
+	 * FIXME:
+	 *
 	 * RAID10 - only has 2-way mirror right now.
 	 *          If we are to move beyond 2-way RAID10, then
 	 *          the 'stripes' argument will always need to
@@ -1256,14 +1258,14 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
 	uint32_t area_reduction, s;
 
 	/* Caller must ensure exact divisibility */
-	if (seg_is_striped(seg)) {
+	if (seg_is_striped(seg) || (seg_is_raid(seg) && !seg_is_raid1(seg))) {
 		if (reduction % seg->area_count) {
 			log_error("Segment extent reduction %" PRIu32
 				  " not divisible by #stripes %" PRIu32,
 				  reduction, seg->area_count);
 			return 0;
 		}
-		area_reduction = (reduction / seg->area_count);
+		area_reduction = (reduction / (seg->area_count - seg->segtype->parity_devs));
 	} else
 		area_reduction = reduction;
 
@@ -3875,8 +3877,8 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 	if (seg_is_raid(seg)) {
 		stripes = 1;
 		stripe_size = 0;
-		if (seg_is_any_raid0(seg))
-			area_multiple = seg->area_count;
+		area_multiple = _calc_area_multiple(seg->segtype, seg->area_count, seg_is_raid1(seg) ? 1 : seg->area_count - seg->segtype->parity_devs);
+printf("area_multiple=%u\n", area_multiple);
 	}
 
 	for (fa = first_area, s = 0; s < seg->area_count; s++) {
@@ -4000,7 +4002,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 }
 
 /* Adjust region and stripe size on very small LVs */
-static void _lv_adjust_region_and_stripe_size(struct logical_volume *lv)
+void lv_adjust_region_and_stripe_size(struct logical_volume *lv)
 {
 	uint32_t size;
 	struct lv_segment *seg = first_seg(lv);
@@ -4135,7 +4137,7 @@ int lv_extend(struct logical_volume *lv,
 					 stripe_size, 0u, 0)))
 			stack;
 		if (empty)
-			_lv_adjust_region_and_stripe_size(lv);
+			lv_adjust_region_and_stripe_size(lv);
 	} else {
 		/*
 		 * For RAID, all the devices are AREA_LV.
@@ -4162,7 +4164,7 @@ int lv_extend(struct logical_volume *lv,
 			goto_out;
 
 		if (empty)
-			_lv_adjust_region_and_stripe_size(lv);
+			lv_adjust_region_and_stripe_size(lv);
 
 		if (!(r = _raid_rmeta_size_sufficient(lv))) {
 			if (!old_extents &&

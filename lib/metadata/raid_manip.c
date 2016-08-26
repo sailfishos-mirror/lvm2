@@ -652,6 +652,7 @@ static int _alloc_image_components(struct logical_volume *lv,
 		region_size = get_default_region_size(lv->vg->cmd);
 
 	if (seg_is_raid(seg))
+	if (seg_is_raid(seg))
 		segtype = seg->segtype;
 	else if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_RAID1)))
 		return_0;
@@ -2985,6 +2986,11 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
 			return 0;
 	}
 
+	/* FIXME Hard-coded raid0/4/5/6 */
+	/* Be prepared for any image addition -> raid5/6 */
+	if (seg_is_any_raid0(seg))
+		seg->area_len = seg->extents_copied = seg->len / seg->area_count;
+
 	/* Add the additional component LV pairs */
 	log_debug_metadata("Adding %" PRIu32 " component LV pair(s) to %s", new_image_count - lv_raid_image_count(lv),
 			   display_lvname(lv));
@@ -2999,10 +3005,9 @@ static int _striped_or_raid0_to_raid45610_wrapper(TAKEOVER_FN_ARGS)
 
 	seg->segtype = new_segtype;
 	seg->region_size = new_region_size;
-	/* FIXME Hard-coded raid0 to raid4 */
-	seg->area_len = seg->len;
 
 	_check_and_adjust_region_size(lv);
+	lv_adjust_region_and_stripe_size(lv);
 
 	log_debug_metadata("Updating VG metadata and reloading %s LV %s",
 			   lvseg_name(seg), display_lvname(lv));
@@ -3410,12 +3415,6 @@ static int _set_convenient_raid456_segtype_to(const struct lv_segment *seg_from,
 		if (segtype_is_any_raid5(*segtype) &&
 		    !segtype_is_raid5_n(*segtype)) {
 			log_error("Conversion to raid5_n not yet supported.");
-			return 0;
-
-		/* If this is any raid6 conversion request -> enforce raid6_n_6, because we convert from striped */
-		} else if (segtype_is_any_raid6(*segtype) &&
-			   !segtype_is_raid6_n_6(*segtype)) {
-			log_error("Conversion to raid6_n_6 not yet supported.");
 			return 0;
 		}
 

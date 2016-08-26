@@ -1008,6 +1008,11 @@ int vgcreate_params_validate(struct cmd_context *cmd,
 		return 0;
 	}
 
+	if (vp->extent_size < MIN_EXTENT_SIZE) {
+		log_error("Physical extent size < 4 KiB restricts RAID use.");
+		return 0;
+	}
+
 	if (!(cmd->fmt->features & FMT_UNLIMITED_VOLS)) {
 		if (!vp->max_lv)
 			vp->max_lv = 255;

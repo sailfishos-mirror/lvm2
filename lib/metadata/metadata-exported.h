@@ -30,10 +30,11 @@
 #define MAX_STRIPES 128U
 #define SECTOR_SHIFT 9L
 #define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
-#define STRIPE_SIZE_MIN 2 /* 2 sectors minimum */
+#define STRIPE_SIZE_MIN 8 /* 8 sectors minimum to allow for raid takover of striped */
 #define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
 #define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
 #define MAX_RESTRICTED_LVS 255	/* Used by FMT_RESTRICTED_LVIDS */
+#define MIN_EXTENT_SIZE 8 /* 8 sectors minimum to allow for raid takover of striped */
 #define MAX_EXTENT_SIZE ((uint32_t) -1)
 #define MIN_NON_POWER2_EXTENT_SIZE (128U * 2U)	/* 128KB in sectors */
 
@@ -825,6 +826,7 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
 /* Updates and reloads metadata for given lv */
 int lv_update_and_reload(struct logical_volume *lv);
 int lv_update_and_reload_origin(struct logical_volume *lv);
+void lv_adjust_region_and_stripe_size(struct  logical_volume *lv);
 
 uint32_t extents_from_size(struct cmd_context *cmd, uint64_t size,
 			   uint32_t extent_size);
