@@ -2352,6 +2352,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	struct lv_list *final_lvl;
 	struct glv_list *glvl, *tglvl;
 	int do_report_ret_code = 1;
+	int lv_is_specific = 0;
 
 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_LV);
 
@@ -2435,9 +2436,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			if (arg_is_set(cmd, all_ARG) ||
 			    (lvargs_supplied && str_list_match_item(arg_lvnames, lvl->lv->name))) {
 				log_very_verbose("Processing lockd_sanlock_lv %s/%s.", vg->name, lvl->lv->name);
-			} else {
+			} else
 				continue;
-			}
 		}
 
 		/*
@@ -2449,15 +2449,19 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		 */
 
 		process_lv = process_all;
+		lv_is_specific = 0;
 
 		if (lvargs_supplied && str_list_match_item(arg_lvnames, lvl->lv->name)) {
 			/* Remove LV from list of unprocessed LV names */
 			str_list_del(arg_lvnames, lvl->lv->name);
 			process_lv = 1;
+			lv_is_specific = 1;
 		}
 
-		if (!process_lv && tags_supplied && str_list_match_list(tags_in, &lvl->lv->tags, NULL))
+		if (!process_lv && tags_supplied && str_list_match_list(tags_in, &lvl->lv->tags, NULL)) {
 			process_lv = 1;
+			lv_is_specific = 1;
+		}
 
 		process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv) && _select_matches(handle);
 
@@ -2477,6 +2481,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			goto_out;
 		}
 		final_lvl->lv = lvl->lv;
+		final_lvl->lv->process_specific = lv_is_specific;
 		dm_list_add(&final_lvs, &final_lvl->list);
 	}
 	log_set_report_object_name_and_id(NULL, NULL);
@@ -3828,6 +3833,14 @@ int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	 */
 	force_t force = (force_t) arg_count(cmd, force_ARG)
 		? : (arg_is_set(cmd, yes_ARG) ? DONT_PROMPT : PROMPT);
+
+	if ((force == PROMPT) &&
+	    !lv->process_specific &&
+	    (cmd->command->flags & CONFIRM_UNLESS_SPECIFIC)) {
+		if (yes_no_prompt("Remove LV %s that was not named directly? [y/n]: ",
+				  display_lvname(lv)) == 'n')
+			return ECMD_PROCESSED;
+	}
 
 	if (!lv_remove_with_dependencies(cmd, lv, force, 0))
 		return_ECMD_FAILED;

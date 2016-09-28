@@ -658,7 +658,7 @@ xx(lvreduce,
 
 xx(lvremove,
    "Remove logical volume(s) from the system",
-   ALL_VGS_IS_DEFAULT, /* all VGs only with --select */
+   ALL_VGS_IS_DEFAULT | CONFIRM_UNLESS_SPECIFIC, /* all VGs only with --select */
    "lvremove\n"
    "\t[-A|--autobackup y|n]\n"
    "\t[--commandprofile ProfileName]\n"

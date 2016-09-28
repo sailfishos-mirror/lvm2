@@ -118,6 +118,7 @@ struct arg_value_group_list {
 #define ENABLE_DUPLICATE_DEVS    0x00000400
 /* Command does not accept tags as args. */
 #define DISALLOW_TAG_ARGS        0x00000800
+#define CONFIRM_UNLESS_SPECIFIC  0x00001000
  
 /* a register of the lvm commands */
 struct command {

@@ -61,6 +61,7 @@ struct logical_volume {
 
 	uint64_t timestamp;
 	unsigned new_lock_args:1;
+	unsigned process_specific:1; /* lv is identified specifically for processing */
 	const char *hostname;
 	const char *lock_args;
 };
