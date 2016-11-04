@@ -2674,7 +2674,8 @@ out:
  */
 static int _get_arg_lvnames(struct cmd_context *cmd,
 			    int argc, char **argv,
-			    const char *one_vgname, const char *one_lvname,
+			    const char *one_vgname,
+			    const char *one_lvname,
 			    struct dm_list *arg_vgnames,
 			    struct dm_list *arg_lvnames,
 			    struct dm_list *arg_tags)
@@ -2794,6 +2795,134 @@ static int _get_arg_lvnames(struct cmd_context *cmd,
 
 	return ret_max;
 }
+
+/*
+ * Some commands will look in specific options to:
+ *
+ * - find the intended LV name if only the VG name was found
+ *   in the position arg or env.
+ *
+ *   command --foo=lvname VG
+ *   . add VG/lvname to arg_lvnames
+ *
+ * - find both the intended VG name and LV name if nothing
+ *   was found in the position arg or env.
+ *
+ *   command --foo=vgname/lvname
+ *   . add vgname to arg_vgnames
+ *   . add vgname/lvname to arg_lvnames
+ *
+ * If a VG name was found in the position arg or from env,
+ * and options are searched for an LV name, then if VG name
+ * is repeated in the option name, verify it matches the VG
+ * name found previously.
+ *
+ *   command --foo=vgname/lvname VG
+ *   . verify vgname matches VG
+ *   . add vgname/lvname to arg_lvnames
+ *
+ *
+ * In some cases, lvconvert wants to get the intended vg/lv
+ * from --thinpool, --cachepool.
+ *
+ *
+ * N.B.
+ * lvconvert --snapshot is a special case where the first
+ * positional arg is saved away and skipped, and the second
+ * positional arg is the LV that is passed to process_each.
+ */
+
+#if 0
+static int _get_arg_lvnames_from_options(struct cmd_context *cmd,
+					 struct dm_list *arg_vgnames,
+					 struct dm_list *arg_lvnames)
+{
+	struct str_list *sl;
+	const char *arg_name = NULL;;
+	const char *pos_vgname = NULL;
+	const char *pos_lvname = NULL;
+	const char *opt_lvname = NULL;
+	const char *opt_vgname = NULL;
+	const char *use_vgname = NULL;
+	char *tmp_name;
+	char *split;
+	char *vglv;
+	size_t vglv_sz;
+	int i;
+
+	dm_list_iterate_items(sl, arg_vgnames) {
+		pos_vgname = sl->str;
+		break;
+	}
+
+	dm_list_iterate_items(sl, arg_lvnames) {
+		if ((pos_lvname = strchr(sl->str, '/')))
+			pos_lvname++;
+		break;
+	}
+
+
+	if (arg_is_set(cmd, thinpool_ARG))
+		arg_name = arg_str_value(cmd, thinpool_ARG, NULL);
+	else if (arg_is_set(cmd, cachepool_ARG))
+		arg_name = arg_str_value(cmd, cachepool_ARG, NULL);
+
+	if (arg_name) {
+		if ((split = strchr(arg_name, '/'))) {
+			/* combined VG/LV */
+
+			if (!(tmp_name = dm_pool_strdup(cmd->mem, arg_name))) {
+				log_error("string alloc failed.");
+				return ECMD_FAILED;
+			}
+
+			if (!(split = strchr(tmp_name, '/')))
+				return ECMD_FAILED;
+
+			opt_vgname = tmp_name;
+			opt_lvname = split + 1;
+			*split = '\0';
+		} else {
+			/* only LV */
+			opt_lvname = arg_name;
+		}
+
+		if (pos_vgname && opt_vgname && strcmp(pos_vgname, opt_vgname)) {
+			log_error("VG name mismatch from position arg (%s) and option arg (%s).",
+				  pos_vgname, opt_vgname);
+			return ECMD_FAILED; 
+		}
+
+		if (!pos_vgname && opt_vgname) {
+			if (!str_list_add(cmd->mem, arg_vgnames,
+					  dm_pool_strdup(cmd->mem, opt_vgname))) {
+				log_error("strlist allocation failed.");
+				return ECMD_FAILED;
+			}
+			use_vgname = opt_vgname;
+		} else {
+			use_vgname = pos_vgname;
+		}
+
+		if (use_vgname && !pos_lvname && opt_lvname) {
+			vglv_sz = strlen(use_vgname) + strlen(opt_lvname) + 2;
+
+			if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
+			    dm_snprintf(vglv, vglv_sz, "%s/%s", use_vgname, opt_lvname) < 0) {
+				log_error("vg/lv string alloc failed.");
+				return ECMD_FAILED;
+			}
+
+			if (!str_list_add(cmd->mem, arg_lvnames, vglv)) {
+				log_error("strlist allocation failed.");
+				return ECMD_FAILED;
+			}
+		}
+	}
+
+	return ECMD_PROCESSED;
+}
+#endif
 
 static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 				     struct dm_list *vgnameids_to_process,
@@ -2956,6 +3085,19 @@ int process_each_lv(struct cmd_context *cmd,
 		ret_max = ret;
 		goto_out;
 	}
+
+#if 0
+	/*
+	 * Some commands will search for VG/LV position args from option
+	 * values, e.g. lvconvert.
+	 */
+	if (cmd->command->flags & ALLOW_VGLV_ARG_FROM_OPTIONS) {
+		if ((ret = _get_arg_lvnames_from_options(cmd, argc, argv, &arg_vgnames, &arg_lvnames) != ECMD_PROCESSED)) {
+			ret_max = ret;
+			goto_out;
+		}
+	}
+#endif
 
 	if (!handle && !(handle = init_processing_handle(cmd, NULL))) {
 		ret_max = ECMD_FAILED;

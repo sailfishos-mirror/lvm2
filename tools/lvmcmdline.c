@@ -85,6 +85,10 @@ struct command_name command_names[MAX_COMMAND_NAMES] = {
 static struct command commands[COMMAND_COUNT];
 static struct cmdline_context _cmdline;
 
+
+int lvconvert_replace_pv_fn(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_repair_pvs_or_thinpool_fn(struct cmd_context *cmd, int argc, char **argv);
+
 /*
  * Table of command line functions
  *
@@ -93,19 +97,24 @@ static struct cmdline_context _cmdline;
  * For now, any command id not included here uses the old command fn.
  */
 struct command_function command_functions[COMMAND_ID_COUNT] = {
-	{ lvmconfig_general_CMD, lvmconfig },
+	{ lvmconfig_general_CMD,			lvmconfig },
+
+	/* lvconvert: utilities related to snapshots and repair */
+	{ lvconvert_repair_pvs_or_thinpool_CMD,		lvconvert_repair_pvs_or_thinpool_fn },
+	{ lvconvert_replace_pv_CMD,			lvconvert_replace_pv_fn },
 };
+
 #if 0
 	/* all raid-related type conversions */
 
 	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_fn },
 
-	/* raid-related utilities (move into lvconvert_raid_types?) */
+	/* lvconvert: raid-related utilities (move into lvconvert_raid_types?) */
 
 	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_fn },
 	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_fn },
 
-	/* utilities for creating/maintaining thin and cache objects. */
+	/* lvconvert: utilities for creating/maintaining thin and cache objects. */
 
 	{ lvconvert_to_thin_with_external_CMD,		lvconvert_to_thin_with_external_fn },
 	{ lvconvert_to_cache_vol_CMD,			lvconvert_to_cache_vol_fn },
@@ -115,12 +124,10 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
 	{ lvconvert_split_and_delete_cachepool_CMD,	lvconvert_split_and_delete_cachepool_fn },
 	{ lvconvert_swap_pool_metadata_CMD,		lvconvert_swap_pool_metadata_fn },
 
-	/* utilities related to snapshots and repair. */
+	/* lvconvert: utilities related to snapshots and repair. */
 
 	{ lvconvert_merge_CMD,				lvconvert_merge_fn },
 	{ lvconvert_combine_split_snapshot_CMD,		lvconvert_combine_split_snapshot_fn },
-	{ lvconvert_repair_pvs_or_thinpool_CMD,		lvconvert_repair_pvs_or_thinpool_fn },
-	{ lvconvert_replace_pv_CMD,			lvconvert_replace_pv_fn },
 	{ lvconvert_split_cow_snapshot_CMD,		lvconvert_split_cow_snapshot_fn },
 	{ lvconvert_poll_start_CMD,			lvconvert_poll_start_fn },
 
