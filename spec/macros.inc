@@ -14,6 +14,9 @@
 %global rhel 0
 %endif
 
+# TODO: This will disable feature, even though configure could enable it if requirements were met:
+# SUGGESTION: rename this to enableiff - "if and only if" and use weaker enableif not producing disable flag
+# NOTE: It is in some cases guarded by another if, so may not produce anything...
 %global enableif() \
 %%global configure_flags %%{?configure_flags} --%%(if test %%1 -gt 0; then echo enable-%%2; else echo disable-%%2; fi)
 

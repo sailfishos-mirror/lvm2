@@ -12,6 +12,7 @@
 %global enable_udev 1
 %global enable_systemd 1
 %global enable_cmirror 1
+# enable_lvmlockd is redefined in spec/build.inc, so are other :-/
 %global enable_lvmlockd 1
 %global enable_lvmetad 1
 %global enable_lvmpolld 1
