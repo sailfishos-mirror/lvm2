@@ -240,7 +240,7 @@ OO_LVCHANGE_META: --addtag Tag, --deltag Tag,
 --writebehind Number, --writemostly WriteMostlyPV, --persistent n
 
 lvchange OO_LVCHANGE_META VG|LV|Tag|Select ...
-OO: OO_LVCHANGE
+OO: --activate Active, OO_LVCHANGE
 ID: lvchange_properties
 DESC: Change a general LV property.
 RULE: all not lv_is_pvmove lv_is_mirror_log lv_is_mirror_image
@@ -275,15 +275,14 @@ ID: lvchange_rebuild
 DESC: Reconstruct data on specific PVs of a raid LV.
 RULE: all not LV_raid0
 
-# try removing the META change options from here?
 lvchange --activate Active VG|LV|Tag|Select ...
 OO: --activationmode ActivationMode, --partial, --ignoreactivationskip,
---ignorelockingfailure, --sysinit, OO_LVCHANGE_META, OO_LVCHANGE
+--ignorelockingfailure, --sysinit, OO_LVCHANGE
 ID: lvchange_activate
 DESC: Activate or deactivate an LV.
 
 lvchange --refresh VG|LV|Tag|Select ...
-OO: --partial, OO_LVCHANGE
+OO: --partial, --poll Bool, OO_LVCHANGE
 ID: lvchange_refresh
 DESC: Reactivate an LV using the latest metadata.
 
