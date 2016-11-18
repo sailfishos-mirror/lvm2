@@ -34,7 +34,7 @@ snap_and_merge() {
 	SLEEP_PID=$!
 
 	# initiate background merge
-	lvconvert -b --merge $vg/$lv2
+	lvconvert -b --mergesnapshot $vg/$lv2
 
 	lvs -a -o+lv_merging,lv_merge_failed $vg
 	get lv_field $vg/$lv1 lv_attr | grep "Owi-ao"
