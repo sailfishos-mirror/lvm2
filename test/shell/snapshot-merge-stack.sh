@@ -34,7 +34,7 @@ snap_and_merge() {
 	SLEEP_PID=$!
 
 	# initiate background merge
-	lvconvert -b --merge $vg/$lv2
+	lvconvert -b --mergesnapshot $vg/$lv2
 
 	lvs -a -o+lv_merging,lv_merge_failed $vg
 	kill $SLEEP_PID
