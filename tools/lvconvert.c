@@ -41,20 +41,17 @@ typedef enum {
 	/* Merge:
 	 *   If merge_snapshot is also set:
 	 *     merge thin snapshot LV into its origin
-	 *     merge old snapshot COW into its origin
 	 *   or if merge_mirror is also set
 	 *     merge LV previously split from mirror back into mirror
 	 */
 	CONV_MERGE = 1,
 
 	/* Split:
-	 *   For a snapshot, split it apart into COW and origin for future recombination
 	 *   For a cached LV, split it apart into the cached LV and its pool
 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
 	 *     future changes to the main mirror to allow future recombination.
 	 */
 	CONV_SPLIT = 2,
-	CONV_SPLIT_SNAPSHOT = 3,
 	CONV_SPLIT_CACHE = 4,
 	CONV_SPLIT_MIRRORS = 5,
 
@@ -63,9 +60,6 @@ typedef enum {
 
 	/* Destroy the cache attached to a cached LV */
 	CONV_UNCACHE = 7,
-
-	/* Reconstruct a snapshot from its origin and COW */
-	CONV_SNAPSHOT = 8,
 
 	/* Convert normal LV into one in a thin pool */
 	CONV_THIN = 11,
@@ -78,19 +72,16 @@ struct lvconvert_params {
 	/* Exactly one of these 12 command categories is determined */
 	int merge;		/* 1 */
 	int split;		/* 2 */
-	int splitsnapshot;	/* 3 */
 	int splitcache;		/* 4 */
 	int keep_mimages;	/* 5 */	/* --splitmirrors */
 	int cache;		/* 6 */
 	int uncache;		/* 7 */
-	int snapshot;		/* 8 */
 	int thin;		/* 11 */
 	/* other */		/* 12 */
 
 	/* FIXME Eliminate all cases where more than one of the above are set then use conv_type instead */
 	conversion_type_t	conv_type;
 
-	int merge_snapshot;	/* CONV_MERGE is set */
 	int merge_mirror;	/* CONV_MERGE is set */
 
 	int track_changes;	/* CONV_SPLIT_MIRRORS is set */
@@ -202,13 +193,6 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
 			return 0;
 		}
 
-		if (!strstr((*pargv)[0], "_rimage_")) {	/* Snapshot */
-			lp->type_str = SEG_TYPE_NAME_SNAPSHOT;
-			lp->merge_snapshot = 1;
-
-			return 1;
-		}
-
 		/* Mirror */
 		lp->merge_mirror = 1;
 	}
@@ -221,11 +205,6 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
 		if (lp->thin) {
 			log_error("Please specify a logical volume to act as "
 				  "the external origin.");
-			return 0;
-		}
-		if (lp->snapshot) {
-			log_error("Please specify a logical volume to act as "
-				  "the snapshot exception store.");
 			return 0;
 		}
 		if (lp->split) {
@@ -296,14 +275,6 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
 		return_0;
 
 	if (*pargc) {
-		if (lp->snapshot) {
-			log_error("Too many arguments provided for snapshots.");
-			return 0;
-		}
-		if (lp->splitsnapshot) {
-			log_error("Too many arguments provided with --splitsnapshot.");
-			return 0;
-		}
 		if (lp->splitcache) {
 			log_error("Too many arguments provided with --splitcache.");
 			return 0;
@@ -326,12 +297,6 @@ static int _lvconvert_name_params(struct lvconvert_params *lp,
 		return_0;
 
 	return 1;
-}
-
-/* -s/--snapshot and --type snapshot are synonyms */
-static int _snapshot_type_requested(struct cmd_context *cmd, const char *type_str)
-{
-	return (arg_is_set(cmd, snapshot_ARG) || !strcmp(type_str, SEG_TYPE_NAME_SNAPSHOT));
 }
 
 static int _raid0_type_requested(const char *type_str)
@@ -531,14 +496,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 			return_0;
 		lp->splitcache = 1;
 		_set_conv_type(lp, CONV_SPLIT_CACHE);
-	} else if (arg_is_set(cmd, splitsnapshot_ARG)) {
-		if (arg_outside_list_is_set(cmd, "cannot be used with --splitsnapshot",
-					    splitsnapshot_ARG,
-					    force_ARG, noudevsync_ARG, test_ARG,
-					    -1))
-			return_0;
-		lp->splitsnapshot = 1;
-		_set_conv_type(lp, CONV_SPLIT_SNAPSHOT);
 	} else if (arg_is_set(cmd, uncache_ARG)) {
 		if (arg_outside_list_is_set(cmd, "cannot be used with --uncache",
 					    uncache_ARG,
@@ -585,15 +542,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	if (!_read_pool_params(cmd, &argc, &argv, lp))
 		return_0;
 
-	if (_snapshot_type_requested(cmd, lp->type_str)) {
-		if (lp->merge) {
-			log_error("--snapshot and --merge are mutually exclusive.");
-			return 0;
-		}
-		lp->snapshot = 1;
-		_set_conv_type(lp, CONV_SNAPSHOT);
-	}
-
 	if (lp->split) {
 		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
 
@@ -632,17 +580,17 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	}
 
 	/* If no other case was identified, then use of --stripes means --type striped */
-	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str && !lp->merge && !lp->splitsnapshot &&
-	    !lp->splitcache && !lp->split && !lp->snapshot && !lp->uncache && !lp->cache && !lp->thin &&
+	if (!arg_is_set(cmd, type_ARG) && !*lp->type_str && !lp->merge &&
+	    !lp->splitcache && !lp->split && !lp->uncache && !lp->cache && !lp->thin &&
 	    !lp->mirrorlog && !lp->corelog &&
 	    (arg_is_set(cmd, stripes_long_ARG) || arg_is_set(cmd, stripesize_ARG)))
 		lp->type_str = SEG_TYPE_NAME_STRIPED;
 
-	if ((_snapshot_type_requested(cmd, lp->type_str) || lp->merge) &&
+	if (lp->merge &&
 	    (lp->mirrorlog || _mirror_or_raid_type_requested(cmd, lp->type_str) ||
 	     arg_is_set(cmd, thinpool_ARG) || _raid0_type_requested(lp->type_str) ||
 	     _striped_type_requested(lp->type_str))) {
-		log_error("--snapshot/--type snapshot or --merge argument "
+		log_error("--merge argument "
 			  "cannot be mixed with --mirrors/--type mirror/--type raid*/--stripes/--type striped/--type linear, "
 			  "--mirrorlog, --repair or --thinpool.");
 		return 0;
@@ -666,8 +614,8 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	lp->alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
 
 	/* We should have caught all these cases already. */
-	if (lp->merge + lp->splitsnapshot + lp->splitcache + lp->split + lp->uncache +
-	    lp->cache + lp->thin + lp->keep_mimages + lp->snapshot > 1) {
+	if (lp->merge + lp->splitcache + lp->split + lp->uncache +
+	    lp->cache + lp->thin + lp->keep_mimages > 1) {
 		log_error(INTERNAL_ERROR "Unexpected combination of incompatible options selected.");
 		return 0;
 	}
@@ -676,14 +624,12 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	/*
 	 * Final checking of each case:
 	 *   lp->merge
-	 *   lp->splitsnapshot
 	 *   lp->splitcache
 	 *   lp->split
 	 *   lp->uncache
 	 *   lp->cache
 	 *   lp->thin
 	 *   lp->keep_mimages
-	 *   lp->snapshot
 	 *   --type mirror|raid  lp->mirrorlog lp->corelog
 	 *   --type raid0|striped
 	 */
@@ -692,46 +638,10 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 	case CONV_SPLIT:
 	case CONV_SPLIT_CACHE:
 	case CONV_SPLIT_MIRRORS:
-	case CONV_SPLIT_SNAPSHOT:	/* Destroy snapshot retaining cow as separate LV */
 	case CONV_CACHE:
 	case CONV_UNCACHE:
 	case CONV_THIN:
                 break;
-	case CONV_SNAPSHOT:	/* Snapshot creation from pre-existing cow */
-		if (!argc) {
-			log_error("Please provide logical volume path for snapshot origin.");
-			return 0;
-		}
-		lp->origin_name = argv[0];
-		argv++, argc--;
-
-		if (arg_is_set(cmd, regionsize_ARG)) {
-			log_error("--regionsize is only available with mirrors");
-			return 0;
-		}
-
-		if (arg_is_set(cmd, stripesize_ARG) || arg_is_set(cmd, stripes_long_ARG)) {
-			log_error("--stripes and --stripesize are only available with striped mirrors");
-			return 0;
-		}
-
-		if (arg_is_set(cmd, chunksize_ARG) &&
-		    (arg_sign_value(cmd, chunksize_ARG, SIGN_NONE) == SIGN_MINUS)) {
-			log_error("Negative chunk size is invalid.");
-			return 0;
-		}
-
-		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
-		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
-		    !is_power_of_2(lp->chunk_size)) {
-			log_error("Chunk size must be a power of 2 in the "
-				  "range 4K to 512K");
-			return 0;
-		}
-		log_verbose("Setting chunk size to %s.", display_size(cmd, lp->chunk_size));
-
-		lp->type_str = SEG_TYPE_NAME_SNAPSHOT;
-		break;
 
 	case CONV_OTHER:
 		if (_mirror_or_raid_type_requested(cmd, lp->type_str) ||
@@ -3377,26 +3287,6 @@ static int _lvconvert_cache(struct cmd_context *cmd,
  */
 
 /*
- * Separate a COW snapshot LV from its origin.
- * lvconvert --splitsnapshot LV
- */
-static int _convert_cow_snapshot_splitsnapshot(struct cmd_context *cmd, struct logical_volume *lv,
-					       struct lvconvert_params *lp)
-{
-	return _lvconvert_splitsnapshot(cmd, lv);
-}
-
-/*
- * Merge a COW snapshot LV into its origin.
- * lvconvert --merge LV
- */
-static int _convert_cow_snapshot_merge(struct cmd_context *cmd, struct logical_volume *lv,
-				       struct lvconvert_params *lp)
-{
-	/* return _lvconvert_merge_old_snapshot(cmd, lv, lp); */
-}
-
-/*
  * Merge a snapshot thin LV into its origin.
  * lvconvert --merge LV
  */
@@ -3677,20 +3567,6 @@ static int _convert_raid_merge(struct cmd_context *cmd, struct logical_volume *l
 }
 
 /*
- * Combine a raid* LV with a snapshot LV that was previously
- * split from the raid* LV using --splitsnapshot.
- * lvconvert --type snapshot LV SnapshotLV
- *
- * Alternate syntax:
- * lvconvert --snapshot LV SnapshotLV
- */
-static int _convert_raid_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
-				  struct lvconvert_params *lp)
-{
-	return _lvconvert_snapshot(cmd, lv, lp->origin_name);
-}
-
-/*
  * Convert a raid* LV to a thin LV with an external origin.
  * lvconvert --type thin LV
  *
@@ -3816,20 +3692,6 @@ static int _convert_striped_merge(struct cmd_context *cmd, struct logical_volume
 }
 
 /*
- * Combine a linear/striped LV with a snapshot LV that was previously
- * split from the linear/striped LV using --splitsnapshot.
- * lvconvert --type snapshot LV SnapshotLV
- *
- * Alternate syntax:
- * lvconvert --snapshot LV SnapshotLV
- */
-static int _convert_striped_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
-				     struct lvconvert_params *lp)
-{
-	return _lvconvert_snapshot(cmd, lv, lp->origin_name);
-}
-
-/*
  * Convert a striped/linear LV to a thin LV with an external origin.
  * lvconvert --type thin LV
  *
@@ -3943,22 +3805,6 @@ static int _convert_striped_raid(struct cmd_context *cmd, struct logical_volume 
  *
  * _convert_<lvtype>
  */
-static int _convert_cow_snapshot(struct cmd_context *cmd, struct logical_volume *lv,
-				 struct lvconvert_params *lp)
-{
-	if (lp->splitsnapshot)
-		return _convert_cow_snapshot_splitsnapshot(cmd, lv, lp);
-
-	/* FIXME: add --merge-snapshot to make this distinct from --merge-mirror. */
-	if (lp->merge)
-		return _convert_cow_snapshot_merge(cmd, lv, lp);
-
-	log_error("Operation not permitted on COW snapshot LV %s.", display_lvname(lv));
-	log_error("Operations permitted on a COW snapshot LV are:\n"
-		  "  --splitsnapshot\n"
-		  "  --merge\n");
-	return 0;
-}
 
 static int _convert_thin_volume(struct cmd_context *cmd, struct logical_volume *lv,
 				struct lvconvert_params *lp)
@@ -4160,9 +4006,6 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
 		if (lp->merge)
 			return _convert_raid_merge(cmd, lv, lp);
 
-		if (!strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT) || arg_is_set(cmd, snapshot_ARG))
-			return _convert_raid_snapshot(cmd, lv, lp);
-
 		if (lp->thin)
 			return _convert_raid_thin(cmd, lv, lp);
 
@@ -4193,9 +4036,6 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
 	/* FIXME: add --merge-mirror to make this distinct from --merge-snapshot. */
 	if (lp->merge)
 		return _convert_striped_merge(cmd, lv, lp);
-
-	if (lp->snapshot || !strcmp(lp->type_str, SEG_TYPE_NAME_SNAPSHOT))
-		return _convert_striped_snapshot(cmd, lv, lp);
 
 	if (lp->thin)
 		return _convert_striped_thin(cmd, lv, lp);
@@ -4335,18 +4175,10 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
 				lp->stripes = 0;
 	}
 
-	if (lp->snapshot)
-		lp->zero = (lp->segtype->flags & SEG_CANNOT_BE_ZEROED) ? 0 : arg_int_value(cmd, zero_ARG, 1);
-
 	/*
 	 * Each LV type that can be converted.
 	 * (The existing type of the LV, not a requested type.)
 	 */
-	if (lv_is_cow(lv)) {
-		ret = _convert_cow_snapshot(cmd, lv, lp);
-		goto out;
-	}
-
 	if (lv_is_thin_volume(lv)) {
 		ret = _convert_thin_volume(cmd, lv, lp);
 		goto out;
