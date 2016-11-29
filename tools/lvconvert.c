@@ -4821,7 +4821,7 @@ int lvconvert(struct cmd_context * cmd, int argc, char **argv)
 
 	if (lp.merge) {
 		ret = process_each_lv(cmd, argc, argv, NULL, NULL,
-				      READ_FOR_UPDATE, handle, &_lvconvert_merge_single);
+				      READ_FOR_UPDATE, handle, NULL, &_lvconvert_merge_single);
 	} else {
 		int saved_ignore_suspended_devices = ignore_suspended_devices();
 
@@ -4831,7 +4831,7 @@ int lvconvert(struct cmd_context * cmd, int argc, char **argv)
 		}
 
 		ret = process_each_lv(cmd, 0, NULL, lp.vg_name, lp.lv_name,
-				      READ_FOR_UPDATE, handle, &_lvconvert_single);
+				      READ_FOR_UPDATE, handle, NULL, &_lvconvert_single);
 
 		init_ignore_suspended_devices(saved_ignore_suspended_devices);
 	}
