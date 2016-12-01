@@ -4392,6 +4392,36 @@ out:
 
 
 /*
+ * FIXME: it's very unlikely that the same !visible exceptions apply to every
+ * lvconvert command.  Add specific !visible exceptions in command-specific
+ * check functions.
+ */
+
+static int _lvconvert_generic_check(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			int lv_is_named_arg)
+{
+	if (!lv_is_visible(lv)) {
+		if (lv_is_cache_pool_metadata(lv) ||
+		    lv_is_cache_pool_data(lv) ||
+		    lv_is_thin_pool_metadata(lv) ||
+		    lv_is_thin_pool_data(lv) ||
+		    lv_is_used_cache_pool(lv) ||
+		    lv_is_mirrored(lv) ||
+		    lv_is_raid(lv)) {
+			return 1;
+		}
+
+		log_error("Operation not permitted (%s %d) on hidden LV %s.",
+			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
  * Data/results accumulated during processing.
  */
 struct lvconvert_result {
@@ -4596,7 +4626,7 @@ int lvconvert_repair_pvs_or_thinpool_cmd(struct cmd_context *cmd, int argc, char
 	cmd->handles_missing_pvs = 1;
 
 	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			      handle, NULL, &_lvconvert_repair_pvs_or_thinpool_single);
+			      handle, &_lvconvert_generic_check, &_lvconvert_repair_pvs_or_thinpool_single);
 
 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
 
@@ -4673,7 +4703,7 @@ int lvconvert_replace_pv_cmd(struct cmd_context *cmd, int argc, char **argv)
 	handle->custom_handle = &lr;
 
 	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			      handle, NULL, &_lvconvert_replace_pv_single);
+			      handle, &_lvconvert_generic_check, &_lvconvert_replace_pv_single);
 
 	destroy_processing_handle(cmd, handle);
 
@@ -4711,6 +4741,20 @@ static int _lvconvert_merge_snapshot_single(struct cmd_context *cmd,
 	return ECMD_PROCESSED;
 }
 
+static int _lvconvert_merge_snapshot_check(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			int lv_is_named_arg)
+{
+	if (!lv_is_visible(lv)) {
+		log_error("Operation not permitted (%s %d) on hidden LV %s.",
+			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
 int lvconvert_merge_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct processing_handle *handle;
@@ -4728,7 +4772,7 @@ int lvconvert_merge_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 	handle->custom_handle = &lr;
 
 	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			      handle, NULL, &_lvconvert_merge_snapshot_single);
+			      handle, &_lvconvert_merge_snapshot_check, &_lvconvert_merge_snapshot_single);
 
 	if (lr.need_polling) {
 		dm_list_iterate_items(idl, &lr.poll_idls) {
@@ -4764,7 +4808,7 @@ static int _lvconvert_split_snapshot_single(struct cmd_context *cmd,
 int lvconvert_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			       NULL, NULL, &_lvconvert_split_snapshot_single);
+			       NULL, &_lvconvert_generic_check, &_lvconvert_split_snapshot_single);
 }
 
 /*
@@ -4826,6 +4870,6 @@ static int _lvconvert_combine_split_snapshot_single(struct cmd_context *cmd,
 int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	return process_each_lv(cmd, 1, cmd->position_argv + 1, NULL, NULL, READ_FOR_UPDATE,
-			       NULL, NULL, &_lvconvert_combine_split_snapshot_single);
+			       NULL, &_lvconvert_generic_check, &_lvconvert_combine_split_snapshot_single);
 }
 
