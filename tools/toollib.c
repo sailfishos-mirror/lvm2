@@ -2681,35 +2681,29 @@ static int _lv_props_match(struct cmd_context *cmd, struct logical_volume *lv, u
 	return !found_a_mismatch;
 }
 
-/*
- * If the command definition specifies one required positional
- * LV (possibly repeatable), and specifies accepted LV types,
- * then verify that the LV being processed matches one of those
- * types.
- *
- * process_each_lv() can only be used for commands that have
- * one positional LV arg (optionally repeating, where each is
- * processed independently.)  It cannot work for commands that
- * have different required LVs in designated positions, like
- * 'lvrename LV1 LV2', where each LV is not processed
- * independently.  That means that this LV type check only
- * needs to check the lv_type of the first positional arg.
- */
-
-static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv)
+static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv, int pos)
 {
 	int ret = 1;
 
-	if ((cmd->command->rp_count == 1) &&
-	    val_bit_is_set(cmd->command->required_pos_args[0].def.val_bits, lv_VAL) &&
-	    cmd->command->required_pos_args[0].def.lvt_bits) {
-		ret = _lv_types_match(cmd, lv, cmd->command->required_pos_args[0].def.lvt_bits, NULL, NULL);
-		if (!ret) {
-			int lvt_enum = _get_lvt_enum(lv);
-			struct lv_types *type = get_lv_type(lvt_enum);
-			log_warn("Operation on LV %s which has invalid type %s.",
-				 display_lvname(lv), type ? type->name : "unknown");
-		}
+	if (!pos)
+		return 1;
+
+	if (!cmd->command->required_pos_args[pos-1].def.lvt_bits)
+		return 1;
+
+	if (!val_bit_is_set(cmd->command->required_pos_args[pos-1].def.val_bits, lv_VAL)) {
+		log_error(INTERNAL_ERROR "Command (%s %d) arg position %d does not permit an LV (%llx)",
+			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  pos, (unsigned long long)cmd->command->required_pos_args[pos-1].def.val_bits);
+		return 0;
+	}
+
+	ret = _lv_types_match(cmd, lv, cmd->command->required_pos_args[pos-1].def.lvt_bits, NULL, NULL);
+	if (!ret) {
+		int lvt_enum = _get_lvt_enum(lv);
+		struct lv_types *type = get_lv_type(lvt_enum);
+		log_warn("Operation on LV %s which has invalid type %s.",
+			 display_lvname(lv), type ? type->name : "unknown");
 	}
 
 	return ret;
@@ -2873,6 +2867,59 @@ static int _check_lv_rules(struct cmd_context *cmd, struct logical_volume *lv)
 	return ret;
 }
 
+/*
+ * Return which arg position the given LV is at,
+ * where 1 represents the first position arg.
+ * When the first position arg is repeatable,
+ * return 1 for all.
+ *
+ * Return 0 when the command has no required
+ * position args. (optional position args are
+ * not considered.)
+ */
+
+static int _find_lv_arg_position(struct cmd_context *cmd, struct logical_volume *lv)
+{
+	const char *sep, *lvname;
+	int i;
+
+	if (cmd->command->rp_count == 0)
+		return 0;
+
+	if (cmd->command->rp_count == 1)
+		return 1;
+
+	for (i = 0; i < cmd->position_argc; i++) {
+		if (i == cmd->command->rp_count)
+			break;
+
+		if (!val_bit_is_set(cmd->command->required_pos_args[i].def.val_bits, lv_VAL))
+			continue;
+
+		if ((sep = strstr(cmd->position_argv[i], "/")))
+			lvname = sep + 1;
+		else
+			lvname = cmd->position_argv[i];
+
+		if (!strcmp(lvname, lv->name))
+			return i + 1;
+	}
+
+	/*
+	 * If the last position arg is an LV and this
+	 * arg is beyond that position, then the last
+	 * LV position arg is repeatable, so return
+	 * that position.
+	 */
+	if (i == cmd->command->rp_count) {
+		int last_pos = cmd->command->rp_count;
+		if (val_bit_is_set(cmd->command->required_pos_args[last_pos-1].def.val_bits, lv_VAL))
+			return last_pos;
+	}
+
+	return 0;
+}
+
 int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			  struct dm_list *arg_lvnames, const struct dm_list *tags_in,
 			  int stop_on_error,
@@ -2892,6 +2939,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	unsigned process_all = 0;
 	unsigned tags_supplied = 0;
 	unsigned lvargs_supplied = 0;
+	int lv_arg_pos;
 	struct lv_list *lvl;
 	struct dm_str_list *sl;
 	struct dm_list final_lvs;
@@ -3051,42 +3099,32 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 
 		lv_is_named_arg = str_list_match_item(&found_arg_lvnames, lvl->lv->name);
 
+		lv_arg_pos = _find_lv_arg_position(cmd, lvl->lv);
+
 		/*
 		 * The command definition may include restrictions on the
 		 * types and properties of LVs that can be processed.
 		 */
 
-		if (!_check_lv_types(cmd, lvl->lv)) {
+		if (!_check_lv_types(cmd, lvl->lv, lv_arg_pos)) {
 			/* FIXME: include this result in report log? */
-			/* FIXME: avoid duplicating message for each level */
-
 			if (lv_is_named_arg) {
 				log_error("Operation not permitted (%s %d) on LV %s.",
 					  cmd->command->command_line_id, cmd->command->command_line_enum,
 					  display_lvname(lvl->lv));
 				ret_max = ECMD_FAILED;
-			} else {
-				log_warn("Operation not permitted (%s %d) on LV %s.",
-					 cmd->command->command_line_id, cmd->command->command_line_enum,
-					 display_lvname(lvl->lv));
 			}
 			continue;
 		}
 
 		if (!_check_lv_rules(cmd, lvl->lv)) {
 			/* FIXME: include this result in report log? */
-			/* FIXME: avoid duplicating message for each level */
-
 			if (lv_is_named_arg) {
 				log_error("Operation not permitted (%s %d) on LV %s.",
 					  cmd->command->command_line_id, cmd->command->command_line_enum,
 					  display_lvname(lvl->lv));
 				ret_max = ECMD_FAILED;
-			} else {
-				log_warn("Operation not permitted (%s %d) on LV %s.",
-					 cmd->command->command_line_id, cmd->command->command_line_enum,
-					 display_lvname(lvl->lv));
-			}
+			} 
 			continue;
 		}
 
