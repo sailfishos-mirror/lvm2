@@ -3917,23 +3917,6 @@ static int _convert_mirror(struct cmd_context *cmd, struct logical_volume *lv,
 	if (segtype_is_raid(lp->segtype))
 		return _convert_mirror_raid(cmd, lv, lp);
 
-	/*
-	 * FIXME: this is here to preserve old behavior, but an
-	 * explicit option should be added to enable this case,
-	 * rather than making it the result of an ambiguous
-	 * "lvconvert vg/lv" command.
-	 * Add 'lvconvert --poll-mirror vg/lv' for this case.
-	 *
-	 * Old behavior was described as:
-	 *   "Collapsing a stack of mirrors.
-	 *    If called with no argument, try collapsing the resync layers"
-	 */
-	log_debug("Checking if LV %s is converting.", display_lvname(lv));
-	if (lv_is_converting(lv)) {
-		lp->need_polling = 1;
-		return 1;
-	}
-
 	log_error("Operation not permitted on mirror LV %s.", display_lvname(lv));
 	log_error("Operations permitted on a mirror LV are:\n"
 		  "  --mirrors\n"
@@ -4870,5 +4853,62 @@ int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char
 {
 	return process_each_lv(cmd, 1, cmd->position_argv + 1, NULL, NULL, READ_FOR_UPDATE,
 			       NULL, &_lvconvert_generic_check, &_lvconvert_combine_split_snapshot_single);
+}
+
+static int _lvconvert_start_poll_single(struct cmd_context *cmd,
+                                       struct logical_volume *lv,
+                                       struct processing_handle *handle)
+{
+	struct lvconvert_result *lr = (struct lvconvert_result *) handle->custom_handle;
+	struct convert_poll_id_list *idl;
+
+	if (!(idl = _convert_poll_id_list_create(cmd, lv)))
+		return_ECMD_FAILED;
+	dm_list_add(&lr->poll_idls, &idl->list);
+
+	lr->need_polling = 1;
+
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_start_poll_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	struct lvconvert_result lr = { 0 };
+	struct convert_poll_id_list *idl;
+	int saved_ignore_suspended_devices;
+	int ret, poll_ret;
+
+	dm_list_init(&lr.poll_idls);
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lr;
+
+	saved_ignore_suspended_devices = ignore_suspended_devices();
+	init_ignore_suspended_devices(1);
+
+	cmd->handles_missing_pvs = 1;
+
+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			      handle, NULL, &_lvconvert_start_poll_single);
+
+	init_ignore_suspended_devices(saved_ignore_suspended_devices);
+
+	if (lr.need_polling) {
+		dm_list_iterate_items(idl, &lr.poll_idls) {
+			poll_ret = _lvconvert_poll_by_id(cmd, idl->id,
+						arg_is_set(cmd, background_ARG), 0, 0);
+			if (poll_ret > ret)
+				ret = poll_ret;
+		}
+	}
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
 }
 
