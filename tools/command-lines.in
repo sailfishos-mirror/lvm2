@@ -388,6 +388,8 @@ lvconvert --type thin --thinpool LV LV_linear_striped_raid
 OO: --thin, --originname LV_new, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
 ID: lvconvert_to_thin_with_external
 DESC: Convert LV to type thin with an external origin.
+RULE: all and lv_is_visible
+RULE: all not lv_is_locked
 
 # alternate form of lvconvert --type thin
 lvconvert --thin --thinpool LV LV_linear_striped_raid
@@ -396,6 +398,8 @@ ID: lvconvert_to_thin_with_external
 DESC: Convert LV to type thin with an external origin
 DESC: (variant, infers --type thin).
 FLAGS: SECONDARY_SYNTAX
+RULE: all and lv_is_visible
+RULE: all not lv_is_locked
 
 ---
 
@@ -404,6 +408,7 @@ OO: --cache, --cachemode CacheMode, --cachepolicy String,
 --cachesettings String, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
 ID: lvconvert_to_cache_vol
 DESC: Convert LV to type cache.
+RULE: all and lv_is_visible
 
 # alternate form of lvconvert --type cache
 lvconvert --cache --cachepool LV LV_linear_striped_raid_thinpool
@@ -412,6 +417,7 @@ OO: --type cache, --cachemode CacheMode, --cachepolicy String,
 ID: lvconvert_to_cache_vol
 DESC: Convert LV to type cache (variant, infers --type cache).
 FLAGS: SECONDARY_SYNTAX
+RULE: all and lv_is_visible
 
 ---
 

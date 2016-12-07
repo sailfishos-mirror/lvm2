@@ -140,10 +140,8 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
 	{ lvconvert_to_thinpool_noarg_CMD,		lvconvert_to_pool_noarg_cmd },
 	{ lvconvert_to_cachepool_CMD,			lvconvert_to_pool_cmd },
 	{ lvconvert_to_cachepool_noarg_CMD,		lvconvert_to_pool_noarg_cmd },
-#if 0
 	{ lvconvert_to_thin_with_external_CMD,		lvconvert_to_thin_with_external_cmd },
 	{ lvconvert_to_cache_vol_CMD,			lvconvert_to_cache_vol_cmd },
-#endif
 };
 
 #if 0

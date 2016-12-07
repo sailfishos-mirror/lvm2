@@ -262,5 +262,7 @@ int lvconvert_start_poll_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_to_pool_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_to_cache_vol_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_to_thin_with_external_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 #endif
