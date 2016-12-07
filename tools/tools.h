@@ -240,6 +240,7 @@ int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg
 
 struct lv_props *get_lv_prop(int lvp_enum);
 struct lv_types *get_lv_type(int lvt_enum);
+struct command *get_command(int cmd_enum);
 
 int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv);
@@ -258,5 +259,8 @@ int lvconvert_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_start_poll_cmd(struct cmd_context *cmd, int argc, char **argv);
+
+int lvconvert_to_pool_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 #endif

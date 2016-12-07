@@ -17,6 +17,7 @@
 #include "polldaemon.h"
 #include "lv_alloc.h"
 #include "lvconvert_poll.h"
+#include "command-lines-count.h"
 
 /*
  * Guidelines for mapping options to operations.
@@ -3235,6 +3236,514 @@ revert_new_lv:
 }
 
 /*
+ * Create a new pool LV, using the lv arg as the data sub LV.
+ * The metadata sub LV is either a new LV created here, or an
+ * existing LV specified by --poolmetadata.
+ */
+
+static int _lvconvert_to_pool(struct cmd_context *cmd,
+			      struct logical_volume *lv,
+			      int to_thinpool,
+			      int to_cachepool,
+			      struct dm_list *use_pvh)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *metadata_lv = NULL;  /* existing or created */
+	struct logical_volume *data_lv;             /* lv arg renamed */
+	struct logical_volume *pool_lv;             /* new lv created here */
+	const char *pool_metadata_name;             /* user-specified lv name */
+	const char *pool_name;                      /* name of original lv arg */
+	char meta_name[NAME_LEN];                   /* generated sub lv name */
+	char data_name[NAME_LEN];                   /* generated sub lv name */
+	struct segment_type *pool_segtype;          /* thinpool or cachepool */
+	struct lv_segment *seg;
+	unsigned int target_attr = ~0;
+	unsigned int passed_args = 0;
+	unsigned int activate_pool;
+	unsigned int zero_metadata;
+	uint64_t meta_size;
+	uint32_t meta_extents;
+	uint32_t chunk_size;
+	int chunk_calc;
+	int r = 0;
+
+	/* for handling lvmlockd cases */
+	char *lockd_data_args = NULL;
+	char *lockd_meta_args = NULL;
+	char *lockd_data_name = NULL;
+	char *lockd_meta_name = NULL;
+	struct id lockd_data_id;
+	struct id lockd_meta_id;
+
+
+	if (lv_is_thin_pool(lv) || lv_is_cache_pool(lv)) {
+		log_error(INTERNAL_ERROR "LV %s is already a pool.", display_lvname(lv));
+		return 0;
+	}
+
+	pool_segtype = to_cachepool ? get_segtype_from_string(cmd, SEG_TYPE_NAME_CACHE_POOL) :
+				      get_segtype_from_string(cmd, SEG_TYPE_NAME_THIN_POOL);
+
+	if (!pool_segtype->ops->target_present(cmd, NULL, &target_attr)) {
+		log_error("%s: Required device-mapper target(s) not detected in your kernel.", pool_segtype->name);
+		return 0;
+	}
+
+	/* Allow to have only thinpool active and restore it's active state. */
+	activate_pool = to_thinpool && lv_is_active(lv);
+
+	/* Wipe metadata_lv by default, but allow skipping this for cache pools. */
+	zero_metadata = to_cachepool ? arg_int_value(cmd, zero_ARG, 1) : 1;
+
+	/* An existing LV needs to have its lock freed once it becomes a data LV. */
+	if (is_lockd_type(vg->lock_type) && lv->lock_args) {
+		lockd_data_args = dm_pool_strdup(cmd->mem, lv->lock_args);
+		lockd_data_name = dm_pool_strdup(cmd->mem, lv->name);
+		memcpy(&lockd_data_id, &lv->lvid.id[1], sizeof(struct id));
+	}
+
+	/*
+	 * If an existing LV is to be used as the metadata LV,
+	 * verify that it's in a usable state.  These checks are
+	 * not done by command def rules because this LV is not
+	 * processed by process_each_lv.
+	 */
+
+	if ((pool_metadata_name = arg_str_value(cmd, poolmetadata_ARG, NULL))) {
+		if (!(metadata_lv = find_lv(vg, pool_metadata_name))) {
+			log_error("Unknown pool metadata LV %s.", pool_metadata_name);
+			return 0;
+		}
+
+		/* An existing LV needs to have its lock freed once it becomes a meta LV. */
+		if (is_lockd_type(vg->lock_type) && metadata_lv->lock_args) {
+			lockd_meta_args = dm_pool_strdup(cmd->mem, metadata_lv->lock_args);
+			lockd_meta_name = dm_pool_strdup(cmd->mem, metadata_lv->name);
+			memcpy(&lockd_meta_id, &metadata_lv->lvid.id[1], sizeof(struct id));
+		}
+
+		if (metadata_lv == lv) {
+			log_error("Can't use same LV for pool data and metadata LV %s.",
+				  display_lvname(metadata_lv));
+			return 0;
+		}
+
+		if (!lv_is_visible(metadata_lv)) {
+			log_error("Can't convert internal LV %s.",
+				  display_lvname(metadata_lv));
+			return 0;
+		}
+
+		if (lv_is_locked(metadata_lv)) {
+			log_error("Can't convert locked LV %s.",
+				  display_lvname(metadata_lv));
+			return 0;
+		}
+
+		if (lv_is_mirror(metadata_lv)) {
+			log_error("Mirror logical volumes cannot be used for pool metadata.");
+			log_print_unless_silent("Try \"%s\" segment type instead.", SEG_TYPE_NAME_RAID1);
+			return 0;
+		}
+
+		/* FIXME Tidy up all these type restrictions. */
+		if (lv_is_cache_type(metadata_lv) ||
+		    lv_is_thin_type(metadata_lv) ||
+		    lv_is_cow(metadata_lv) || lv_is_merging_cow(metadata_lv) ||
+		    lv_is_origin(metadata_lv) || lv_is_merging_origin(metadata_lv) ||
+		    lv_is_external_origin(metadata_lv) ||
+		    lv_is_virtual(metadata_lv)) {
+			log_error("Pool metadata LV %s is of an unsupported type.",
+				  display_lvname(metadata_lv));
+			return 0;
+		}
+	}
+
+	/*
+	 * Determine the size of the metadata LV and the chunk size.  When an
+	 * existing LV is to be used for metadata, this introduces some
+	 * constraints/defaults.  When chunk_size=0 and/or meta_extents=0 are
+	 * passed to the "update params" function, defaults are calculated and
+	 * returned.
+	 */
+
+	if (arg_is_set(cmd, chunksize_ARG)) {
+		passed_args |= PASS_ARG_CHUNK_SIZE;
+		chunk_size = arg_uint_value(cmd, chunksize_ARG, 0);
+		if (!validate_pool_chunk_size(cmd, pool_segtype, chunk_size))
+			return_0;
+	} else {
+		/* A default will be chosen by the "update" function. */
+		chunk_size = 0;
+	}
+
+	if (arg_is_set(cmd, poolmetadatasize_ARG)) {
+		meta_size = arg_uint64_value(cmd, poolmetadatasize_ARG, UINT64_C(0));
+		meta_extents = extents_from_size(cmd, meta_size, vg->extent_size);
+		passed_args |= PASS_ARG_POOL_METADATA_SIZE;
+	} else if (metadata_lv) {
+		meta_extents = metadata_lv->le_count;
+		passed_args |= PASS_ARG_POOL_METADATA_SIZE;
+	} else {
+		/* A default will be chosen by the "update" function. */
+		meta_extents = 0;
+	}
+
+	/* Tell the "update" function to ignore these, they are handled below. */
+	passed_args |= PASS_ARG_DISCARDS | PASS_ARG_ZERO;
+
+	/*
+	 * Validate and/or choose defaults for meta_extents and chunk_size,
+	 * this involves some complicated calculations.
+	 */
+
+	if (to_cachepool) {
+		if (!update_cache_pool_params(pool_segtype, vg, target_attr,
+					      passed_args, lv->le_count,
+					      &meta_extents,
+					      &chunk_calc,
+					      &chunk_size))
+			return_0;
+	} else {
+		if (!update_thin_pool_params(pool_segtype, vg, target_attr,
+					     passed_args, lv->le_count,
+					     &meta_extents,
+					     &chunk_calc,
+					     &chunk_size,
+					     NULL, NULL))
+			return_0;
+	}
+
+	if (metadata_lv && (meta_extents > metadata_lv->le_count)) {
+		log_error("Logical volume %s is too small for metadata.",
+			  display_lvname(metadata_lv));
+	}
+
+	log_warn("Pool metadata extents %u chunk_size %u", meta_extents, chunk_size);
+
+
+	/*
+	 * Verify that user wants to use these LVs.
+	 */
+
+	log_warn("WARNING: Converting logical volume %s%s%s to %s pool's data%s %s metadata wiping.",
+		 display_lvname(lv),
+		 metadata_lv ? " and " : "",
+		 metadata_lv ? display_lvname(metadata_lv) : "",
+		 to_cachepool ? "cache" : "thin",
+		 metadata_lv ? " and metadata volumes" : " volume",
+		 zero_metadata ? "with" : "WITHOUT");
+
+	if (zero_metadata)
+		log_warn("THIS WILL DESTROY CONTENT OF LOGICAL VOLUME (filesystem etc.)");
+	else if (to_cachepool)
+		log_warn("WARNING: Using mismatched cache pool metadata MAY DESTROY YOUR DATA!");
+
+	if (!arg_count(cmd, yes_ARG) &&
+	    yes_no_prompt("Do you really want to convert %s%s%s? [y/n]: ",
+			  display_lvname(lv),
+			  metadata_lv ? " and " : "",
+			  metadata_lv ? display_lvname(metadata_lv) : "") == 'n') {
+		log_error("Conversion aborted.");
+		return 0;
+	}
+
+	/*
+	 * The internal LV names for pool data/meta LVs.
+	 */
+
+	if ((dm_snprintf(meta_name, sizeof(meta_name), "%s%s", lv->name, to_cachepool ? "_cmeta" : "_tmeta") < 0) ||
+	    (dm_snprintf(data_name, sizeof(data_name), "%s%s", lv->name, to_cachepool ? "_cdata" : "_tdata") < 0)) {
+		log_error("Failed to create internal lv names, pool name is too long.");
+		return 0;
+	}
+
+	/*
+	 * If a new metadata LV needs to be created, collect the settings for
+	 * the new LV and create it.
+	 *
+	 * If an existing LV is used for metadata, deactivate/activate/wipe it.
+	 */
+
+	if (!metadata_lv) {
+		uint32_t meta_stripes;
+		uint32_t meta_stripe_size;
+		uint32_t meta_readahead;
+		alloc_policy_t meta_alloc;
+		unsigned meta_stripes_supplied;
+		unsigned meta_stripe_size_supplied;
+
+		if (!get_stripe_params(cmd, get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED),
+				       &meta_stripes,
+				       &meta_stripe_size,
+				       &meta_stripes_supplied,
+				       &meta_stripe_size_supplied))
+			return_0;
+
+		meta_readahead = arg_uint_value(cmd, readahead_ARG, cmd->default_settings.read_ahead);
+		meta_alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
+
+		if (!archive(vg))
+			return_0;
+
+		if (!(metadata_lv = alloc_pool_metadata(lv,
+							meta_name,
+							meta_readahead,
+							meta_stripes,
+							meta_stripe_size,
+							meta_extents,
+							meta_alloc,
+							use_pvh)))
+			return_0;
+	} else {
+		if (!deactivate_lv(cmd, metadata_lv)) {
+			log_error("Aborting. Failed to deactivate %s.",
+				  display_lvname(metadata_lv));
+			return 0;
+		}
+
+		if (!archive(vg))
+			return_0;
+
+		if (zero_metadata) {
+			metadata_lv->status |= LV_TEMPORARY;
+			if (!activate_lv_local(cmd, metadata_lv)) {
+				log_error("Aborting. Failed to activate metadata lv.");
+				return 0;
+			}
+
+			if (!wipe_lv(metadata_lv, (struct wipe_params) { .do_zero = 1 })) {
+				log_error("Aborting. Failed to wipe metadata lv.");
+				return 0;
+			}
+		}
+	}
+
+	/*
+	 * Deactivate the data LV and metadata LV.
+	 * We are changing target type, so deactivate first.
+	 */
+
+	if (!deactivate_lv(cmd, metadata_lv)) {
+		log_error("Aborting. Failed to deactivate metadata lv. "
+			  "Manual intervention required.");
+		return 0;
+	}
+
+	if (!deactivate_lv(cmd, lv)) {
+		log_error("Aborting. Failed to deactivate logical volume %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	/*
+	 * When the LV referenced by the original function arg "lv"
+	 * is renamed, it is then referenced as "data_lv".
+	 *
+	 * pool_name    pool name taken from lv arg
+	 * data_name    sub lv name, generated
+	 * meta_name    sub lv name, generated
+	 *
+	 * pool_lv      new lv for pool object, created here
+	 * data_lv      sub lv, was lv arg, now renamed
+	 * metadata_lv  sub lv, existing or created here
+	 */
+
+	data_lv = lv;
+	pool_name = lv->name; /* Use original LV name for pool name */
+
+	/*
+	 * Rename the original LV arg to the internal data LV naming scheme.
+	 *
+	 * Since we wish to have underlaying devs to match _[ct]data
+	 * rename data LV to match pool LV subtree first,
+	 * also checks for visible LV.
+	 *
+	 * FIXME: any more types prohibited here?
+	 */
+
+	if (!lv_rename_update(cmd, data_lv, data_name, 0))
+		return_0;
+
+	/*
+	 * Create LV structures for the new pool LV object,
+	 * and connect it to the data/meta LVs.
+	 */
+
+	if (!(pool_lv = lv_create_empty(pool_name, NULL,
+					(to_cachepool ? CACHE_POOL : THIN_POOL) | VISIBLE_LV | LVM_READ | LVM_WRITE,
+					ALLOC_INHERIT, vg))) {
+		log_error("Creation of pool LV failed.");
+		return 0;
+	}
+
+	/* Allocate a new pool segment */
+	if (!(seg = alloc_lv_segment(pool_segtype, pool_lv, 0, data_lv->le_count,
+				     pool_lv->status, 0, NULL, 1,
+				     data_lv->le_count, 0, 0, 0, NULL)))
+		return_0;
+
+	/* Add the new segment to the layer LV */
+	dm_list_add(&pool_lv->segments, &seg->list);
+	pool_lv->le_count = data_lv->le_count;
+	pool_lv->size = data_lv->size;
+
+	if (!attach_pool_data_lv(seg, data_lv))
+		return_0;
+
+	/*
+	 * Create a new lock for a thin pool LV.  A cache pool LV has no lock.
+	 * Locks are removed from existing LVs that are being converted to
+	 * data and meta LVs (they are unlocked and deleted below.)
+	 */
+	if (is_lockd_type(vg->lock_type)) {
+		if (to_cachepool) {
+			data_lv->lock_args = NULL;
+			metadata_lv->lock_args = NULL;
+		} else {
+			data_lv->lock_args = NULL;
+			metadata_lv->lock_args = NULL;
+
+			if (!strcmp(vg->lock_type, "sanlock"))
+				pool_lv->lock_args = "pending";
+			else if (!strcmp(vg->lock_type, "dlm"))
+				pool_lv->lock_args = "dlm";
+			/* The lock_args will be set in vg_write(). */
+		}
+	}
+
+	/*
+	 * Apply settings to the new pool seg, from command line, from
+	 * defaults, sometimes adjusted.
+	 */
+
+	seg->transaction_id = 0;
+	seg->chunk_size = chunk_size;
+
+	if (to_cachepool) {
+		cache_mode_t cache_mode = 0;
+		const char *policy_name = NULL;
+		struct dm_config_tree *policy_settings = NULL;
+
+		if (!get_cache_params(cmd, &cache_mode, &policy_name, &policy_settings))
+			return_0;
+
+		if (cache_mode &&
+		    !cache_set_cache_mode(seg, cache_mode))
+			return_0;
+
+		if ((policy_name || policy_settings) &&
+		    !cache_set_policy(seg, policy_name, policy_settings))
+			return_0;
+	} else {
+		const char *discards_name;
+
+		if (arg_is_set(cmd, zero_ARG))
+			seg->zero_new_blocks = 1;
+		else
+			seg->zero_new_blocks = find_config_tree_bool(cmd, allocation_thin_pool_zero_CFG, vg->profile);
+
+		if (arg_is_set(cmd, discards_ARG))
+			seg->discards = (thin_discards_t) arg_uint_value(cmd, discards_ARG, THIN_DISCARDS_PASSDOWN);
+		else {
+			if (!(discards_name = find_config_tree_str(cmd, allocation_thin_pool_discards_CFG, vg->profile)))
+				return_0;
+			if (!set_pool_discards(&seg->discards, discards_name))
+				return_0;
+		}
+	}
+
+	/*
+	 * Rename deactivated metadata LV to have _tmeta suffix.
+	 * Implicit checks if metadata_lv is visible.
+	 */
+	if (pool_metadata_name &&
+	    !lv_rename_update(cmd, metadata_lv, meta_name, 0))
+		return_0;
+
+	if (!attach_pool_metadata_lv(seg, metadata_lv))
+		return_0;
+
+	if (!handle_pool_metadata_spare(vg,
+					metadata_lv->le_count,
+					use_pvh,
+					arg_int_value(cmd, poolmetadataspare_ARG, DEFAULT_POOL_METADATA_SPARE)))
+		return_0;
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
+
+	if (seg->zero_new_blocks &&
+	    seg->chunk_size >= DEFAULT_THIN_POOL_CHUNK_SIZE_PERFORMANCE * 2)
+		log_warn("WARNING: Pool zeroing and large %s chunk size slows down provisioning.",
+			 display_size(cmd, seg->chunk_size));
+
+	if (activate_pool && !lockd_lv(cmd, pool_lv, "ex", LDLV_PERSISTENT)) {
+		log_error("Failed to lock pool LV %s.", display_lvname(pool_lv));
+		goto out;
+	}
+
+	if (activate_pool &&
+	    !activate_lv_excl(cmd, pool_lv)) {
+		log_error("Failed to activate pool logical volume %s.",
+			  display_lvname(pool_lv));
+		/* Deactivate subvolumes */
+		if (!deactivate_lv(cmd, seg_lv(seg, 0)))
+			log_error("Failed to deactivate pool data logical volume %s.",
+				  display_lvname(seg_lv(seg, 0)));
+		if (!deactivate_lv(cmd, seg->metadata_lv))
+			log_error("Failed to deactivate pool metadata logical volume %s.",
+				  display_lvname(seg->metadata_lv));
+		goto out;
+	}
+
+	r = 1;
+
+out:
+	backup(vg);
+
+	if (r)
+		log_print_unless_silent("Converted %s to %s pool.",
+					display_lvname(lv),
+					to_cachepool ? "cache" : "thin");
+
+	/*
+	 * Unlock and free the locks from existing LVs that became pool data
+	 * and meta LVs.
+	 */
+	if (lockd_data_name) {
+		if (!lockd_lv_name(cmd, vg, lockd_data_name, &lockd_data_id, lockd_data_args, "un", LDLV_PERSISTENT))
+			log_error("Failed to unlock pool data LV %s/%s", vg->name, lockd_data_name);
+		lockd_free_lv(cmd, vg, lockd_data_name, &lockd_data_id, lockd_data_args);
+	}
+
+	if (lockd_meta_name) {
+		if (!lockd_lv_name(cmd, vg, lockd_meta_name, &lockd_meta_id, lockd_meta_args, "un", LDLV_PERSISTENT))
+			log_error("Failed to unlock pool metadata LV %s/%s", vg->name, lockd_meta_name);
+		lockd_free_lv(cmd, vg, lockd_meta_name, &lockd_meta_id, lockd_meta_args);
+	}
+
+	return r;
+#if 0
+revert_new_lv:
+	/* TBD */
+	if (!pool_metadata_lv_name) {
+		if (!deactivate_lv(cmd, metadata_lv)) {
+			log_error("Failed to deactivate metadata lv.");
+			return 0;
+		}
+		if (!lv_remove(metadata_lv) || !vg_write(vg) || !vg_commit(vg))
+			log_error("Manual intervention may be required to remove "
+				  "abandoned LV(s) before retrying.");
+		else
+			backup(vg);
+	}
+
+	return 0;
+#endif
+}
+
+/*
  * Convert origin into a cache LV by attaching a cache pool.
  */
 static int _lvconvert_cache(struct cmd_context *cmd,
@@ -4911,5 +5420,93 @@ int lvconvert_start_poll_cmd(struct cmd_context *cmd, int argc, char **argv)
 	destroy_processing_handle(cmd, handle);
 
 	return ret;
+}
+
+static int _lvconvert_to_pool_single(struct cmd_context *cmd,
+					 struct logical_volume *lv,
+					 struct processing_handle *handle)
+{
+	struct dm_list *use_pvh = NULL;
+	int to_thinpool = 0;
+	int to_cachepool = 0;
+
+	switch (cmd->command->command_line_enum) {
+	case lvconvert_to_thinpool_CMD:
+		to_thinpool = 1;
+		break;
+	case lvconvert_to_cachepool_CMD:
+		to_cachepool = 1;
+		break;
+	default:
+		log_error(INTERNAL_ERROR "Invalid lvconvert pool command");
+		return 0;
+	};
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_ECMD_FAILED;
+	} else
+		use_pvh = &lv->vg->pvs;
+
+	if (!_lvconvert_to_pool(cmd, lv, to_thinpool, to_cachepool, use_pvh))
+		return_ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+/*
+ * The LV position arg is used as thinpool/cachepool data LV.
+ */
+
+int lvconvert_to_pool_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			       NULL, NULL, &_lvconvert_to_pool_single);
+}
+
+/*
+ * Reformats non-standard command form into standard command form.
+ *
+ * In the command variants with no position LV arg, the LV arg is taken from
+ * the --thinpool/--cachepool arg, and the position args are modified to match
+ * the standard command form.
+ */
+
+int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct command *new_command;
+	char *pool_data_name;
+	int i, p;
+
+	switch (cmd->command->command_line_enum) {
+	case lvconvert_to_thinpool_noarg_CMD:
+		pool_data_name = (char *)arg_str_value(cmd, thinpool_ARG, NULL);
+		new_command = get_command(lvconvert_to_thinpool_CMD);
+		break;
+	case lvconvert_to_cachepool_noarg_CMD:
+		pool_data_name = (char *)arg_str_value(cmd, cachepool_ARG, NULL);
+		new_command = get_command(lvconvert_to_cachepool_CMD);
+		break;
+	default:
+		log_error(INTERNAL_ERROR "Unknown pool conversion.");
+		return 0;
+	};
+
+	log_debug("Changing command line id %s %d to standard form %s %d",
+		  cmd->command->command_line_id, cmd->command->command_line_enum,
+		  new_command->command_line_id, new_command->command_line_enum);
+
+	/* Make the LV the first position arg. */
+
+	p = cmd->position_argc;
+	for (i = 0; i < cmd->position_argc; i++)
+		cmd->position_argv[p] = cmd->position_argv[p-1];
+
+	cmd->position_argv[0] = pool_data_name;
+	cmd->position_argc++;
+	cmd->command = new_command;
+
+	return lvconvert_to_pool_cmd(cmd, argc, argv);
 }
 

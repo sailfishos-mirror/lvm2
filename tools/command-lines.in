@@ -421,14 +421,18 @@ OO: --stripes_long Number, --stripesize SizeKB,
 OP: PV ...
 ID: lvconvert_to_thinpool
 DESC: Convert LV to type thin-pool.
+RULE: all and lv_is_visible
+RULE: all not lv_is_locked lv_is_origin lv_is_merging_origin lv_is_external_origin lv_is_virtual
 
 # alternate form of lvconvert --type thin-pool
 # deprecated because of non-standard syntax (missing positional arg)
+# Commands in this form are converted to standard form so that
+# the validation of LV types and rules specified above will apply.
 lvconvert --thinpool LV_linear_striped_raid_cache
 OO: --type thin-pool, --stripes_long Number, --stripesize SizeKB,
 --discards Discards, --zero Bool, OO_LVCONVERT_POOL, OO_LVCONVERT
 OP: PV ...
-ID: lvconvert_to_thinpool
+ID: lvconvert_to_thinpool_noarg
 DESC: Convert LV to type thin-pool (variant, use --type thin-pool).
 FLAGS: SECONDARY_SYNTAX
 
@@ -443,10 +447,13 @@ DESC: Convert LV to type cache-pool.
 
 # alternate form of lvconvert --type cache-pool
 # deprecated because of non-standard syntax (missing positional arg)
+# Commands in this form are converted to standard form so that
+# the validation of LV types and rules specified above will apply.
 lvconvert --cachepool LV_linear_striped_raid
 OO: --type cache-pool, OO_LVCONVERT_POOL, OO_LVCONVERT,
 --cachemode CacheMode, --cachepolicy String, --cachesettings String
-ID: lvconvert_to_cachepool
+OP: PV ...
+ID: lvconvert_to_cachepool_noarg
 DESC: Convert LV to type cache-pool (variant, use --type cache-pool).
 FLAGS: SECONDARY_SYNTAX
 
