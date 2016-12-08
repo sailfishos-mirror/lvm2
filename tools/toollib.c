@@ -2498,9 +2498,9 @@ static int _lv_is_type(struct cmd_context *cmd, struct logical_volume *lv, int l
 
 	switch (lvt_enum) {
 	case striped_LVT:
-		return seg_is_striped(seg);
+		return seg_is_striped(seg) && !lv_is_cow(lv);
 	case linear_LVT:
-		return seg_is_linear(seg);
+		return seg_is_linear(seg) && !lv_is_cow(lv);
 	case snapshot_LVT:
 		return lv_is_cow(lv);
 	case thin_LVT:
@@ -2544,12 +2544,17 @@ int get_lvt_enum(struct logical_volume *lv)
 {
 	struct lv_segment *seg = first_seg(lv);
 
-	if (seg_is_striped(seg))
-		return striped_LVT;
-	if (seg_is_linear(seg))
-		return linear_LVT;
+	/*
+	 * The order these are checked is important, because a snapshot LV has
+	 * a linear seg type.
+	 */
+
 	if (lv_is_cow(lv))
 		return snapshot_LVT;
+	if (seg_is_linear(seg))
+		return linear_LVT;
+	if (seg_is_striped(seg))
+		return striped_LVT;
 	if (lv_is_thin_volume(lv))
 		return thin_LVT;
 	if (lv_is_thin_pool(lv))
