@@ -3373,6 +3373,143 @@ revert_new_lv:
 #endif
 }
 
+static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
+					 struct logical_volume *lv,
+					 struct logical_volume *metadata_lv)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *prev_metadata_lv;
+	struct lv_segment *seg;
+	struct lv_types *lvtype;
+	char meta_name[NAME_LEN];
+	const char *swap_name;
+	uint32_t chunk_size;
+	int is_thinpool;
+	int is_cachepool;
+	int lvt_enum;
+
+	is_thinpool = lv_is_thin_pool(lv);
+	is_cachepool = lv_is_cache_pool(lv);
+	lvt_enum = get_lvt_enum(metadata_lv);
+	lvtype = get_lv_type(lvt_enum);
+
+	if (lvt_enum != striped_LVT && lvt_enum != linear_LVT && lvt_enum != raid_LVT) {
+		log_error("LV %s with type %s cannot be used as a metadata LV.",
+			  display_lvname(metadata_lv), lvtype ? lvtype->name : "unknown");
+		return 0;
+	}
+
+	if (!lv_is_visible(metadata_lv)) {
+		log_error("Can't convert internal LV %s.",
+			  display_lvname(metadata_lv));
+		return 0;
+	}
+
+	if (lv_is_locked(metadata_lv)) {
+		log_error("Can't convert locked LV %s.",
+			  display_lvname(metadata_lv));
+		return 0;
+	}
+
+	if (lv_is_origin(metadata_lv) ||
+	    lv_is_merging_origin(metadata_lv) ||
+	    lv_is_external_origin(metadata_lv) ||
+	    lv_is_virtual(metadata_lv)) {
+		log_error("Pool metadata LV %s is of an unsupported type.",
+			  display_lvname(metadata_lv));
+		return 0;
+	}
+
+	/* FIXME cache pool */
+	if (is_thinpool && pool_is_active(lv)) {
+		/* If any volume referencing pool active - abort here */
+		log_error("Cannot convert pool %s with active volumes.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if ((dm_snprintf(meta_name, sizeof(meta_name), "%s%s", lv->name, is_cachepool ? "_cmeta" : "_tmeta") < 0)) {
+                log_error("Failed to create internal lv names, pool name is too long.");
+                return 0;
+        }
+
+	seg = first_seg(lv);
+
+	/* Normally do NOT change chunk size when swapping */
+
+	if (arg_is_set(cmd, chunksize_ARG)) {
+		chunk_size = arg_uint_value(cmd, chunksize_ARG, 0);
+
+		if ((chunk_size != seg->chunk_size) && !dm_list_empty(&lv->segs_using_this_lv)) {
+			if (arg_count(cmd, force_ARG) == PROMPT) {
+				log_error("Chunk size can be only changed with --force. Conversion aborted.");
+				return 0;
+			}
+
+			log_warn("WARNING: Changing chunk size %s to %s for %s pool volume.",
+				 display_size(cmd, seg->chunk_size),
+				 display_size(cmd, chunk_size),
+				 display_lvname(lv));
+
+			/* Ok, user has likely some serious reason for this */
+			if (!arg_count(cmd, yes_ARG) &&
+			    yes_no_prompt("Do you really want to change chunk size for %s pool volume? [y/n]: ",
+					  display_lvname(lv)) == 'n') {
+				log_error("Conversion aborted.");
+				return 0;
+			}
+		}
+
+		seg->chunk_size = chunk_size;
+	}
+
+	if (!arg_count(cmd, yes_ARG) &&
+	    yes_no_prompt("Do you want to swap metadata of %s pool with metadata volume %s? [y/n]: ",
+			  display_lvname(lv),
+			  display_lvname(metadata_lv)) == 'n') {
+		log_error("Conversion aborted.");
+		return 0;
+	}
+
+	if (!deactivate_lv(cmd, metadata_lv)) {
+		log_error("Aborting. Failed to deactivate %s.",
+			  display_lvname(metadata_lv));
+		return 0;
+	}
+
+	if (!archive(vg))
+		return_0;
+
+	/* Swap names between old and new metadata LV */
+
+	if (!detach_pool_metadata_lv(seg, &prev_metadata_lv))
+		return_0;
+
+	swap_name = metadata_lv->name;
+
+	if (!lv_rename_update(cmd, metadata_lv, "pvmove_tmeta", 0))
+		return_0;
+
+	/* Give the previous metadata LV the name of the LV replacing it. */
+
+	if (!lv_rename_update(cmd, prev_metadata_lv, swap_name, 0))
+		return_0;
+
+	/* Rename deactivated metadata LV to have _tmeta suffix */
+
+	if (!lv_rename_update(cmd, metadata_lv, meta_name, 0))
+		return_0;
+
+	if (!attach_pool_metadata_lv(seg, metadata_lv))
+		return_0;
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
+
+	backup(vg);
+	return 1;
+}
+
 /*
  * Create a new pool LV, using the lv arg as the data sub LV.
  * The metadata sub LV is either a new LV created here, or an
@@ -3552,12 +3689,21 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 			return_0;
 	}
 
-	if (metadata_lv && (meta_extents > metadata_lv->le_count)) {
-		log_error("Logical volume %s is too small for metadata.",
-			  display_lvname(metadata_lv));
+	if ((uint64_t)chunk_size > ((uint64_t)lv->le_count * vg->extent_size)) {
+		log_error("Pool data LV %s is too small (%s) for specified chunk size (%s).",
+			  display_lvname(lv),
+			  display_size(cmd, (uint64_t)lv->le_count * vg->extent_size),
+			  display_size(cmd, chunk_size));
+		return 0;
 	}
 
-	log_warn("Pool metadata extents %u chunk_size %u", meta_extents, chunk_size);
+	if (metadata_lv && (meta_extents > metadata_lv->le_count)) {
+		log_error("Pool metadata LV %s is too small (%s extents) for required metadata (%s extents).",
+			  display_lvname(metadata_lv), metadata_lv->le_count, meta_extents);
+		return 0;
+	}
+
+	log_verbose("Pool metadata extents %u chunk_size %u", meta_extents, chunk_size);
 
 
 	/*
@@ -5784,7 +5930,7 @@ static int _lvconvert_to_cache_vol_single(struct cmd_context *cmd,
 
 	return ECMD_PROCESSED;
 
-out:
+ out:
 	return ECMD_FAILED;
 }
 
@@ -5859,3 +6005,76 @@ int lvconvert_to_thin_with_external_cmd(struct cmd_context *cmd, int argc, char 
 			       NULL, NULL, &_lvconvert_to_thin_with_external_single);
 }
 
+static int _lvconvert_swap_pool_metadata_single(struct cmd_context *cmd,
+					 struct logical_volume *lv,
+					 struct processing_handle *handle)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *metadata_lv;
+	const char *metadata_name;
+
+	if (!(metadata_name = arg_str_value(cmd, poolmetadata_ARG, NULL)))
+		goto_out;
+
+	if (!validate_lvname_param(cmd, &vg->name, &metadata_name))
+		goto_out;
+
+	if (!(metadata_lv = find_lv(vg, metadata_name))) {
+		log_error("Metadata LV %s not found.", metadata_name);
+		goto out;
+	}
+
+	if (metadata_lv == lv) {
+		log_error("Can't use same LV for pool data and metadata LV %s.",
+			  display_lvname(metadata_lv));
+		goto out;
+	}
+
+	if (!_lvconvert_swap_pool_metadata(cmd, lv, metadata_lv))
+		goto_out;
+
+	return ECMD_PROCESSED;
+
+ out:
+	return ECMD_FAILED;
+}
+
+int lvconvert_swap_pool_metadata_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			       NULL, NULL, &_lvconvert_swap_pool_metadata_single);
+}
+
+#if 0
+int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct command *new_command;
+	char *pool_name;
+
+	switch (cmd->command->command_line_enum) {
+	case lvconvert_swap_thinpool_metadata_CMD:
+		pool_name = (char *)arg_str_value(cmd, thinpool_ARG, NULL);
+		break;
+	case lvconvert_swap_cachepool_metadata_CMD:
+		pool_name = (char *)arg_str_value(cmd, cachepool_ARG, NULL);
+		break;
+	default:
+		log_error(INTERNAL_ERROR "Unknown pool conversion.");
+		return 0;
+	};
+
+	new_command = get_command(lvconvert_swap_pool_metadata_CMD);
+
+	log_debug("Changing command line id %s %d to standard form %s %d",
+		  cmd->command->command_line_id, cmd->command->command_line_enum,
+		  new_command->command_line_id, new_command->command_line_enum);
+
+	/* Make the LV the first position arg. */
+
+	cmd->position_argv[0] = pool_name;
+	cmd->position_argc++;
+	cmd->command = new_command;
+
+	return lvconvert_swap_pool_metadata_cmd(cmd, argc, argv);
+}
+#endif
