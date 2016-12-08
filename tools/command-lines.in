@@ -481,10 +481,16 @@ DESC: Separate and delete the cache pool from a cache LV.
 
 # FIXME: add a new option defining this operation, e.g. --swapmetadata
 
-lvconvert --poolmetadata LV LV_thinpool_cachepool
-OO: OO_LVCONVERT
+lvconvert --swapmetadata --poolmetadata LV LV_thinpool_cachepool
+OO: --chunksize SizeKB, OO_LVCONVERT
 ID: lvconvert_swap_pool_metadata
-DESC: Swap metadata LV in a thin pool or cache pool (temporary command).
+DESC: Swap metadata LV in a thin pool or cache pool (for repair only).
+
+# alternate form, does not use explicit command option
+lvconvert --poolmetadata LV LV_thinpool_cachepool
+OO: --chunksize SizeKB, OO_LVCONVERT
+ID: lvconvert_swap_pool_metadata_deprecated
+DESC: Swap metadata LV in a thin pool or cache pool (variant, use --swapmetadata).
 FLAGS: SECONDARY_SYNTAX
 
 ---
