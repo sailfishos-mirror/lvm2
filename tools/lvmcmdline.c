@@ -145,10 +145,8 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
 	{ lvconvert_swap_pool_metadata_CMD,		lvconvert_swap_pool_metadata_cmd },
 	{ lvconvert_swap_pool_metadata_deprecated_CMD,	lvconvert_swap_pool_metadata_cmd },
 	{ lvconvert_merge_thin_CMD,			lvconvert_merge_thin_cmd },
-#if 0
 	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_cachepool_cmd },
-	{ lvconvert_split_and_delete_cachepool_CMD,	lvconvert_split_cachepool_cmd },
-#endif
+	{ lvconvert_split_and_remove_cachepool_CMD,	lvconvert_split_cachepool_cmd },
 };
 
 #if 0

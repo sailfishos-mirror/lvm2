@@ -1955,14 +1955,12 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
 	return 1;
 }
 
-
-static int _lvconvert_split_cached(struct cmd_context *cmd,
-				   struct logical_volume *lv)
+static int _lvconvert_split_and_keep_cachepool(struct cmd_context *cmd,
+				   struct logical_volume *lv,
+				   struct logical_volume *cachepool_lv)
 {
-	struct logical_volume *cache_pool_lv = first_seg(lv)->pool_lv;
-
-	log_debug("Detaching cache pool %s from cached LV %s.",
-		  display_lvname(cache_pool_lv), display_lvname(lv));
+	log_debug("Detaching cache pool %s from cache LV %s.",
+		  display_lvname(cachepool_lv), display_lvname(lv));
 
 	if (!archive(lv->vg))
 		return_0;
@@ -1976,26 +1974,17 @@ static int _lvconvert_split_cached(struct cmd_context *cmd,
 	backup(lv->vg);
 
 	log_print_unless_silent("Logical volume %s is not cached and cache pool %s is unused.",
-				display_lvname(lv), display_lvname(cache_pool_lv));
+				display_lvname(lv), display_lvname(cachepool_lv));
 
 	return 1;
 }
 
-static int _lvconvert_uncache(struct cmd_context *cmd,
-			      struct logical_volume *lv,
-			      struct lvconvert_params *lp)
+static int _lvconvert_split_and_remove_cachepool(struct cmd_context *cmd,
+				   struct logical_volume *lv,
+				   struct logical_volume *cachepool_lv)
 {
 	struct lv_segment *seg;
 	struct logical_volume *remove_lv;
-
-	if (lv_is_thin_pool(lv))
-		lv = seg_lv(first_seg(lv), 0); /* cached _tdata ? */
-
-	if (!lv_is_cache(lv)) {
-		log_error("Cannot uncache non-cached logical volume %s.",
-			  display_lvname(lv));
-		return 0;
-	}
 
 	seg = first_seg(lv);
 
@@ -2017,7 +2006,7 @@ static int _lvconvert_uncache(struct cmd_context *cmd,
 	/* TODO: Check for failed cache as well to get prompting? */
 	if (lv_is_partial(lv)) {
 		if (first_seg(seg->pool_lv)->cache_mode != CACHE_MODE_WRITETHROUGH) {
-			if (!lp->force) {
+			if (!arg_count(cmd, force_ARG)) {
 				log_error("Conversion aborted.");
 				log_error("Cannot uncache writethrough cache volume %s without --force.",
 					  display_lvname(lv));
@@ -2027,14 +2016,12 @@ static int _lvconvert_uncache(struct cmd_context *cmd,
 				 display_lvname(lv));
 		}
 
-		if (!lp->yes &&
+		if (!arg_count(cmd, yes_ARG) &&
 		    yes_no_prompt("Do you really want to uncache %s with missing LVs? [y/n]: ",
 				  display_lvname(lv)) == 'n') {
 			log_error("Conversion aborted.");
 			return 0;
 		}
-		cmd->handles_missing_pvs = 1;
-		cmd->partial_activation = 1;
 	}
 
 	if (lvremove_single(cmd, remove_lv, NULL) != ECMD_PROCESSED)
@@ -4143,7 +4130,8 @@ static int _convert_thin_pool_splitcache(struct cmd_context *cmd, struct logical
 		return 0;
 	}
 
-	return _lvconvert_split_cached(cmd, sublv1);
+	/* return _lvconvert_split_cached(cmd, sublv1); */
+	return 0;
 }
 
 /*
@@ -4162,7 +4150,8 @@ static int _convert_thin_pool_uncache(struct cmd_context *cmd, struct logical_vo
 		return 0;
 	}
 
-	return _lvconvert_uncache(cmd, sublv1, lp);
+	/* return _lvconvert_uncache(cmd, sublv1, lp); */
+	return 0;
 }
 
 /*
@@ -4211,7 +4200,8 @@ static int _convert_thin_pool_swapmetadata(struct cmd_context *cmd, struct logic
 static int _convert_cache_volume_splitcache(struct cmd_context *cmd, struct logical_volume *lv,
 					    struct lvconvert_params *lp)
 {
-	return _lvconvert_split_cached(cmd, lv);
+	/* return _lvconvert_split_cached(cmd, lv); */
+	return 0;
 }
 
 /*
@@ -4221,7 +4211,8 @@ static int _convert_cache_volume_splitcache(struct cmd_context *cmd, struct logi
 static int _convert_cache_volume_uncache(struct cmd_context *cmd, struct logical_volume *lv,
 					 struct lvconvert_params *lp)
 {
-	return _lvconvert_uncache(cmd, lv, lp);
+	/* return _lvconvert_uncache(cmd, lv, lp); */
+	return 0;
 }
 
 /*
@@ -4288,7 +4279,8 @@ static int _convert_cache_pool_splitcache(struct cmd_context *cmd, struct logica
 		return 0;
 	}
 
-	return _lvconvert_split_cached(cmd, sublv1);
+	/* return _lvconvert_split_cached(cmd, sublv1); */
+	return 0;
 }
 
 /*
@@ -6092,5 +6084,71 @@ int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	return process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
 			       NULL, NULL, &_lvconvert_merge_thin_single);
+}
+
+static int _lvconvert_split_cachepool_single(struct cmd_context *cmd,
+					 struct logical_volume *lv,
+					 struct processing_handle *handle)
+{
+	struct logical_volume *cache_lv = NULL;
+	struct logical_volume *cachepool_lv = NULL;
+	struct lv_segment *seg;
+	int ret;
+
+	if (lv_is_cache(lv)) {
+		cache_lv = lv;
+		cachepool_lv = first_seg(cache_lv)->pool_lv;
+
+	} else if (lv_is_cache_pool(lv)) {
+		cachepool_lv = lv;
+
+		if ((dm_list_size(&cachepool_lv->segs_using_this_lv) == 1) &&
+		    (seg = get_only_segment_using_this_lv(cachepool_lv)) &&
+		    seg_is_cache(seg))
+			cache_lv = seg->lv;
+
+	} else if (lv_is_thin_pool(lv)) {
+		cache_lv = seg_lv(first_seg(lv), 0); /* cached _tdata */
+		cachepool_lv = first_seg(cache_lv)->pool_lv;
+	}
+
+	if (!cache_lv) {
+		log_error("Cannot find cache LV from %s.", display_lvname(lv));
+		return ECMD_FAILED;
+	}
+
+	if (!cachepool_lv) {
+		log_error("Cannot find cache pool LV from %s.", display_lvname(lv));
+		return ECMD_FAILED;
+	}
+
+	switch (cmd->command->command_line_enum) {
+	case lvconvert_split_and_keep_cachepool_CMD:
+		ret = _lvconvert_split_and_keep_cachepool(cmd, cache_lv, cachepool_lv);
+		break;
+
+	case lvconvert_split_and_remove_cachepool_CMD:
+		ret = _lvconvert_split_and_remove_cachepool(cmd, cache_lv, cachepool_lv);
+		break;
+	default:
+		log_error(INTERNAL_ERROR "Unknown cache pool split.");
+		ret = 0;
+	}
+
+	if (!ret)
+		return ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	if (cmd->command->command_line_enum == lvconvert_split_and_remove_cachepool_CMD) {
+		cmd->handles_missing_pvs = 1;
+		cmd->partial_activation = 1;
+	}
+
+	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			       NULL, NULL, &_lvconvert_split_cachepool_single);
 }
 

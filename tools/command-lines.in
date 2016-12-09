@@ -474,7 +474,7 @@ DESC: Separate and keep the cache pool from a cache LV.
 
 lvconvert --uncache LV_cache_thinpool
 OO: OO_LVCONVERT
-ID: lvconvert_split_and_delete_cachepool
+ID: lvconvert_split_and_remove_cachepool
 DESC: Separate and delete the cache pool from a cache LV.
 
 ---
