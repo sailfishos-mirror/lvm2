@@ -2868,6 +2868,9 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 		if ((policy_name || policy_settings) &&
 		    !cache_set_policy(seg, policy_name, policy_settings))
 			return_0;
+
+		if (policy_settings)
+			dm_config_destroy(policy_settings);
 	} else {
 		const char *discards_name;
 
@@ -3002,6 +3005,9 @@ static int _lvconvert_to_cache_vol(struct cmd_context *cmd,
 
 	if (!cache_set_policy(first_seg(cache_lv), policy_name, policy_settings))
 		return_0;
+
+	if (policy_settings)
+		dm_config_destroy(policy_settings);
 
 	cache_check_for_warns(first_seg(cache_lv));
 
@@ -4246,6 +4252,11 @@ static int _lvconvert_to_cache_vol_single(struct cmd_context *cmd,
 			goto out;
 		}
 	} else {
+		if (!dm_list_empty(&cachepool_lv->segs_using_this_lv)) {
+			log_error("Cache pool %s is already in use.", cachepool_name);
+			goto out;
+		}
+
 		if (arg_is_set(cmd, chunksize_ARG))
 			chunk_size = arg_uint_value(cmd, chunksize_ARG, 0);
 		if (!chunk_size)
