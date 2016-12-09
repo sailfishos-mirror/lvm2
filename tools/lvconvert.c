@@ -3398,6 +3398,20 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
 				lp->stripes = 0;
 	}
 
+	if (arg_is_set(cmd, splitmirrors_ARG) && lv_is_cache(lv)) {
+		struct logical_volume *sublv;
+		sublv = seg_lv(first_seg(lv), 0);
+		if (lv_is_raid(sublv))
+			return _lvconvert_raid(sublv, lp);
+		else if (lv_is_mirror(sublv))
+			return _lvconvert_mirrors(cmd, lv, lp);
+		else {
+			log_error("Sub LV %s must be raid or mirror.", display_lvname(sublv));
+			ret = 0;
+			goto out;
+		}
+	}
+
 	/*
 	 * Each LV type that can be converted.
 	 * (The existing type of the LV, not a requested type.)
