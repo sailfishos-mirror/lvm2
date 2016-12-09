@@ -892,6 +892,14 @@ DESC: (infers --type thin).
 
 ---
 
+lvconvert --mergethin LV_thin ...
+OO: --background, --interval Number, OO_LVCONVERT
+ID: lvconvert_merge_thin
+DESC: Merge thin LV into its origin LV.
+RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
+
+---
+
 # stripes option is not intuitive when creating a thin LV,
 # but here it applies to creating the new thin pool that
 # is used for the thin LV

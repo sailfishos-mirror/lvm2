@@ -144,6 +144,11 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
 	{ lvconvert_to_cache_vol_CMD,			lvconvert_to_cache_vol_cmd },
 	{ lvconvert_swap_pool_metadata_CMD,		lvconvert_swap_pool_metadata_cmd },
 	{ lvconvert_swap_pool_metadata_deprecated_CMD,	lvconvert_swap_pool_metadata_cmd },
+	{ lvconvert_merge_thin_CMD,			lvconvert_merge_thin_cmd },
+#if 0
+	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_cachepool_cmd },
+	{ lvconvert_split_and_delete_cachepool_CMD,	lvconvert_split_cachepool_cmd },
+#endif
 };
 
 #if 0
@@ -153,10 +158,6 @@ struct command_function command_functions[COMMAND_ID_COUNT] = {
 	/* raid-related utilities (move into lvconvert_raid_types?) */
 	{ lvconvert_split_mirror_images_CMD,		lvconvert_split_mirror_images_fn },
 	{ lvconvert_change_mirrorlog_CMD,		lvconvert_change_mirrorlog_fn },
-
-	/* utilities for creating/maintaining thin and cache objects. */
-	{ lvconvert_split_and_keep_cachepool_CMD,	lvconvert_split_and_keep_cachepool_fn },
-	{ lvconvert_split_and_delete_cachepool_CMD,	lvconvert_split_and_delete_cachepool_fn },
 
 	/* directed to one of the other merges (snap,thin,mirror) when all are implemented */
 	{ lvconvert_merge_CMD,				lvconvert_merge_fn },

@@ -2242,8 +2242,7 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
 }
 
 static int _lvconvert_merge_thin_snapshot(struct cmd_context *cmd,
-					  struct logical_volume *lv,
-					  struct lvconvert_params *lp)
+					  struct logical_volume *lv)
 {
 	int origin_is_active = 0, r = 0;
 	struct lv_segment *snap_seg = first_seg(lv);
@@ -3698,7 +3697,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 	}
 
 	if (metadata_lv && (meta_extents > metadata_lv->le_count)) {
-		log_error("Pool metadata LV %s is too small (%s extents) for required metadata (%s extents).",
+		log_error("Pool metadata LV %s is too small (%u extents) for required metadata (%u extents).",
 			  display_lvname(metadata_lv), metadata_lv->le_count, meta_extents);
 		return 0;
 	}
@@ -4125,7 +4124,7 @@ static int _lvconvert_to_cache_vol(struct cmd_context *cmd,
 static int _convert_thin_volume_merge(struct cmd_context *cmd, struct logical_volume *lv,
 				      struct lvconvert_params *lp)
 {
-	return _lvconvert_merge_thin_snapshot(cmd, lv, lp);
+	return _lvconvert_merge_thin_snapshot(cmd, lv);
 }
 
 /*
@@ -6078,3 +6077,20 @@ int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, ch
 	return lvconvert_swap_pool_metadata_cmd(cmd, argc, argv);
 }
 #endif
+
+static int _lvconvert_merge_thin_single(struct cmd_context *cmd,
+					 struct logical_volume *lv,
+					 struct processing_handle *handle)
+{
+	if (!_lvconvert_merge_thin_snapshot(cmd, lv))
+		return ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	return process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			       NULL, NULL, &_lvconvert_merge_thin_single);
+}
+
