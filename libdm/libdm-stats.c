@@ -4390,6 +4390,25 @@ bad:
 	return NULL;
 }
 
+#define MATCH_EXTENT(e, s, l) \
+(((e).start == (s)) && ((e).len == (l)))
+
+static struct _extent *_find_extent(size_t nr_extents, struct _extent *extents,
+				    uint64_t start, uint64_t len)
+{
+	size_t i;
+	for (i = 0; i < nr_extents; i++)
+		if (MATCH_EXTENT(extents[i], start, len))
+			return extents + i;
+	return NULL;
+}
+
+static int _extent_in_extents(size_t nr_extents, struct _extent *extents,
+		       uint64_t start, uint64_t len)
+{
+	return (_find_extent(nr_extents, extents, start, len) != NULL);
+}
+
 /*
  * Create a set of regions representing the extents of a file and
  * return a table of uint64_t region_id values. The number of regions
