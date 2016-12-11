@@ -3843,6 +3843,37 @@ static int _extent_start_compare(const void *p1, const void *p2)
 	return 1;
 }
 
+/*
+ * Resize the group bitmap corresponding to group_id so that it can
+ * contain at least num_regions members.
+ */
+static int _stats_resize_group(struct dm_stats_group *group, int num_regions)
+{
+	int last_bit = dm_bit_get_last(group->regions);
+	dm_bitset_t new, old;
+
+	if (last_bit >= num_regions) {
+		log_error("Cannot resize group bitmap to %d with bit %d set.",
+			  num_regions, last_bit);
+		return 0;
+	}
+
+	log_very_verbose("Resizing group bitmap from %d to %d (last_bit=%d).",
+			 group->regions[0], num_regions, last_bit);
+
+	new = dm_bitset_create(NULL, num_regions);
+	if (!new) {
+		log_error("Could not allocate memory for new group bitmap.");
+		return 0;
+	}
+
+	old = group->regions;
+	dm_bit_copy(new, old);
+	group->regions = new;
+	dm_bitset_destroy(old);
+	return 1;
+}
+
 static int _stats_create_group(struct dm_stats *dms, dm_bitset_t regions,
 			       const char *alias, uint64_t *group_id)
 {
@@ -4207,8 +4238,10 @@ static int _stats_add_extent(struct dm_pool *mem, struct fiemap_extent *fm_ext,
 	/* convert bytes to dm (512b) sectors */
 	extent.start = fm_ext->fe_physical >> SECTOR_SHIFT;
 	extent.len = fm_ext->fe_length >> SECTOR_SHIFT;
-
 	extent.id = id;
+
+	log_very_verbose("Found file extent (start=" FMTu64 ", len=" FMTu64 ", id="
+			 FMTu64 ")", extent.start, extent.len, id);
 
 	if (!dm_pool_grow_object(mem, &extent,
 				 sizeof(extent))) {
@@ -4216,7 +4249,6 @@ static int _stats_add_extent(struct dm_pool *mem, struct fiemap_extent *fm_ext,
 		return 0;
 	}
 	return 1;
-
 }
 
 /* test for the boundary of an extent */
@@ -4286,7 +4318,7 @@ static uint64_t _stats_map_extents(struct dm_pool *mem,
 	 * If the file only has a single extent, no boundary is ever
 	 * detected to trigger addition of the first extent.
 	 */
-	if (fm_ext[i - 1].fe_logical == 0) {
+	if (*eof || (fm_ext[i - 1].fe_logical == 0)) {
 		_stats_add_extent(mem, fm_pending, nr_extents);
 		nr_extents++;
 	}
@@ -4319,7 +4351,6 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
 	struct _extent *extents;
 	unsigned long flags = 0;
 	uint64_t *buf;
-	int rc;
 
 	buf = dm_zalloc(STATS_FIE_BUF_LEN);
 	if (!buf) {
@@ -4339,7 +4370,7 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
 	if (!dm_pool_begin_object(mem, sizeof(*extents)))
 		return NULL;
 
-	flags |= FIEMAP_FLAG_SYNC;
+	flags = FIEMAP_FLAG_SYNC;
 
 	do {
 		/* start of ioctl loop - zero size and set count to bufsize */
@@ -4348,10 +4379,8 @@ static struct _extent *_stats_get_extents_for_file(struct dm_pool *mem, int fd,
 		fiemap->fm_extent_count = *count;
 
 		/* get count-sized chunk of extents */
-		rc = ioctl(fd, FS_IOC_FIEMAP, (unsigned long) fiemap);
-		if (rc < 0) {
-			rc = -errno;
-			if (rc == -EBADR)
+		if (ioctl(fd, FS_IOC_FIEMAP, (unsigned long) fiemap) < 0) {
+			if (errno == EBADR)
 				log_err_once("FIEMAP failed with unknown "
 					     "flags %x.", fiemap->fm_flags);
 			goto bad;
@@ -4410,21 +4439,49 @@ static int _extent_in_extents(size_t nr_extents, struct _extent *extents,
 }
 
 /*
- * Create a set of regions representing the extents of a file and
- * return a table of uint64_t region_id values. The number of regions
+ * Clean up a table of region_id values that were created during a
+ * failed dm_stats_create_regions_from_fd, or dm_stats_update_regions_from_fd
+ * operation.
+ */
+static void _stats_cleanup_region_ids(struct dm_stats *dms, uint64_t *regions,
+				      uint64_t nr_regions)
+{
+	uint64_t i;
+
+	for (i = 0; i < nr_regions; i++)
+		if (!_stats_delete_region(dms, regions[i]))
+			log_error("Could not delete region " FMTu64 ".", i);
+}
+
+/*
+ * Create or update a set of regions representing the extents of a file
+ * and return a table of uint64_t region_id values. The number of regions
  * created is returned in the memory pointed to by count (which must be
  * non-NULL).
+ *
+ * If group_id is not equal to DM_STATS_GROUP_NOT_PRESENT, it is assumed
+ * that group_id corresponds to a group containing existing regions that
+ * were mapped to this file at an earlier time: regions will be added or
+ * removed to reflect the current status of the file.
  */
-static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
-					    struct dm_histogram *bounds,
-					    int precise, uint64_t *count)
+static uint64_t *_stats_map_file_regions(struct dm_stats *dms, int fd,
+					 struct dm_histogram *bounds,
+					 int precise, uint64_t group_id,
+					 uint64_t *count, int *regroup)
 {
-	uint64_t *regions = NULL, i, fail_region;
+	struct _extent *extents = NULL, *old_extents;
+	uint64_t *regions = NULL, fail_region;
+	struct dm_stats_region *region = NULL;
+	struct dm_stats_group *group = NULL;
 	struct dm_pool *extent_mem = NULL;
-	struct _extent *extents = NULL;
+	struct _extent ext, *old_ext;
+	int64_t nr_kept, nr_old, i;
 	char *hist_arg = NULL;
 	struct statfs fsbuf;
 	struct stat buf;
+	int num_bits;
+
+	*regroup = (group_id == DM_STATS_GROUP_NOT_PRESENT);
 
 #ifdef BTRFS_SUPER_MAGIC
 	if (fstatfs(fd, &fsbuf)) {
@@ -4454,6 +4511,10 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
 		return 0;
 	}
 
+	log_very_verbose("%sapping extents from fd %d on (%d:%d)",
+			 (group_id != DM_STATS_GROUP_NOT_PRESENT) ? "Rem" : "M",
+			 fd, major(buf.st_dev), minor(buf.st_dev));
+
 	/* Use a temporary, private pool for the extent table. This avoids
          * hijacking the dms->mem (region table) pool which would lead to
          * interleaving temporary allocations with dm_stats_list() data,
@@ -4465,6 +4526,77 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
 	if (!(extents = _stats_get_extents_for_file(extent_mem, fd, count))) {
 		dm_pool_destroy(extent_mem);
 		return_0;
+	}
+
+	/*
+	 * First update pass: prune no-longer-allocated extents from the group
+	 * and build a table of the remaining extents so that their creation
+	 * can be skipped in the second pass.
+	 */
+	if (group_id != DM_STATS_GROUP_NOT_PRESENT) {
+		group = &dms->groups[group_id];
+
+		if (!dms->regions)
+			dm_stats_list(dms, dms->program_id);
+
+		log_very_verbose("Checking filemap for changed extents "
+				 "(group_id=" FMTu64 ")", group_id);
+
+		if (!dm_pool_begin_object(extent_mem, sizeof(*old_extents))) {
+			log_error("Could not allocate extent table.");
+			goto out_extents;
+		}
+
+		nr_kept = nr_old = 0; /* counts of old and retained extents */
+
+		/*
+		 * First pass: delete de-allocated extents and set regroup=1
+		 * if deleting the current group leader.
+		 */
+		for (i = dm_bit_get_last(group->regions);
+		     i >= 0; i = dm_bit_get_prev(group->regions, i)) {
+			region = &dms->regions[i];
+			nr_old++;
+
+			log_very_verbose("Checking extent " FMTu64 " (start="
+					 FMTu64 " len=" FMTu64 ")", i,
+					 region->start, region->len);
+
+			if (!_extent_in_extents(*count, extents,
+						region->start, region->len)) {
+
+				if (i == group_id)
+					*regroup = 1;
+
+				log_very_verbose("Deleting region " FMTu64
+						 " (leader=%d, regroup=%d)",
+						 i, i == group_id, *regroup);
+
+				_stats_delete_region(dms, i);
+			} else {
+				ext.start = region->start;
+				ext.len = region->len;
+				ext.id = i;
+				nr_kept++;
+
+				log_very_verbose("Keeping region " FMTu64
+						 " (leader=%d, regroup=%d)",
+						 i, i == group_id, *regroup);
+
+				dm_pool_grow_object(extent_mem, &ext,
+						    sizeof(ext));
+			}
+		}
+
+		old_extents = dm_pool_end_object(extent_mem);
+		if (!old_extents) {
+			log_error("Could not finalize region extent table.");
+			goto out;
+		}
+		log_very_verbose("Kept %ld of %ld old extents",
+				 nr_kept, nr_old);
+		log_very_verbose("Found " FMTu64 " new extents",
+				 *count - nr_kept);
 	}
 
         if (bounds) {
@@ -4479,7 +4611,26 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
 		goto out;
 	}
 
+	/*
+	 * Second pass (first for non-update case): create regions for
+	 * all extents not retained from the prior mapping, and insert
+	 * retained regions into the table of region_id values.
+	 *
+	 * If a regroup is not scheduled, set group bits for newly
+	 * created regions in the group leader bitmap.
+	 */
 	for (i = 0; i < *count; i++) {
+		if (group_id != DM_STATS_GROUP_NOT_PRESENT) {
+			if ((old_ext = _find_extent(nr_kept, old_extents,
+						       extents[i].start,
+						       extents[i].len))) {
+				regions[i] = old_ext->id;
+				log_very_verbose("Reusing existing extent "
+						 "region_id=" FMTu64,
+						 old_ext->id);
+				continue;
+			}
+		}
 		if (!_stats_create_region(dms, regions + i, extents[i].start,
 					  extents[i].len, -1, precise, hist_arg,
 					  dms->program_id, "")) {
@@ -4488,11 +4639,38 @@ static uint64_t *_stats_create_file_regions(struct dm_stats *dms, int fd,
 				  extents[i].start);
 			goto out_remove;
 		}
+
+		log_very_verbose("Created new extent region with region_id="
+				 FMTu64, regions[i]);
+
+		if (!(*regroup) && (group_id != DM_STATS_GROUP_NOT_PRESENT)) {
+			/* expand group bitmap */
+			if (regions[i] > (group->regions[0] - 1)) {
+				num_bits = regions[i] + *count;
+				if (!_stats_resize_group(group, num_bits)) {
+					log_error("Failed to resize group "
+						  "bitmap.");
+					goto out_remove;
+				}
+			}
+			dm_bit_set(group->regions, regions[i]);
+		}
+
 	}
 	regions[*count] = DM_STATS_REGION_NOT_PRESENT;
 
+	/* Update group leader aux_data for new group members. */
+	if (!(*regroup) && (group_id != DM_STATS_GROUP_NOT_PRESENT))
+		if (!_stats_set_aux(dms, group_id,
+				    dms->regions[group_id].aux_data))
+			log_error("Failed to update group aux_data.");
+
 	if (bounds)
 		dm_free(hist_arg);
+
+out_extents:
+	if (group_id != DM_STATS_GROUP_NOT_PRESENT)
+		dm_pool_abandon_object(extent_mem);
 	dm_pool_free(extent_mem, extents);
 	dm_pool_destroy(extent_mem);
 	return regions;
@@ -4508,13 +4686,15 @@ out_remove:
 	dm_stats_list(dms, NULL);
 
 	fail_region = i;
-	for (i = 0; i < fail_region; i++)
-		if (!_stats_delete_region(dms, regions[i]))
-			log_error("Could not delete region " FMTu64 ".", i);
-
+	_stats_cleanup_region_ids(dms, regions, fail_region);
 	*count = 0;
 
 out:
+	/*
+	 * The table of file extents in 'extents' is always built, so free
+	 * it explicitly: this will also free any 'old_extents' table that
+	 * was later allocated from the 'extent_mem' pool by this function.
+	 */
 	dm_pool_free(extent_mem, extents);
 	dm_pool_destroy(extent_mem);
 	dm_free(hist_arg);
@@ -4528,15 +4708,16 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 					  const char *alias)
 {
 	uint64_t *regions, count = 0;
+	int regroup = 1;
 
 	if (alias && !group) {
 		log_error("Cannot set alias without grouping regions.");
 		return NULL;
 	}
 
-	regions = _stats_create_file_regions(dms, fd, bounds, precise, &count);
-	if (!regions)
-		return_0;
+	if (!(regions = _stats_map_file_regions(dms, fd, bounds, precise,
+						-1, &count, &regroup)))
+		return NULL;
 
 	if (!group)
 		return regions;
@@ -4550,15 +4731,97 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 
 	return regions;
 out:
+	_stats_cleanup_region_ids(dms, regions, count);
 	dm_free(regions);
 	return NULL;
 }
 
+uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+					  uint64_t group_id)
+{
+	struct dm_histogram *bounds = NULL;
+	int nr_bins, precise, regroup = 0;
+	uint64_t *regions, count = 0;
+	const char *alias;
+
+	if (!dms->regions)
+		dm_stats_list(dms, dms->program_id);
+
+	if (!dm_stats_group_present(dms, group_id)) {
+		log_error("Group ID " FMTu64 " does not exist.", group_id);
+		return NULL;
+	}
+
+	/*
+	 * We need to take a copy of the alias, as it is possible that the
+	 * extent corresponding to the current group leader no longer exists;
+	 * in that case, _stats_map_file_regions() will remove the leader and
+	 * the group will be destroyed.
+	 */
+	if (dms->groups[group_id].alias) {
+		alias = dm_strdup(dms->groups[group_id].alias);
+		if (!alias) {
+			log_error("Failed to allocated group alias string.");
+			return NULL;
+		}
+	} else
+		alias = NULL;
+
+	if (dms->regions[group_id].bounds) {
+		/*
+		 * We need a copy since the group leader may have been
+		 * deallocated from the file - _stats_map_file_regions()
+		 * will destroy its region in this case.
+		 */
+		nr_bins = dms->regions[group_id].bounds->nr_bins;
+		bounds = _alloc_dm_histogram(nr_bins);
+		if (!bounds) {
+			log_error("Could not allocate memory for group "
+				  "histogram bounds.");
+			return NULL;
+		}
+		_stats_copy_histogram_bounds(bounds,
+					     dms->regions[group_id].bounds);
+	}
+
+	precise = (dms->regions[group_id].timescale == 1);
+
+	regions = _stats_map_file_regions(dms, fd, bounds, precise,
+					  group_id, &count, &regroup);
+
+	if (!regions)
+		goto bad;
+
+	if (regroup) {
+		if (!dm_stats_list(dms, NULL))
+			goto bad;
+		if (!_stats_group_file_regions(dms, regions, count, alias))
+			goto bad;
+	}
+
+	dm_free(bounds);
+	dm_free((char *) alias);
+	return regions;
+bad:
+	_stats_cleanup_region_ids(dms, regions, count);
+	dm_free(bounds);
+	dm_free((char *) alias);
+	return NULL;
+}
+
 #else /* HAVE_LINUX_FIEMAP */
+
 uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 					  int group, int precise,
 					  struct dm_histogram *bounds,
 					  const char *alias)
+{
+	log_error("File mapping requires FIEMAP ioctl support.");
+	return 0;
+}
+
+uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
+					  uint64_t group_id)
 {
 	log_error("File mapping requires FIEMAP ioctl support.");
 	return 0;
