@@ -242,4 +242,6 @@ int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
 
 int get_lvt_enum(struct logical_volume *lv);
 
+struct dm_list *failed_pv_list(struct volume_group *vg);
+
 #endif

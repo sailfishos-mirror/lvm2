@@ -188,3 +188,118 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
 
 	return PROGRESS_FINISHED_ALL; /* Merging happend */
 }
+
+static struct poll_operation_id *_create_id(struct cmd_context *cmd,
+					    const char *vg_name,
+					    const char *lv_name,
+					    const char *uuid)
+{
+	struct poll_operation_id *id;
+	char lv_full_name[NAME_LEN];
+
+	if (!vg_name || !lv_name || !uuid) {
+		log_error(INTERNAL_ERROR "Wrong params for lvconvert _create_id.");
+		return NULL;
+	}
+
+	if (dm_snprintf(lv_full_name, sizeof(lv_full_name), "%s/%s", vg_name, lv_name) < 0) {
+		log_error(INTERNAL_ERROR "Name \"%s/%s\" is too long.", vg_name, lv_name);
+		return NULL;
+	}
+
+	if (!(id = dm_pool_alloc(cmd->mem, sizeof(*id)))) {
+		log_error("Poll operation ID allocation failed.");
+		return NULL;
+	}
+
+	if (!(id->display_name = dm_pool_strdup(cmd->mem, lv_full_name)) ||
+	    !(id->lv_name = strchr(id->display_name, '/')) ||
+	    !(id->vg_name = dm_pool_strdup(cmd->mem, vg_name)) ||
+	    !(id->uuid = dm_pool_strdup(cmd->mem, uuid))) {
+		log_error("Failed to copy one or more poll operation ID members.");
+		dm_pool_free(cmd->mem, id);
+		return NULL;
+	}
+
+	id->lv_name++; /* skip over '/' */
+
+	return id;
+}
+
+static struct poll_functions _lvconvert_mirror_fns = {
+	.poll_progress = poll_mirror_progress,
+	.finish_copy = lvconvert_mirror_finish,
+};
+
+static struct poll_functions _lvconvert_merge_fns = {
+	.poll_progress = poll_merge_progress,
+	.finish_copy = lvconvert_merge_finish,
+};
+
+static struct poll_functions _lvconvert_thin_merge_fns = {
+	.poll_progress = poll_thin_merge_progress,
+	.finish_copy = lvconvert_merge_finish,
+};
+
+int lvconvert_poll_by_id(struct cmd_context *cmd, struct poll_operation_id *id,
+				 unsigned background,
+				 int is_merging_origin,
+				 int is_merging_origin_thin)
+{
+	if (test_mode())
+		return ECMD_PROCESSED;
+
+	if (is_merging_origin)
+		return poll_daemon(cmd, background,
+				(MERGING | (is_merging_origin_thin ? THIN_VOLUME : SNAPSHOT)),
+				is_merging_origin_thin ? &_lvconvert_thin_merge_fns : &_lvconvert_merge_fns,
+				"Merged", id);
+	else
+		return poll_daemon(cmd, background, CONVERTING,
+				&_lvconvert_mirror_fns, "Converted", id);
+}
+
+int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv,
+		   unsigned background)
+{
+	int r;
+	struct poll_operation_id *id = _create_id(cmd, lv->vg->name, lv->name, lv->lvid.s);
+	int is_merging_origin = 0;
+	int is_merging_origin_thin = 0;
+
+	if (!id) {
+		log_error("Failed to allocate poll identifier for lvconvert.");
+		return ECMD_FAILED;
+	}
+
+	/* FIXME: check this in polling instead */
+	if (lv_is_merging_origin(lv)) {
+		is_merging_origin = 1;
+		is_merging_origin_thin = seg_is_thin_volume(find_snapshot(lv));
+	}
+
+	r = lvconvert_poll_by_id(cmd, id, background, is_merging_origin, is_merging_origin_thin);
+
+	return r;
+}
+
+struct convert_poll_id_list *convert_poll_id_list_create(struct cmd_context *cmd, const struct logical_volume *lv)
+{
+	struct convert_poll_id_list *idl = (struct convert_poll_id_list *) dm_pool_alloc(cmd->mem, sizeof(struct convert_poll_id_list));
+
+	if (!idl) {
+		log_error("Convert poll ID list allocation failed.");
+		return NULL;
+	}
+
+	if (!(idl->id = _create_id(cmd, lv->vg->name, lv->name, lv->lvid.s))) {
+		dm_pool_free(cmd->mem, idl);
+		return_NULL;
+	}
+
+	idl->is_merging_origin = lv_is_merging_origin(lv);
+	idl->is_merging_origin_thin = idl->is_merging_origin && seg_is_thin_volume(find_snapshot(lv));
+
+	return idl;
+}
+
