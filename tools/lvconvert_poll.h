@@ -21,6 +21,26 @@ struct cmd_context;
 struct logical_volume;
 struct volume_group;
 
+ /*
+  * Data/results accumulated during processing.
+  */
+struct lvconvert_result {
+	int need_polling;
+	struct dm_list poll_idls;
+};
+
+struct convert_poll_id_list {
+	struct dm_list list;
+	struct poll_operation_id *id;
+	unsigned is_merging_origin:1;
+	unsigned is_merging_origin_thin:1;
+};
+
+int lvconvert_poll_by_id(struct cmd_context *cmd, struct poll_operation_id *id,
+		unsigned background, int is_merging_origin, int is_merging_origin_thin);
+struct convert_poll_id_list *convert_poll_id_list_create(struct cmd_context *cmd,
+		const struct logical_volume *lv);
+
 int lvconvert_mirror_finish(struct cmd_context *cmd,
 			    struct volume_group *vg,
 			    struct logical_volume *lv,

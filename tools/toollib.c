@@ -5746,3 +5746,40 @@ out:
 	return 0;
 }
 
+struct dm_list *failed_pv_list(struct volume_group *vg)
+{
+	struct dm_list *failed_pvs;
+	struct pv_list *pvl, *new_pvl;
+
+	if (!(failed_pvs = dm_pool_alloc(vg->vgmem, sizeof(*failed_pvs)))) {
+		log_error("Allocation of list of failed_pvs failed.");
+		return NULL;
+	}
+
+	dm_list_init(failed_pvs);
+
+	dm_list_iterate_items(pvl, &vg->pvs) {
+		if (!is_missing_pv(pvl->pv))
+			continue;
+
+		/*
+		 * Finally, --repair will remove empty PVs.
+		 * But we only want remove these which are output of repair,
+		 * Do not count these which are already empty here.
+		 * FIXME: code should traverse PV in LV not in whole VG.
+		 * FIXME: layer violation? should it depend on vgreduce --removemising?
+		 */
+		if (pvl->pv->pe_alloc_count == 0)
+			continue;
+
+		if (!(new_pvl = dm_pool_alloc(vg->vgmem, sizeof(*new_pvl)))) {
+			log_error("Allocation of failed_pvs list entry failed.");
+			return NULL;
+		}
+		new_pvl->pv = pvl->pv;
+		dm_list_add(failed_pvs, &new_pvl->list);
+	}
+
+	return failed_pvs;
+}
+
