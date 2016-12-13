@@ -231,6 +231,7 @@ int pvmove_poll(struct cmd_context *cmd, const char *pv_name, const char *uuid,
 		const char *vg_name, const char *lv_name, unsigned background);
 int lvconvert_poll(struct cmd_context *cmd, struct logical_volume *lv, unsigned background);
 
+
 int mirror_remove_missing(struct cmd_context *cmd,
 			  struct logical_volume *lv, int force);
 
@@ -273,5 +274,28 @@ int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv
 int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
+
+int lvconvert_generic_check(struct cmd_context *cmd, struct logical_volume *lv,
+                        struct processing_handle *handle,
+                        int lv_is_named_arg);
+
+
+int lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_volume *lv,
+                        struct processing_handle *handle,
+                        struct dm_list *use_pvh);
+int lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_volume *lv,
+                        struct processing_handle *handle,
+                        struct dm_list *use_pvh);
+int lvconvert_repair_thinpool(struct cmd_context *cmd, struct logical_volume *lv,
+                        struct processing_handle *handle);
+int lvconvert_merge_snapshot_single(struct cmd_context *cmd,
+                                       struct logical_volume *lv,
+                                       struct processing_handle *handle);
+int lvconvert_merge_thin_single(struct cmd_context *cmd,
+                                         struct logical_volume *lv,
+                                         struct processing_handle *handle);
+int lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
+                                          struct logical_volume *lv,
+                                          struct processing_handle *handle);
 
 #endif
