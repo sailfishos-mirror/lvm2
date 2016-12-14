@@ -5715,9 +5715,9 @@ static int _stats_help(CMD_ARGS);
  * dmstats <cmd> [options] [device_name]
  *
  *    clear [--regionid id] <device_name>
- *    create [--areas nr_areas] [--areasize size]
+ *    create [[--areas nr_areas] [--areasize size]
  *           [ [--start start] [--length len] | [--segments]]
- *           [--userdata data] [--programid id] [<device_name>]
+ *           [--userdata data] [--programid id] [<device_name>] | --filemap <path>]
  *    delete [--regionid] <device_name>
  *    delete_all [--programid id]
  *    group [--alias name] [--alldevices] [--regions <regions>] [<device_name>]
@@ -5726,10 +5726,17 @@ static int _stats_help(CMD_ARGS);
  *    report [--interval seconds] [--count count] [--units units] [--regionid id]
  *           [--programid id] [<device>]
  *    ungroup [--alldevices] [--groupid id] [<device_name>]
+ *    update_filemap --groupid id <file_path>
  */
 
-#define AREA_OPTS "[--areas <nr_areas>] [--areasize <size>] "
-#define CREATE_OPTS "[--start <start> [--length <len>]]\n\t\t" AREA_OPTS
+#define USERDATA_OPT "--userdata <data> "
+#define PROGID_OPT "--programid <id> "
+#define SEGMENTS_OPT "--segments "
+#define START_LEN_OPTS "[--start <start>] [--length <len>] "
+#define AREA_OPTS "[--areas <nr_areas>] [--areasize <size>]"
+#define CREATE_OPTS USERDATA_OPT PROGID_OPT "\n\t\t" "[[[[ " START_LEN_OPTS "\n\t\t" \
+AREA_OPTS "] |\n\t\t" SEGMENTS_OPT "] [<device_name]] |\n\t\t--filemap <file_path> ]"
+
 #define ID_OPTS "[--programid <id>] [--userdata <data> ] "
 #define SELECT_OPTS "[--programid <id>] [--regionid <id>] "
 #define PRINT_OPTS "[--clear] " SELECT_OPTS
@@ -5739,7 +5746,7 @@ static int _stats_help(CMD_ARGS);
 static struct command _stats_subcommands[] = {
 	{"help", "", 0, 0, 0, 0, _stats_help},
 	{"clear", "--regionid <id> [<device>]", 0, -1, 1, 0, _stats_clear},
-	{"create", CREATE_OPTS "\n\t\t" ID_OPTS "[<device>]", 0, -1, 1, 0, _stats_create},
+	{"create", CREATE_OPTS , 0, -1, 1, 0, _stats_create},
 	{"delete", "--regionid <id> <device>", 1, -1, 1, 0, _stats_delete},
 	{"group", GROUP_OPTS, 1, -1, 1, 0, _stats_group},
 	{"list", "[--programid <id>] [<device>]", 0, -1, 1, 0, _stats_report},
