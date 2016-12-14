@@ -24,18 +24,18 @@ typedef enum {
 	 *   For a mirrored or raid LV, split mirror into two mirrors, optionally tracking
 	 *     future changes to the main mirror to allow future recombination.
 	 */
-	CONV_SPLIT = 2,
-	CONV_SPLIT_MIRRORS = 5,
+	CONV_SPLIT = 1,
+	CONV_SPLIT_MIRRORS = 2,
 
 	/* Every other segment type or mirror log conversion we haven't separated out */
-	CONV_OTHER = 12,
+	CONV_OTHER = 3,
 } conversion_type_t;
 
 struct lvconvert_params {
-	/* Exactly one of these 12 command categories is determined */
-	int split;		/* 2 */
-	int keep_mimages;	/* 5 */	/* --splitmirrors */
-	/* other */		/* 12 */
+	/* Exactly one of these command categories is determined */
+	int split;		/* 1 */
+	int keep_mimages;	/* 2 */	/* --splitmirrors */
+	/* other */		/* 3 */
 
 	/* FIXME Eliminate all cases where more than one of the above are set then use conv_type instead */
 	conversion_type_t	conv_type;
@@ -55,12 +55,7 @@ struct lvconvert_params {
 	int yes;
 	int zero;
 
-	const char *lv_name;
 	const char *lv_split_name;
-	const char *lv_name_full;
-	const char *vg_name;
-	int wait_completion;
-	int need_polling;
 
 	uint32_t region_size;
 
@@ -77,13 +72,12 @@ struct lvconvert_params {
 	alloc_policy_t alloc;
 
 	int pv_count;
-	char **pvs;
 	struct dm_list *pvh;
 
+	int wait_completion;
+	int need_polling;
 	struct logical_volume *lv_to_poll;
 	struct dm_list idls;
-
-	const char *origin_name;
 };
 
 
@@ -94,73 +88,6 @@ static void _set_conv_type(struct lvconvert_params *lp, int conv_type)
 		log_error(INTERNAL_ERROR "Changing conv_type from %d to %d.", lp->conv_type, conv_type);
 
 	lp->conv_type = conv_type;
-}
-
-static int _lvconvert_name_params(struct lvconvert_params *lp,
-				  struct cmd_context *cmd,
-				  int *pargc, char ***pargv)
-{
-	if (!*pargc) {
-		if (lp->split) {
-			log_error("Logical volume for split is missing.");
-			return 0;
-		}
-		if (!lp->lv_name_full) {
-			log_error("Please provide logical volume path.");
-			return 0;
-		}
-	} else if (!lp->lv_name_full) {
-		lp->lv_name_full = (*pargv)[0];
-		(*pargv)++, (*pargc)--;
-	}
-
-	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->origin_name))
-		return_0;
-
-	if (!validate_restricted_lvname_param(cmd, &lp->vg_name, &lp->lv_split_name))
-		return_0;
-
-	if (!lp->vg_name && !strchr(lp->lv_name_full, '/')) {
-		/* Check for $LVM_VG_NAME */
-		if (!(lp->vg_name = extract_vgname(cmd, NULL))) {
-			log_error("Please specify a logical volume path.");
-			return 0;
-		}
-	}
-
-	if (!validate_lvname_param(cmd, &lp->vg_name, &lp->lv_name_full))
-		return_0;
-
-	lp->lv_name = lp->lv_name_full;
-
-	if (!validate_name(lp->vg_name)) {
-		log_error("Please provide a valid volume group name");
-		return 0;
-	}
-
-	/*
-	 * FIXME: avoid this distinct validation out of scope of _convert_*()
-	 *
- 	 *        We should not rely on namespace here any more!
- 	 *        It is the duty of lvcreate/lvrename to avoid reserved names.
- 	 */
-	if (!lp->keep_mimages &&
-	    !strstr(lp->lv_name, "_tdata") &&
-	    !strstr(lp->lv_name, "_tmeta") &&
-	    !strstr(lp->lv_name, "_cdata") &&
-	    !strstr(lp->lv_name, "_cmeta") &&
-	    !strstr(lp->lv_name, "_corig") &&
-	    !apply_lvname_restrictions(lp->lv_name))
-		return_0;
-
-	if (*pargc) {
-		if (lp->split) {
-			log_error("Too many arguments provided with --split.");
-			return 0;
-		}
-	}
-
-	return 1;
 }
 
 static int _raid0_type_requested(const char *type_str)
@@ -207,9 +134,9 @@ static int _read_conversion_type(struct cmd_context *cmd,
 	return 0;
 }
 
-static int _read_params(struct cmd_context *cmd, int argc, char **argv,
-			struct lvconvert_params *lp)
+static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
 {
+	const char *vg_name = NULL;
 	int region_size;
 	int pagesize = lvm_getpagesize();
 
@@ -245,7 +172,11 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 		lp->track_changes = 1;
 
 	if (lp->split) {
-		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
+		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
+			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
+				return_0;
+		}
+
 
 	/*
 	 * The '--splitmirrors n' argument is equivalent to '--mirrors -n'
@@ -265,7 +196,11 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 			return 0;
 		}
 
-		lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL);
+		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
+			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
+				return_0;
+		}
+
 		lp->keep_mimages = 1;
 		_set_conv_type(lp, CONV_SPLIT_MIRRORS);
 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
@@ -390,12 +325,6 @@ static int _read_params(struct cmd_context *cmd, int argc, char **argv,
 
 	lp->force = arg_count(cmd, force_ARG);
 	lp->yes = arg_count(cmd, yes_ARG);
-
-	if (!_lvconvert_name_params(lp, cmd, &argc, &argv))
-		return_0;
-
-	lp->pv_count = argc;
-	lp->pvs = argv;
 
 	return 1;
 }
@@ -672,22 +601,6 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
 		/* FIXME: we need to create a lock for the new LV. */
 		log_error("Unable to split mirrors in VG with lock_type %s", lv->vg->lock_type);
 		return 0;
-	}
-
-	/*
-	 * Collapsing a stack of mirrors:
-	 *
-	 * If called with no argument, try collapsing the resync layers
-	 */
-	if (!lp->mirrors_supplied && !lp->mirrorlog &&
-	    !lp->corelog && !arg_is_set(cmd, regionsize_ARG) &&
-	    !lp->keep_mimages) {
-		*new_mimage_count = *old_mimage_count;
-		*new_log_count = *old_log_count;
-
-		if (find_temporary_mirror(lv) || lv_is_converting(lv))
-			lp->need_polling = 1;
-		return 1;
 	}
 
 	/*
@@ -1403,128 +1316,6 @@ try_new_takeover_or_reshape:
 	return 0;
 }
 
-int lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_volume *lv,
-			struct processing_handle *handle,
-			struct dm_list *use_pvh)
-{
-	struct lvconvert_result *lr = (struct lvconvert_result *) handle->custom_handle;
-	struct lvconvert_params lp = { 0 };
-	struct convert_poll_id_list *idl;
-	struct lvinfo info;
-	int ret;
-
-	/*
-	 * FIXME: temporary use of lp because _lvconvert_mirrors_repair()
-	 * and _aux() still use lp fields everywhere.
-	 * Migrate them away from using lp (for the most part just use
-	 * local variables, and check arg_values directly).
-	 */
-
-	/*
-	 * Fill in any lp fields here that this fn expects to be set before
-	 * it's called.  It's hard to tell what the old code expects in lp
-	 * for repair; it doesn't take the stripes option, but it seems to
-	 * expect lp.stripes to be set to 1.
-	 */
-	lp.alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
-	lp.stripes = 1;
-
-	ret = _lvconvert_mirrors_repair(cmd, lv, &lp, use_pvh);
-
-	if (lp.need_polling) {
-		if (!lv_info(cmd, lv, 0, &info, 0, 0) || !info.exists)
-			log_print_unless_silent("Conversion starts after activation.");
-		else {
-			if (!(idl = convert_poll_id_list_create(cmd, lv)))
-				return 0;
-			dm_list_add(&lr->poll_idls, &idl->list);
-		}
-		lr->need_polling = 1;
-	}
-
-	return ret;
-}
-
-static void _lvconvert_repair_pvs_raid_ask(struct cmd_context *cmd, int *do_it)
-{
-	const char *dev_policy;
-
-	*do_it = 1;
-
-	if (arg_is_set(cmd, usepolicies_ARG)) {
-		dev_policy = find_config_tree_str(cmd, activation_raid_fault_policy_CFG, NULL);
-
-		if (!strcmp(dev_policy, "allocate") ||
-		    !strcmp(dev_policy, "replace"))
-			return;
-
-		/* else if (!strcmp(dev_policy, "anything_else")) -- no replace */
-		*do_it = 0;
-		return;
-	}
-
-	if (!arg_count(cmd, yes_ARG) &&
-	    yes_no_prompt("Attempt to replace failed RAID images "
-			  "(requires full device resync)? [y/n]: ") == 'n') {
-		*do_it = 0;
-	}
-}
-
-int lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_volume *lv,
-			struct processing_handle *handle,
-			struct dm_list *use_pvh)
-{
-	struct dm_list *failed_pvs;
-	int do_it;
-
-	if (!lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
-		log_error("%s must be active %sto perform this operation.",
-			  display_lvname(lv),
-			  vg_is_clustered(lv->vg) ?
-			  "exclusive locally " : "");
-		return 0;
-	}
-
-	_lvconvert_repair_pvs_raid_ask(cmd, &do_it);
-
-	if (do_it) {
-		if (!(failed_pvs = failed_pv_list(lv->vg)))
-			return_0;
-
-		if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), failed_pvs, use_pvh)) {
-			log_error("Failed to replace faulty devices in %s.",
-				  display_lvname(lv));
-			return 0;
-		}
-
-		log_print_unless_silent("Faulty devices in %s successfully replaced.",
-					display_lvname(lv));
-		return 1;
-	}
-
-	/* "warn" if policy not set to replace */
-	if (arg_is_set(cmd, usepolicies_ARG))
-		log_warn("Use 'lvconvert --repair %s' to replace "
-			 "failed device.", display_lvname(lv));
-	return 1;
-}
-
-/*
- * Functions called to perform a specific operation on a specific LV type.
- *
- * _convert_<lvtype>_<operation>
- *
- * For cases where an operation does not apply to the LV itself, but
- * is implicitly redirected to a sub-LV, these functions locate the
- * correct sub-LV and call the operation on that sub-LV.  If a sub-LV
- * of the proper type is not found, these functions report the error.
- *
- * FIXME: the _lvconvert_foo() functions can be cleaned up since they
- * are now only called for valid combinations of LV type and operation.
- * After that happens, the code remaining in those functions can be
- * moved into the _convert_lvtype_operation() functions below.
- */
-
 /*
  * Change the number of images in a mirror LV.
  * lvconvert --mirrors Number LV
@@ -1704,51 +1495,21 @@ static int _convert_mirror(struct cmd_context *cmd, struct logical_volume *lv,
 	if (segtype_is_raid(lp->segtype))
 		return _convert_mirror_raid(cmd, lv, lp);
 
-	log_error("Operation not permitted on mirror LV %s.", display_lvname(lv));
-	log_error("Operations permitted on a mirror LV are:\n"
-		  "  --mirrors\n"
-		  "  --splitmirrors\n"
-		  "  --mirrorlog\n"
-		  "  --type linear\n"
-		  "  --type raid*\n");
-
+	log_error("Unknown operation on mirror LV %s.", display_lvname(lv));
 	return 0;
 }
 
 static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
 			 struct lvconvert_params *lp)
 {
-	/* Permitted convert options on visible or hidden RaidLVs */
-	const char *permitted_options = lv_is_visible(lv) ?
-		"  --mirrors\n"
-		"  --splitmirrors\n"
-		"  --type raid*\n"
-		"  --type mirror\n"
-		"  --type striped\n"
-		"  --type linear\n"
-		:
-		"  --mirrors\n"
-		"  --splitmirrors\n"
-		"  --replace\n"
-		"  --type raid*\n"
-		"  --type mirror\n"
-		"  --type striped\n"
-		"  --type linear\n";
-
-	/* Applicable to any hidden _or_ visible LVs. */
 	if (arg_is_set(cmd, mirrors_ARG))
 		return _convert_raid_number(cmd, lv, lp);
 
 	if (arg_is_set(cmd, splitmirrors_ARG))
 		return _convert_raid_splitmirrors(cmd, lv, lp);
 
-	if (segtype_is_raid(lp->segtype)) {
-		/* Only --type allowed on hidden RaidLV. */
-		if (!lv_is_visible(lv) && !arg_is_set(cmd, type_ARG))
-			goto out;
-
+	if (segtype_is_raid(lp->segtype))
 		return _convert_raid_raid(cmd, lv, lp);
-	}
 
 	if (segtype_is_mirror(lp->segtype))
 		return _convert_raid_mirror(cmd, lv, lp);
@@ -1759,10 +1520,7 @@ static int _convert_raid(struct cmd_context *cmd, struct logical_volume *lv,
 	if (_linear_type_requested(lp->type_str))
 		return _convert_raid_linear(cmd, lv, lp);
 
-out:
-	log_error("Operation not permitted on raid LV %s.", display_lvname(lv));
-	log_error("Operations permitted on a raid LV are:\n%s", permitted_options);
-
+	log_error("Unknown operation on raid LV %s.", display_lvname(lv));
 	return 0;
 }
 
@@ -1785,11 +1543,7 @@ static int _convert_striped(struct cmd_context *cmd, struct logical_volume *lv,
 	if (arg_is_set(cmd, mirrors_ARG) && mirrors_type && !strcmp(mirrors_type, SEG_TYPE_NAME_RAID1))
 		return _convert_striped_raid(cmd, lv, lp);
 
-	log_error("Operation not permitted on striped or linear LV %s.", display_lvname(lv));
-	log_error("Operations permitted on a striped or linear LV are:\n"
-		  "  --type mirror\n"
-		  "  --type raid*\n");
-
+	log_error("Unknown operation on striped or linear LV %s.", display_lvname(lv));
 	return 0;
 }
 
@@ -1817,39 +1571,6 @@ static int _lvconvert(struct cmd_context *cmd, struct logical_volume *lv,
 {
 	struct lv_segment *seg = first_seg(lv);
 	int ret = 0;
-
-	/*
-	 * Check some conditions that can never be processed.
-	 */
-
-	if (lv_is_locked(lv)) {
-		log_error("Cannot convert locked LV %s.", display_lvname(lv));
-		goto out;
-	}
-
-	if (lv_is_pvmove(lv)) {
-		log_error("Cannot convert pvmove LV %s.", display_lvname(lv));
-		goto out;
-	}
-
-	if (!lv_is_visible(lv)) {
-		/*
-		 * FIXME: there are some exceptions to the rule of only
-		 * operating on visible LVs.  These should be fixed by running
-		 * the command on the visible LV with an option indicating
-		 * which sub LV is intended rather than naming the !visible LV.
-		 */
-		if (!lv_is_cache_pool_metadata(lv) &&
-		    !lv_is_cache_pool_data(lv) &&
-		    !lv_is_thin_pool_metadata(lv) &&
-		    !lv_is_thin_pool_data(lv) &&
-		    !lv_is_used_cache_pool(lv) &&
-		    !lv_is_mirrored(lv) &&
-		    !lv_is_raid(lv)) {
-			log_error("Cannot convert internal LV %s.", display_lvname(lv));
-			goto out;
-		}
-	}
 
 	/* Set up segtype either from type_str or else to match the existing one. */
 	if (!*lp->type_str)
@@ -1925,18 +1646,42 @@ out:
 	return ret ? ECMD_PROCESSED : ECMD_FAILED;
 }
 
-static int _lvconvert_and_add_to_poll_list(struct cmd_context *cmd,
-					    struct lvconvert_params *lp,
-					    struct logical_volume *lv)
-{
-	int ret;
-	struct lvinfo info;
-	struct convert_poll_id_list *idl;
+/*
+ * Change LV between raid/mirror/linear/striped
+ */
 
-	/* _lvconvert() call may alter the reference in lp->lv_to_poll */
-	if ((ret = _lvconvert(cmd, lv, lp)) != ECMD_PROCESSED)
-		stack;
-	else if (lp->need_polling) {
+static int _lvconvert_raid_types_single(struct cmd_context *cmd, struct logical_volume *lv,
+			     struct processing_handle *handle)
+{
+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
+	struct dm_list *use_pvh;
+	struct convert_poll_id_list *idl;
+	struct lvinfo info;
+	int ret;
+
+	/*
+	 * lp->pvh holds the list of PVs available for allocation or removal
+	 */
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_ECMD_FAILED;
+		lp->pv_count = cmd->position_argc - 1;
+	} else
+		use_pvh = &lv->vg->pvs;
+
+	lp->pvh = use_pvh;
+
+	lp->lv_to_poll = lv;
+
+	ret = _lvconvert(cmd, lv, lp);
+
+	if (ret != ECMD_PROCESSED)
+		return_ECMD_FAILED;
+
+	if (lp->need_polling) {
+		/* _lvconvert() call may alter the reference in lp->lv_to_poll */
 		if (!lv_info(cmd, lp->lv_to_poll, 0, &info, 0, 0) || !info.exists)
 			log_print_unless_silent("Conversion starts after activation.");
 		else {
@@ -1946,65 +1691,86 @@ static int _lvconvert_and_add_to_poll_list(struct cmd_context *cmd,
 		}
 	}
 
-	return ret;
+	return ECMD_PROCESSED;
 }
 
-static int _lvconvert_single(struct cmd_context *cmd, struct logical_volume *lv,
-			     struct processing_handle *handle)
+static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			int lv_is_named_arg)
 {
-	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
-	struct volume_group *vg = lv->vg;
+	struct lv_types *lvtype;
+	int lvt_enum;
 
-	if (test_mode() && is_lockd_type(vg->lock_type)) {
-		log_error("Test mode is not yet supported with lock type %s.",
-			  vg->lock_type);
-		return ECMD_FAILED;
+	if (!lv_is_visible(lv)) {
+		if (!lv_is_cache_pool_metadata(lv) &&
+		    !lv_is_cache_pool_data(lv) &&
+		    !lv_is_thin_pool_metadata(lv) &&
+		    !lv_is_thin_pool_data(lv) &&
+		    !lv_is_used_cache_pool(lv) &&
+		    !lv_is_mirrored(lv) &&
+		    !lv_is_raid(lv))
+			goto fail_hidden;
 	}
 
+	lvt_enum = get_lvt_enum(lv);
+	if (lvt_enum)
+		lvtype = get_lv_type(lvt_enum);
+
 	/*
-	 * lp->pvh holds the list of PVs available for allocation or removal
+	 * FIXME: this validation could be done by command defs.
+	 *
+	 * Outside the standard linear/striped/mirror/raid LV
+	 * types, cache is the only special LV type that is handled
+	 * (the command is redirected to origin).
 	 */
-	if (lp->pv_count) {
-		if (!(lp->pvh = create_pv_list(cmd->mem, vg, lp->pv_count, lp->pvs, 0)))
-			return_ECMD_FAILED;
-	} else
-		lp->pvh = &vg->pvs;
+	switch (lvt_enum) {
+	case thin_LVT:
+	case thinpool_LVT:
+	case cachepool_LVT:
+	case snapshot_LVT:
+		log_error("Operation not permitted (%s %d) on LV %s type %s.",
+			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  display_lvname(lv), lvtype ? lvtype->name : "unknown");
+		return 0;
+	}
 
-	lp->lv_to_poll = lv;
+	return 1;
 
-	return _lvconvert_and_add_to_poll_list(cmd, lp, lv);
+ fail_hidden:
+	log_error("Operation not permitted (%s %d) on hidden LV %s.",
+		  cmd->command->command_line_id, cmd->command->command_line_enum,
+		  display_lvname(lv));
+	return 0;
 }
 
-int lvconvert(struct cmd_context * cmd, int argc, char **argv)
+int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv)
 {
 	int poll_ret, ret;
 	int saved_ignore_suspended_devices;
+	struct processing_handle *handle;
 	struct convert_poll_id_list *idl;
 	struct lvconvert_params lp = {
 		.conv_type = CONV_OTHER,
 		.target_attr = ~0,
 		.idls = DM_LIST_HEAD_INIT(lp.idls),
 	};
-	struct processing_handle *handle = init_processing_handle(cmd, NULL);
 
-	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
-
-	if (!handle) {
+	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
 		return ECMD_FAILED;
 	}
 
 	handle->custom_handle = &lp;
 
-	if (!_read_params(cmd, argc, argv, &lp)) {
+	if (!_read_params(cmd, &lp)) {
 		ret = EINVALID_CMD_LINE;
 		goto_out;
 	}
 
 	saved_ignore_suspended_devices = ignore_suspended_devices();
 
-	ret = process_each_lv(cmd, 0, NULL, lp.vg_name, lp.lv_name, READ_FOR_UPDATE,
-			      handle, NULL, &_lvconvert_single);
+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			      handle, &_lvconvert_raid_types_check, &_lvconvert_raid_types_single);
 
 	init_ignore_suspended_devices(saved_ignore_suspended_devices);
 
@@ -2023,6 +1789,148 @@ out:
 	return ret;
 }
 
+/*
+ * change mirror log
+ */
+
+static int _lvconvert_visible_check(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			int lv_is_named_arg)
+{
+	if (!lv_is_visible(lv)) {
+		log_error("Operation not permitted (%s %d) on hidden LV %s.",
+			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
+static int _lvconvert_change_mirrorlog_single(struct cmd_context *cmd, struct logical_volume *lv,
+			     struct processing_handle *handle)
+{
+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
+	struct dm_list *use_pvh;
+
+	/*
+	 * lp->pvh holds the list of PVs available for allocation or removal
+	 */
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_ECMD_FAILED;
+		lp->pv_count = cmd->position_argc - 1;
+	} else
+		use_pvh = &lv->vg->pvs;
+
+	lp->pvh = use_pvh;
+
+ 	/* FIXME: extract the mirrorlog functionality out of _lvconvert()? */
+	return _lvconvert(cmd, lv, lp);
+}
+
+int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	struct lvconvert_params lp = {
+		.conv_type = CONV_OTHER,
+		.target_attr = ~0,
+		.idls = DM_LIST_HEAD_INIT(lp.idls),
+	};
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lp;
+
+	/* FIXME: extract the relevant bits of read_params and put here. */
+	if (!_read_params(cmd, &lp)) {
+		ret = EINVALID_CMD_LINE;
+		goto_out;
+	}
+
+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			      handle, &_lvconvert_visible_check, &_lvconvert_change_mirrorlog_single);
+
+out:
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
+/*
+ * split mirror images
+ */
+
+static int _lvconvert_split_mirror_images_single(struct cmd_context *cmd, struct logical_volume *lv,
+			     struct processing_handle *handle)
+{
+	struct lvconvert_params *lp = (struct lvconvert_params *) handle->custom_handle;
+	struct dm_list *use_pvh;
+
+	/*
+	 * lp->pvh holds the list of PVs available for allocation or removal
+	 */
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, lv->vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_ECMD_FAILED;
+		lp->pv_count = cmd->position_argc - 1;
+	} else
+		use_pvh = &lv->vg->pvs;
+
+	lp->pvh = use_pvh;
+
+ 	/* FIXME: extract the split functionality out of _lvconvert()? */
+	return _lvconvert(cmd, lv, lp);
+}
+
+int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	struct lvconvert_params lp = {
+		.conv_type = CONV_OTHER,
+		.target_attr = ~0,
+		.idls = DM_LIST_HEAD_INIT(lp.idls),
+	};
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lp;
+
+	/* FIXME: extract the relevant bits of read_params and put here. */
+	if (!_read_params(cmd, &lp)) {
+		ret = EINVALID_CMD_LINE;
+		goto_out;
+	}
+
+	/* FIXME: are there any hidden LVs that should be disallowed? */
+
+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
+			      handle, NULL, &_lvconvert_split_mirror_images_single);
+
+out:
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
+/*
+ * merge mirror images
+ *
+ * Called from both lvconvert --mergemirrors and lvconvert --merge.
+ */
+
 int lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
                                           struct logical_volume *lv,
                                           struct processing_handle *handle)
@@ -2035,9 +1943,133 @@ int lvconvert_merge_mirror_images_single(struct cmd_context *cmd,
 
 int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
+	/* arg can be a VG name, which is the standard option usage */
 	cmd->command->flags &= ~GET_VGNAME_FROM_OPTIONS;
 
 	return process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			       NULL, NULL, &lvconvert_merge_mirror_images_single);
+			       NULL, &_lvconvert_visible_check, &lvconvert_merge_mirror_images_single);
+}
+
+/*
+ * repair/replace code, is called from lvconvert --repair/--replace
+ * utilities in lvconvert_other.c
+ */
+
+int lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			struct dm_list *use_pvh)
+{
+	struct lvconvert_result *lr = (struct lvconvert_result *) handle->custom_handle;
+	struct lvconvert_params lp = { 0 };
+	struct convert_poll_id_list *idl;
+	struct lvinfo info;
+	int ret;
+
+	/*
+	 * FIXME: temporary use of lp because _lvconvert_mirrors_repair()
+	 * and _aux() still use lp fields everywhere.
+	 * Migrate them away from using lp (for the most part just use
+	 * local variables, and check arg_values directly).
+	 */
+
+	/*
+	 * Fill in any lp fields here that this fn expects to be set before
+	 * it's called.  It's hard to tell what the old code expects in lp
+	 * for repair; it doesn't take the stripes option, but it seems to
+	 * expect lp.stripes to be set to 1.
+	 */
+	lp.alloc = (alloc_policy_t) arg_uint_value(cmd, alloc_ARG, ALLOC_INHERIT);
+	lp.stripes = 1;
+
+	ret = _lvconvert_mirrors_repair(cmd, lv, &lp, use_pvh);
+
+	if (lp.need_polling) {
+		if (!lv_info(cmd, lv, 0, &info, 0, 0) || !info.exists)
+			log_print_unless_silent("Conversion starts after activation.");
+		else {
+			if (!(idl = convert_poll_id_list_create(cmd, lv)))
+				return 0;
+			dm_list_add(&lr->poll_idls, &idl->list);
+		}
+		lr->need_polling = 1;
+	}
+
+	return ret;
+}
+
+static void _lvconvert_repair_pvs_raid_ask(struct cmd_context *cmd, int *do_it)
+{
+	const char *dev_policy;
+
+	*do_it = 1;
+
+	if (arg_is_set(cmd, usepolicies_ARG)) {
+		dev_policy = find_config_tree_str(cmd, activation_raid_fault_policy_CFG, NULL);
+
+		if (!strcmp(dev_policy, "allocate") ||
+		    !strcmp(dev_policy, "replace"))
+			return;
+
+		/* else if (!strcmp(dev_policy, "anything_else")) -- no replace */
+		*do_it = 0;
+		return;
+	}
+
+	if (!arg_count(cmd, yes_ARG) &&
+	    yes_no_prompt("Attempt to replace failed RAID images "
+			  "(requires full device resync)? [y/n]: ") == 'n') {
+		*do_it = 0;
+	}
+}
+
+int lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle,
+			struct dm_list *use_pvh)
+{
+	struct dm_list *failed_pvs;
+	int do_it;
+
+	if (!lv_is_active_exclusive_locally(lv_lock_holder(lv))) {
+		log_error("%s must be active %sto perform this operation.",
+			  display_lvname(lv),
+			  vg_is_clustered(lv->vg) ?
+			  "exclusive locally " : "");
+		return 0;
+	}
+
+	_lvconvert_repair_pvs_raid_ask(cmd, &do_it);
+
+	if (do_it) {
+		if (!(failed_pvs = failed_pv_list(lv->vg)))
+			return_0;
+
+		if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), failed_pvs, use_pvh)) {
+			log_error("Failed to replace faulty devices in %s.",
+				  display_lvname(lv));
+			return 0;
+		}
+
+		log_print_unless_silent("Faulty devices in %s successfully replaced.",
+					display_lvname(lv));
+		return 1;
+	}
+
+	/* "warn" if policy not set to replace */
+	if (arg_is_set(cmd, usepolicies_ARG))
+		log_warn("Use 'lvconvert --repair %s' to replace "
+			 "failed device.", display_lvname(lv));
+	return 1;
+}
+
+/*
+ * All lvconvert command defs have their own function,
+ * so the generic function name is unused.
+ */
+
+int lvconvert(struct cmd_context *cmd, int argc, char **argv)
+{
+	log_error(INTERNAL_ERROR "Missing function for command definition %s.",
+		  cmd->command->command_line_id);
+	return ECMD_FAILED;
 }
 
