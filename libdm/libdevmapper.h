@@ -1358,6 +1358,7 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
 					  uint64_t group_id);
 
+
 /*
  * Call this to actually run the ioctl.
  */
