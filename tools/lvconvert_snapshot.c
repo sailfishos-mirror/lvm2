@@ -200,7 +200,10 @@ static int _lvconvert_merge_old_snapshot(struct cmd_context *cmd,
 		if (!lv_update_and_reload(origin))
 			return_0;
 
-		*lv_to_poll = origin;
+		if (!lv_info(cmd, origin, 0, &info, 0, 0) || !info.exists)
+			log_print_unless_silent("Conversion starts after activation.");
+		else
+			*lv_to_poll = origin;
 	}
 
 	if (merge_on_activate)
