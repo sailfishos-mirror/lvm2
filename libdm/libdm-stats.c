@@ -4795,12 +4795,12 @@ uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
 	if (!regions)
 		goto bad;
 
-	if (regroup) {
-		if (!dm_stats_list(dms, NULL))
-			goto bad;
+	if (!dm_stats_list(dms, NULL))
+		goto bad;
+
+	if (regroup)
 		if (!_stats_group_file_regions(dms, regions, count, alias))
 			goto bad;
-	}
 
 	dm_free(bounds);
 	dm_free((char *) alias);
