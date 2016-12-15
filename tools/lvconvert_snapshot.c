@@ -293,20 +293,6 @@ int lvconvert_merge_snapshot_single(struct cmd_context *cmd,
 	return ECMD_PROCESSED;
 }
 
-static int _lvconvert_merge_snapshot_check(struct cmd_context *cmd, struct logical_volume *lv,
-			struct processing_handle *handle,
-			int lv_is_named_arg)
-{
-	if (!lv_is_visible(lv)) {
-		log_error("Operation not permitted (%s %d) on hidden LV %s.",
-			  cmd->command->command_line_id, cmd->command->command_line_enum,
-			  display_lvname(lv));
-		return 0;
-	}
-
-	return 1;
-}
-
 int lvconvert_merge_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct processing_handle *handle;
@@ -324,7 +310,7 @@ int lvconvert_merge_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 	handle->custom_handle = &lr;
 
 	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			      handle, &_lvconvert_merge_snapshot_check, &lvconvert_merge_snapshot_single);
+			      handle, NULL, &lvconvert_merge_snapshot_single);
 
 	if (lr.need_polling) {
 		dm_list_iterate_items(idl, &lr.poll_idls) {
@@ -360,7 +346,7 @@ static int _lvconvert_split_snapshot_single(struct cmd_context *cmd,
 int lvconvert_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
-			       NULL, &lvconvert_generic_check, &_lvconvert_split_snapshot_single);
+			       NULL, NULL, &_lvconvert_split_snapshot_single);
 }
 
 /*
@@ -422,5 +408,5 @@ static int _lvconvert_combine_split_snapshot_single(struct cmd_context *cmd,
 int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	return process_each_lv(cmd, 1, cmd->position_argv + 1, NULL, NULL, READ_FOR_UPDATE,
-			       NULL, &lvconvert_generic_check, &_lvconvert_combine_split_snapshot_single);
+			       NULL, NULL, &_lvconvert_combine_split_snapshot_single);
 }

@@ -525,6 +525,7 @@ OO: --background, --interval Number, OO_LVCONVERT
 ID: lvconvert_merge_snapshot
 DESC: Merge COW snapshot LV into its origin.
 RULE: all not lv_is_locked lv_is_pvmove lv_is_merging_origin lv_is_virtual_origin lv_is_external_origin lv_is_merging_cow
+RULE: all and lv_is_visible
 
 ---
 
@@ -552,6 +553,7 @@ DESC: Combine a former COW snapshot (second arg) with a former
 DESC: origin LV (first arg) to reverse a splitsnapshot command.
 FLAGS: SECONDARY_SYNTAX
 RULE: all not lv_is_locked lv_is_pvmove
+RULE: all and lv_is_visible
 
 lvconvert --snapshot LV LV_linear
 OO: --type snapshot, --chunksize SizeKB, --zero Bool, OO_LVCONVERT
@@ -559,6 +561,7 @@ ID: lvconvert_combine_split_snapshot
 DESC: Combine a former COW snapshot (second arg) with a former
 DESC: origin LV (first arg) to reverse a splitsnapshot command.
 RULE: all not lv_is_locked lv_is_pvmove
+RULE: all and lv_is_visible
 
 ---
 

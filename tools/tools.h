@@ -278,11 +278,6 @@ int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **ar
 
 int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
 
-int lvconvert_generic_check(struct cmd_context *cmd, struct logical_volume *lv,
-                        struct processing_handle *handle,
-                        int lv_is_named_arg);
-
-
 int lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_volume *lv,
                         struct processing_handle *handle,
                         struct dm_list *use_pvh);

@@ -20,36 +20,6 @@
 #include "command-lines-count.h"
 
 /*
- * FIXME: it's very unlikely that the same !visible exceptions apply to every
- * lvconvert command.  Add specific !visible exceptions in command-specific
- * check functions.
- */
-
-int lvconvert_generic_check(struct cmd_context *cmd, struct logical_volume *lv,
-			struct processing_handle *handle,
-			int lv_is_named_arg)
-{
-	if (!lv_is_visible(lv)) {
-		if (lv_is_cache_pool_metadata(lv) ||
-		    lv_is_cache_pool_data(lv) ||
-		    lv_is_thin_pool_metadata(lv) ||
-		    lv_is_thin_pool_data(lv) ||
-		    lv_is_used_cache_pool(lv) ||
-		    lv_is_mirrored(lv) ||
-		    lv_is_raid(lv)) {
-			return 1;
-		}
-
-		log_error("Operation not permitted (%s %d) on hidden LV %s.",
-			  cmd->command->command_line_id, cmd->command->command_line_enum,
-			  display_lvname(lv));
-		return 0;
-	}
-
-	return 1;
-}
-
-/*
  * Reomove missing and empty PVs from VG, if are also in provided list
  */
 static void _remove_missing_empty_pv(struct volume_group *vg, struct dm_list *remove_pvs)
