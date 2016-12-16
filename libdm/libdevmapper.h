@@ -1358,6 +1358,18 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
 					  uint64_t group_id);
 
+/*
+ * Start the dmfilemapd filemap monitoring daemon for the specified
+ * file descriptor, group, and file system path. The daemon will
+ * monitor the file for allocation changes, and when a change is
+ * detected, call dm_stats_update_regions_from_fd() to update the
+ * mapped regions for the file.
+ *
+ * The daemon can be stopped at any time by sending SIGTERM to the
+ * daemon pid.
+ */
+int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+			    unsigned foreground, unsigned verbose);
 
 /*
  * Call this to actually run the ioctl.

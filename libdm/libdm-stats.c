@@ -4812,6 +4812,95 @@ bad:
 	return NULL;
 }
 
+#define NR_FILEMAPD_ARGS 5
+/*
+ * Start dmfilemapd to monitor the specified file descriptor, and to
+ * update the group given by 'group_id' when the file's allocation
+ * changes.
+ *
+ * usage: dmfilemapd <fd> <group_id> [<debug>[<log_level>]]
+ */
+int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+			    unsigned foreground, unsigned verbose)
+{
+	char *args[NR_FILEMAPD_ARGS + 1];
+	char fd_str[8], group_str[8], fg_str[2], verb_str[2];
+	int argc = 0;
+	pid_t pid;
+
+	if (fd < 0) {
+		log_error("dmfilemapd file descriptor must be "
+			  "non-negative: %d", fd);
+		return 0;
+	}
+
+	if (foreground > 1) {
+		log_error("Invalid dmfilemapd foreground argument. "
+			  "Must be 0 or 1: %d.", foreground);
+		return 0;
+	}
+
+	if (verbose > 3) {
+		log_error("Invalid dmfilemapd verbose argument. "
+			  "Must be 0..3: %d.", verbose);
+		return 0;
+	}
+
+	/* set argv[0] */
+	args[argc++] = (char *) "dmfilemapd";
+
+	/* set <fd> */
+	if ((dm_snprintf(fd_str, sizeof(fd_str), "%d", fd)) < 0) {
+		log_error("Could not format fd argument.");
+		return 0;
+	}
+	args[argc++] = fd_str;
+
+	/* set <group_id> */
+	if ((dm_snprintf(group_str, sizeof(group_str), FMTu64, group_id)) < 0) {
+		log_error("Could not format group_id argument.");
+		return 0;
+	}
+	args[argc++] = group_str;
+
+	/* set <path> */
+	args[argc++] = (char *) path;
+
+	/* set <foreground> */
+	if ((dm_snprintf(fg_str, sizeof(fg_str), "%u", foreground)) < 0) {
+		log_error("Could not format foreground argument.");
+		return 0;
+	}
+	args[argc++] = fg_str;
+
+	/* set <verbose> */
+	if ((dm_snprintf(verb_str, sizeof(verb_str), "%u", verbose)) < 0) {
+		log_error("Could not format verbose argument.");
+		return 0;
+	}
+	args[argc++] = verb_str;
+
+	/* terminate args[argc] */
+	args[argc++] = NULL;
+
+	log_very_verbose("Spawning daemon as '%s %d " FMTu64 "%s %u %u'",
+			 *args, fd, group_id, path, foreground, verbose);
+
+	if ((pid = fork()) < 0) {
+		log_error("Failed to fork filemapd process.");
+		return 0;
+	}
+
+	if (pid > 0) {
+		log_very_verbose("Forked filemapd process as pid %d", pid);
+		return 1;
+	}
+
+	execvp(args[0], args);
+	log_error("execv() failed.");
+	exit(127);
+}
+
 #else /* HAVE_LINUX_FIEMAP */
 
 uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
@@ -4825,6 +4914,13 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 
 uint64_t *dm_stats_update_regions_from_fd(struct dm_stats *dms, int fd,
 					  uint64_t group_id)
+{
+	log_error("File mapping requires FIEMAP ioctl support.");
+	return 0;
+}
+
+int dm_stats_start_filemapd(struct dm_stats *dms, int fd, uint64_t group_id,
+			    const char *path)
 {
 	log_error("File mapping requires FIEMAP ioctl support.");
 	return 0;
