@@ -4999,6 +4999,7 @@ static int _stats_create_file(CMD_ARGS)
 	const char *alias, *program_id = DM_STATS_PROGRAM_ID;
 	const char *bounds_str = _string_args[BOUNDS_ARG];
 	uint64_t *regions, *region, count = 0;
+	int verbose = _switches[VERBOSE_ARG];
 	struct dm_histogram *bounds = NULL;
 	char *path, *abspath = NULL;
 	struct dm_stats *dms = NULL;
@@ -5085,6 +5086,10 @@ static int _stats_create_file(CMD_ARGS)
 
 	regions = dm_stats_create_regions_from_fd(dms, fd, group, precise,
 						  bounds, alias);
+
+	if (!_switches[NOMONITOR_ARG] && group)
+		if (!dm_stats_start_filemapd(fd, regions[0], abspath, 0, verbose))
+			log_warn("Failed to start filemap monitoring daemon.");
 
 	if (close(fd))
 		log_error("Error closing %s", abspath);
