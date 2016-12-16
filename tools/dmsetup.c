@@ -196,6 +196,7 @@ enum {
 	NOTABLE_ARG,
 	NOTIMESUFFIX_ARG,
 	UDEVCOOKIE_ARG,
+	NOMONITOR_ARG,
 	NOUDEVRULES_ARG,
 	NOUDEVSYNC_ARG,
 	OPTIONS_ARG,
@@ -5734,8 +5735,9 @@ static int _stats_help(CMD_ARGS);
 #define SEGMENTS_OPT "--segments "
 #define START_LEN_OPTS "[--start <start>] [--length <len>] "
 #define AREA_OPTS "[--areas <nr_areas>] [--areasize <size>]"
-#define CREATE_OPTS USERDATA_OPT PROGID_OPT "\n\t\t" "[[[[ " START_LEN_OPTS "\n\t\t" \
-AREA_OPTS "] |\n\t\t" SEGMENTS_OPT "] [<device_name]] |\n\t\t--filemap <file_path> ]"
+#define CREATE_OPTS USERDATA_OPT PROGID_OPT "\n\t\t" "[[[[ " START_LEN_OPTS "\n\t\t"	\
+	AREA_OPTS "] |\n\t\t" SEGMENTS_OPT "] [<device_name]] |\n\t\t[--nomonitor] "	\
+	"--filemap <file_path> ]"
 
 #define ID_OPTS "[--programid <id>] [--userdata <data> ] "
 #define SELECT_OPTS "[--programid <id>] [--regionid <id>] "
@@ -6385,6 +6387,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 		{"notable", 0, &ind, NOTABLE_ARG},
 		{"notimesuffix", 0, &ind, NOTIMESUFFIX_ARG},
 		{"udevcookie", 1, &ind, UDEVCOOKIE_ARG},
+		{"nomonitor", 0, &ind, NOMONITOR_ARG},
 		{"noudevrules", 0, &ind, NOUDEVRULES_ARG},
 		{"noudevsync", 0, &ind, NOUDEVSYNC_ARG},
 		{"options", 1, &ind, OPTIONS_ARG},
@@ -6622,6 +6625,8 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 			_switches[UDEVCOOKIE_ARG]++;
 			_udev_cookie = _get_cookie_value(optarg);
 		}
+		if (ind == NOMONITOR_ARG)
+			_switches[NOMONITOR_ARG]++;
 		if (ind == NOUDEVRULES_ARG)
 			_switches[NOUDEVRULES_ARG]++;
 		if (ind == NOUDEVSYNC_ARG)
