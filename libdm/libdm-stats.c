@@ -4513,15 +4513,12 @@ bad:
 	return NULL;
 }
 
-#define MATCH_EXTENT(e, s, l) \
-(((e).start == (s)) && ((e).len == (l)))
-
 static struct _extent *_find_extent(size_t nr_extents, struct _extent *extents,
 				    uint64_t start, uint64_t len)
 {
 	size_t i;
 	for (i = 0; i < nr_extents; i++)
-		if (MATCH_EXTENT(extents[i], start, len))
+		if (extents[i].start == start)
 			return extents + i;
 	return NULL;
 }
@@ -4553,8 +4550,10 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 {
 	struct dm_stats_region *region = NULL;
 	struct dm_stats_group *group = NULL;
+	struct _extent ext, *file_ext;
 	int64_t nr_kept, nr_old, i;
-	struct _extent ext;
+	uint64_t d_size;
+	int have_resize;
 
 	group = &dms->groups[group_id];
 
@@ -4565,6 +4564,9 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 		log_error("Could not allocate extent table.");
 		return 0;
 	}
+
+	/* Can driver extend regions in-place? */
+	have_resize = dm_stats_driver_supports_resize();
 
 	nr_kept = nr_old = 0; /* counts of old and retained extents */
 
@@ -4577,18 +4579,34 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 		region = &dms->regions[i];
 		nr_old++;
 
-		if (_find_extent(*count, extents,
-				  region->start, region->len)) {
+		if ((file_ext = _find_extent(*count, extents,
+					     region->start, region->len))) {
+
+			/* growing extent? */
+			if (region->len < file_ext->len) {
+				if (!have_resize)
+					goto delete_region;
+				d_size = file_ext->len - region->len;
+
+				log_very_verbose("Resizing region ID " FMTu64
+						 " to " FMTu64 " sectors.", i,
+						 region->len);
+
+				if (!dm_stats_resize_region(dms, i, d_size))
+					log_error("Failed to resize region ID "
+						  FMTu64, i);
+			}
+
 			ext.start = region->start;
 			ext.len = region->len;
 			ext.id = i;
 			nr_kept++;
 
-			dm_pool_grow_object(mem, &ext,
-					    sizeof(ext));
+			dm_pool_grow_object(mem, &ext, sizeof(ext));
 			log_very_verbose("Kept region " FMTu64, i);
-		} else {
 
+		} else {
+delete_region:
 			if (i == group_id)
 				*regroup = 1;
 
@@ -4597,7 +4615,6 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 					  i);
 				goto out;
 			}
-
 			log_very_verbose("Deleted region " FMTu64, i);
 		}
 	}
