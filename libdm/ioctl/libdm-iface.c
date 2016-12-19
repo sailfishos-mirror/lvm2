@@ -619,6 +619,17 @@ int dm_message_supports_precise_timestamps(void)
 	return 0;
 }
 
+int dm_message_supports_stats_resize(void)
+{
+	/*
+	 * FIXME: set to final version when known.
+	 */
+	if (dm_check_version() && _dm_version >= 4)
+		if (_dm_version_minor >= 35)
+			return 1;
+	return 0;
+}
+
 void *dm_get_next_target(struct dm_task *dmt, void *next,
 			 uint64_t *start, uint64_t *length,
 			 char **target_type, char **params)

@@ -537,12 +537,23 @@ int dm_stats_bind_from_fd(struct dm_stats *dms, int fd);
 int dm_message_supports_precise_timestamps(void);
 
 /*
+ * Test whether the running kernel supports the @stats_resize
+ * message.
+ */
+int dm_message_supports_stats_resize(void);
+
+/*
  * Precise timetamps and histogram support.
  * 
  * Test for the presence of precise_timestamps and histogram support.
  */
 int dm_stats_driver_supports_precise(void);
 int dm_stats_driver_supports_histogram(void);
+
+/*
+ * Test for presence of the @stats_resize message.
+ */
+int dm_stats_driver_supports_resize(void);
 
 /*
  * Returns 1 if the specified region has the precise_timestamps feature

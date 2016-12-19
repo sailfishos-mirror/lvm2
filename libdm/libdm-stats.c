@@ -493,6 +493,11 @@ int dm_stats_driver_supports_histogram(void)
 	return _stats_check_precise_timestamps(NULL);
 }
 
+int dm_stats_driver_supports_resize(void)
+{
+	return dm_message_supports_stats_resize();
+}
+
 static int _fill_hist_arg(char *hist_arg, size_t hist_len, uint64_t scale,
 			  struct dm_histogram *bounds)
 {
