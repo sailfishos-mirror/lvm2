@@ -6,4 +6,5 @@ dm_bitset_parse_list
 dm_message_supports_stats_resize
 dm_stats_bind_from_fd
 dm_stats_driver_supports_resize
+dm_stats_resize_region
 dm_stats_start_filemapd

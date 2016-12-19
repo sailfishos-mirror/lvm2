@@ -2035,6 +2035,51 @@ out:
 	return r;
 }
 
+static int _stats_resize_region(struct dm_stats *dms, uint64_t region_id,
+				int64_t size_change)
+{
+	struct dm_stats_region *region = &dms->regions[region_id];
+	char msg[STATS_MSG_BUF_LEN];
+	struct dm_task *dmt = NULL;
+
+	if (!_stats_bound(dms))
+		return_0;
+
+	if (!dm_stats_driver_supports_resize()) {
+		log_error("Driver does not support stats resize message.");
+		return 0;
+	}
+
+	if ((dm_snprintf(msg, sizeof(msg), "@stats_resize " FMTu64 " " FMTu64,
+			region_id, size_change)) < 0) {
+		log_error("Could not format @stats_resize message.");
+		return 0;
+	}
+
+	if (!(dmt = _stats_send_message(dms, msg)))
+		return_0;
+
+	if (dms->regions && _stats_region_present(region)) {
+		if (region->step == region->len)
+			region->step = region->len = region->len + size_change;
+		else
+			region->len += size_change;
+	}
+
+	return 1;
+}
+
+int dm_stats_resize_region(struct dm_stats *dms, uint64_t region_id,
+			   int64_t size_change)
+{
+	if (size_change < 0) {
+		log_error("Shrinking statistics regions is currently "
+			  "unsupported.");
+		return 0;
+	}
+	return _stats_resize_region(dms, region_id, size_change);
+}
+
 static void _stats_clear_group_regions(struct dm_stats *dms, uint64_t group_id)
 {
 	struct dm_stats_group *group;

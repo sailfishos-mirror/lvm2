@@ -690,6 +690,14 @@ int dm_stats_create_region(struct dm_stats *dms, uint64_t *region_id,
 			   const char *program_id, const char *user_data);
 
 /*
+ * Atomically resize an existing statistics region, retaining any
+ * accumulated counter data. This can be used to grow a statistics
+ * region to account for changes in the object it represents.
+ */
+int dm_stats_resize_region(struct dm_stats *dms, uint64_t region_id,
+			   int64_t size_change);
+
+/*
  * Delete the specified statistics region. This will also mark the
  * region as not-present and discard any existing statistics data.
  */
