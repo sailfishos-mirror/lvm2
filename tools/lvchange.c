@@ -1022,6 +1022,12 @@ static int _lvchange_properties_check(struct cmd_context *cmd,
 		return 0;
 	}
 
+	if (vg_is_clustered(lv->vg) && lv_is_cache_origin(lv) && lv_is_raid(lv)) {
+		log_error("Unable to change internal LV %s directly in a cluster.",
+			  display_lvname(lv));
+		return 0;
+	}
+
 	return 1;
 }
 
