@@ -68,6 +68,7 @@ struct opt_name {
 	int val_enum;           /* xyz_VAL when --foo takes a val like "--foo xyz" */
 	uint32_t unused1;
 	uint32_t unused2;
+	const char *desc;
 };
 
 /* also see val_props in tools.h and vals.h */
@@ -104,7 +105,7 @@ enum {
 /* create foo_ARG enums for --option's */
 
 enum {
-#define arg(a, b, c, d, e, f) a ,
+#define arg(a, b, c, d, e, f, g) a ,
 #include "args.h"
 #undef arg
 };
@@ -136,7 +137,7 @@ static struct val_name val_names[VAL_COUNT + 1] = {
 /* create table of option names, e.g. --foo, and corresponding enum from args.h */
 
 static struct opt_name opt_names[ARG_COUNT + 1] = {
-#define arg(a, b, c, d, e, f) { # a, a, b, "", "--" c, d, e, f },
+#define arg(a, b, c, d, e, f, g) { # a, a, b, "", "--" c, d, e, f, g },
 #include "args.h"
 #undef arg
 };
@@ -182,6 +183,8 @@ static struct cmd_name cmd_names[MAX_CMD_NAMES] = {
 
 #define MAX_LINE 1024
 #define MAX_LINE_ARGC 256
+
+#define DESC_LINE 256
 
 #define REQUIRED 1  /* required option */
 #define OPTIONAL 0  /* optional option */
@@ -2194,7 +2197,78 @@ void print_man_usage_common(struct command *cmd)
 	printf(" ]\n");
 }
 
-void print_man_all_options(struct cmd_name *cname)
+/*
+ * Format of description, when different command names have
+ * different descriptions:
+ *
+ * "#cmdname1"
+ * "text foo goes here"
+ * "a second line of text."
+ * "#cmdname2"
+ * "text bar goes here"
+ * "another line of text."
+ *
+ * When called for cmdname2, this function should just print:
+ *
+ * "text bar goes here"
+ * "another line of text."
+ */
+
+static void print_man_option_desc(struct cmd_name *cname, int opt_enum)
+{
+	const char *desc = opt_names[opt_enum].desc;
+	char buf[DESC_LINE];
+	int started_cname = 0;
+	int di, bi;
+
+	if (!strstr(desc, "#")) {
+		printf("%s", desc);
+		return;
+	}
+
+	for (di = 0; di < strlen(desc); di++) {
+		buf[bi++] = desc[di];
+
+		if (bi == DESC_LINE) {
+			printf("print_man_option_desc line too long\n");
+			return;
+		}
+
+		if (buf[bi-1] != '\n')
+			continue;
+
+		if (buf[0] != '#') {
+			if (started_cname)
+				printf("%s", buf);
+
+			memset(buf, 0, sizeof(buf));
+			bi = 0;
+			continue;
+		}
+
+		/* Line starting with #cmdname */
+
+		/* Must be starting a new command name. */
+		if (started_cname)
+			return;
+
+		if (!strncmp(buf + 1, cname->name, strlen(cname->name))) {
+			/* The start of our command name. */
+			started_cname = 1;
+			memset(buf, 0, sizeof(buf));
+			bi = 0;
+		} else {
+			/* The start of another command name. */
+			memset(buf, 0, sizeof(buf));
+			bi = 0;
+		}
+	}
+
+	if (bi && started_cname)
+		printf("%s", buf);
+}
+
+void print_man_all_options(struct cmd_name *cname, int with_desc)
 {
 	int opt_enum, val_enum;
 	int sep = 0;
@@ -2209,6 +2283,9 @@ void print_man_all_options(struct cmd_name *cname)
 
 		if (sep)
 			printf("\n.br\n");
+
+		if (with_desc)
+			printf("\n.TP\n");
 
 		printf(" \\fB-%c\\fP|\\fB%s\\fP",
 			opt_names[opt_enum].short_opt,
@@ -2228,6 +2305,12 @@ void print_man_all_options(struct cmd_name *cname)
 			print_val_man(val_names[val_enum].usage);
 		}
 
+		if (with_desc && opt_names[opt_enum].desc) {
+			printf("\n");
+			printf(".br\n");
+			print_man_option_desc(cname, opt_enum);
+		}
+
 		sep = 1;
 	}
 
@@ -2242,8 +2325,12 @@ void print_man_all_options(struct cmd_name *cname)
 		if (sep)
 			printf("\n.br\n");
 
+		if (with_desc)
+			printf("\n.TP\n");
+
 		/* space alignment without short opt */
-		printf("   ");
+		if (!with_desc)
+			printf("   ");
 
 		printf(" \\fB%s\\fP", man_long_opt_name(cname->name, opt_enum));
 
@@ -2261,11 +2348,15 @@ void print_man_all_options(struct cmd_name *cname)
 			print_val_man(val_names[val_enum].usage);
 		}
 
+		if (with_desc && opt_names[opt_enum].desc) {
+			printf("\n");
+			printf(".br\n");
+			print_man_option_desc(cname, opt_enum);
+		}
+
 		sep = 1;
 	}
 }
-
-#define DESC_LINE 256
 
 void print_desc_man(const char *desc)
 {
@@ -2338,6 +2429,12 @@ void print_man_command(void)
 			printf("Common options:\n");
 			printf(".\n");
 			print_man_usage_common(prev_cmd);
+
+			printf("\n");
+			printf(".SH OPTIONS\n");
+			printf(".br\n");
+			print_man_all_options(cname, 1);
+
 			prev_cmd = NULL;
 		}
 
@@ -2396,7 +2493,7 @@ void print_man_command(void)
 			/* listing them all when there's only 1 or 2 is just repetative */
 			if (cname->variants > 2) {
 				printf(".P\n");
-				print_man_all_options(cname);
+				print_man_all_options(cname, 0);
 				printf("\n");
 				printf(".P\n");
 				printf("\n");
