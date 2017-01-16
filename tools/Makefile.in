@@ -176,8 +176,8 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
 	$(CC) -E -P $(srcdir)/cmdnames.h 2> /dev/null | \
 		egrep -v '^ *(|#.*|config|devtypes|dumpconfig|formats|fullreport|help|lastlog|lvpoll|pvdata|segtypes|systemid|tags|version) *$$' > .commands
 
-ccmd: $(srcdir)/create-commands.c
-	$(CC) $(srcdir)/create-commands.c -o ccmd
+ccmd: $(srcdir)/ccmd-main.c $(srcdir)/ccmd-util.c $(srcdir)/ccmd-man.c
+	$(CC) $(srcdir)/ccmd-main.c $(srcdir)/ccmd-util.c $(srcdir)/ccmd-man.c -o ccmd
 
 .DELETE_ON_ERROR:
 
