@@ -1,0 +1,53 @@
+lvconvert changes the LV type and includes utilities for LV data
+maintenance. The LV type controls data layout and redundancy.
+The LV type is also called the segment type or segtype.
+
+To display the current LV type, run the command:
+
+.B lvs \-o name,segtype
+.I LV
+
+A command to change the LV type uses the general pattern:
+
+.B lvconvert \-\-type
+.I NewType LV
+
+LVs with the following types can be modified by lvconvert:
+.B striped,
+.B snapshot,
+.B mirror,
+.B raid*,
+.B thin,
+.B cache,
+.B thin\-pool,
+.B cache\-pool.
+
+The
+.B linear
+type is equivalent to the
+.B striped
+type when one stripe exists.
+In that case, the types can sometimes be used interchangably.
+
+In most cases, the
+.B mirror
+type is deprecated and the
+.B raid1
+type should be used.  They are both implementations of mirroring.
+
+The
+.B raid*
+type refers to one of many raid levels, e.g.
+.B raid1,
+.B raid5.
+
+In some cases, an LV is a single device mapper (dm) layer above physical
+devices.  In other cases, hidden LVs (dm devices) are layered between the
+visible LV and physical devices.  LVs in the middle layers are called sub LVs.
+A command run on a visible LV sometimes operates on a sub LV rather than
+the specified LV.  In other cases, a sub LV must be specified directly on
+the command line.
+
+Sub LVs can be displayed with the command
+.B lvs -a
+

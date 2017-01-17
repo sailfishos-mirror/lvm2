@@ -1,0 +1,20 @@
+.SH NOTES
+
+.IP \[bu] 3
+vgimportclone can be used to import a VG from duplicated PVs (e.g. created
+by a hardware snapshot of the PV devices).
+
+.IP \[bu] 3
+A duplicated VG cannot used until it is made to coexist with the original
+VG.  vgimportclone renames the VG associated with the specified PVs and
+changes the associated VG and PV UUIDs.
+
+.SH EXAMPLES
+
+An original VG "vg00" has PVs "/dev/sda" and "/dev/sdb".
+The corresponding PVs from a hardware snapshot are "/dev/sdc" and "/dev/sdd".
+Rename the VG associated with "/dev/sdc" and "/dev/sdd" from "vg00" to "vg00_snap"
+(and change associated UUIDs).
+.br
+.B vgimportclone \-\-basevgname vg00_snap /dev/sdc /dev/sdd
+
