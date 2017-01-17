@@ -960,6 +960,8 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			man_command_name = strdup(optarg);
+			if (!strncmp(man_command_name, "lvm-", 4))
+				man_command_name += 4;
 			break;
 		}
 	}

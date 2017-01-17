@@ -31,18 +31,22 @@ LVMRAIDMAN = lvmraid.7
 
 MAN5=lvm.conf.5
 MAN7=lvmsystemid.7 lvmreport.7 
-MAN8=lvm-config.8 lvm-dumpconfig.8 lvm-fullreport.8 lvm-lvpoll.8 \
-	lvchange.8 lvmconfig.8 lvconvert.8 lvcreate.8 lvdisplay.8 lvextend.8 \
-	lvm.8 lvmchange.8 lvmconf.8 lvmdiskscan.8 lvmdump.8 lvmsadc.8 lvmsar.8 \
+MAN8=lvm.8 lvmconf.8 lvmdump.8
+MAN8DM=dmsetup.8 dmstats.8
+MAN8CLUSTER=
+MAN8SYSTEMD_GENERATORS=lvm2-activation-generator.8
+
+MAN8GEN=lvm-config.8 lvm-dumpconfig.8 lvm-fullreport.8 lvm-lvpoll.8 \
+	lvcreate.8 lvchange.8 lvmconfig.8 lvconvert.8 lvdisplay.8 lvextend.8 \
 	lvreduce.8 lvremove.8 lvrename.8 lvresize.8 lvs.8 \
 	lvscan.8 pvchange.8 pvck.8 pvcreate.8 pvdisplay.8 pvmove.8 pvremove.8 \
 	pvresize.8 pvs.8 pvscan.8 vgcfgbackup.8 vgcfgrestore.8 vgchange.8 \
 	vgck.8 vgcreate.8 vgconvert.8 vgdisplay.8 vgexport.8 vgextend.8 \
 	vgimport.8 vgimportclone.8 vgmerge.8 vgmknodes.8 vgreduce.8 vgremove.8 \
-	vgrename.8 vgs.8 vgscan.8 vgsplit.8
-MAN8DM=dmsetup.8 dmstats.8
-MAN8CLUSTER=
-MAN8SYSTEMD_GENERATORS=lvm2-activation-generator.8
+	vgrename.8 vgs.8 vgscan.8 vgsplit.8 \
+	lvmsar.8 lvmsadc.8 lvmdiskscan.8 lvmchange.8
+
+MAN8+=$(MAN8GEN)
 
 ifeq ($(MAKECMDGOALS),all_man)
   MAN_ALL="yes"
@@ -140,12 +144,11 @@ Makefile: Makefile.in
 	  *) echo "Creating $@" ; $(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+@CLVMD_PATH@+;s+#LVM_PATH#+@LVM_PATH@+;s+#DEFAULT_RUN_DIR#+@DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+@DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+;" $< > $@ ;; \
 	esac
 
-ccmd: ../tools/create-commands.c
-	$(CC) ../tools/create-commands.c -o ccmd
-
-generate: ccmd
-	./ccmd --output man -s 0 -p 1 -c lvcreate ../tools/command-lines.in > lvcreate.8.a
-	cat lvcreate.8.a lvcreate.8.b > lvcreate.8.in
+$(MAN8GEN):
+	echo "Generating $@" ;
+	$(top_builddir)/tools/ccmd --output man -p 1 -s 1 -c `basename -s .8 $@` ../tools/command-lines.in > $@.in
+	if [ -f $@.notes ]; then cat $@.notes >> $@.in; fi;
+	$(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+@CLVMD_PATH@+;s+#LVM_PATH#+@LVM_PATH@+;s+#DEFAULT_RUN_DIR#+@DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+@DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+;" $@.in > $@
 
 install_man5: $(MAN5)
 	$(INSTALL) -d $(MAN5DIR)
@@ -155,7 +158,7 @@ install_man7: $(MAN7)
 	$(INSTALL) -d $(MAN7DIR)
 	$(INSTALL_DATA) $(MAN7) $(MAN7DIR)/
 
-install_man8: $(MAN8)
+install_man8: $(MAN8) $(MAN8GEN)
 	$(INSTALL) -d $(MAN8DIR)
 	$(INSTALL_DATA) $(MAN8) $(MAN8DIR)/
 
