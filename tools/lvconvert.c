@@ -17,7 +17,6 @@
 #include "polldaemon.h"
 #include "lv_alloc.h"
 #include "lvconvert_poll.h"
-#include "command-lines-count.h"
 
 typedef enum {
 	/* Split:

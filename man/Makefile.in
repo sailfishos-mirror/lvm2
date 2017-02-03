@@ -145,8 +145,9 @@ Makefile: Makefile.in
 	esac
 
 $(MAN8GEN):
+	$(CC) -DMAN_PAGE_GENERATOR $(top_builddir)/tools/command.c -o man-generator
 	echo "Generating $@" ;
-	$(top_builddir)/tools/ccmd --output man -p 1 -s 1 -c `basename -s .8 $@` ../tools/command-lines.in > $@.in
+	./man-generator `basename -s .8 $@` > $@.in
 	if [ -f $@.notes ]; then cat $@.notes >> $@.in; fi;
 	$(SED) -e "s+#VERSION#+$(LVM_VERSION)+;s+#DEFAULT_SYS_DIR#+$(DEFAULT_SYS_DIR)+;s+#DEFAULT_ARCHIVE_DIR#+$(DEFAULT_ARCHIVE_DIR)+;s+#DEFAULT_BACKUP_DIR#+$(DEFAULT_BACKUP_DIR)+;s+#DEFAULT_PROFILE_DIR#+$(DEFAULT_PROFILE_DIR)+;s+#DEFAULT_CACHE_DIR#+$(DEFAULT_CACHE_DIR)+;s+#DEFAULT_LOCK_DIR#+$(DEFAULT_LOCK_DIR)+;s+#CLVMD_PATH#+@CLVMD_PATH@+;s+#LVM_PATH#+@LVM_PATH@+;s+#DEFAULT_RUN_DIR#+@DEFAULT_RUN_DIR@+;s+#DEFAULT_PID_DIR#+@DEFAULT_PID_DIR@+;s+#SYSTEMD_GENERATOR_DIR#+$(SYSTEMD_GENERATOR_DIR)+;s+#DEFAULT_MANGLING#+$(DEFAULT_MANGLING)+;" $@.in > $@
 
