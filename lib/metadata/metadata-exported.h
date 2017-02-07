@@ -1224,6 +1224,8 @@ int lv_raid_replace(struct logical_volume *lv, int force,
 		    struct dm_list *remove_pvs, struct dm_list *allocate_pvs);
 int lv_raid_remove_missing(struct logical_volume *lv);
 int partial_raid_lv_supports_degraded_activation(const struct logical_volume *lv);
+int lv_raid_change_region_size(struct logical_volume *lv,
+                               int yes, int force, uint32_t new_region_size);
 /* --  metadata/raid_manip.c */
 
 /* ++  metadata/cache_manip.c */
