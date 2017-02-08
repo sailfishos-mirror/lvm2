@@ -170,7 +170,7 @@ struct cmd_rule {
 /* a register of the lvm commands */
 struct command {
 	const char *name;
-	const char *desc; /* specific command description from command-lines.h */
+	const char *desc; /* specific command description from command-lines.in */
 	const char *command_id; /* ID string in command-lines.in */
 	int command_enum; /* <command_id>_CMD */
 	int command_index; /* position in commands[] */

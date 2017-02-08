@@ -1559,8 +1559,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 
 	if (best_unused_count) {
 		for (i = 0; i < best_unused_count; i++) {
-			log_error("Invalid option for command (%s %d): %s.",
-				  commands[best_i].command_id, best_i,
+			log_error("Invalid option for command: %s.",
 				  arg_long_option_name(best_unused_options[i]));
 		}
 		return NULL;
@@ -1590,8 +1589,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 			break;
 
 		if (count >= (commands[best_i].rp_count + commands[best_i].op_count)) {
-			log_error("Invalid positional argument for command (%s %d): %s.",
-				  commands[best_i].command_id, best_i, argv[count]);
+			log_error("Invalid positional argument for command: %s.", argv[count]);
 
 			/* FIXME: to warn/ignore, clear so it can't be used when processing. */
 			/*
@@ -1635,22 +1633,21 @@ out:
 			if (opts_match_count && (rule->rule == RULE_INVALID)) {
 				memset(buf, 0, sizeof(buf));
 				opt_array_to_str(cmd, rule->check_opts, rule->check_opts_count, buf, sizeof(buf));
-				log_error("Invalid options for command (%s %d): %s",
-					  commands[best_i].command_id, best_i, buf);
+				log_error("Invalid options for command: %s", buf);
 				return NULL;
 			}
 
 			if (opts_unmatch_count && (rule->rule == RULE_REQUIRE)) {
 				memset(buf, 0, sizeof(buf));
 				opt_array_to_str(cmd, rule->check_opts, rule->check_opts_count, buf, sizeof(buf));
-				log_error("Required options for command (%s %d): %s",
-					  commands[best_i].command_id, best_i, buf);
+				log_error("Required options for command: %s", buf);
 				return NULL;
 			}
 		}
 	}
 
-	log_debug("command line id: %s %d", commands[best_i].command_id, best_i);
+	log_debug("Using command index %d id %s enum %d.",
+		  best_i, commands[best_i].command_id, commands[best_i].command_enum);
 
 	return &commands[best_i];
 }

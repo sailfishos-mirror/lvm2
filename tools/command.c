@@ -1316,7 +1316,9 @@ int define_commands(void)
 				return 0;
 			}
 
-			cmd = &commands[cmd_count++];
+			cmd = &commands[cmd_count];
+			cmd->command_index = cmd_count;
+			cmd_count++;
 			cmd->name = strdup(name);
 			cmd->pos_count = 1;
 			add_required_line(cmd, line_argc, line_argv);
