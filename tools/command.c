@@ -1851,7 +1851,7 @@ static char *man_long_opt_name(const char *cmdname, int opt_enum)
 	return long_opt_name;
 }
 
-void print_man_usage(struct command *cmd)
+void print_man_usage(char *lvmname, struct command *cmd)
 {
 	struct command_name *cname;
 	int onereq = (cmd->cmd_flags & CMD_FLAG_ONE_REQUIRED_OPT) ? 1 : 0;
@@ -1860,7 +1860,7 @@ void print_man_usage(struct command *cmd)
 	if (!(cname = find_command_name(cmd->name)))
 		return;
 
-	printf("\\fB%s\\fP", cmd->name);
+	printf("\\fB%s\\fP", lvmname);
 
 	if (!onereq)
 		goto ro_normal;
@@ -2508,15 +2508,21 @@ static char *upper_command_name(char *str)
 	return str_upper;
 }
 
-void print_man(char *man_command_name, int include_primary, int include_secondary)
+void print_man(char *name, int include_primary, int include_secondary)
 {
-	struct command_name *cname = find_command_name(man_command_name);
+	struct command_name *cname;
 	struct command *cmd, *prev_cmd = NULL;
+	char *lvmname = name;
 	const char *desc;
 	int i, j, ro, rp, oo, op;
 
+	if (!strncmp(name, "lvm-", 4))
+		name += 4;
+
+	cname = find_command_name(name);
+
 	printf(".TH %s 8 \"LVM TOOLS #VERSION#\" \"Sistina Software UK\"\n",
-		man_command_name ? upper_command_name(man_command_name) : "LVM_COMMANDS");
+		upper_command_name(lvmname));
 
 	for (i = 0; i < COMMAND_COUNT; i++) {
 
@@ -2541,16 +2547,16 @@ void print_man(char *man_command_name, int include_primary, int include_secondar
 		if (!(cmd->cmd_flags & CMD_FLAG_SECONDARY_SYNTAX) && !include_primary)
 			continue;
 
-		if (man_command_name && strcmp(man_command_name, cmd->name))
+		if (name && strcmp(name, cmd->name))
 			continue;
 
 		if (!prev_cmd || strcmp(prev_cmd->name, cmd->name)) {
 			printf(".SH NAME\n");
 			printf(".\n");
 			if (cname->desc)
-				printf("%s \\- %s\n", cmd->name, cname->desc);
+				printf("%s \\- %s\n", lvmname, cname->desc);
 			else
-				printf("%s\n", cmd->name);
+				printf("%s\n", lvmname);
 			printf(".br\n");
 			printf(".P\n");
 			printf(".\n");
@@ -2564,13 +2570,13 @@ void print_man(char *man_command_name, int include_primary, int include_secondar
 				return;
 
 			if (cname->variant_has_ro && cname->variant_has_rp)
-				printf("\\fB%s\\fP \\fIrequired_option_args\\fP \\fIrequired_position_args\\fP\n", cmd->name);
+				printf("\\fB%s\\fP \\fIrequired_option_args\\fP \\fIrequired_position_args\\fP\n", lvmname);
 			else if (cname->variant_has_ro && !cname->variant_has_rp)
-				printf("\\fB%s\\fP \\fIrequired_option_args\\fP\n", cmd->name);
+				printf("\\fB%s\\fP \\fIrequired_option_args\\fP\n", lvmname);
 			else if (!cname->variant_has_ro && cname->variant_has_rp)
-				printf("\\fB%s\\fP \\fIrequired_position_args\\fP\n", cmd->name);
+				printf("\\fB%s\\fP \\fIrequired_position_args\\fP\n", lvmname);
 			else if (!cname->variant_has_ro && !cname->variant_has_rp)
-				printf("\\fB%s\\fP\n", cmd->name);
+				printf("\\fB%s\\fP\n", lvmname);
 
 			printf(".br\n");
 
@@ -2607,7 +2613,7 @@ void print_man(char *man_command_name, int include_primary, int include_secondar
 			printf(".P\n");
 		}
 
-		print_man_usage(cmd);
+		print_man_usage(lvmname, cmd);
 
 		if (i == (COMMAND_COUNT - 1)) {
 			printf("Common options:\n");
