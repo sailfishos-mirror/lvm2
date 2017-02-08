@@ -2689,7 +2689,7 @@ static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv, i
 
 	if (!val_bit_is_set(cmd->command->required_pos_args[pos-1].def.val_bits, lv_VAL)) {
 		log_error(INTERNAL_ERROR "Command (%s %d) arg position %d does not permit an LV (%llx)",
-			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  cmd->command->command_id, cmd->command->command_enum,
 			  pos, (unsigned long long)cmd->command->required_pos_args[pos-1].def.val_bits);
 		return 0;
 	}
@@ -3106,7 +3106,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			/* FIXME: include this result in report log? */
 			if (lv_is_named_arg) {
 				log_error("Operation not permitted (%s %d) on LV %s.",
-					  cmd->command->command_line_id, cmd->command->command_line_enum,
+					  cmd->command->command_id, cmd->command->command_enum,
 					  display_lvname(lvl->lv));
 				ret_max = ECMD_FAILED;
 			}
@@ -3117,7 +3117,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			/* FIXME: include this result in report log? */
 			if (lv_is_named_arg) {
 				log_error("Operation not permitted (%s %d) on LV %s.",
-					  cmd->command->command_line_id, cmd->command->command_line_enum,
+					  cmd->command->command_id, cmd->command->command_enum,
 					  display_lvname(lvl->lv));
 				ret_max = ECMD_FAILED;
 			} 

@@ -22,11 +22,11 @@ struct cmd_context;
 typedef int (*command_fn) (struct cmd_context *cmd, int argc, char **argv);
 
 /* new per-command-line-id functions */
-typedef int (*command_line_fn) (struct cmd_context *cmd, int argc, char **argv);
+typedef int (*command_id_fn) (struct cmd_context *cmd, int argc, char **argv);
 
 struct command_function {
-	int command_line_enum;
-	command_line_fn fn;
+	int command_enum;
+	command_id_fn fn;
 };
 
 #define MAX_COMMAND_NAMES 64
@@ -171,8 +171,9 @@ struct cmd_rule {
 struct command {
 	const char *name;
 	const char *desc; /* specific command description from command-lines.h */
-	const char *command_line_id; /* ID string in command-lines.in */
-	int command_line_enum; /* <command_line_id>_CMD */
+	const char *command_id; /* ID string in command-lines.in */
+	int command_enum; /* <command_id>_CMD */
+	int command_index; /* position in commands[] */
 
 	struct command_function *functions; /* new style */
 	command_fn fn;                      /* old style */

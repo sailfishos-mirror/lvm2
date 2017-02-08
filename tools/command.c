@@ -1356,7 +1356,7 @@ int define_commands(void)
 		}
 
 		if (is_id_line(line_argv[0])) {
-			cmd->command_line_id = strdup(line_argv[1]);
+			cmd->command_id = strdup(line_argv[1]);
 			continue;
 		}
 

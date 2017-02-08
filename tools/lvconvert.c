@@ -3718,7 +3718,7 @@ static int _lvconvert_to_pool_single(struct cmd_context *cmd,
 	int to_thinpool = 0;
 	int to_cachepool = 0;
 
-	switch (cmd->command->command_line_enum) {
+	switch (cmd->command->command_enum) {
 	case lvconvert_to_thinpool_CMD:
 		to_thinpool = 1;
 		break;
@@ -3767,7 +3767,7 @@ int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv)
 	char *pool_data_name;
 	int i, p;
 
-	switch (cmd->command->command_line_enum) {
+	switch (cmd->command->command_enum) {
 	case lvconvert_to_thinpool_noarg_CMD:
 		pool_data_name = (char *)arg_str_value(cmd, thinpool_ARG, NULL);
 		new_command = get_command(lvconvert_to_thinpool_CMD);
@@ -3782,8 +3782,8 @@ int lvconvert_to_pool_noarg_cmd(struct cmd_context *cmd, int argc, char **argv)
 	};
 
 	log_debug("Changing command line id %s %d to standard form %s %d",
-		  cmd->command->command_line_id, cmd->command->command_line_enum,
-		  new_command->command_line_id, new_command->command_line_enum);
+		  cmd->command->command_id, cmd->command->command_enum,
+		  new_command->command_id, new_command->command_enum);
 
 	/* Make the LV the first position arg. */
 
@@ -4046,7 +4046,7 @@ int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, ch
 	struct command *new_command;
 	char *pool_name;
 
-	switch (cmd->command->command_line_enum) {
+	switch (cmd->command->command_enum) {
 	case lvconvert_swap_thinpool_metadata_CMD:
 		pool_name = (char *)arg_str_value(cmd, thinpool_ARG, NULL);
 		break;
@@ -4061,8 +4061,8 @@ int lvconvert_swap_pool_metadata_noarg_cmd(struct cmd_context *cmd, int argc, ch
 	new_command = get_command(lvconvert_swap_pool_metadata_CMD);
 
 	log_debug("Changing command line id %s %d to standard form %s %d",
-		  cmd->command->command_line_id, cmd->command->command_line_enum,
-		  new_command->command_line_id, new_command->command_line_enum);
+		  cmd->command->command_id, cmd->command->command_enum,
+		  new_command->command_id, new_command->command_enum);
 
 	/* Make the LV the first position arg. */
 
@@ -4126,7 +4126,7 @@ static int _lvconvert_split_cachepool_single(struct cmd_context *cmd,
 		return ECMD_FAILED;
 	}
 
-	switch (cmd->command->command_line_enum) {
+	switch (cmd->command->command_enum) {
 	case lvconvert_split_and_keep_cachepool_CMD:
 		ret = _lvconvert_split_and_keep_cachepool(cmd, cache_lv, cachepool_lv);
 		break;
@@ -4147,7 +4147,7 @@ static int _lvconvert_split_cachepool_single(struct cmd_context *cmd,
 
 int lvconvert_split_cachepool_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
-	if (cmd->command->command_line_enum == lvconvert_split_and_remove_cachepool_CMD) {
+	if (cmd->command->command_enum == lvconvert_split_and_remove_cachepool_CMD) {
 		cmd->handles_missing_pvs = 1;
 		cmd->partial_activation = 1;
 	}
@@ -4227,7 +4227,7 @@ static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_v
 	case cachepool_LVT:
 	case snapshot_LVT:
 		log_error("Operation not permitted (%s %d) on LV %s type %s.",
-			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  cmd->command->command_id, cmd->command->command_enum,
 			  display_lvname(lv), lvtype ? lvtype->name : "unknown");
 		return 0;
 	}
@@ -4236,7 +4236,7 @@ static int _lvconvert_raid_types_check(struct cmd_context *cmd, struct logical_v
 
  fail_hidden:
 	log_error("Operation not permitted (%s %d) on hidden LV %s.",
-		  cmd->command->command_line_id, cmd->command->command_line_enum,
+		  cmd->command->command_id, cmd->command->command_enum,
 		  display_lvname(lv));
 	return 0;
 }
@@ -4297,7 +4297,7 @@ static int _lvconvert_visible_check(struct cmd_context *cmd, struct logical_volu
 {
 	if (!lv_is_visible(lv)) {
 		log_error("Operation not permitted (%s %d) on hidden LV %s.",
-			  cmd->command->command_line_id, cmd->command->command_line_enum,
+			  cmd->command->command_id, cmd->command->command_enum,
 			  display_lvname(lv));
 		return 0;
 	}
@@ -4517,7 +4517,7 @@ int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv)
 int lvconvert(struct cmd_context *cmd, int argc, char **argv)
 {
 	log_error(INTERNAL_ERROR "Missing function for command definition %s.",
-		  cmd->command->command_line_id);
+		  cmd->command->command_id);
 	return ECMD_FAILED;
 }
 

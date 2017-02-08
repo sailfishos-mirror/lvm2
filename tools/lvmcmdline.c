@@ -1112,15 +1112,15 @@ static struct command_name *find_command_name(const char *name)
 	return NULL;
 }
 
-static struct command_function *_find_command_id_function(int command_line_enum)
+static struct command_function *_find_command_id_function(int command_enum)
 {
 	int i;
 
-	if (!command_line_enum)
+	if (!command_enum)
 		return NULL;
 
 	for (i = 0; i < CMD_COUNT; i++) {
-		if (command_functions[i].command_line_enum == command_line_enum)
+		if (command_functions[i].command_enum == command_enum)
 			return &command_functions[i];
 	}
 	return NULL;
@@ -1145,10 +1145,10 @@ void lvm_register_commands(void)
 	_cmdline.num_commands = COMMAND_COUNT;
 
 	for (i = 0; i < COMMAND_COUNT; i++) {
-		commands[i].command_line_enum = command_id_to_enum(commands[i].command_line_id);
+		commands[i].command_enum = command_id_to_enum(commands[i].command_id);
 
 		/* new style */
-		commands[i].functions = _find_command_id_function(commands[i].command_line_enum);
+		commands[i].functions = _find_command_id_function(commands[i].command_enum);
 
 		/* old style */
 		if (!commands[i].functions) {
@@ -1188,7 +1188,7 @@ struct command *get_command(int cmd_enum)
 	int i;
 
 	for (i = 0; i < COMMAND_COUNT; i++) {
-		if (commands[i].command_line_enum == cmd_enum)
+		if (commands[i].command_enum == cmd_enum)
 			return &commands[i];
 	}
 
@@ -1560,7 +1560,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 	if (best_unused_count) {
 		for (i = 0; i < best_unused_count; i++) {
 			log_error("Invalid option for command (%s %d): %s.",
-				  commands[best_i].command_line_id, best_i,
+				  commands[best_i].command_id, best_i,
 				  arg_long_option_name(best_unused_options[i]));
 		}
 		return NULL;
@@ -1591,7 +1591,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 
 		if (count >= (commands[best_i].rp_count + commands[best_i].op_count)) {
 			log_error("Invalid positional argument for command (%s %d): %s.",
-				  commands[best_i].command_line_id, best_i, argv[count]);
+				  commands[best_i].command_id, best_i, argv[count]);
 
 			/* FIXME: to warn/ignore, clear so it can't be used when processing. */
 			/*
@@ -1636,7 +1636,7 @@ out:
 				memset(buf, 0, sizeof(buf));
 				opt_array_to_str(cmd, rule->check_opts, rule->check_opts_count, buf, sizeof(buf));
 				log_error("Invalid options for command (%s %d): %s",
-					  commands[best_i].command_line_id, best_i, buf);
+					  commands[best_i].command_id, best_i, buf);
 				return NULL;
 			}
 
@@ -1644,13 +1644,13 @@ out:
 				memset(buf, 0, sizeof(buf));
 				opt_array_to_str(cmd, rule->check_opts, rule->check_opts_count, buf, sizeof(buf));
 				log_error("Required options for command (%s %d): %s",
-					  commands[best_i].command_line_id, best_i, buf);
+					  commands[best_i].command_id, best_i, buf);
 				return NULL;
 			}
 		}
 	}
 
-	log_debug("command line id: %s %d", commands[best_i].command_line_id, best_i);
+	log_debug("command line id: %s %d", commands[best_i].command_id, best_i);
 
 	return &commands[best_i];
 }

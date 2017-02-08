@@ -1017,7 +1017,7 @@ static int _lvchange_properties_check(struct cmd_context *cmd,
 	if (!lv_is_visible(lv)) {
 		if (lv_is_named_arg)
 			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-				  cmd->command->command_line_id, cmd->command->command_line_enum,
+				  cmd->command->command_id, cmd->command->command_enum,
 				  display_lvname(lv));
 		return 0;
 	}
@@ -1130,7 +1130,7 @@ static int _lvchange_activate_check(struct cmd_context *cmd,
 	if (!lv_is_visible(lv)) {
 		if (lv_is_named_arg)
 			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-				  cmd->command->command_line_id, cmd->command->command_line_enum,
+				  cmd->command->command_id, cmd->command->command_enum,
 				  display_lvname(lv));
 		return 0;
 	}
@@ -1186,7 +1186,7 @@ static int _lvchange_refresh_check(struct cmd_context *cmd,
 	if (!lv_is_visible(lv)) {
 		if (lv_is_named_arg)
 			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-				  cmd->command->command_line_id, cmd->command->command_line_enum,
+				  cmd->command->command_id, cmd->command->command_enum,
 				  display_lvname(lv));
 		return 0;
 	}
@@ -1368,7 +1368,7 @@ static int _lvchange_persistent_check(struct cmd_context *cmd,
 	if (!lv_is_visible(lv)) {
 		if (lv_is_named_arg)
 			log_error("Operation not permitted (%s %d) on hidden LV %s.",
-				  cmd->command->command_line_id, cmd->command->command_line_enum,
+				  cmd->command->command_id, cmd->command->command_enum,
 				  display_lvname(lv));
 		return 0;
 	}
@@ -1386,7 +1386,7 @@ int lvchange_persistent_cmd(struct cmd_context *cmd, int argc, char **argv)
 int lvchange(struct cmd_context *cmd, int argc, char **argv)
 {
 	log_error(INTERNAL_ERROR "Missing function for command definition %s.",
-		  cmd->command->command_line_id);
+		  cmd->command->command_id);
 	return ECMD_FAILED;
 }
 
