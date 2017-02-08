@@ -1856,6 +1856,7 @@ void print_man_usage(char *lvmname, struct command *cmd)
 	struct command_name *cname;
 	int onereq = (cmd->cmd_flags & CMD_FLAG_ONE_REQUIRED_OPT) ? 1 : 0;
 	int i, sep, ro, rp, oo, op, opt_enum;
+	int need_ro_indent_end = 0;
 
 	if (!(cname = find_command_name(cmd->name)))
 		return;
@@ -1910,7 +1911,7 @@ void print_man_usage(char *lvmname, struct command *cmd)
 				print_def_man(&cmd->required_opt_args[ro].def, 1);
 			}
 
-			sep = 1;
+			sep++;
 		}
 
 		/* print required options without a short opt */
@@ -1934,7 +1935,7 @@ void print_man_usage(char *lvmname, struct command *cmd)
 				print_def_man(&cmd->required_opt_args[ro].def, 1);
 			}
 
-			sep = 1;
+			sep++;
 		}
 
 		printf(" )\n");
@@ -1968,7 +1969,16 @@ void print_man_usage(char *lvmname, struct command *cmd)
 	 */
 
 	if (cmd->ro_count) {
+		sep = 0;
+
 		for (ro = 0; ro < cmd->ro_count; ro++) {
+
+			/* avoid long line wrapping */
+			if ((cmd->ro_count > 2) && (sep == 2)) {
+				printf("\n.RS 5\n");
+				need_ro_indent_end = 1;
+			}
+
 			opt_enum = cmd->required_opt_args[ro].opt;
 
 			if (opt_names[opt_enum].short_opt) {
@@ -1983,6 +1993,8 @@ void print_man_usage(char *lvmname, struct command *cmd)
 				printf(" ");
 				print_def_man(&cmd->required_opt_args[ro].def, 1);
 			}
+
+			sep++;
 		}
 	}
 
@@ -1999,6 +2011,9 @@ void print_man_usage(char *lvmname, struct command *cmd)
 	} else {
 		printf("\n");
 	}
+
+	if (need_ro_indent_end)
+		printf(".RE\n");
 
 	printf(".br\n");
 
