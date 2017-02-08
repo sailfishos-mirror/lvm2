@@ -1,0 +1,13 @@
+.SH NOTES
+
+If the specified PVs have not yet been initialized with pvcreate,
+vgextend will initialize them. In this case the PV options apply,
+e.g. \-\-labelsector, \-\-metadatasize, \-\-metadataignore,
+\-\-pvmetadatacopies, \-\-dataalignment, \-\-dataalignmentoffset.
+
+.SH EXAMPLES
+
+Add two PVs to a VG.
+.br
+.B vgextend vg00 /dev/sda4 /dev/sdn1
+
