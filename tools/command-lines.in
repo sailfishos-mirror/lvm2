@@ -265,7 +265,7 @@ RULE: --permission not lv_is_external_origin lv_is_raid_metadata lv_is_raid_imag
 RULE: --alloc --contiguous --metadataprofile --permission --persistent --profile --readahead not lv_is_thick_origin
 RULE: --alloc --discards --zero --cachemode --cachepolicy --cachesettings not lv_is_partial
 
-# It's unfortunate that acativate needs to be optionally allowed here,
+# It's unfortunate that activate needs to be optionally allowed here,
 # like above, it was previouly allowed in combination.
 
 lvchange --resync VG|LV_raid_mirror|Tag|Select ...
