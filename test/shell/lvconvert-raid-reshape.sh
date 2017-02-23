@@ -132,8 +132,12 @@ _reshape_layout raid5_ls 15 $vg $lv1 --stripes 14
 # Convert raid5_ls to 63 stripes
 _reshape_layout raid5_ls 64 $vg $lv1 --stripes 63
 
+# Convert raid5_ls back to 27 stripes
+_reshape_layout raid5_ls 64 $vg $lv1 --stripes 27 --force
+_reshape_layout raid5_ls 28 $vg $lv1 --stripes 27
+
 # Convert raid5_ls back to 4 stripes
-_reshape_layout raid5_ls 15 $vg $lv1 --stripes 4 --force
+_reshape_layout raid5_ls 28 $vg $lv1 --stripes 4 --force
 _reshape_layout raid5_ls 5 $vg $lv1 --stripes 4
 
 # Convert raid5_ls back to 3 stripes

@@ -264,12 +264,12 @@ static int _get_dev_health(struct logical_volume *lv, uint32_t *kernel_devs,
 	*devs_health = *devs_in_sync = 0;
 
 	if (!lv_raid_dev_count(lv, kernel_devs)) {
-		log_error("Failed to get device count");
+		log_error("Failed to get device count.");
 		return_0;
 	}
 
 	if (!lv_raid_dev_health(lv, &rh)) {
-		log_error("Failed to get device health");
+		log_error("Failed to get device health.");
 		return_0;
 	}
 
@@ -313,7 +313,7 @@ static int _devs_in_sync_count(struct logical_volume *lv)
  * Returns: 1 if in-sync, 0 otherwise.
  */
 #define _RAID_IN_SYNC_RETRIES  10
-static int _raid_in_sync(struct logical_volume *lv)
+static int _raid_in_sync(const struct logical_volume *lv)
 {
 	int retries = _RAID_IN_SYNC_RETRIES;
 	dm_percent_t sync_percent;
@@ -342,6 +342,12 @@ static int _raid_in_sync(struct logical_volume *lv)
 	} while (--retries);
 
 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
+}
+
+/* External interface to raid in-sync check */
+int lv_raid_in_sync(const struct logical_volume *lv)
+{
+	return _raid_in_sync(lv);
 }
 
 /* Check if RaidLV @lv is synced or any raid legs of @lv are not synced */
@@ -510,7 +516,7 @@ static int _clear_lv(struct logical_volume *lv)
 	 * to remove the superblock of any previous RAID devices.  It is much
 	 * quicker than wiping a potentially larger metadata device completely.
 	 */
-	log_verbose("Clearing metadata area of %s", display_lvname(lv));
+	log_verbose("Clearing metadata area of %s.", display_lvname(lv));
 	offset = (pv->pe_start + seg_pe(seg, 0) * lv->vg->extent_size) << 9;
 
 	return dev_set(pv->dev, offset, 4096, 0);
@@ -604,7 +610,7 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 
 	/* FIXME: once more data copies supported with raid10 */
 	if (seg_is_raid10_near(seg) && (stripes % data_copies)) {
-		log_error("Can't convert %s LV %s with number of stripes not divisable by number of data copies",
+		log_error("Can't convert %s LV %s with number of stripes not divisable by number of data copies.",
 			  lvseg_name(seg), display_lvname(seg->lv));
 		return 0;
 	}
@@ -743,7 +749,7 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
 	for (s = 0, missing = 0; s < seg->area_count; s++) {
 		if (seg_type(seg, s) == AREA_UNASSIGNED) {
 			if (seg_metatype(seg, s) != AREA_UNASSIGNED) {
-				log_error(INTERNAL_ERROR "Metadata segment area"
+				log_error(INTERNAL_ERROR "Metadata segment area."
 					  " #%d should be AREA_UNASSIGNED.", s);
 				return 0;
 			}
@@ -1305,7 +1311,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 
 	/* Get data_offset and dev_sectors from the kernel */
 	if (!lv_raid_data_offset(lv, &data_offset)) {
-		log_error("Can't get data offset and dev size for %s from kernel",
+		log_error("Can't get data offset and dev size for %s from kernel.",
 			  display_lvname(lv));
 		return 0;
 	}
@@ -1381,7 +1387,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 		break;
 
 	default:
-		log_error(INTERNAL_ERROR "Bogus reshape space allocation request");
+		log_error(INTERNAL_ERROR "Bogus reshape space allocation request.");
 		return 0;
 	}
 
@@ -1580,12 +1586,12 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 	vg = lv->vg;
 
 	if (!lv_info(vg->cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
-		log_error("lv_info failed: aborting");
+		log_error("lv_info failed: aborting.");
 		return 0;
 	}
 
 	if (seg->segtype != new_segtype)
-		log_print_unless_silent("Ignoring layout change on device adding reshape");
+		log_print_unless_silent("Ignoring layout change on device adding reshape.");
 
 	if (seg_is_any_raid10(seg) && (new_image_count % seg->data_copies)) {
 		log_error("Can't reshape %s LV %s to odd number of stripes.", 
@@ -1602,7 +1608,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 		 "will grow it from %u to %u extents!",
 		 info.open_count ? " and open" : "",
 		 display_lvname(lv), current_le_count, grown_le_count);
-	log_print_unless_silent("Run \"lvresize -l%u %s\" to shrink it or use the additional capacity",
+	log_print_unless_silent("Run \"lvresize -l%u %s\" to shrink it or use the additional capacity.",
 				current_le_count, display_lvname(lv));
 	if (!yes && yes_no_prompt("Are you sure you want to add %u images to %s LV %s? [y/n]: ",
 				  new_image_count - old_image_count, lvseg_name(seg), display_lvname(lv)) == 'n') {
@@ -1612,7 +1618,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 
 //printf("%s[%u] lv=%s segtype=%s data_copies=%u lv_size=%s le_count=%u\n", __func__, __LINE__, display_lvname(lv), lvseg_name(seg), seg->data_copies, display_size(lv->vg->cmd, lv->size), lv->le_count);
 	/* Allocate new image component pairs for the additional stripes and grow LV size */
-	log_debug_metadata("Adding %u data and metadata image LV pair%s to %s",
+	log_debug_metadata("Adding %u data and metadata image LV pair%s to %s.",
 			   new_image_count - old_image_count, new_image_count - old_image_count > 1 ? "s" : "",
 			   display_lvname(lv));
 	if (!_lv_raid_change_image_count(lv, new_image_count, allocate_pvs, NULL, 0, 0))
@@ -1625,7 +1631,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 	}
 
 	/* Allocate forward out of place reshape space at the beginning of all data image LVs */
-	log_debug_metadata("(Re)allocating reshape space for %s", display_lvname(lv));
+	log_debug_metadata("(Re)allocating reshape space for %s.", display_lvname(lv));
 	if (!_lv_alloc_reshape_space(lv, alloc_begin, NULL, allocate_pvs))
 		return 0;
 
@@ -1636,7 +1642,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 	 * - set delta disks plus flag on new image LVs
 	 */
 	if (old_image_count < seg->area_count) {
-		log_debug_metadata("Setting delta disk flag on new data LVs of %s",
+		log_debug_metadata("Setting delta disk flag on new data LVs of %s.",
 				   display_lvname(lv));
 		for (s = old_image_count; s < seg->area_count; s++) {
 			slv = seg_lv(seg, s);
@@ -1671,7 +1677,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 	struct lvinfo info = { 0 };
 
 	if (seg_is_any_raid6(seg) && new_stripes < 3) {
-		log_error("Minimum 3 stripes required for %s LV %s",
+		log_error("Minimum 3 stripes required for %s LV %s.",
 			  lvseg_name(seg), display_lvname(lv));
 		return 0;
 	}
@@ -1692,10 +1698,10 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 		 *
 		 */
 		if (seg->segtype != new_segtype)
-			log_print_unless_silent("Ignoring layout change on device removing reshape");
+			log_print_unless_silent("Ignoring layout change on device removing reshape.");
 
 		if (!lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && driver_version(NULL, 0)) {
-			log_error("lv_info failed: aborting");
+			log_error("lv_info failed: aborting.");
 			return 0;
 		}
 
@@ -1722,7 +1728,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 			 new_stripes, display_lvname(lv));
 
 		if (!force) {
-			log_warn("WARNING: Can't remove stripes without --force option");
+			log_warn("WARNING: Can't remove stripes without --force option.");
 			return 0;
 		}
 
@@ -1763,7 +1769,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 			struct logical_volume *slv;
 
 			if (!seg_lv(seg, s) || !(slv = seg_lv(seg, s))) {
-				log_error("Missing image sub lv off LV %s", display_lvname(lv));
+				log_error("Missing image sub lv off LV %s.", display_lvname(lv));
 				return 0;
 			}
 
@@ -1774,12 +1780,12 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 		}
 
 		if (devs_in_sync != new_image_count) {
-			log_error("No correct kernel/lvm active LV count on %s", display_lvname(lv));
+			log_error("No correct kernel/lvm active LV count on %s.", display_lvname(lv));
 			return 0;
 		}
 
 		if (active_lvs + removed_lvs != old_image_count) {
-			log_error ("No correct kernel/lvm total LV count on %s", display_lvname(lv));
+			log_error ("No correct kernel/lvm total LV count on %s.", display_lvname(lv));
 			return 0;
 		}
 
@@ -1789,7 +1795,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 			return 0;
 		}
 
-		log_debug_metadata("Removing %u data and metadata image LV pair%s from %s",
+		log_debug_metadata("Removing %u data and metadata image LV pair%s from %s.",
 				   old_image_count - new_image_count, old_image_count - new_image_count > 1 ? "s" : "",
 				   display_lvname(lv));
 		if (!_lv_raid_change_image_count(lv, new_image_count, allocate_pvs, removal_lvs, 0, 0))
@@ -1825,7 +1831,7 @@ static int _raid_reshape_keep_images(struct logical_volume *lv,
 	struct lv_segment *seg = first_seg(lv);
 
 	if (seg->segtype != new_segtype)
-		log_print_unless_silent("Converting %s LV %s to %s",
+		log_print_unless_silent("Converting %s LV %s to %s.",
 					lvseg_name(seg), display_lvname(lv), new_segtype->name);
 	if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s? [y/n]: ",
 				  lvseg_name(seg), display_lvname(lv)) == 'n') {
@@ -1866,20 +1872,20 @@ static int _vg_write_lv_suspend_commit_backup(struct volume_group *vg,
 	int r = 1;
 
 	if (!vg_write(vg)) {
-		log_error("Write of VG %s failed", vg->name);
+		log_error("Write of VG %s failed.", vg->name);
 		return_0;
 	}
 
 	if (lv && !(r = (origin_only ? suspend_lv_origin(vg->cmd, lv_lock_holder(lv)) :
 				       suspend_lv(vg->cmd, lv_lock_holder(lv))))) {
-		log_error("Failed to suspend %s before committing changes",
+		log_error("Failed to suspend %s before committing changes.",
 			  display_lvname(lv));
 		vg_revert(lv->vg);
 	} else if (!(r = vg_commit(vg)))
 		stack; /* !vg_commit() has implicit vg_revert() */
 
 	if (r && do_backup && !backup(vg))
-		log_error("Backup of VG %s failed; continuing", vg->name);
+		log_error("Backup of VG %s failed; continuing.", vg->name);
 
 	return r;
 }
@@ -1919,7 +1925,7 @@ static int _activate_sub_lvs_excl_local(struct logical_volume *lv, uint32_t star
 	struct lv_segment *seg = first_seg(lv);
 
 	/* seg->area_count may be 0 here! */
-	log_debug_metadata("Activating %u image component%s of LV %s",
+	log_debug_metadata("Activating %u image component%s of LV %s.",
 			   seg->area_count - start_idx, seg->meta_areas ? " pairs" : "s",
 			   display_lvname(lv));
 	for (s = start_idx; s < seg->area_count; s++)
@@ -2022,7 +2028,7 @@ static int _raid_reshape(struct logical_volume *lv,
 		return_0;
 
 	if (!_raid_in_sync(lv)) {
-		log_error("Unable to convert %s while it is not in-sync",
+		log_error("Unable to convert %s while it is not in-sync.",
 			  display_lvname(lv));
 		return 0;
 	}
@@ -2040,15 +2046,15 @@ static int _raid_reshape(struct logical_volume *lv,
 		 * user requests this to remove any reshape space from the @lv
 		 */
 		if (!_lv_free_reshape_space_with_status(lv, &where_it_was)) {
-			log_error(INTERNAL_ERROR "Failed to free reshape space of %s",
+			log_error(INTERNAL_ERROR "Failed to free reshape space of %s.",
 				  display_lvname(lv));
 			return 0;
 		}
 
-		log_print_unless_silent("No change in RAID LV %s layout, freeing reshape space", display_lvname(lv));
+		log_print_unless_silent("No change in RAID LV %s layout, freeing reshape space.", display_lvname(lv));
 
 		if (where_it_was == alloc_none) {
-			log_print_unless_silent("LV %s does not have reshape space allocated",
+			log_print_unless_silent("LV %s does not have reshape space allocated.",
 						display_lvname(lv));
 			return 1;
 		}
@@ -2069,7 +2075,7 @@ static int _raid_reshape(struct logical_volume *lv,
 		too_few = 1;
 
 	if (too_few) {
-		log_error("Too few stripes requested");
+		log_error("Too few stripes requested.");
 		return 0;
 	}
 
@@ -2081,7 +2087,7 @@ static int _raid_reshape(struct logical_volume *lv,
 		 * Check for device health
 		 */
 		if (devs_in_sync < devs_health) {
-			log_error("Can't reshape out of sync LV %s", display_lvname(lv));
+			log_error("Can't reshape out of sync LV %s.", display_lvname(lv));
 			return 0;
 		}
 
@@ -2105,7 +2111,7 @@ static int _raid_reshape(struct logical_volume *lv,
 	}
 
 	if (seg->stripe_size != new_stripe_size)
-		log_print_unless_silent("Converting stripesize %s of %s LV %s to %s",
+		log_print_unless_silent("Converting stripesize %s of %s LV %s to %s.",
 					display_size(lv->vg->cmd, seg->stripe_size),
 					lvseg_name(seg), display_lvname(lv),
 					display_size(lv->vg->cmd, new_stripe_size));
@@ -2199,7 +2205,7 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 	    !seg_is_any_raid0(seg) &&
 	    (region_size || stripe_size) &&
 	    ((region_size ?: seg->region_size) < (stripe_size ?: seg->stripe_size))) {
-		log_error("region size may not be smaller than stripe size on LV %s",
+		log_error("region size may not be smaller than stripe size on LV %s.",
 			  display_lvname(lv));
 		return 2;
 	}
@@ -2212,7 +2218,7 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 	    (seg_is_raid10_far(seg) && !segtype_is_striped(segtype))) {
 		if (data_copies == seg->data_copies &&
 		    region_size == seg->region_size) {
-			log_error("Can't convert %sraid10_far",
+			log_error("Can't convert %sraid10_far.",
 				  seg_is_raid10_far(seg) ? "" : "to ");
 			goto err;
 		}
@@ -2220,12 +2226,12 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 
 	if (seg_is_raid10_far(seg)) {
 		if (stripes != _data_rimages_count(seg, seg->area_count)) {
-			log_error("Can't change stripes in raid10_far");
+			log_error("Can't change stripes in raid10_far.");
 			goto err;
 		}
 
 		if (stripe_size != seg->stripe_size) {
-			log_error("Can't change stripe size in raid10_far");
+			log_error("Can't change stripe size in raid10_far.");
 			goto err;
 		}
 	}
@@ -2245,7 +2251,7 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 			return segtype_is_raid10_far(segtype) ? 1 : 0;
 
 		if (seg_is_raid10_offset(seg)) {
-			log_error("Can't change number of data copies on %s LV %s",
+			log_error("Can't change number of data copies on %s LV %s.",
 				  lvseg_name(seg), display_lvname(lv));
 			goto err;
 		}
@@ -2300,9 +2306,9 @@ static int _reshape_requested(const struct logical_volume *lv, const struct segm
 err:
 #if 0
 	if (lv_is_duplicated(lv))
-		log_error("Conversion of duplicating sub LV %s rejected", display_lvname(lv));
+		log_error("Conversion of duplicating sub LV %s rejected.", display_lvname(lv));
 	else
-		log_error("Use \"lvconvert --duplicate --type %s ... %s", segtype->name, display_lvname(lv));
+		log_error("Use \"lvconvert --duplicate --type %s ... %s.", segtype->name, display_lvname(lv));
 #endif
 	return 2;
 }
@@ -2738,12 +2744,12 @@ static int _raid_extract_images(struct logical_volume *lv,
 				 * cannot honor that list because error LVs
 				 * must come first.
 				 */
-				log_error("%s has components with error targets"
+				log_error("%s has components with error targets."
 					  " that must be removed first: %s.",
 					  display_lvname(lv),
 					  display_lvname(seg_lv(seg, s)));
 
-				log_error("Try removing the PV list and rerun"
+				log_error("Try removing the PV list and rerun."
 					  " the command.");
 				return 0;
 			}
@@ -2762,7 +2768,7 @@ static int _raid_extract_images(struct logical_volume *lv,
 			 */
 			if (!_raid_devs_sync_healthy(lv) &&
 			    (!seg_is_mirrored(seg) || (s == 0 && !force))) {
-				log_error("Unable to extract %sRAID image"
+				log_error("Unable to extract %sRAID image."
 					  " while RAID array is not in-sync%s.",
 					  seg_is_mirrored(seg) ? "primary " : "",
 					  seg_is_mirrored(seg) ? " (use --force option to replace)" : "");
@@ -3624,7 +3630,7 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 
 	/* Call any efn_pre_on_lv before the first update and reload call (e.g. to rename LVs) */
 	if (fn_pre_on_lv && !(r = fn_pre_on_lv(lv, fn_pre_data))) {
-		log_error(INTERNAL_ERROR "Pre callout function failed");
+		log_error(INTERNAL_ERROR "Pre callout function failed.");
 		goto err;
 	}
 
@@ -3635,7 +3641,7 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 		 */
 		if (!(origin_only ? resume_lv_origin(lv->vg->cmd, lv_lock_holder(lv)) :
 				    resume_lv(lv->vg->cmd, lv_lock_holder(lv)))) {
-			log_error("Failed to resume %s", display_lvname(lv));
+			log_error("Failed to resume %s.", display_lvname(lv));
 			goto err;
 		}
 
@@ -3656,20 +3662,20 @@ static int _lv_update_reload_fns_reset_eliminate_lvs(struct logical_volume *lv, 
 	 * Writes and commits metadata if any flags have been reset
 	 * and if successful, performs metadata backup.
 	 */
-	log_debug_metadata("Clearing any flags for %s passed to the kernel", display_lvname(lv));
+	log_debug_metadata("Clearing any flags for %s passed to the kernel.", display_lvname(lv));
 	if (!_reset_flags_passed_to_kernel(lv, &flags_reset))
 		goto err;
 
 	/* Call any @fn_post_on_lv before the second update call (e.g. to rename LVs back) */
 	if (fn_post_on_lv && !(r = fn_post_on_lv(lv, fn_post_data))) {
-		log_error("Post callout function failed");
+		log_error("Post callout function failed.");
 		goto err;
 	}
 
 	/* Update and reload to clear out reset flags in the metadata and in the kernel */
-	log_debug_metadata("Updating metadata mappings for %s", display_lvname(lv));
+	log_debug_metadata("Updating metadata mappings for %s.", display_lvname(lv));
 	if ((r != 2 || flags_reset) && !(origin_only ? lv_update_and_reload_origin(lv) : lv_update_and_reload(lv))) {
-		log_error(INTERNAL_ERROR "Update of LV %s failed", display_lvname(lv));
+		log_error(INTERNAL_ERROR "Update of LV %s failed.", display_lvname(lv));
 		goto err;
 	}
 
@@ -4389,7 +4395,7 @@ static int _log_possible_conversion(uint64_t *processed_segtypes, void *data)
 	if (!(~*processed_segtypes & segtype->flags))
 		return 1;
 
-	log_error("  %s", segtype->name);
+	log_error("  %s.", segtype->name);
 
 	*processed_segtypes |= segtype->flags;
 
@@ -4788,7 +4794,7 @@ static int _takeover_downconvert_wrapper(TAKEOVER_FN_ARGS)
 	}
 
 	if (seg_is_any_raid10(seg) && (seg->area_count % seg->data_copies)) {
-		log_error("Can't convert %s LV %s to %s with odd number of stripes",
+		log_error("Can't convert %s LV %s to %s with odd number of stripes.",
 			  lvseg_name(seg), display_lvname(lv), new_segtype->name);
 		return 0;
 	}
@@ -4835,7 +4841,7 @@ static int _takeover_downconvert_wrapper(TAKEOVER_FN_ARGS)
 			return 0;
 
 	} else if (seg_is_raid10_near(seg)) {
-		log_debug_metadata("Reordering areas for raid10 -> raid0 takeover");
+		log_debug_metadata("Reordering areas for raid10 -> raid0 takeover.");
 		if (!_reorder_raid10_near_seg_areas(seg, reorder_from_raid10_near))
 			return 0;
 	}
@@ -5022,7 +5028,7 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
 	}
 
 	if (seg_is_any_raid5(seg) && segtype_is_any_raid6(new_segtype) && seg->area_count < 4) {
-		log_error("Minimum of 3 stripes needed for conversion from %s to %s",
+		log_error("Minimum of 3 stripes needed for conversion from %s to %s.",
 			  lvseg_name(seg), new_segtype->name);
 		return 0;
 	}
@@ -5114,7 +5120,7 @@ static int _takeover_upconvert_wrapper(TAKEOVER_FN_ARGS)
 		/* FIXME: raid10 ; needs to change once more than 2 data copies! */
 		seg->data_copies = 2;
 
-		log_debug_metadata("Reordering areas for raid0 -> raid10 takeover");
+		log_debug_metadata("Reordering areas for raid0 -> raid10 takeover.");
 		if (!_reorder_raid10_near_seg_areas(seg, reorder_to_raid10_near))
 			return 0;
 		/* Set rebuild flags accordingly */
@@ -5711,7 +5717,7 @@ replaced:
 	if (!yes && yes_no_prompt("Do you want to convert %s LV %s to %s? [y/n]: ",
 				  segtype_sav->name, display_lvname(seg_from->lv),
 				  (*segtype)->name) == 'n') {
-		log_error("Logical volume %s NOT converted", display_lvname(seg_from->lv));
+		log_error("Logical volume %s NOT converted.", display_lvname(seg_from->lv));
 		return 0;
 	}
 
@@ -5768,7 +5774,7 @@ static int _region_size_change_requested(struct logical_volume *lv, int yes, con
 	if (!yes && yes_no_prompt("Do you really want to change the region_size %s of LV %s to %s? [y/n]: ",
 				  display_size(lv->vg->cmd, old_region_size),
 				  display_lvname(lv), seg_region_size_str) == 'n') {
-		log_error("Logical volume %s NOT converted", display_lvname(lv));
+		log_error("Logical volume %s NOT converted.", display_lvname(lv));
 		return 0;
 	}
 
@@ -5818,19 +5824,19 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
 	}
 
 	if (stripes > 1 && !(opts & ALLOW_STRIPES)) {
-		if (!_log_prohibited_option(seg_from, *segtype_to, "--stripes"))
+		if (!_log_prohibited_option(seg_from, *segtype_to, "--stripes."))
 			stack;
 		r = 0;
 	}
 
 	if (new_stripe_size_supplied && !(opts & ALLOW_STRIPE_SIZE)) {
-		if (!_log_prohibited_option(seg_from, *segtype_to, "-I/--stripesize"))
+		if (!_log_prohibited_option(seg_from, *segtype_to, "-I/--stripesize."))
 			stack;
 		r = 0;
 	}
 
 	if (new_region_size && !(opts & ALLOW_REGION_SIZE)) {
-		if (!_log_prohibited_option(seg_from, *segtype_to, "-R/--regionsize"))
+		if (!_log_prohibited_option(seg_from, *segtype_to, "-R/--regionsize."))
 			stack;
 		r = 0;
 	}
@@ -5896,17 +5902,17 @@ int lv_raid_convert(struct logical_volume *lv,
 		if (!_raid_reshape(lv, new_segtype, yes, force,
 				   data_copies, region_size,
 				   stripes, stripe_size, allocate_pvs)) {
-			log_error("Reshape request failed on LV %s", display_lvname(lv));
+			log_error("Reshape request failed on LV %s.", display_lvname(lv));
 			return 0;
 		}
 
 		return 1;
 	case 2:
-		log_error("Invalid conversion request on %s", display_lvname(lv));
+		log_error("Invalid conversion request on %s.", display_lvname(lv));
 		/* Error if we got here with stripes and/or stripe size change requested */
 		return 0;
 	default:
-		log_error(INTERNAL_ERROR "_reshape_requested failed");
+		log_error(INTERNAL_ERROR "_reshape_requested failed.");
 		return 0;
 	}
 
