@@ -1305,6 +1305,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 		return 0;
 	}
 
+// printf("%s[%u] *stripe_size=%u\n", __func__, __LINE__, *stripe_size);
 	return 1;
 }
 
@@ -1324,6 +1325,7 @@ int get_stripe_params(struct cmd_context *cmd, const struct segment_type *segtyp
 	*stripes_supplied = arg_is_set(cmd, stripes_long_ARG) ? : arg_is_set(cmd, stripes_ARG);
 
 	*stripe_size = arg_uint_value(cmd, stripesize_ARG, 0);
+// printf("%s[%u] *stripe_size=%u\n", __func__, __LINE__, *stripe_size);
 	*stripe_size_supplied = arg_is_set(cmd, stripesize_ARG);
 	if (*stripe_size) {
 		if (arg_sign_value(cmd, stripesize_ARG, SIGN_NONE) == SIGN_MINUS) {
@@ -1338,6 +1340,7 @@ int get_stripe_params(struct cmd_context *cmd, const struct segment_type *segtyp
 		}
 	}
 
+// printf("%s[%u] *stripe_size=%u\n", __func__, __LINE__, *stripe_size);
 	return _validate_stripe_params(cmd, segtype, stripes, stripe_size);
 }
 

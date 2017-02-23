@@ -816,6 +816,7 @@ static int _lvchange_writemostly(struct logical_volume *lv)
 		}
 	}
 
+	/* FIXME: prohibit on primary if not in-sync! */
 	if (!lv_update_and_reload(lv))
 		return_0;
 

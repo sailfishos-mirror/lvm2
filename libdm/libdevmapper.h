@@ -331,6 +331,7 @@ struct dm_status_raid {
 	char *dev_health;
 	/* idle, frozen, resync, recover, check, repair */
 	char *sync_action;
+	uint64_t data_offset; /* RAID out-of-place reshaping */
 };
 
 int dm_get_status_raid(struct dm_pool *mem, const char *params,
@@ -1719,7 +1720,7 @@ int dm_tree_node_add_raid_target(struct dm_tree_node *node,
 				 const char *raid_type,
 				 uint32_t region_size,
 				 uint32_t stripe_size,
-				 uint64_t rebuilds,
+				 uint64_t *rebuilds,
 				 uint64_t flags);
 
 /*
@@ -1746,18 +1747,22 @@ struct dm_tree_node_raid_params {
 	uint32_t region_size;
 	uint32_t stripe_size;
 
+	int delta_disks; /* +/- number of disks to add/remove (reshaping) */
+	int data_offset; /* data offset to set (out-of-place reshaping) */
+
 	/*
 	 * 'rebuilds' and 'writemostly' are bitfields that signify
 	 * which devices in the array are to be rebuilt or marked
 	 * writemostly.  By choosing a 'uint64_t', we limit ourself
 	 * to RAID arrays with 64 devices.
 	 */
-	uint64_t rebuilds;
-	uint64_t writemostly;
-	uint32_t writebehind;       /* I/Os (kernel default COUNTER_MAX / 2) */
+	uint64_t rebuilds[4];
+	uint64_t writemostly[4];
+	uint32_t writebehind;	    /* I/Os (kernel default COUNTER_MAX / 2) */
 	uint32_t sync_daemon_sleep; /* ms (kernel default = 5sec) */
 	uint32_t max_recovery_rate; /* kB/sec/disk */
 	uint32_t min_recovery_rate; /* kB/sec/disk */
+	uint32_t data_copies;	    /* RAID # of data copies */
 	uint32_t stripe_cache;      /* sectors */
 
 	uint64_t flags;             /* [no]sync */

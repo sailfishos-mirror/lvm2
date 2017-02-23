@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -71,7 +71,7 @@
  * FIXME: Increase these to 64 and further to the MD maximum
  *	  once the SubLVs split and name shift got enhanced
  */
-#define DEFAULT_RAID1_MAX_IMAGES 10
+#define DEFAULT_RAID1_MAX_IMAGES 64
 #define DEFAULT_RAID_MAX_IMAGES 64
 #define DEFAULT_ALLOCATION_STRIPE_ALL_DEVICES 0 /* Don't stripe across all devices if not -i/--stripes given */
 
