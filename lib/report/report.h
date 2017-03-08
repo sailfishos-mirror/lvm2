@@ -32,8 +32,21 @@ typedef enum {
 	SEGS		= 256,
 	PVSEGS		= 512,
 	LABEL		= 1024,
-	DEVTYPES	= 2048
+	DEVTYPES	= 2048,
+	MOUNTINFO	= 4096,
+	FSINFO		= 8192
 } report_type_t;
+
+struct lvm_mountinfo {
+	const char *mountpoint;
+};
+
+struct lvm_fsinfo {
+	uint64_t fs_used;
+	uint64_t fs_size;
+	uint64_t fs_free;
+	uint64_t fs_avail;
+};
 
 /*
  * The "struct selection_handle" is used only for selection
@@ -104,7 +117,8 @@ int report_object(void *handle, int selection_only, const struct volume_group *v
 		  const struct logical_volume *lv, const struct physical_volume *pv,
 		  const struct lv_segment *seg, const struct pv_segment *pvseg,
 		  const struct lv_with_info_and_seg_status *lvdm,
-		  const struct label *label);
+		  const struct label *label,
+		  const struct lvm_mountinfo *mountinfo, const struct lvm_fsinfo *fsinfo);
 int report_devtypes(void *handle);
 int report_cmdlog(void *handle, const char *type, const char *context,
 		  const char *object_type_name, const char *object_name,

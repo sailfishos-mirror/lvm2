@@ -36,6 +36,8 @@ struct lvm_report_object {
 	struct lv_segment *seg;
 	struct pv_segment *pvseg;
 	struct label *label;
+	struct lvm_mountinfo *mountinfo;
+	struct lvm_fsinfo *fsinfo;
 };
 
 static uint32_t log_seqnum = 1;
@@ -3791,6 +3793,13 @@ static struct volume_group _unknown_vg = {
 	.tags = DM_LIST_HEAD_INIT(_unknown_vg.tags),
 };
 
+static struct lvm_mountinfo _unknown_mountinfo = {
+	.mountpoint = ""
+};
+
+static struct lvm_fsinfo _unknown_fsinfo = {
+};
+
 static void *_obj_get_vg(void *obj)
 {
 	struct volume_group *vg = ((struct lvm_report_object *)obj)->vg;
@@ -3828,6 +3837,16 @@ static void *_obj_get_pvseg(void *obj)
 	return ((struct lvm_report_object *)obj)->pvseg;
 }
 
+static void *_obj_get_mountinfo(void *obj)
+{
+	return ((struct lvm_report_object *)obj)->mountinfo;
+}
+
+static void *_obj_get_fsinfo(void *obj)
+{
+	return ((struct lvm_report_object *)obj)->fsinfo;
+}
+
 static void *_obj_get_devtypes(void *obj)
 {
 	return obj;
@@ -3853,6 +3872,8 @@ static const struct dm_report_object_type _report_types[] = {
 	{ LABEL, "Physical Volume Label", "pv_", _obj_get_label },
 	{ SEGS, "Logical Volume Segment", "seg_", _obj_get_seg },
 	{ PVSEGS, "Physical Volume Segment", "pvseg_", _obj_get_pvseg },
+	{ MOUNTINFO, "Mount Point", "mount_", _obj_get_mountinfo },
+	{ FSINFO, "Filesystem", "fs_", _obj_get_fsinfo },
 	{ 0, "", "", NULL },
 };
 
@@ -3885,6 +3906,8 @@ typedef struct volume_group type_vg;
 typedef struct lv_segment type_seg;
 typedef struct pv_segment type_pvseg;
 typedef struct label type_label;
+typedef struct lvm_mountinfo type_mountinfo;
+typedef struct lvm_fsinfo type_fsinfo;
 
 typedef dev_known_type_t type_devtype;
 
@@ -4012,7 +4035,8 @@ int report_object(void *handle, int selection_only, const struct volume_group *v
 		  const struct logical_volume *lv, const struct physical_volume *pv,
 		  const struct lv_segment *seg, const struct pv_segment *pvseg,
 		  const struct lv_with_info_and_seg_status *lvdm,
-		  const struct label *label)
+		  const struct label *label,
+		  const struct lvm_mountinfo *mountinfo, const struct lvm_fsinfo *fsinfo)
 {
 	struct selection_handle *sh = selection_only ? (struct selection_handle *) handle : NULL;
 	struct device dummy_device = { .dev = 0 };
@@ -4023,7 +4047,9 @@ int report_object(void *handle, int selection_only, const struct volume_group *v
 		.pv = (struct physical_volume *) pv,
 		.seg = (struct lv_segment *) seg,
 		.pvseg = (struct pv_segment *) pvseg,
-		.label = (struct label *) (label ? : (pv ? pv_label(pv) : NULL))
+		.label = (struct label *) (label ? : (pv ? pv_label(pv) : NULL)),
+		.mountinfo = (struct lvm_mountinfo *) mountinfo ? : &_unknown_mountinfo,
+		.fsinfo = (struct lvm_fsinfo *) fsinfo ? : &_unknown_fsinfo,
 	};
 
 	/* FIXME workaround for pv_label going through cache; remove once struct

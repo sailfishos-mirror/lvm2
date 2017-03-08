@@ -520,6 +520,16 @@ GET_PVSEG_NUM_PROPERTY_FN(pvseg_start, pvseg->pe)
 GET_PVSEG_NUM_PROPERTY_FN(pvseg_size, (SECTOR_SIZE * pvseg->len))
 #define _pvseg_size_set prop_not_implemented_set
 
+#define _mount_point_get prop_not_implemented_get
+#define _mount_point_set prop_not_implemented_set
+#define _fs_used_get prop_not_implemented_get
+#define _fs_used_set prop_not_implemented_set
+#define _fs_size_get prop_not_implemented_get
+#define _fs_size_set prop_not_implemented_set
+#define _fs_free_get prop_not_implemented_get
+#define _fs_free_set prop_not_implemented_set
+#define _fs_avail_get prop_not_implemented_get
+#define _fs_avail_set prop_not_implemented_set
 
 struct lvm_property_type _properties[] = {
 #include "columns.h"

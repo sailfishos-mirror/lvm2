@@ -17,6 +17,8 @@
 
 #include "report.h"
 
+#include <sys/vfs.h>
+
 typedef enum {
 	REPORT_IDX_NULL = -1,
 	REPORT_IDX_SINGLE,
@@ -79,7 +81,7 @@ static int _vgs_single(struct cmd_context *cmd __attribute__((unused)),
 	struct selection_handle *sh = handle->selection_handle;
 
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-			   vg, NULL, NULL, NULL, NULL, NULL, NULL))
+			   vg, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL))
 		return_ECMD_FAILED;
 
 	check_current_backup(vg);
@@ -177,7 +179,7 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
 	}
 
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-			   lv->vg, lv, NULL, NULL, NULL, &status, NULL))
+			   lv->vg, lv, NULL, NULL, NULL, &status, NULL, NULL, NULL))
 		goto out;
 
 	r = ECMD_PROCESSED;
@@ -239,7 +241,7 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
 	}
 
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-			   seg->lv->vg, seg->lv, NULL, seg, NULL, &status, NULL))
+			   seg->lv->vg, seg->lv, NULL, seg, NULL, &status, NULL, NULL, NULL))
 	goto_out;
 
 	r = ECMD_PROCESSED;
@@ -367,7 +369,7 @@ static int _do_pvsegs_sub_single(struct cmd_context *cmd,
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
 			   vg, seg ? seg->lv : &_free_logical_volume,
 			   pvseg->pv, seg ? : &_free_lv_segment, pvseg,
-			   &status, pv_label(pvseg->pv))) {
+			   &status, pv_label(pvseg->pv), NULL, NULL)) {
 		ret = ECMD_FAILED;
 		goto_out;
 	}
@@ -443,17 +445,101 @@ static int _pvsegs_with_lv_info_and_status_single(struct cmd_context *cmd,
 	return process_each_segment_in_pv(cmd, vg, pv, handle, _pvsegs_with_lv_info_and_status_sub_single);
 }
 
+struct mountinfo_s { // FIXME
+	unsigned maj;	//FIXME
+	unsigned min;	//FIXME
+	const char *mountpoint;
+};
+
+static int _get_mountpoint(char *buffer, unsigned major, unsigned minor,
+			   char *target, void *cb_data)
+{
+	struct mountinfo_s *data = cb_data;
+
+	if ((major == data->maj) && (minor == data->min))
+		data->mountpoint = dm_strdup(target);	// FIXME error/pool
+
+	return 1;
+}
+
+static int _populate_mount_info(struct physical_volume *pv, struct lvm_mountinfo *mountinfo)
+{
+	struct mountinfo_s data = {
+		.maj = MAJOR(pv->dev->dev),
+		.min = MINOR(pv->dev->dev),
+	};
+
+        if (!dm_mountinfo_read(_get_mountpoint, &data))
+		return 0;
+
+	if (data.mountpoint)
+		mountinfo->mountpoint = data.mountpoint;
+	else
+		mountinfo->mountpoint = "";
+
+	return 1;
+}
+
+static int _populate_fs_info(const char *mountpoint, struct lvm_fsinfo *fsinfo)
+{
+	struct statfs buf;
+
+	if (statfs(mountpoint, &buf)) {
+		log_sys_error("statfs", mountpoint);
+		return 0;
+	}
+
+	fsinfo->fs_size = (buf.f_blocks * buf.f_bsize) >> SECTOR_SHIFT;
+	fsinfo->fs_free = (buf.f_bfree * buf.f_bsize) >> SECTOR_SHIFT;
+	fsinfo->fs_avail = (buf.f_bavail * buf.f_bsize) >> SECTOR_SHIFT;
+	fsinfo->fs_used = ((buf.f_blocks - buf.f_bfree) * buf.f_bsize) >> SECTOR_SHIFT;
+
+	return 1;
+}
+
+static int _do_pvs_with_mount_and_fs_info_single(struct cmd_context *cmd, struct volume_group *vg,
+						 struct physical_volume *pv,
+						 struct processing_handle *handle,
+						 int do_mount_info, int do_fs_info)
+{
+	struct selection_handle *sh = handle->selection_handle;
+	struct lvm_mountinfo mountinfo;
+	struct lvm_fsinfo fsinfo;
+
+	if (do_mount_info)
+		if (!_populate_mount_info(pv, &mountinfo))
+			return_0;
+
+	if (do_fs_info && *mountinfo.mountpoint)
+		if (!_populate_fs_info(mountinfo.mountpoint, &fsinfo))
+			return_0;
+
+	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
+			   vg, NULL, pv, NULL, NULL, NULL, NULL, do_mount_info ? &mountinfo : NULL, do_fs_info && *mountinfo.mountpoint ? &fsinfo : NULL))
+		return_ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
 static int _pvs_single(struct cmd_context *cmd, struct volume_group *vg,
 		       struct physical_volume *pv,
 		       struct processing_handle *handle)
 {
-	struct selection_handle *sh = handle->selection_handle;
+	return _do_pvs_with_mount_and_fs_info_single(cmd, vg, pv, handle, 0, 0);
+}
 
-	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-			   vg, NULL, pv, NULL, NULL, NULL, NULL))
-		return_ECMD_FAILED;
+static int _pvs_with_mount_info_single(struct cmd_context *cmd, struct volume_group *vg,
+				       struct physical_volume *pv,
+				       struct processing_handle *handle)
+{
+	return _do_pvs_with_mount_and_fs_info_single(cmd, vg, pv, handle, 1, 0);
+}
 
-	return ECMD_PROCESSED;
+static int _pvs_with_fs_info_single(struct cmd_context *cmd, struct volume_group *vg,
+				    struct physical_volume *pv,
+				    struct processing_handle *handle)
+{
+	return _do_pvs_with_mount_and_fs_info_single(cmd, vg, pv, handle, 1, 1);
 }
 
 static int _label_single(struct cmd_context *cmd, struct label *label,
@@ -462,7 +548,7 @@ static int _label_single(struct cmd_context *cmd, struct label *label,
 	struct selection_handle *sh = handle->selection_handle;
 
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
-			   NULL, NULL, NULL, NULL, NULL, NULL, label))
+			   NULL, NULL, NULL, NULL, NULL, NULL, label, NULL, NULL))
 		return_ECMD_FAILED;
 
 	return ECMD_PROCESSED;
@@ -487,6 +573,8 @@ static int _get_final_report_type(struct report_args *args,
 				  report_type_t report_type,
 				  int *lv_info_needed,
 				  int *lv_segment_status_needed,
+				  int *mountinfo_needed,
+				  int *fsinfo_needed,
 				  report_type_t *final_report_type)
 {
 	/* Do we need to acquire LV device info in addition? */
@@ -498,8 +586,16 @@ static int _get_final_report_type(struct report_args *args,
 	/* Ensure options selected are compatible */
 	if (report_type & SEGS)
 		report_type |= LVS;
+
 	if (report_type & PVSEGS)
 		report_type |= PVS;
+
+	if (report_type & FSINFO)
+		report_type |= MOUNTINFO;
+
+	if (report_type & MOUNTINFO)
+		report_type |= PVS;	// FIXME Temporarily drive fs and mount from pvs
+
 	if ((report_type & (LVS | LVSINFO | LVSSTATUS | LVSINFOSTATUS)) &&
 	    (report_type & (PVS | LABEL)) && !(single_args->args_are_pvs || (args->full_report_vg && single_args->report_type == PVSEGS))) {
 		log_error("Can't report LV and PV fields at the same time in %sreport type \"%s\"%s%s.",
@@ -508,6 +604,12 @@ static int _get_final_report_type(struct report_args *args,
 			  args->full_report_vg ? args->full_report_vg->name: "");
 		return 0;
 	}
+
+	/* Do we need to acquire mount point information? */
+	*mountinfo_needed = (report_type & MOUNTINFO) ? 1 : 0;
+
+	/* Do we need to acquire mounted filesystem information? */
+	*fsinfo_needed = (report_type & FSINFO) ? 1 : 0;
 
 	/* Change report type if fields specified makes this necessary */
 	if (report_type & FULL)
@@ -603,7 +705,7 @@ static int _report_all_in_lv(struct cmd_context *cmd, struct processing_handle *
 
 static int _report_all_in_pv(struct cmd_context *cmd, struct processing_handle *handle,
 			     struct physical_volume *pv, report_type_t type,
-			     int do_lv_info, int do_lv_seg_status)
+			     int do_lv_info, int do_lv_seg_status, int do_mount_info, int do_fs_info)
 {
 	int r = 0;
 
@@ -635,7 +737,7 @@ int report_for_selection(struct cmd_context *cmd,
 	struct selection_handle *sh = parent_handle->selection_handle;
 	struct report_args args = {0};
 	struct single_report_args *single_args = &args.single_args[REPORT_IDX_SINGLE];
-	int do_lv_info, do_lv_seg_status;
+	int do_lv_info, do_lv_seg_status, do_mount_info, do_fs_info;
 	struct processing_handle *handle;
 	int r = 0;
 
@@ -645,6 +747,7 @@ int report_for_selection(struct cmd_context *cmd,
 	if (!_get_final_report_type(&args, single_args,
 				    single_args->report_type,
 				    &do_lv_info, &do_lv_seg_status,
+				    &do_mount_info, &do_fs_info,
 				    &sh->report_type))
 		return_0;
 
@@ -688,7 +791,7 @@ int report_for_selection(struct cmd_context *cmd,
 			r = _report_all_in_vg(cmd, handle, vg, sh->report_type, do_lv_info, do_lv_seg_status);
 			break;
 		case PVS:
-			r = _report_all_in_pv(cmd, handle, pv, sh->report_type, do_lv_info, do_lv_seg_status);
+			r = _report_all_in_pv(cmd, handle, pv, sh->report_type, do_lv_info, do_lv_seg_status, do_mount_info, do_fs_info);
 			break;
 		default:
 			log_error(INTERNAL_ERROR "report_for_selection: incorrect report type");
@@ -1079,6 +1182,7 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
 	int lock_global = 0;
 	int lv_info_needed;
 	int lv_segment_status_needed;
+	int do_mount_info, do_fs_info;
 	int report_in_group = 0;
 	int r = ECMD_FAILED;
 
@@ -1091,7 +1195,9 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
 	handle->custom_handle = report_handle;
 
 	if (!_get_final_report_type(args, single_args, report_type, &lv_info_needed,
-				    &lv_segment_status_needed, &report_type))
+				    &lv_segment_status_needed,
+				    &do_mount_info, &do_fs_info,
+				    &report_type))
 		goto_out;
 
 	if (!(args->log_only && (single_args->report_type != CMDLOG))) {
@@ -1151,7 +1257,10 @@ static int _do_report(struct cmd_context *cmd, struct processing_handle *handle,
 				if (single_args->args_are_pvs)
 					r = process_each_pv(cmd, args->argc, args->argv, NULL,
 							    arg_is_set(cmd, all_ARG), 0,
-							    handle, &_pvs_single);
+							    handle,
+							    do_fs_info ? &_pvs_with_fs_info_single :
+							    do_mount_info ? &_pvs_with_mount_info_single :
+									    &_pvs_single);
 				else
 					r = process_each_vg(cmd, args->argc, args->argv, NULL, NULL,
 							    0, 0, handle, &_pvs_in_vg);

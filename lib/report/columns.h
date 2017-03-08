@@ -283,4 +283,26 @@ FIELD(PVSEGS, pvseg, NUM, "SSize", len, 0, uint32, pvseg_size, "Number of extent
 /*
  * End of PVSEGS type fields
  */
+
+/*
+ * MOUNTINFO type fields
+ */
+FIELD(MOUNTINFO, mountinfo, STR, "Mounted on", mountpoint, 0, string, mount_point, "Mount point of filesystem on device.", 0)
+/*
+ * End of MOUNTINFO type fields
+ */
+
+
+/*
+ * FSINFO type fields
+ */
+FIELD(FSINFO, fsinfo, SIZ, "FSUsed", fs_used, 0, size64, fs_used, "Space used in mounted filesystem on device.", 0)
+FIELD(FSINFO, fsinfo, SIZ, "FSSize", fs_size, 0, size64, fs_size, "Size of mounted filesystem on device.", 0)
+FIELD(FSINFO, fsinfo, SIZ, "FSFree", fs_free, 0, size64, fs_free, "Free space in mounted filesystem on device.", 0)
+FIELD(FSINFO, fsinfo, SIZ, "FSAvail", fs_avail, 0, size64, fs_avail, "Available space in mounted filesystem on device.", 0)
+/*
+ * End of FSINFO type fields
+ */
+
+
 /* *INDENT-ON* */
