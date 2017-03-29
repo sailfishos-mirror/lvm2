@@ -106,7 +106,7 @@ devices {
 	# Example
 	# preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
 	# 
-	# This configuration option does not have a default value defined.
+	preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
 
 	# Configuration option devices/filter.
 	# Limit the block devices that are used by LVM commands.

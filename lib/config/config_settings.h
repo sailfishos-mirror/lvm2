@@ -255,7 +255,7 @@ cfg(devices_external_device_info_source_CFG, "external_device_info_source", devi
 	"    compiled with udev support.\n"
 	"#\n")
 
-cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED , CFG_TYPE_STRING, NULL, vsn(1, 2, 19), NULL, 0, NULL,
+cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, CFG_ALLOW_EMPTY, CFG_TYPE_STRING, "#S^/dev/mpath/#S^/dev/mapper/mpath#S^/dev/[hs]d", vsn(1, 2, 19), NULL, 0, NULL,
 	"Select which path name to display for a block device.\n"
 	"If multiple path names exist for a block device, and LVM needs to\n"
 	"display a name for the device, the path names are matched against\n"
