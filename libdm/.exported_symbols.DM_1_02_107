@@ -13,3 +13,4 @@ dm_stats_create_region
 dm_stats_driver_supports_histogram
 dm_stats_get_histogram
 dm_stats_get_region_nr_histogram_bins
+dm_tree_node_size_changed
