@@ -22,7 +22,7 @@
 static sigset_t _oldset;
 static int _signals_blocked = 0;
 static volatile sig_atomic_t _sigint_caught = 0;
-static volatile sig_atomic_t _handler_installed;
+static volatile sig_atomic_t _handler_installed = 0;
 
 /* Support 3 level nesting, increase if needed more */
 #define MAX_SIGINTS 3
@@ -34,7 +34,26 @@ static void _catch_sigint(int unused __attribute__((unused)))
 	_sigint_caught = 1;
 }
 
+static void _register_sigint_caught(struct sigaction *old_handler)
+{
+	struct sigaction handler;
+
+	/* Grab old sigaction for SIGINT: shall not fail. */
+	if (sigaction(SIGINT, NULL, &handler))
+		log_sys_debug("sigaction", "SIGINT");
+
+	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
+	handler.sa_handler = _catch_sigint;
+
+	/* Override the signal handler: shall not fail. */
+	if (sigaction(SIGINT, &handler, old_handler))
+		log_sys_debug("sigaction", "SIGINT");
+}
+
 int sigint_caught(void) {
+printf("%s[%u] CALLED\n", __func__, __LINE__);
+	_register_sigint_caught(NULL);
+
 	if (_sigint_caught)
 		log_error("Interrupted...");
 
@@ -58,7 +77,6 @@ void sigint_clear(void)
 
 void sigint_allow(void)
 {
-	struct sigaction handler;
 	sigset_t sigs;
 
 	if (memlock_count_daemon())
@@ -70,16 +88,7 @@ void sigint_allow(void)
 	if (++_handler_installed >= MAX_SIGINTS)
 		return;
 
-	/* Grab old sigaction for SIGINT: shall not fail. */
-	if (sigaction(SIGINT, NULL, &handler))
-		log_sys_debug("sigaction", "SIGINT");
-
-	handler.sa_flags &= ~SA_RESTART; /* Clear restart flag */
-	handler.sa_handler = _catch_sigint;
-
-	/* Override the signal handler: shall not fail. */
-	if (sigaction(SIGINT, &handler, &_oldhandler[_handler_installed  - 1]))
-		log_sys_debug("sigaction", "SIGINT");
+	_register_sigint_caught(&_oldhandler[_handler_installed  - 1]);
 
 	/* Unmask SIGINT.  Remember to mask it again on restore. */
 	if (sigprocmask(0, NULL, &sigs))
