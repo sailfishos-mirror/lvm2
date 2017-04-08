@@ -1976,6 +1976,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
  * Reshape: keep images in RAID @lv but change stripe size or data copies
  *
  */
+static const char *_get_segtype_alias(const struct segment_type *segtype);
 static int _raid_reshape_keep_images(struct logical_volume *lv,
 				     const struct segment_type *new_segtype,
 				     int yes, int force, int *force_repair,
@@ -1985,14 +1986,18 @@ static int _raid_reshape_keep_images(struct logical_volume *lv,
 	int alloc_reshape_space = 1;
 	enum alloc_where where = alloc_anywhere;
 	struct lv_segment *seg = first_seg(lv);
+	const char *alias = _get_segtype_alias(new_segtype);
 
 	if (seg->segtype != new_segtype)
 		log_print_unless_silent("Converting %s LV %s to %s.",
 					lvseg_name(seg), display_lvname(lv), new_segtype->name);
-	if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s? [y/n]: ",
-				  lvseg_name(seg), display_lvname(lv), new_segtype->name) == 'n') {
-			log_error("Logical volume %s NOT converted.", display_lvname(lv));
-			return 0;
+
+	if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s%s%s%s type? [y/n]: ",
+				  lvseg_name(seg), display_lvname(lv),
+				  new_segtype->name,
+		  		  *alias ? " (same as " : "", alias, *alias ? ")" : "") == 'n') {
+		log_error("Logical volume %s NOT converted.", display_lvname(lv));
+		return 0;
 	}
 
 	seg->stripe_size = new_stripe_size;
@@ -4350,49 +4355,54 @@ static int _get_allowed_conversion_options(const struct lv_segment *seg_from,
  * Log any possible conversions for @lv
  */
 typedef int (*type_flag_fn_t)(uint64_t *processed_segtypes, void *data);
+struct type_flag_data {
+	const struct segment_type *segtype;
+	void *data; /* to pass _process_type_flags caller reference */
+};
 
 /* Loop through pt->flags calling tfn with argument @data */
-static int _process_type_flags(const struct logical_volume *lv, struct possible_type *pt, uint64_t *processed_segtypes, type_flag_fn_t tfn, void *data)
+static int _process_type_flags(const struct logical_volume *lv, const struct segment_type *segtype,
+			       struct possible_type *pt, uint64_t *processed_segtypes,
+			       type_flag_fn_t tfn, void *data)
 {
 	unsigned i;
-	uint64_t t;
-	const struct lv_segment *seg = first_seg(lv);
-	const struct segment_type *segtype;
+	uint64_t t = 1ULL;
+	struct type_flag_data tfd = { .data = data };
 
-	for (i = 0; i < 64; i++) {
-		t = 1ULL << i;
+	for (i = 0; i < 8 * sizeof(pt->possible_types); i++, t <<= 1) {
 		if ((t & pt->possible_types) &&
-		    !(t & seg->segtype->flags) &&
-		     ((segtype = get_segtype_from_flag(lv->vg->cmd, t))))
-			if (!tfn(processed_segtypes, data ? : (void *) segtype))
+		    !(t & segtype->flags) &&
+		     ((tfd.segtype = get_segtype_from_flag(lv->vg->cmd, t))))
+			if (!tfn(processed_segtypes, &tfd))
 				return 0;
 	}
 
 	return 1;
 }
 
-/* Callback to increment unsigned  possible conversion types in *data */
+/* Callback to increment unsigned  possible conversion types in *data->data */
 static int _count_possible_conversions(uint64_t *processed_segtypes, void *data)
 {
-	unsigned *possible_conversions = data;
-
-	(*possible_conversions)++;
-
+	(*((unsigned *) ((struct type_flag_data *) data)->data))++;
 	return 1;
 }
 
 /* Callback to log possible conversion to segment type in *data */
-static int _log_possible_conversion(uint64_t *processed_segtypes, void *data)
+static int _get_possible_conversion_type(uint64_t *processed_segtypes, void *data)
 {
-	struct segment_type *segtype = data;
+	int i;
+	struct type_flag_data *tfd = data;
+	const struct segment_type **segtypes = tfd->data;
 
 	/* Already processed? */
-	if (!(~*processed_segtypes & segtype->flags))
+	if (!(~*processed_segtypes & tfd->segtype->flags))
 		return 1;
 
-	log_error("  %s", segtype->name);
+	for (i = 0; segtypes[i]; i++) ; /* Next free array slot */
 
-	*processed_segtypes |= segtype->flags;
+	segtypes[i] = tfd->segtype;
+
+	// *processed_segtypes |= tfd->segtype->flags;
 
 	return 1;
 }
@@ -4414,37 +4424,187 @@ static const char *_get_segtype_alias(const struct segment_type *segtype)
 	return "";
 }
 
-static int _log_possible_conversion_types(const struct logical_volume *lv, const struct segment_type *new_segtype)
+static int _get_possible_conversion_types(const struct logical_volume *lv,
+					  const struct lv_segment *seg,
+					  const struct segment_type *new_segtype,
+					  const struct segment_type ***segtypes,
+					  unsigned *possible_conversions)
 {
-	unsigned possible_conversions = 0;
-	const struct lv_segment *seg = first_seg(lv);
 	struct possible_type *pt = NULL;
-	const char *alias;
 	uint64_t processed_segtypes = UINT64_C(0);
 
 	/* Count any possible segment types @seg an be directly converted to */
 	while ((pt = _get_possible_type(seg, NULL, 0, pt)))
-		if (!_process_type_flags(lv, pt, &processed_segtypes, _count_possible_conversions, &possible_conversions))
+		if (!_process_type_flags(lv, new_segtype, pt, &processed_segtypes, _count_possible_conversions, possible_conversions))
 			return_0;
 
-	if (!possible_conversions)
-		log_error("Direct conversion of %s LV %s is not possible.", lvseg_name(seg), display_lvname(lv));
-	else {
-			alias = _get_segtype_alias(seg->segtype);
-
-			log_error("Converting %s from %s%s%s%s is "
-				  "directly possible to the following layout%s:",
-				  display_lvname(lv), lvseg_name(seg),
-				  *alias ? " (same as " : "", alias, *alias ? ")" : "",
-				  possible_conversions > 1 ? "s" : "");
+	if (*possible_conversions) {
+			if (!(*segtypes = dm_pool_zalloc(lv->vg->vgmem, (*possible_conversions + 1) * sizeof(**segtypes))))
+				return_0;
 
 			pt = NULL;
 
-			/* Print any possible segment types @seg can be directly converted to */
+			/* Get any possible segment types @seg can be directly converted to */
 			while ((pt = _get_possible_type(seg, NULL, 0, pt)))
-				if (!_process_type_flags(lv, pt, &processed_segtypes, _log_possible_conversion, NULL))
+				if (!_process_type_flags(lv, new_segtype, pt, &processed_segtypes, _get_possible_conversion_type, *segtypes))
 					return_0;
+	} else {
+		log_error("Direct conversion of %s LV %s is not possible.", lvseg_name(seg), display_lvname(lv));
+		return 0;
 	}
+
+	return 1;
+}
+
+static int _is_listed_segtype(const struct segment_type *segtype,
+			      const struct segment_type **types)
+{
+	int i;
+
+	for (i = 0; types[i]; i++)
+		if (segtype == types[i])
+			return 1;
+	return 0;
+}
+
+/* Process @directs segtypes array, find any indirect conversion types and call @fn on them */
+typedef int (*segtypes_fn_t)(const struct segment_type *segtype,
+			     const struct segment_type **indirects,
+			     unsigned possible_conversion, void *data);
+static int _process_segtypes(const struct logical_volume *lv,
+			     const struct segment_type **directs,
+			     segtypes_fn_t fn, void *data)
+{
+	int i, r = 1;
+	struct lv_segment *seg = first_seg(lv);
+	struct lv_segment seg1;
+	unsigned possible_conversions;
+	const struct segment_type **indirects;
+
+	for (i = 0; r && directs[i]; i++) {
+		if (directs[i] == seg->segtype)
+			continue;
+
+		indirects = NULL;
+		seg1.segtype = directs[i];
+		seg1.area_count = 2;
+		if (!_get_possible_conversion_types(lv, &seg1, directs[i], &indirects, &possible_conversions))
+			return 0;
+
+		if (!fn(directs[i], indirects, possible_conversions, data))
+			r = 0;
+
+		dm_pool_free(lv->vg->vgmem, indirects);
+	}
+
+	return r;
+}
+
+struct inc_if_listed_indirect_segtypes_data {
+	const struct segment_type *segtype;
+	unsigned *possible_conversions;
+};
+static int _inc_if_listed_indirect_segtypes(const struct segment_type *segtype,
+					    const struct segment_type **indirects,
+					    unsigned notused, void *data)
+{
+	struct inc_if_listed_indirect_segtypes_data *iilisd = data;
+	const struct segment_type *new_segtype = iilisd->segtype;
+	
+	if (_is_listed_segtype(new_segtype, indirects))
+		(*iilisd->possible_conversions)++;
+
+	return 1;
+}
+
+static int _log_indirects(const struct segment_type *segtype,
+			  const struct segment_type **indirects,
+			  unsigned notused, void *data)
+{
+	const struct segment_type *new_segtype = data;
+	
+	if (_is_listed_segtype(new_segtype, indirects))
+		log_error("  %s", segtype->name);
+
+	return 1;
+}
+
+#define BUF_SZ	128
+static int _log_directs_and_indirects(const struct segment_type *segtype,
+				      const struct segment_type **indirects,
+				      unsigned possible_conversions, void *data)
+{
+	int i, r;
+	size_t sz = 0;
+	char buf[BUF_SZ + 1];
+
+	if ((r = snprintf(buf, BUF_SZ - sz, "  %s%s", segtype->name, possible_conversions ? "\t(" : "")) < 0)
+		return 0;
+
+	sz = r;
+
+	for (i = 0; indirects[i]; i++) {
+		if ((r = snprintf(buf + sz, BUF_SZ - sz, "%s%s", indirects[i]->name, indirects[i+1] ? "/" : "")) < 0)
+			return 0;
+		sz += r;
+	}
+
+	if (buf[sz-1] == '/')
+		buf[sz-1] = '\0';
+
+	strcat(buf, ")");
+	log_error("%s", buf);
+
+	return 1;
+}
+#undef BUF_SZ
+
+static int _log_possible_conversion_types(const struct logical_volume *lv,
+					  const struct segment_type *new_segtype)
+{
+	unsigned possible_conversions[] = { 0, 0 };
+	const struct segment_type **directs = NULL, *new_segtype_sav = new_segtype;
+	const struct lv_segment *seg = first_seg(lv);
+	const char *alias = _get_segtype_alias(seg->segtype);
+	const char *new_alias = _get_segtype_alias(new_segtype);
+	struct inc_if_listed_indirect_segtypes_data iilisd;
+
+	if (*new_alias &&
+	    !(new_segtype = get_segtype_from_string(lv->vg->cmd, new_alias)))
+		return_0;
+
+	if (!_get_possible_conversion_types(lv, seg, new_segtype, &directs, possible_conversions + 0))
+		return 0;
+
+	iilisd.segtype = new_segtype;
+	iilisd.possible_conversions = possible_conversions + 1;
+	if (!_process_segtypes(lv, directs, _inc_if_listed_indirect_segtypes, &iilisd))
+		return_0;
+
+
+	if (possible_conversions[1]) {
+		log_error("Converting %s from %s%s%s%s to %s%s%s%s requires "
+			  "conversion to %s type%s first:",
+			  display_lvname(lv), lvseg_name(seg),
+			  *alias ? " (same as " : "", alias, *alias ? ")" : "",
+			  new_segtype_sav->name,
+			  *new_alias ? " (same as " : "", new_alias, *new_alias ? ")" : "",
+			  possible_conversions[1] > 1 ? "any of these" : "this",
+			  possible_conversions[1] > 1 ? "s" : "");
+
+		if (!_process_segtypes(lv, directs, _log_indirects, (void *) new_segtype))
+			return_0;
+	}
+
+	log_error("Converting %s from %s%s%s%s is "
+		  "directly possible to %s type%s:",
+		  display_lvname(lv), lvseg_name(seg),
+		  *alias ? " (same as " : "", alias, *alias ? ")" : "",
+		  possible_conversions[0] > 1 ? "these" : "this",
+		  possible_conversions[0] > 1 ? "s" : "");
+
+	if (!_process_segtypes(lv, directs, _log_directs_and_indirects, NULL))
+		return_0;
 
 	return 0;
 }
@@ -5675,6 +5835,7 @@ static int _set_convenient_raid1456_segtype_to(const struct lv_segment *seg_from
 	struct cmd_context *cmd = seg_from->lv->vg->cmd;
 	const struct segment_type *segtype_sav = *segtype;
 
+return 1;
 	/* Bail out if same RAID level is requested. */
 	if (!strncmp((*segtype)->name, lvseg_name(seg_from), len))
 		return 1;
@@ -5695,17 +5856,6 @@ static int _set_convenient_raid1456_segtype_to(const struct lv_segment *seg_from
 	/* raid4 -> raid5_n */
 	} else if (seg_is_raid4(seg_from) && segtype_is_any_raid5(*segtype)) {
 		seg_flag = SEG_RAID5_N;
-		goto replaced;
-
-	/* raid4/raid5_n -> striped/raid0/raid6 */
-	} else if ((seg_is_raid4(seg_from) || seg_is_raid5_n(seg_from)) &&
-		   !segtype_is_striped(*segtype) &&
-		   !segtype_is_any_raid0(*segtype) &&
-		   !segtype_is_raid1(*segtype) &&
-		   !segtype_is_raid4(*segtype) &&
-		   !segtype_is_raid5_n(*segtype) &&
-		   !segtype_is_raid6_n_6(*segtype)) {
-		seg_flag = SEG_RAID6_N_6;
 		goto replaced;
 
 	/* Got to do check for raid5 -> raid6 ... */
@@ -5813,11 +5963,15 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
 {
 	int r = 1;
 	uint32_t opts;
+	const struct segment_type *segtype_to_sav = *segtype_to;
 
 	if (!new_image_count && !_set_convenient_raid1456_segtype_to(seg_from, segtype_to, yes))
 		return_0;
 
 	if (!_get_allowed_conversion_options(seg_from, *segtype_to, new_image_count, &opts)) {
+	    	if (*segtype_to == segtype_to_sav)
+			_log_possible_conversion_types(seg_from->lv, segtype_to_sav);
+
 		log_error("Unable to convert LV %s from %s to %s.",
 			  display_lvname(seg_from->lv), lvseg_name(seg_from), (*segtype_to)->name);
 		return 0;
@@ -5841,13 +5995,17 @@ static int _conversion_options_allowed(const struct lv_segment *seg_from,
 		r = 0;
 	}
 
-	if (r &&
-	    strcmp((*segtype_to)->name, SEG_TYPE_NAME_MIRROR) && /* "mirror" is prompted for later */
-	    !yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s type? [y/n]: ",
+	if (r && !yes &&
+	    strcmp((*segtype_to)->name, SEG_TYPE_NAME_MIRROR)) { /* "mirror" is prompted for later */
+		const char *alias = _get_segtype_alias(segtype_to_sav);
+
+		if (yes_no_prompt("Are you sure you want to convert %s LV %s to %s%s%s%s type? [y/n]: ",
 				  lvseg_name(seg_from), display_lvname(seg_from->lv),
-				  (*segtype_to)->name) == 'n') {
-		log_error("Logical volume %s NOT converted.", display_lvname(seg_from->lv));
-		r = 0;
+				  segtype_to_sav->name,
+		  		  *alias ? " (same as " : "", alias, *alias ? ")" : "") == 'n') {
+			log_error("Logical volume %s NOT converted.", display_lvname(seg_from->lv));
+			r = 0;
+		}
 	}
 
 	return r;
@@ -5902,9 +6060,10 @@ int lv_raid_convert(struct logical_volume *lv,
 	uint32_t region_size;
 	uint32_t data_copies = seg->data_copies;
 	uint32_t available_slvs, removed_slvs;
+	const struct segment_type *new_segtype_sav;
 	takeover_fn_t takeover_fn;
 
-	new_segtype = new_segtype ? : seg->segtype;
+	new_segtype = new_segtype_sav = new_segtype ? : seg->segtype;
 	if (!new_segtype) {
 		log_error(INTERNAL_ERROR "New segtype not specified.");
 		return 0;
@@ -5965,14 +6124,20 @@ int lv_raid_convert(struct logical_volume *lv,
 	}
 
 	/*
+ 	 * Log any possible direct (and indirect) conversion types.
+ 	 *
 	 * Check acceptible options mirrors, region_size,
 	 * stripes and/or stripe_size have been provided.
+	 *
+	 * In case no direct conversion to the requested
+	 * new segment type is possible, replace type with
+	 * any available convenient one.
 	 */
 	if (!_conversion_options_allowed(seg, &new_segtype, yes,
 					 0 /* Takeover */, 0 /*new_data_copies*/, new_region_size,
 					 new_stripes, new_stripe_size_supplied))
-		return _log_possible_conversion_types(lv, new_segtype);
-	
+		return 0;
+
 	takeover_fn = _get_takeover_fn(first_seg(lv), new_segtype, new_image_count);
 
 	/* Exit without doing activation checks if the combination isn't possible */
