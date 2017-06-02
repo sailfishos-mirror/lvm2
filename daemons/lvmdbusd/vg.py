@@ -238,14 +238,10 @@ class Vg(AutomatedProperties):
 		# If pv_object_paths is not empty, then get the device paths
 		if pv_object_paths and len(pv_object_paths) > 0:
 			if missing:
-				if cfg.args.strict:
-					# FIXME: Shall this call cbe directly from Reduce?
-					raise dbus.exceptions.DBusException(
-						VG_INTERFACE,
-						'Mixed missing and PVs usage!')
-				else:
-					# Passing an empty list to vg_reduce
-					pass
+				# FIXME: Shall this call cbe directly from Reduce?
+				raise cfg.deprecation(
+					VG_INTERFACE,
+					'Mixed missing and PVs usage!')
 			else:
 				for pv_op in pv_object_paths:
 					pv = cfg.om.get_object_by_path(pv_op)

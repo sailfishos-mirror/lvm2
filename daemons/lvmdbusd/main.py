@@ -62,7 +62,6 @@ def check_bb_size(value):
 			"positive integers only ('%s' invalid)" % value)
 	return v
 
-
 def main():
 	start = time.time()
 	# Add simple command line handling
@@ -109,6 +108,7 @@ def main():
 	# as the user may be specifying a different size.  The default one in
 	# cmdhandler is for when we are running other code with a different main.
 	cfg.blackbox = LvmFlightRecorder(cfg.args.bb_size)
+	cfg.deprecation = dbus.exceptions.DBusException if cfg.args.strict else DeprecationWarning
 
 	if cfg.args.use_lvm_shell and not cfg.args.use_json:
 		log_error("You cannot specify --lvmshell and --nojson")
