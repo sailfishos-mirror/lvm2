@@ -91,6 +91,11 @@ def main():
 		default=10,
 		type=check_bb_size,
 		dest='bb_size')
+	parser.add_argument(
+		"--strict", action='store_true',
+		help="Strict checking of deprecated methods and arguments",
+		default=False,
+		dest='strict')
 
 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
 

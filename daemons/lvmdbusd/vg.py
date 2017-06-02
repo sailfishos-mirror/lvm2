@@ -238,18 +238,23 @@ class Vg(AutomatedProperties):
 		# If pv_object_paths is not empty, then get the device paths
 		if pv_object_paths and len(pv_object_paths) > 0:
 			if missing:
-				# FIXME: Shall this call cbe directly from Reduce?
-				raise dbus.exceptions.DBusException(
-					VG_INTERFACE,
-					'Mixed missing and PVs usage!')
-			for pv_op in pv_object_paths:
-				pv = cfg.om.get_object_by_path(pv_op)
-				if pv:
-					pv_devices.append(pv.lvm_id)
-				else:
+				if cfg.args.strict:
+					# FIXME: Shall this call cbe directly from Reduce?
 					raise dbus.exceptions.DBusException(
 						VG_INTERFACE,
-						'PV Object path not found = %s!' % pv_op)
+						'Mixed missing and PVs usage!')
+				else:
+					# Passing an empty list to vg_reduce
+					pass
+			else:
+				for pv_op in pv_object_paths:
+					pv = cfg.om.get_object_by_path(pv_op)
+					if pv:
+						pv_devices.append(pv.lvm_id)
+					else:
+						raise dbus.exceptions.DBusException(
+							VG_INTERFACE,
+							'PV Object path not found = %s!' % pv_op)
 
 		rc, out, err = cmdhandler.vg_reduce(vg_name, missing, pv_devices,
 											reduce_options)
