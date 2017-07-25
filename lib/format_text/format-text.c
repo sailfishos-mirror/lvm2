@@ -321,6 +321,9 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 	if (!dev_open_readonly(dev_area->dev))
 		return_0;
 
+	log_debug_metadata("Reading mda header sector from %s at %llu",
+			   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+
 	if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
 		if (!dev_close(dev_area->dev))
 			stack;

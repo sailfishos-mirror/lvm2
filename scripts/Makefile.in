@@ -31,6 +31,10 @@ endif
 	LVMLIBS = @LVM2APP_LIB@ -ldevmapper
 endif
 
+ifeq ("@AIO@", "yes")
+	LVMLIBS += -laio
+endif
+
 LVM_SCRIPTS = lvmdump.sh lvmconf.sh
 DM_SCRIPTS =
 
