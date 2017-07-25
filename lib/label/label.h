@@ -18,6 +18,7 @@
 
 #include "uuid.h"
 #include "device.h"
+#include "toolcontext.h"
 
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
@@ -99,11 +100,13 @@ int label_register_handler(struct labeller *handler);
 struct labeller *label_get_handler(const char *name);
 
 int label_remove(struct device *dev);
-int label_read(struct device *dev, struct label **result,
-		uint64_t scan_sector);
+int label_read(struct device *dev, struct label **label, uint64_t scan_sector);
 int label_write(struct device *dev, struct label *label);
 int label_verify(struct device *dev);
 struct label *label_create(struct labeller *labeller);
 void label_destroy(struct label *label);
+
+int label_scan_async(struct cmd_context *cmd);
+int label_scan_sync(struct cmd_context *cmd);
 
 #endif
