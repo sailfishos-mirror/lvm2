@@ -2387,6 +2387,8 @@ static int _get_current_settings(struct cmd_context *cmd)
 	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
 		return EINVALID_CMD_LINE;
 
+	cmd->use_aio = find_config_tree_bool(cmd, metadata_scan_async_CFG, NULL);
+
 	/* Zero indicates success */
 	return 0;
 }

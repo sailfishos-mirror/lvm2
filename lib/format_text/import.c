@@ -52,13 +52,23 @@ int text_vgsummary_import(const struct format_type *fmt,
 	if (!(cft = config_open(CONFIG_FILE_SPECIAL, NULL, 0)))
 		return_0;
 
-	if ((!dev && !config_file_read(cft)) ||
-	    (dev && !config_file_read_fd(cft, dev, offset, size,
+	if (dev) {
+		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+				   dev_name(dev), (unsigned long long)offset,
+				   size, size2);
+
+		if (!config_file_read_fd(cft, dev, offset, size,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
-					 checksum_only, 1))) {
-		log_error("Couldn't read volume group metadata.");
-		goto out;
+					 checksum_only, 1)) {
+			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
+			goto out;
+		}
+	} else {
+		if (!config_file_read(cft)) {
+			log_error("Couldn't read volume group metadata from file.");
+			goto out;
+		}
 	}
 
 	if (checksum_only) {

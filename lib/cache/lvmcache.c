@@ -542,7 +542,6 @@ const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
 {
 	struct lvmcache_vginfo *vginfo;
 	struct lvmcache_info *info;
-	struct label *label;
 	struct dm_list *devh, *tmp;
 	struct dm_list devs;
 	struct device_list *devl;
@@ -587,7 +586,7 @@ const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
 
 	dm_list_iterate_safe(devh, tmp, &devs) {
 		devl = dm_list_item(devh, struct device_list);
-		(void) label_read(devl->dev, &label, UINT64_C(0));
+		label_read(devl->dev, NULL, UINT64_C(0));
 		dm_list_del(&devl->list);
 		dm_free(devl);
 	}
@@ -768,16 +767,20 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
 	return vgname;
 }
 
+static int _scan_invalid_dev_count;
+
 static void _rescan_entry(struct lvmcache_info *info)
 {
-	struct label *label;
-
-	if (info->status & CACHE_INVALID)
-		(void) label_read(info->dev, &label, UINT64_C(0));
+	if (info->status & CACHE_INVALID) {
+		label_read(info->dev, NULL, UINT64_C(0));
+		_scan_invalid_dev_count++;
+	}
 }
 
-static int _scan_invalid(void)
+static int _label_scan_invalid(void)
 {
+	_scan_invalid_dev_count = 0;
+
 	dm_hash_iter(_pvid_hash, (dm_hash_iterate_fn) _rescan_entry);
 
 	return 1;
@@ -1101,11 +1104,7 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	struct dm_list add_cache_devs;
 	struct lvmcache_info *info;
 	struct device_list *devl;
-	struct label *label;
-	struct dev_iter *iter;
-	struct device *dev;
 	struct format_type *fmt;
-	int dev_count = 0;
 
 	int r = 0;
 
@@ -1124,33 +1123,38 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	}
 
 	if (_has_scanned && !_force_label_scan) {
-		r = _scan_invalid();
+		log_debug_devs("Scanning labels of invalid infos");
+		r = _label_scan_invalid();
+		log_debug_devs("Scanned %d labels of invalid infos", _scan_invalid_dev_count);
 		goto out;
 	}
 
 	if (_force_label_scan && (cmd->full_filter && !cmd->full_filter->use_count) && !refresh_filters(cmd))
 		goto_out;
 
-	if (!cmd->full_filter || !(iter = dev_iter_create(cmd->full_filter, _force_label_scan))) {
-		log_error("dev_iter creation failed");
+	if (!cmd->full_filter) {
+		log_error("label scan is missing full filter");
 		goto out;
 	}
-
-	log_very_verbose("Scanning device labels");
 
 	/*
 	 * Duplicates found during this label scan are added to _found_duplicate_devs().
 	 */
 	_destroy_duplicate_device_list(&_found_duplicate_devs);
 
-	while ((dev = dev_iter_get(iter))) {
-		(void) label_read(dev, &label, UINT64_C(0));
-		dev_count++;
-	}
-
-	dev_iter_destroy(iter);
-
-	log_very_verbose("Scanned %d device labels", dev_count);
+	/*
+	 * Do the actual scanning.  This populates lvmcache
+	 * with infos/vginfos based on reading headers from
+	 * each device, and a vg summary from each mda.
+	 *
+	 * Note that these will *skip* scanning a device if
+	 * an info struct already exists in lvmcache for
+	 * the device.  To really scan every device here,
+	 * you need to destroy lvmcache first.
+	 * (even "force" does not force this to scan devices.)
+	 */
+	if (!cmd->use_aio || !label_scan_async(cmd))
+		label_scan_sync(cmd);
 
 	/*
 	 * _choose_preferred_devs() returns:
@@ -1184,7 +1188,7 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 
 		dm_list_iterate_items(devl, &add_cache_devs) {
 			log_debug_cache("Rescan preferred device %s for lvmcache", dev_name(devl->dev));
-			(void) label_read(devl->dev, &label, UINT64_C(0));
+			label_read(devl->dev, NULL, UINT64_C(0));
 		}
 
 		dm_list_splice(&_unused_duplicate_devs, &del_cache_devs);
@@ -1505,7 +1509,6 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
 				       const char *devname)
 {
 	struct device *dev;
-	struct label *label;
 
 	if (!(dev = dev_cache_get(devname, cmd->filter))) {
 		log_error("%s: Couldn't find device.  Check your filters?",
@@ -1513,7 +1516,7 @@ const char *lvmcache_pvid_from_devname(struct cmd_context *cmd,
 		return NULL;
 	}
 
-	if (!(label_read(dev, &label, UINT64_C(0))))
+	if (!label_read(dev, NULL, UINT64_C(0)))
 		return NULL;
 
 	return dev->pvid;
