@@ -24,7 +24,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <libaio.h>
 
 /* FIXME Allow for larger labels?  Restricted to single sector currently */
 
@@ -335,7 +334,7 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, labelp)) && *labelp) {
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, labelp)) && *labelp) {
 		(*labelp)->dev = dev;
 		(*labelp)->sector = sector;
 	} else {
@@ -448,18 +447,6 @@ struct label *label_create(struct labeller *labeller)
 	return label;
 }
 
-struct label_read_data {
-	char *buf; /* 2K aligned memory buffer */
-	struct iocb iocb;
-	struct device *dev;
-	struct dm_list list;
-	int buf_len; /* LABEL_SCAN_SIZE */
-	int try_sync;
-	int read_done;
-	int read_result;
-	int process_done;
-};
-
 /*
  * Start label aio read on a device.
  */
@@ -543,6 +530,9 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 	/*
 	 * Finds the sector from scanbuf containing the label and copies into label_buf.
 	 * label_buf: struct label_header + struct pv_header + struct pv_header_extension
+	 *
+	 * FIXME: we don't need to copy one sector from ld->buf into label_buf,
+	 * we can just point label_buf at one sector in ld->buf.
 	 */
 	if (!(l = _find_label_header(ld->dev, ld->buf, label_buf, &sector, 0))) {
 		/* Non-PVs exit here */
@@ -555,7 +545,7 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, ld->dev, label_buf, &label)) && label) {
+	if ((r = (l->ops->read)(l, ld->dev, label_buf, ld, &label)) && label) {
 		label->dev = ld->dev;
 		label->sector = sector;
 	} else {
@@ -598,14 +588,23 @@ int label_scan_async(struct cmd_context *cmd)
 	dm_list_init(&label_read_list);
 
 	/*
-	 * "buf" is the buffer into which the first four sectors
-	 * of each device is read.
-	 * (LABEL_SCAN_SIZE is four 512-byte sectors, i.e. 2K).
+	 * "buf" is the buffer into which the first ASYNC_SCAN_SIZE bytes
+	 * of each device are read.  The memory for buf needs to be aligned.
 	 *
-	 * The label is expected to be one of the first four sectors.
-	 * buf needs to be aligned.
+	 * This data is meant to big large enough to cover all the
+	 * headers and metadata that need to be read from the device
+	 * during the label scan:
+	 *
+	 * 1. one of the first four sectors holds:
+	 *    label_header, pv_header, pv_header_extention
+	 *
+	 * 2. the mda_header whose location is found from 1,
+	 *    (is typically at 4096.)
+	 *
+	 * 3. the metadata whose location is from found 2,
+	 *    (is typically at 16896.)
 	 */
-	buf_len = LABEL_SCAN_SIZE;
+	buf_len = ASYNC_SCAN_SIZE;
 
 	/*
 	 * if aio setup fails, caller will revert to sync scan
@@ -686,7 +685,7 @@ int label_scan_async(struct cmd_context *cmd)
 		if (!_label_read_async_start(cmd, aio_ctx, ld))
 			ld->try_sync = 1;
 		else
-			log_debug_devs("Reading label sectors from device %s async", dev_name(ld->dev));
+			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
 	}
 
 	/*
@@ -694,7 +693,7 @@ int label_scan_async(struct cmd_context *cmd)
 	 */
 	dm_list_iterate_items(ld, &label_read_list) {
 		if (ld->try_sync) {
-			log_debug_devs("Reading label sectors from device %s async", dev_name(ld->dev));
+			log_debug_devs("Reading sectors from device %s trying sync", dev_name(ld->dev));
 
 			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
 				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
@@ -815,7 +814,7 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, &label)) && label) {
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, &label)) && label) {
 		label->dev = dev;
 		label->sector = sector;
 	} else {

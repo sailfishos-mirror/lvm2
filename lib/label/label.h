@@ -20,6 +20,8 @@
 #include "device.h"
 #include "toolcontext.h"
 
+#include <libaio.h>
+
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
 #define LABEL_SCAN_SECTORS 4L
@@ -28,6 +30,20 @@
 struct labeller;
 
 void allow_reads_with_lvmetad(void);
+
+#define ASYNC_SCAN_SIZE (32 * 1024)
+
+struct label_read_data {
+	char *buf; /* ASYNC_SCAN_SIZE aligned memory buffer */
+	struct iocb iocb;
+	struct device *dev;
+	struct dm_list list;
+	int buf_len; /* ASYNC_SCAN_SIZE */
+	int try_sync;
+	int read_done;
+	int read_result;
+	int process_done;
+};
 
 /* On disk - 32 bytes */
 struct label_header {
@@ -64,7 +80,8 @@ struct label_ops {
 	 * Read a label from a volume.
 	 */
 	int (*read) (struct labeller * l, struct device * dev,
-		     void *buf, struct label ** label);
+		     void *label_buf,
+		     struct label_read_data *ld, struct label ** label);
 
 	/*
 	 * Additional consistency checks for the paranoid.
