@@ -1166,8 +1166,9 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
 	return 1;
 }
 
-int vgname_from_mda(const struct format_type *fmt,
-		    struct mda_header *mdah, struct device_area *dev_area,
+int read_metadata_location(const struct format_type *fmt,
+		    struct mda_header *mdah, struct label_read_data *ld,
+		    struct device_area *dev_area,
 		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors)
 {
 	struct raw_locn *rlocn;
@@ -1181,7 +1182,7 @@ int vgname_from_mda(const struct format_type *fmt,
 		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
 
 	if (!mdah) {
-		log_error(INTERNAL_ERROR "vgname_from_mda called with NULL pointer for mda_header");
+		log_error(INTERNAL_ERROR "read_metadata_location called with NULL pointer for mda_header");
 		return 0;
 	}
 
@@ -1198,9 +1199,12 @@ int vgname_from_mda(const struct format_type *fmt,
 	}
 
 	/* Do quick check for a vgname */
-	if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
-		      NAME_LEN, buf))
-		return_0;
+	if (!ld || (ld->buf_len < dev_area->start + rlocn->offset + NAME_LEN)) {
+		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf))
+			return_0;
+	} else {
+		memcpy(buf, ld->buf + dev_area->start + rlocn->offset, NAME_LEN);
+	}
 
 	while (buf[len] && !isspace(buf[len]) && buf[len] != '{' &&
 	       len < (NAME_LEN - 1))
@@ -1230,7 +1234,7 @@ int vgname_from_mda(const struct format_type *fmt,
 		used_cached_metadata = 1;
 
 	/* FIXME 64-bit */
-	if (!text_vgsummary_import(fmt, dev_area->dev,
+	if (!text_read_metadata_summary(fmt, dev_area->dev, ld,
 				(off_t) (dev_area->start + rlocn->offset),
 				(uint32_t) (rlocn->size - wrap),
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
@@ -1292,8 +1296,8 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 			goto close_dev;
 		}
 
-		/* TODO: caching as in vgname_from_mda() (trigger this code?) */
-		if (vgname_from_mda(fmt, mdah, &rl->dev_area, &vgsummary, NULL)) {
+		/* TODO: caching as in read_metadata_location() (trigger this code?) */
+		if (read_metadata_location(fmt, mdah, NULL, &rl->dev_area, &vgsummary, NULL)) {
 			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0, 0);
 			if (vg)
 				lvmcache_update_vg(vg, 0);

@@ -308,15 +308,15 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
 	return 1;
 }
 
-struct _update_mda_baton {
+struct _mda_baton {
 	struct lvmcache_info *info;
 	struct label *label;
 	struct label_read_data *ld;
 };
 
-static int _update_mda(struct metadata_area *mda, void *baton)
+static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 {
-	struct _update_mda_baton *p = baton;
+	struct _mda_baton *p = baton;
 	const struct format_type *fmt = p->label->labeller->fmt;
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct mda_header *mdah;
@@ -351,13 +351,7 @@ static int _update_mda(struct metadata_area *mda, void *baton)
 		return 1;
 	}
 
-	/*
-	 * FIXME: vgname_from_mda reads metadata from mda location;
-	 * pass it ld so it can copy the metadata from ld->buf and
-	 * avoid reading the dev.
-	 */
-
-	if (vgname_from_mda(fmt, mdah, &mdac->area, &vgsummary,
+	if (read_metadata_location(fmt, mdah, p->ld, &mdac->area, &vgsummary,
 			     &mdac->free_sectors) &&
 	    !lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
 		if (!dev_close(mdac->area.dev))
@@ -390,7 +384,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 	struct disk_locn *dlocn_xl;
 	uint64_t offset;
 	uint32_t ext_version;
-	struct _update_mda_baton baton;
+	struct _mda_baton baton;
 
 	/*
 	 * PV header base
@@ -453,8 +447,7 @@ out:
 	baton.label = *label;
 	baton.ld = ld;
 
-	if (!lvmcache_foreach_mda(info, _update_mda, &baton))
-		return_0;
+	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
 
 	lvmcache_make_valid(info);
 

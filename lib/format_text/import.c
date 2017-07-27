@@ -35,8 +35,9 @@ static void _init_text_import(void)
 /*
  * Find out vgname on a given device.
  */
-int text_vgsummary_import(const struct format_type *fmt,
+int text_read_metadata_summary(const struct format_type *fmt,
 		       struct device *dev,
+		       struct label_read_data *ld,
 		       off_t offset, uint32_t size,
 		       off_t offset2, uint32_t size2,
 		       checksum_fn_t checksum_fn,
@@ -45,7 +46,23 @@ int text_vgsummary_import(const struct format_type *fmt,
 {
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
+	char *buf_async = NULL;
 	int r = 0;
+
+	if (ld) {
+		if (ld->buf_len >= (offset + size))
+			buf_async = ld->buf;
+		else {
+			/*
+			 * Needs data beyond the end of the async read buffer.
+			 * Will do a new synchronous read to get the data.
+			 * (ASYNC_SCAN_SIZE could also be made larger.)
+			 */
+			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
+					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
+			buf_async = NULL;
+		}
+	}
 
 	_init_text_import();
 
@@ -53,11 +70,16 @@ int text_vgsummary_import(const struct format_type *fmt,
 		return_0;
 
 	if (dev) {
-		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
-				   dev_name(dev), (unsigned long long)offset,
-				   size, size2);
+		if (buf_async)
+			log_debug_metadata("Copying metadata for %s at %llu size %d (+%d)",
+					   dev_name(dev), (unsigned long long)offset,
+					   size, size2);
+		else
+			log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+					    dev_name(dev), (unsigned long long)offset,
+					    size, size2);
 
-		if (!config_file_read_fd(cft, dev, offset, size,
+		if (!config_file_read_fd(cft, dev, buf_async, offset, size,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
 					 checksum_only, 1)) {
@@ -138,7 +160,7 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
 		     ((*vg_fmtdata)->cached_mda_size == (size + size2));
 
 	if ((!dev && !config_file_read(cft)) ||
-	    (dev && !config_file_read_fd(cft, dev, offset, size,
+	    (dev && !config_file_read_fd(cft, dev, NULL, offset, size,
 					 offset2, size2, checksum_fn, checksum,
 					 skip_parse, 1)))
 		goto_out;
