@@ -31,7 +31,13 @@ struct labeller;
 
 void allow_reads_with_lvmetad(void);
 
-#define ASYNC_SCAN_SIZE (32 * 1024)
+/*
+ * This is the amount of data read from each device
+ * at the start of label scan.  It's meant to be big
+ * enough to cover all the headers and metadata that
+ * need to be read during label scan for common cases.
+ */
+#define ASYNC_SCAN_SIZE (128 * 1024)
 
 struct label_read_data {
 	char *buf; /* ASYNC_SCAN_SIZE aligned memory buffer */
