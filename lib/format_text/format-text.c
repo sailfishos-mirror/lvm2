@@ -190,7 +190,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
 	if (!dev_open_readonly(area->dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fmt, area)))
+	if (!(mdah = raw_read_mda_header(fmt, area, NULL)))
 		goto_out;
 
 	rlocn = mdah->raw_locns;
@@ -316,18 +316,26 @@ static void _xlate_mdah(struct mda_header *mdah)
 	}
 }
 
-static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area)
+static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area,
+				struct label_read_data *ld)
 {
 	if (!dev_open_readonly(dev_area->dev))
 		return_0;
 
-	log_debug_metadata("Reading mda header sector from %s at %llu",
-			   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+	if (!ld || (ld->buf_len < dev_area->start + MDA_HEADER_SIZE)) {
+		log_debug_metadata("Reading mda header sector from %s at %llu",
+			   	   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
 
-	if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
-		if (!dev_close(dev_area->dev))
-			stack;
-		return_0;
+		if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
+			if (!dev_close(dev_area->dev))
+				stack;
+			return_0;
+		}
+	} else {
+		log_debug_metadata("Copying mda header sector from %s buffer at %llu",
+			   	   dev_name(dev_area->dev), (unsigned long long)dev_area->start);
+
+		memcpy(mdah, ld->buf + dev_area->start, MDA_HEADER_SIZE);
 	}
 
 	if (!dev_close(dev_area->dev))
@@ -369,7 +377,8 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 }
 
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
-				       struct device_area *dev_area)
+				       struct device_area *dev_area,
+				       struct label_read_data *ld)
 {
 	struct mda_header *mdah;
 
@@ -378,7 +387,7 @@ struct mda_header *raw_read_mda_header(const struct format_type *fmt,
 		return NULL;
 	}
 
-	if (!_raw_read_mda_header(mdah, dev_area)) {
+	if (!_raw_read_mda_header(mdah, dev_area, ld)) {
 		dm_pool_free(fmt->cmd->mem, mdah);
 		return NULL;
 	}
@@ -491,7 +500,7 @@ static int _raw_holds_vgname(struct format_instance *fid,
 	if (!dev_open_readonly(dev_area->dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area, NULL)))
 		return_0;
 
 	if (_find_vg_rlocn(dev_area, mdah, vgname, &noprecommit))
@@ -518,7 +527,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 	char *desc;
 	uint32_t wrap = 0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, area)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, area, NULL)))
 		goto_out;
 
 	if (!(rlocn = _find_vg_rlocn(area, mdah, vgname, &precommitted))) {
@@ -633,7 +642,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!dev_open(mdac->area.dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
 	rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit);
@@ -739,7 +748,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
 	if (!found)
 		return 1;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit))) {
@@ -849,7 +858,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!dev_open(mdac->area.dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
 	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, vg->name, &noprecommit))) {
@@ -1278,7 +1287,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 			continue;
 		}
 
-		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area))) {
+		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area, NULL))) {
 			stack;
 			goto close_dev;
 		}
@@ -1758,7 +1767,7 @@ static int _mda_export_text_raw(struct metadata_area *mda,
 	struct mda_context *mdc = (struct mda_context *) mda->metadata_locn;
 	char mdah[MDA_HEADER_SIZE]; /* temporary */
 
-	if (!mdc || !_raw_read_mda_header((struct mda_header *)mdah, &mdc->area))
+	if (!mdc || !_raw_read_mda_header((struct mda_header *)mdah, &mdc->area, NULL))
 		return 1; /* pretend the MDA does not exist */
 
 	return config_make_nodes(cft, parent, NULL,
