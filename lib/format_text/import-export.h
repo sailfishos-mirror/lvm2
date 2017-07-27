@@ -83,8 +83,9 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
 				       uint32_t checksum,
 				       time_t *when, char **desc);
 
-int text_vgsummary_import(const struct format_type *fmt,
+int text_read_metadata_summary(const struct format_type *fmt,
 		       struct device *dev,
+		       struct label_read_data *ld,
 		       off_t offset, uint32_t size,
 		       off_t offset2, uint32_t size2,
 		       checksum_fn_t checksum_fn,
