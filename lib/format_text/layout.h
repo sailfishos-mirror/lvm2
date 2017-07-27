@@ -81,7 +81,8 @@ struct mda_header {
 } __attribute__ ((packed));
 
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
-				       struct device_area *dev_area);
+				       struct device_area *dev_area,
+				       struct label_read_data *ld);
 
 struct mda_lists {
 	struct dm_list dirs;
