@@ -463,13 +463,30 @@ static int _label_read_async_start(struct cmd_context *cmd, io_context_t aio_ctx
 	iocb->u.c.offset = 0;
 
 	ret = io_submit(aio_ctx, 1, &iocb);
-	if (ret < 0)
+
+	/*
+	 * This means that the number of devices exceeded the number of events
+	 * set up in io_setup().
+	 */
+	if (ret == -EAGAIN) {
+		log_debug_devs("Reading label no aio event for %s", dev_name(ld->dev));
 		return 0;
+	}
+
+	if (ret < 0) {
+		log_debug_devs("Reading label aio submit error %d for %s", ret, dev_name(ld->dev));
+		return 0;
+	}
 
 	return 1;
 }
 
-#define MAX_GET_EVENTS 8
+/*
+ * We'll collect the results of this many async reads
+ * in one system call.  It shouldn't matter much what
+ * number is used here.
+ */
+#define MAX_GET_EVENTS 16
 
 /*
  * Reap aio reads from devices.
@@ -556,6 +573,15 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 }
 
 /*
+ * The number of events to use in io_setup(),
+ * which is the limit on the number of concurrent
+ * async i/o's we can submit.  After all these are
+ * used, io_submit() returns -EAGAIN, and we revert
+ * to doing synchronous io.
+ */
+#define MAX_ASYNC_EVENTS 1024
+
+/*
  * label_scan iterates over all visible devices, looking
  * for any that belong to lvm, and fills lvmcache with
  * basic info about them.  It's main job is to prepare
@@ -593,25 +619,30 @@ int label_scan_async(struct cmd_context *cmd)
 	 *
 	 * This data is meant to big large enough to cover all the
 	 * headers and metadata that need to be read from the device
-	 * during the label scan:
+	 * during the label scan for most common cases.
 	 *
 	 * 1. one of the first four sectors holds:
 	 *    label_header, pv_header, pv_header_extention
 	 *
-	 * 2. the mda_header whose location is found from 1,
-	 *    (is typically at 4096.)
+	 * 2. the mda_header whose location is found from 1.
 	 *
-	 * 3. the metadata whose location is from found 2,
-	 *    (is typically at 16896.)
+	 * 3. the metadata whose location is from found 2.
+	 *
+	 * If during processing, metadata needs to be read in a region
+	 * beyond this buffer, then the code will revert do doing a
+	 * synchronous read of the data it needs.
 	 */
 	buf_len = ASYNC_SCAN_SIZE;
 
-	/*
-	 * if aio setup fails, caller will revert to sync scan
-	 */
 	memset(&aio_ctx, 0, sizeof(io_context_t));
 
-	error = io_setup(128, &aio_ctx);
+	/*
+	 * if aio setup fails, caller will revert to sync scan
+	 * The number of events set up here is the max number of
+	 * concurrent async reads that can be submitted.  After
+	 * all of those are used, we revert to synchronous reads.
+	 */
+	error = io_setup(MAX_ASYNC_EVENTS, &aio_ctx);
 	if (error < 0) {
 		log_debug_devs("async io setup error %d, reverting to sync io.", error);
 		return_0;
