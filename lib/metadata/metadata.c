@@ -3859,7 +3859,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 
 	/* Find the vgname in the cache */
 	/* If it's not there we must do full scan to be completely sure */
-	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 1))) {
+	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0))) {
 		lvmcache_label_scan(cmd);
 		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 1))) {
 			/* Independent MDAs aren't supported under low memory */
