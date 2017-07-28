@@ -517,8 +517,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 					      struct device_area *area,
 					      struct cached_vg_fmtdata **vg_fmtdata,
 					      unsigned *use_previous_vg,
-					      int precommitted,
-					      int single_device)
+					      int precommitted)
 {
 	struct volume_group *vg = NULL;
 	struct raw_locn *rlocn;
@@ -545,12 +544,15 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 	}
 
 	/* FIXME 64-bit */
-	if (!(vg = text_vg_import_fd(fid, NULL, vg_fmtdata, use_previous_vg, single_device, area->dev, 
+	if (!(vg = text_vg_import_fd(fid, NULL, vg_fmtdata, use_previous_vg, area->dev,
 				     (off_t) (area->start + rlocn->offset),
 				     (uint32_t) (rlocn->size - wrap),
 				     (off_t) (area->start + MDA_HEADER_SIZE),
-				     wrap, calc_crc, rlocn->checksum, &when,
-				     &desc)) && (!use_previous_vg || !*use_previous_vg))
+				     wrap,
+				     calc_crc,
+				     rlocn->checksum,
+				     &when, &desc))
+			&& (!use_previous_vg || !*use_previous_vg))
 		goto_out;
 
 	if (vg)
@@ -575,8 +577,7 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 					 const char *vgname,
 					 struct metadata_area *mda,
 					 struct cached_vg_fmtdata **vg_fmtdata,
-					 unsigned *use_previous_vg,
-					 int single_device)
+					 unsigned *use_previous_vg)
 {
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct volume_group *vg;
@@ -584,7 +585,7 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 	if (!dev_open_readonly(mdac->area.dev))
 		return_NULL;
 
-	vg = _vg_read_raw_area(fid, vgname, &mdac->area, vg_fmtdata, use_previous_vg, 0, single_device);
+	vg = _vg_read_raw_area(fid, vgname, &mdac->area, vg_fmtdata, use_previous_vg, 0);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
@@ -604,7 +605,7 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
 	if (!dev_open_readonly(mdac->area.dev))
 		return_NULL;
 
-	vg = _vg_read_raw_area(fid, vgname, &mdac->area, vg_fmtdata, use_previous_vg, 1, 0);
+	vg = _vg_read_raw_area(fid, vgname, &mdac->area, vg_fmtdata, use_previous_vg, 1);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
@@ -920,8 +921,7 @@ static struct volume_group *_vg_read_file(struct format_instance *fid,
 					  const char *vgname,
 					  struct metadata_area *mda,
 					  struct cached_vg_fmtdata **vg_fmtdata,
-					  unsigned *use_previous_vg __attribute__((unused)),
-					  int single_device __attribute__((unused)))
+					  unsigned *use_previous_vg __attribute__((unused)))
 {
 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
 
@@ -1298,7 +1298,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 
 		/* TODO: caching as in read_metadata_location() (trigger this code?) */
 		if (read_metadata_location(fmt, mdah, NULL, &rl->dev_area, &vgsummary, NULL)) {
-			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0, 0);
+			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, 0);
 			if (vg)
 				lvmcache_update_vg(vg, 0);
 		}
@@ -2496,7 +2496,7 @@ static int _get_config_disk_area(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (!(dev_area.dev = lvmcache_device_from_pvid(cmd, &id, NULL, NULL))) {
+	if (!(dev_area.dev = lvmcache_device_from_pvid(cmd, &id, NULL))) {
 		char buffer[64] __attribute__((aligned(8)));
 
 		if (!id_write_format(&id, buffer, sizeof(buffer)))
