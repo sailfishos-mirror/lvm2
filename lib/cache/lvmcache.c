@@ -1098,6 +1098,45 @@ next:
 	goto next;
 }
 
+int lvmcache_label_refresh_for_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
+{
+	struct dm_list devs;
+	struct device_list *devl;
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+
+	if (lvmetad_used())
+		return 1;
+
+	dm_list_init(&devs);
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid)))
+		return_0;
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		if (!(devl = dm_malloc(sizeof(*devl)))) {
+			log_error("device_list element allocation failed");
+			return 0;
+		}
+		devl->dev = info->dev;
+		dm_list_add(&devs, &devl->list);
+	}
+
+	dm_list_iterate_items(devl, &devs) {
+		log_debug_cache("Reading label on %s for VG %s", dev_name(devl->dev), vgname);
+		label_read(devl->dev, NULL, 0);
+	}
+
+	/*
+	 * TODO: grab vginfo again, and compare vginfo->infos
+	 * to what was found above before rereading labels.
+	 * If there are any info->devs now that were not in the
+	 * first devs list, then do label_read on those also.
+	 */
+
+	return 1;
+}
+
 int lvmcache_label_scan(struct cmd_context *cmd)
 {
 	struct dm_list del_cache_devs;

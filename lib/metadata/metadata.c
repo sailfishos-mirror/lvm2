@@ -3856,20 +3856,28 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		correct_vg = NULL;
 	}
 
+	/*
+	 * Rescan the devices that are associated with this vg in lvmcache.
+	 * This repeats what was done by the command's initial label scan,
+	 * but only the devices associated with this VG.
+	 *
+	 * The lvmcache info about these devs is from the initial label scan
+	 * performed by the command before the vg lock was held.  Now the VG
+	 * lock is held, so we rescan all the info from the devs in case
+	 * something changed between the initial scan and now that the lock
+	 * is held.
+	 */
+	log_debug_metadata("Reading VG rereading labels for %s", vgname);
 
-	/* Find the vgname in the cache */
-	/* If it's not there we must do full scan to be completely sure */
-	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0))) {
+	if (!lvmcache_label_refresh_for_vg(cmd, vgname, vgid)) {
+		/* The VG wasn't found, so force a full label scan. */
+		lvmcache_force_next_label_scan();
 		lvmcache_label_scan(cmd);
-		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 1))) {
-			/* Independent MDAs aren't supported under low memory */
-			if (!cmd->independent_metadata_areas && critical_section())
-				return_NULL;
-			lvmcache_force_next_label_scan();
-			lvmcache_label_scan(cmd);
-			if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0)))
-				return_NULL;
-		}
+	}
+
+	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0))) {
+		log_debug_metadata("Cache did not find fmt for vgname %s", vgname);
+		return_NULL;
 	}
 
 	/* Now determine the correct vgname if none was supplied */
