@@ -789,7 +789,7 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
 	struct lvmcache_info *info;
 	char *vgname;
 
-	if (!lvmcache_device_from_pvid(cmd, (const struct id *)pvid, NULL, NULL)) {
+	if (!lvmcache_device_from_pvid(cmd, (const struct id *)pvid, NULL)) {
 		log_error("Couldn't find device with uuid %s.", pvid);
 		return NULL;
 	}
@@ -1376,61 +1376,28 @@ struct dm_list *lvmcache_get_pvids(struct cmd_context *cmd, const char *vgname,
 	return pvids;
 }
 
-static struct device *_device_from_pvid(const struct id *pvid,
-					uint64_t *label_sector)
+static struct device *_device_from_pvid(const struct id *pvid, uint64_t *label_sector)
 {
 	struct lvmcache_info *info;
-	struct label *label;
 
 	if ((info = lvmcache_info_from_pvid((const char *) pvid, NULL, 0))) {
-		if (lvmetad_used()) {
-			if (info->label && label_sector)
-				*label_sector = info->label->sector;
-			return info->dev;
-		}
-
-		if (label_read(info->dev, &label, UINT64_C(0))) {
-			info = (struct lvmcache_info *) label->info;
-			if (id_equal(pvid, (struct id *) &info->dev->pvid)) {
-				if (label_sector)
-					*label_sector = label->sector;
-				return info->dev;
-                        }
-		}
+		if (info->label && label_sector)
+			*label_sector = info->label->sector;
+		return info->dev;
 	}
+
 	return NULL;
 }
 
-struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid,
-				unsigned *scan_done_once, uint64_t *label_sector)
+struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector)
 {
 	struct device *dev;
 
-	/* Already cached ? */
 	dev = _device_from_pvid(pvid, label_sector);
 	if (dev)
 		return dev;
 
-	lvmcache_label_scan(cmd);
-
-	/* Try again */
-	dev = _device_from_pvid(pvid, label_sector);
-	if (dev)
-		return dev;
-
-	if (critical_section() || (scan_done_once && *scan_done_once))
-		return NULL;
-
-	lvmcache_force_next_label_scan();
-	lvmcache_label_scan(cmd);
-	if (scan_done_once)
-		*scan_done_once = 1;
-
-	/* Try again */
-	dev = _device_from_pvid(pvid, label_sector);
-	if (dev)
-		return dev;
-
+	log_debug_devs("No device with uuid %s.", (const char *)pvid);
 	return NULL;
 }
 
