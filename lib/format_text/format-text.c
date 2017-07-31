@@ -543,28 +543,25 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 		goto out;
 	}
 
-	/* FIXME 64-bit */
-	if (!(vg = text_read_metadata(fid, NULL, vg_fmtdata, use_previous_vg, area->dev,
-				     (off_t) (area->start + rlocn->offset),
-				     (uint32_t) (rlocn->size - wrap),
-				     (off_t) (area->start + MDA_HEADER_SIZE),
-				     wrap,
-				     calc_crc,
-				     rlocn->checksum,
-				     &when, &desc))
-			&& (!use_previous_vg || !*use_previous_vg))
-		goto_out;
+	vg = text_read_metadata(fid, NULL, vg_fmtdata, use_previous_vg, area->dev,
+				(off_t) (area->start + rlocn->offset),
+				(uint32_t) (rlocn->size - wrap),
+				(off_t) (area->start + MDA_HEADER_SIZE),
+				wrap,
+				calc_crc,
+				rlocn->checksum,
+				&when, &desc);
 
-	if (vg)
-		log_debug_metadata("Read %s %smetadata (%u) from %s at %" PRIu64 " size %"
-				   PRIu64, vg->name, precommitted ? "pre-commit " : "",
-				   vg->seqno, dev_name(area->dev),
-				   area->start + rlocn->offset, rlocn->size);
-	else
-		log_debug_metadata("Skipped reading %smetadata from %s at %" PRIu64 " size %"
-				   PRIu64 " with matching checksum.", precommitted ? "pre-commit " : "",
-				   dev_name(area->dev),
-				   area->start + rlocn->offset, rlocn->size);
+	if (!vg) {
+		/* FIXME: detect and handle errors, and distinguish from the optimization
+		   that skips parsing the metadata which also returns NULL. */
+	}
+
+	log_debug_metadata("Read metadata from %s at %"PRIu64" size %"PRIu64" for VG %s",
+			   dev_name(area->dev),
+			   area->start + rlocn->offset,
+			   rlocn->size,
+			   vgname);
 
 	if (vg && precommitted)
 		vg->status |= PRECOMMITTED;
@@ -1104,6 +1101,8 @@ static int _vg_remove_file(struct format_instance *fid __attribute__((unused)),
 	return 1;
 }
 
+/* used for independent_metadata_areas */
+
 static int _scan_file(const struct format_type *fmt, const char *vgname)
 {
 	struct dirent *dirent;
@@ -1176,7 +1175,6 @@ int read_metadata_location(const struct format_type *fmt,
 	unsigned int len = 0;
 	char buf[NAME_LEN + 1] __attribute__((aligned(8)));
 	uint64_t buffer_size, current_usage;
-	unsigned used_cached_metadata = 0;
 
 	if (mda_free_sectors)
 		*mda_free_sectors = ((dev_area->size - MDA_HEADER_SIZE) / 2) >> SECTOR_SHIFT;
@@ -1230,30 +1228,25 @@ int read_metadata_location(const struct format_type *fmt,
 	vgsummary->mda_checksum = rlocn->checksum;
 	vgsummary->mda_size = rlocn->size;
 
-	if (lvmcache_lookup_mda(vgsummary))
-		used_cached_metadata = 1;
-
-	/* FIXME 64-bit */
 	if (!text_read_metadata_summary(fmt, dev_area->dev, ld,
 				(off_t) (dev_area->start + rlocn->offset),
 				(uint32_t) (rlocn->size - wrap),
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
-				vgsummary))
+				vgsummary)) {
+		/* FIXME: detect and handle errors */
 		return_0;
+	}
 
 	/* Ignore this entry if the characters aren't permissible */
 	if (!validate_name(vgsummary->vgname))
 		return_0;
 
-	log_debug_metadata("%s: %s metadata at %" PRIu64 " size %" PRIu64
-			   " (in area at %" PRIu64 " size %" PRIu64
-			   ") for %s (" FMTVGID ")",
+	log_debug_metadata("Read metadata summary from %s at %"PRIu64" size %"PRIu64" for VG %s",
 			   dev_name(dev_area->dev),
-			   used_cached_metadata ? "Using cached" : "Found",
 			   dev_area->start + rlocn->offset,
-			   rlocn->size, dev_area->start, dev_area->size, vgsummary->vgname,
-			   (char *)&vgsummary->vgid);
+			   rlocn->size,
+			   vgsummary->vgname);
 
 	if (mda_free_sectors) {
 		current_usage = (rlocn->size + SECTOR_SIZE - UINT64_C(1)) -
@@ -1268,6 +1261,8 @@ int read_metadata_location(const struct format_type *fmt,
 
 	return 1;
 }
+
+/* used for independent_metadata_areas */
 
 static int _scan_raw(const struct format_type *fmt, const char *vgname __attribute__((unused)))
 {
@@ -1309,6 +1304,8 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 
 	return 1;
 }
+
+/* used for independent_metadata_areas */
 
 static int _text_scan(const struct format_type *fmt, const char *vgname)
 {
