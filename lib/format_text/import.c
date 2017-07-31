@@ -83,6 +83,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
 					 checksum_only, 1)) {
+			/* FIXME: handle errors */
 			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
 			goto out;
 		}
@@ -139,6 +140,15 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	struct text_vg_version_ops **vsn;
 	int skip_parse;
 
+	/*
+	 * This struct holds the checksum and size of the VG metadata
+	 * that was read from a previous device.  When we read the VG
+	 * metadata from this device, we can skip parsing it into a
+	 * cft (saving time) if the checksum of the metadata buffer
+	 * we read from this device matches the size/checksum saved in
+	 * the mda_header/rlocn struct on this device, and matches the
+	 * size/checksum from the previous device.
+	 */
 	if (vg_fmtdata && !*vg_fmtdata &&
 	    !(*vg_fmtdata = dm_pool_zalloc(fid->mem, sizeof(**vg_fmtdata)))) {
 		log_error("Failed to allocate VG fmtdata for text format.");
@@ -166,6 +176,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 		if (!config_file_read_fd(cft, dev, NULL, offset, size,
 					 offset2, size2, checksum_fn, checksum,
 					 skip_parse, 1)) {
+			/* FIXME: handle errors */
 			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
 			goto out;
 		}
@@ -179,6 +190,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	if (skip_parse) {
 		if (use_previous_vg)
 			*use_previous_vg = 1;
+		log_debug_metadata("Skipped parsing metadata on %s", dev_name(dev));
 		goto out;
 	}
 
