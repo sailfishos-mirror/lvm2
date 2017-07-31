@@ -544,7 +544,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 	}
 
 	/* FIXME 64-bit */
-	if (!(vg = text_vg_import_fd(fid, NULL, vg_fmtdata, use_previous_vg, area->dev,
+	if (!(vg = text_read_metadata(fid, NULL, vg_fmtdata, use_previous_vg, area->dev,
 				     (off_t) (area->start + rlocn->offset),
 				     (uint32_t) (rlocn->size - wrap),
 				     (off_t) (area->start + MDA_HEADER_SIZE),
@@ -896,7 +896,7 @@ static struct volume_group *_vg_read_file_name(struct format_instance *fid,
 	time_t when;
 	char *desc;
 
-	if (!(vg = text_vg_import_file(fid, read_path, &when, &desc)))
+	if (!(vg = text_read_metadata_file(fid, read_path, &when, &desc)))
 		return_NULL;
 
 	/*
