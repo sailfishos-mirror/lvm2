@@ -67,10 +67,10 @@ int read_segtype_lvflags(uint64_t *status, char *segtype_str);
 
 int text_vg_export_file(struct volume_group *vg, const char *desc, FILE *fp);
 size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf);
-struct volume_group *text_vg_import_file(struct format_instance *fid,
+struct volume_group *text_read_metadata_file(struct format_instance *fid,
 					 const char *file,
 					 time_t *when, char **desc);
-struct volume_group *text_vg_import_fd(struct format_instance *fid,
+struct volume_group *text_read_metadata(struct format_instance *fid,
 				       const char *file,
 				       struct cached_vg_fmtdata **vg_fmtdata,
 				       unsigned *use_previous_vg,
