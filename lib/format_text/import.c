@@ -71,11 +71,11 @@ int text_read_metadata_summary(const struct format_type *fmt,
 
 	if (dev) {
 		if (buf_async)
-			log_debug_metadata("Copying metadata for %s at %llu size %d (+%d)",
+			log_debug_metadata("Copying metadata summary for %s at %llu size %d (+%d)",
 					   dev_name(dev), (unsigned long long)offset,
 					   size, size2);
 		else
-			log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+			log_debug_metadata("Reading metadata summary from %s at %llu size %d (+%d)",
 					    dev_name(dev), (unsigned long long)offset,
 					    size, size2);
 
@@ -123,7 +123,7 @@ struct cached_vg_fmtdata {
         size_t cached_mda_size;
 };
 
-struct volume_group *text_vg_import_fd(struct format_instance *fid,
+struct volume_group *text_read_metadata(struct format_instance *fid,
 				       const char *file,
 				       struct cached_vg_fmtdata **vg_fmtdata,
 				       unsigned *use_previous_vg,
@@ -158,11 +158,23 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
 		     ((*vg_fmtdata)->cached_mda_checksum == checksum) &&
 		     ((*vg_fmtdata)->cached_mda_size == (size + size2));
 
-	if ((!dev && !config_file_read(cft)) ||
-	    (dev && !config_file_read_fd(cft, dev, NULL, offset, size,
+	if (dev) {
+		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+				   dev_name(dev), (unsigned long long)offset,
+				   size, size2);
+
+		if (!config_file_read_fd(cft, dev, NULL, offset, size,
 					 offset2, size2, checksum_fn, checksum,
-					 skip_parse, 1)))
-		goto_out;
+					 skip_parse, 1)) {
+			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
+			goto out;
+		}
+	} else {
+		if (!config_file_read(cft)) {
+			log_error("Couldn't read volume group metadata from file.");
+			goto out;
+		}
+	}
 
 	if (skip_parse) {
 		if (use_previous_vg)
@@ -197,11 +209,11 @@ struct volume_group *text_vg_import_fd(struct format_instance *fid,
 	return vg;
 }
 
-struct volume_group *text_vg_import_file(struct format_instance *fid,
+struct volume_group *text_read_metadata_file(struct format_instance *fid,
 					 const char *file,
 					 time_t *when, char **desc)
 {
-	return text_vg_import_fd(fid, file, NULL, NULL, NULL,
+	return text_read_metadata(fid, file, NULL, NULL, NULL,
 				 (off_t)0, 0, (off_t)0, 0,
 				 NULL,
 				 0,

@@ -4367,7 +4367,11 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	/* Ensure contents of all metadata areas match - else do recovery */
 	inconsistent_mda_count=0;
 	dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
+		struct device *mda_dev = mda_get_device(mda);
+
 		use_previous_vg = 0;
+
+		log_debug_metadata("Reading VG %s from mda on %s", vgname, dev_name(mda_dev));
 
 		if ((use_precommitted &&
 		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
