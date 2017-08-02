@@ -25,6 +25,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+static DM_LIST_INIT(label_read_list);
+
 /* FIXME Allow for larger labels?  Restricted to single sector currently */
 
 /*
@@ -447,6 +449,31 @@ struct label *label_create(struct labeller *labeller)
 	return label;
 }
 
+static void _free_label_read_list(int do_close)
+{
+	struct label_read_data *ld, *ld2;
+
+	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+		dm_list_del(&ld->list);
+		if (do_close)
+			dev_close(ld->dev);
+		if (ld->buf)
+			free(ld->buf);
+		free(ld);
+	}
+}
+
+struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct device *dev)
+{
+	struct label_read_data *ld;
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		if (ld->dev == dev)
+			return ld;
+	}
+	return NULL;
+}
+
 /*
  * Start label aio read on a device.
  */
@@ -582,22 +609,22 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 #define MAX_ASYNC_EVENTS 1024
 
 /*
- * label_scan iterates over all visible devices, looking
- * for any that belong to lvm, and fills lvmcache with
- * basic info about them.  It's main job is to prepare
- * for subsequent vg_reads.  vg_read(vgname) needs to
- * know which devices/locations to read metadata from
- * for the given vg name.  The label_scan has scanned
- * all devices and saved info in lvmcache about:
- * the device, the mda locations on that device,
- * and the vgname referenced in those mdas.  So,
- * vg_read(vgname) can map the vgname to a set of
- * mda locations it needs to read to get the metadata.
+ * label_scan run at the start of a command iterates over all visible devices,
+ * looking for any that belong to lvm, and fills lvmcache with basic info about
+ * them.  It's main job is to prepare for subsequent vg_reads.  vg_read(vgname)
+ * needs to know which devices/locations to read metadata from for the given vg
+ * name.  The label_scan has scanned all devices and saved info in lvmcache
+ * about: the device, the mda locations on that device, and the vgname
+ * referenced in those mdas.  So, vg_read(vgname) can map the vgname to a the
+ * subset of devices it needs to read for that VG.
+ */
+
+/*
+ * Scan labels/metadata for all devices (async)
  */
 
 int label_scan_async(struct cmd_context *cmd)
 {
-	struct dm_list label_read_list;
 	struct label_read_data *ld, *ld2;
 	struct dev_iter *iter;
 	struct device *dev;
@@ -611,7 +638,7 @@ int label_scan_async(struct cmd_context *cmd)
 	int dev_count = 0;
 	int error;
 
-	dm_list_init(&label_read_list);
+	_free_label_read_list(0);
 
 	/*
 	 * "buf" is the buffer into which the first ASYNC_SCAN_SIZE bytes
@@ -652,7 +679,7 @@ int label_scan_async(struct cmd_context *cmd)
 
 	dev_cache_full_scan(cmd->full_filter);
 
-	log_debug_devs("Scanning labels async");
+	log_debug_devs("Scanning all labels async");
 
 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
 		log_error("Scanning labels failed to get devices.");
@@ -780,13 +807,8 @@ int label_scan_async(struct cmd_context *cmd)
 
 	io_destroy(aio_ctx);
 
-	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
-		dm_list_del(&ld->list);
+	dm_list_iterate_items(ld, &label_read_list)
 		dev_close(ld->dev);
-		if (ld->buf)
-			free(ld->buf);
-		free(ld);
-	}
 
 	log_debug_devs("Scanned %d labels async", dev_count);
 	return 1;
@@ -807,6 +829,148 @@ bad:
 	}
 	return 0;
 }
+
+/*
+ * Rescan labels/metadata for select devices (async)
+ * (devs from a specific VG)
+ */
+
+int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
+{
+	struct dm_list tmp_label_read_list;
+	struct label_read_data *ld, *ld2;
+	struct device_list *devl;
+	struct device *dev;
+	io_context_t aio_ctx;
+	int need_wait_count;
+	int need_process_count;
+	int dev_count = 0;
+	int error;
+
+	dm_list_init(&tmp_label_read_list);
+
+	memset(&aio_ctx, 0, sizeof(io_context_t));
+
+	error = io_setup(MAX_ASYNC_EVENTS, &aio_ctx);
+	if (error < 0) {
+		log_debug_devs("async io setup error %d, reverting to sync io.", error);
+		return_0;
+	}
+
+	log_debug_devs("Scanning labels for VG devs async");
+
+	dm_list_iterate_items(devl, devs) {
+		dev = devl->dev;
+
+		if (!(ld = get_label_read_data(cmd, dev))) {
+			log_warn("WARNING: label rescan cannot find dev %s", dev_name(dev));
+			continue;
+		}
+
+		/* Temporarily move structs being reread onto local list. */
+		dm_list_del(&ld->list);
+		dm_list_add(&tmp_label_read_list, &ld->list);
+
+		if (!dev_open_readonly(ld->dev)) {
+			log_debug_devs("Reading label skipped can't open %s", dev_name(dev));
+			continue;
+		}
+
+		ld->try_sync = 0;
+		ld->read_done = 0;
+		ld->process_done = 0;
+
+		if (!_label_read_async_start(cmd, aio_ctx, ld))
+			ld->try_sync = 1;
+		else
+			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
+
+		dev_count++;
+	}
+
+	/*
+	 * Try a synchronous read for any dev where aio couldn't be submitted.
+	 */
+	dm_list_iterate_items(ld, &tmp_label_read_list) {
+		if (ld->try_sync) {
+			log_debug_devs("Reading sectors from device %s trying sync", dev_name(ld->dev));
+
+			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
+				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
+				ld->read_result = -1;
+			} else {
+				ld->read_result = ld->buf_len;
+			}
+			ld->read_done = 1;
+		}
+	}
+
+	/*
+	 * Reap the aio and process the results.
+	 */
+
+ check_aio:
+	need_wait_count = 0;
+	need_process_count = 0;
+
+	dm_list_iterate_items(ld, &tmp_label_read_list) {
+		if (!ld->read_done)
+			need_wait_count++;
+		else if (!ld->process_done)
+			need_process_count++;
+	}
+
+	/*
+	 * Process devices that have finished reading label sectors.
+	 * Processing includes sync i/o to read mda locations and vg metadata.
+	 *
+	 * FIXME: we shouldn't need to fully reprocess everything when rescanning.
+	 * lvmcache is already populated from the previous scan, and if nothing
+	 * has changed we don't need to repopulate it with the same data.
+	 * Do something like check the metadata checksum from previous label scan
+	 * and don't reprocess here if it's the same.
+	 */
+	if (need_process_count) {
+		dm_list_iterate_items(ld, &tmp_label_read_list) {
+			if (!ld->read_done || ld->process_done)
+				continue;
+			log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
+			_label_read_async_process(cmd, ld);
+			ld->process_done = 1;
+		}
+	}
+
+	/*
+	 * Wait for more devices to finish reading label sectors.
+	 */
+	if (need_wait_count) {
+		if (_label_read_async_wait(cmd, aio_ctx, need_wait_count))
+			goto check_aio;
+
+		/* TODO: handle this error */
+		/* an error getting aio events, should we fall back
+		   to doing sync dev_read() on any that aren't done? */
+		log_error(INTERNAL_ERROR "aio getevents error");
+	}
+
+	io_destroy(aio_ctx);
+
+	dm_list_iterate_items(ld, &tmp_label_read_list)
+		dev_close(ld->dev);
+
+	/* Move structs being reread back to normal list */
+	dm_list_iterate_items_safe(ld, ld2, &tmp_label_read_list) {
+		dm_list_del(&ld->list);
+		dm_list_add(&label_read_list, &ld->list);
+	}
+
+	log_debug_devs("Scanned %d labels for VG devs async", dev_count);
+	return 1;
+}
+
+/*
+ * Read label/metadata for one dev (sync)
+ */
 
 static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 {
@@ -856,8 +1020,9 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 }
 
 /*
- * Read and process device labels/data without aio.
+ * Scan labels/metadata for all devices (sync)
  */
+
 int label_scan_sync(struct cmd_context *cmd)
 {
 	struct dev_iter *iter;
@@ -865,11 +1030,13 @@ int label_scan_sync(struct cmd_context *cmd)
 	int dev_count = 0;
 	struct lvmcache_info *info;
 
+	_free_label_read_list(0);
+
 	log_debug_devs("Finding devices to scan");
 
 	dev_cache_full_scan(cmd->full_filter);
 
-	log_very_verbose("Scanning labels sync");
+	log_very_verbose("Scanning all labels sync");
 
 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
 		log_error("Scanning labels failed to get devices.");
@@ -897,6 +1064,36 @@ int label_scan_sync(struct cmd_context *cmd)
 	dev_iter_destroy(iter);
 
 	log_very_verbose("Scanned %d labels sync", dev_count);
+	return 1;
+}
+
+/*
+ * Rescan labels/metadata for select devices (sync)
+ * (devs from a specific VG)
+ */
+
+int label_rescan_sync(struct cmd_context *cmd, struct dm_list *devs)
+{
+	struct device_list *devl;
+	int dev_count = 0;
+
+	log_debug_devs("Scanning labels for VG devs sync");
+
+	dm_list_iterate_items(devl, devs) {
+		if (!dev_open_readonly(devl->dev)) {
+			log_debug_devs("Reading label skipped can't open %s", dev_name(devl->dev));
+			continue;
+		}
+
+		_label_read_sync(cmd, devl->dev);
+
+		if (!dev_close(devl->dev))
+			stack;
+
+		dev_count++;
+	}
+
+	log_very_verbose("Scanned %d labels for VG devs sync", dev_count);
 	return 1;
 }
 

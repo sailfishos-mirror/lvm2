@@ -25,6 +25,8 @@
 #include "dev-cache.h"
 #include "lvm-string.h"
 #include "metadata-exported.h"
+#include "lvm-logging.h"
+#include "label.h"
 
 //#define MAX_STRIPES 128U
 //#define SECTOR_SHIFT 9L
@@ -79,11 +81,13 @@ struct metadata_area_ops {
 	struct volume_group *(*vg_read) (struct format_instance * fi,
 					 const char *vg_name,
 					 struct metadata_area * mda,
+					 struct label_read_data *ld,
 					 struct cached_vg_fmtdata **vg_fmtdata,
 					 unsigned *use_previous_vg);
 	struct volume_group *(*vg_read_precommit) (struct format_instance * fi,
 					 const char *vg_name,
 					 struct metadata_area * mda,
+					 struct label_read_data *ld,
 					 struct cached_vg_fmtdata **vg_fmtdata,
 					 unsigned *use_previous_vg);
 	/*
