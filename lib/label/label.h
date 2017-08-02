@@ -131,5 +131,8 @@ void label_destroy(struct label *label);
 
 int label_scan_async(struct cmd_context *cmd);
 int label_scan_sync(struct cmd_context *cmd);
+int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs);
+int label_rescan_sync(struct cmd_context *cmd, struct dm_list *devs);
+struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct device *dev);
 
 #endif

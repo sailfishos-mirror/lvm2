@@ -74,7 +74,7 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset);
  */
 void lvmcache_force_next_label_scan(void);
 int lvmcache_label_scan(struct cmd_context *cmd);
-int lvmcache_label_refresh_for_vg(struct cmd_context *cmd, const char *vgname, const char *vgid);
+int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid);
 
 /* Add/delete a device */
 struct lvmcache_info *lvmcache_add(struct labeller *labeller, const char *pvid,

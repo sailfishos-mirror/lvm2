@@ -125,10 +125,11 @@ struct cached_vg_fmtdata {
 };
 
 struct volume_group *text_read_metadata(struct format_instance *fid,
+				       struct device *dev,
 				       const char *file,
+				       struct label_read_data *ld,
 				       struct cached_vg_fmtdata **vg_fmtdata,
 				       unsigned *use_previous_vg,
-				       struct device *dev,
 				       off_t offset, uint32_t size,
 				       off_t offset2, uint32_t size2,
 				       checksum_fn_t checksum_fn,
@@ -138,6 +139,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	struct volume_group *vg = NULL;
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
+	char *buf_async = NULL;
 	int skip_parse;
 
 	/*
@@ -168,12 +170,32 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 		     ((*vg_fmtdata)->cached_mda_checksum == checksum) &&
 		     ((*vg_fmtdata)->cached_mda_size == (size + size2));
 
-	if (dev) {
-		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
-				   dev_name(dev), (unsigned long long)offset,
-				   size, size2);
+	if (ld) {
+		if (ld->buf_len >= (offset + size))
+			buf_async = ld->buf;
+		else {
+			/*
+			 * Needs data beyond the end of the async read buffer.
+			 * Will do a new synchronous read to get the data.
+			 * (ASYNC_SCAN_SIZE could also be made larger.)
+			 */
+			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
+					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
+			buf_async = NULL;
+		}
+	}
 
-		if (!config_file_read_fd(cft, dev, NULL, offset, size,
+	if (dev) {
+		if (buf_async)
+			log_debug_metadata("Copying metadata for %s at %llu size %d (+%d)",
+					   dev_name(dev), (unsigned long long)offset,
+					   size, size2);
+		else
+			log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+				   	   dev_name(dev), (unsigned long long)offset,
+				           size, size2);
+
+		if (!config_file_read_fd(cft, dev, buf_async, offset, size,
 					 offset2, size2, checksum_fn, checksum,
 					 skip_parse, 1)) {
 			/* FIXME: handle errors */
@@ -225,7 +247,7 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
 					 const char *file,
 					 time_t *when, char **desc)
 {
-	return text_read_metadata(fid, file, NULL, NULL, NULL,
+	return text_read_metadata(fid, NULL, file, NULL, NULL, NULL,
 				 (off_t)0, 0, (off_t)0, 0,
 				 NULL,
 				 0,

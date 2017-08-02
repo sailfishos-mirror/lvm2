@@ -1098,7 +1098,25 @@ next:
 	goto next;
 }
 
-int lvmcache_label_refresh_for_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
+/*
+ * The initial label_scan at the start of the command is done without
+ * holding VG locks.  Then for each VG identified during the label_scan,
+ * vg_read(vgname) is called while holding the VG lock.  The labels
+ * and metadata on this VG's devices could have changed between the
+ * initial unlocked label_scan and the current vg_read().  So, we reread
+ * the labels/metadata for each device in the VG now that we hold the
+ * lock, and use this for processing the VG.
+ *
+ * FIXME: In some cases, the data read by label_scan may be fine, and not
+ * need to be reread here. e.g. a reporting command, possibly with a
+ * special option, could skip this second reread.  Or, we could look
+ * at the VG seqno in each copy of the metadata read in the first label
+ * scan, and if they all match, consider it good enough to use for
+ * reporting without rereading it.  (A command modifying the VG would
+ * always want to reread while the lock is held before modifying.)
+ */
+
+int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
 {
 	struct dm_list devs;
 	struct device_list *devl;
@@ -1122,10 +1140,8 @@ int lvmcache_label_refresh_for_vg(struct cmd_context *cmd, const char *vgname, c
 		dm_list_add(&devs, &devl->list);
 	}
 
-	dm_list_iterate_items(devl, &devs) {
-		log_debug_cache("Reading label on %s for VG %s", dev_name(devl->dev), vgname);
-		label_read(devl->dev, NULL, 0);
-	}
+	if (!cmd->use_aio || !label_rescan_async(cmd, &devs))
+		label_rescan_sync(cmd, &devs);
 
 	/*
 	 * TODO: grab vginfo again, and compare vginfo->infos
