@@ -783,6 +783,10 @@ bad:
  * . pvremove_single()
  * . find_pv_by_name()
  * . get_pvs()
+ * . get_vgids()
+ * . get_vgnames()
+ * . lvmcache_get_vgids()
+ * . lvmcache_get_vgnames()
  * . the vg->pvs_to_write list and pv_to_write struct
  * . vg_reduce()
  */
