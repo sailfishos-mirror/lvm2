@@ -414,8 +414,14 @@ static int _raw_write_mda_header(const struct format_type *fmt,
 	return 1;
 }
 
-static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
+/*
+ * FIXME: unify this with read_metadata_location() which is used
+ * in the label scanning path.
+ */
+
+static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 				       struct mda_header *mdah,
+				       struct label_read_data *ld,
 				       const char *vgname,
 				       int *precommitted)
 {
@@ -450,11 +456,20 @@ static struct raw_locn *_find_vg_rlocn(struct device_area *dev_area,
 	if (!*vgname)
 		return rlocn;
 
-	/* FIXME Loop through rlocns two-at-a-time.  List null-terminated. */
-	/* FIXME Ignore if checksum incorrect!!! */
-	if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
-		      sizeof(vgnamebuf), vgnamebuf))
-		goto_bad;
+	/*
+	 * Verify that the VG metadata pointed to by the rlocn
+	 * begins with a valid vgname.
+	 */
+	if (!ld || (ld->buf_len < dev_area->start + rlocn->offset + NAME_LEN)) {
+		/* FIXME Loop through rlocns two-at-a-time.  List null-terminated. */
+		/* FIXME Ignore if checksum incorrect!!! */
+		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
+		      	      sizeof(vgnamebuf), vgnamebuf))
+			goto_bad;
+	} else {
+		memset(vgnamebuf, 0, sizeof(vgnamebuf));
+		memcpy(vgnamebuf, ld->buf + dev_area->start + rlocn->offset, NAME_LEN);
+	}
 
 	if (!strncmp(vgnamebuf, vgname, len = strlen(vgname)) &&
 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
@@ -503,7 +518,7 @@ static int _raw_holds_vgname(struct format_instance *fid,
 	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area, NULL)))
 		return_0;
 
-	if (_find_vg_rlocn(dev_area, mdah, vgname, &noprecommit))
+	if (_read_metadata_location_vg(dev_area, mdah, NULL, vgname, &noprecommit))
 		r = 1;
 
 	if (!dev_close(dev_area->dev))
@@ -530,7 +545,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 	if (!(mdah = raw_read_mda_header(fid->fmt, area, ld)))
 		goto_out;
 
-	if (!(rlocn = _find_vg_rlocn(area, mdah, vgname, &precommitted))) {
+	if (!(rlocn = _read_metadata_location_vg(area, mdah, ld, vgname, &precommitted))) {
 		log_debug_metadata("VG %s not found on %s", vgname, dev_name(area->dev));
 		goto out;
 	}
@@ -558,7 +573,7 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 		   that skips parsing the metadata which also returns NULL. */
 	}
 
-	log_debug_metadata("Read metadata from %s at %"PRIu64" size %"PRIu64" for VG %s",
+	log_debug_metadata("Found metadata on %s at %"PRIu64" size %"PRIu64" for VG %s",
 			   dev_name(area->dev),
 			   area->start + rlocn->offset,
 			   rlocn->size,
@@ -646,7 +661,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
-	rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit);
+	rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit);
 	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah);
 
 	if (!fidtc->raw_metadata_buf &&
@@ -752,7 +767,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
-	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, old_vg_name ? : vg->name, &noprecommit))) {
+	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit))) {
 		mdah->raw_locns[0].offset = 0;
 		mdah->raw_locns[0].size = 0;
 		mdah->raw_locns[0].checksum = 0;
@@ -862,7 +877,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
 		goto_out;
 
-	if (!(rlocn = _find_vg_rlocn(&mdac->area, mdah, vg->name, &noprecommit))) {
+	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, vg->name, &noprecommit))) {
 		rlocn = &mdah->raw_locns[0];
 		mdah->raw_locns[1].offset = 0;
 	}
@@ -1201,7 +1216,10 @@ int read_metadata_location(const struct format_type *fmt,
 		return 0;
 	}
 
-	/* Do quick check for a vgname */
+	/*
+	 * Verify that the VG metadata pointed to by the rlocn
+	 * begins with a valid vgname.
+	 */
 	if (!ld || (ld->buf_len < dev_area->start + rlocn->offset + NAME_LEN)) {
 		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf))
 			return_0;
