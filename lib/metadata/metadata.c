@@ -715,6 +715,10 @@ int check_pv_dev_sizes(struct volume_group *vg)
  * source file.  All the following and more are only used by liblvm:
  *
  * . get_pvs()
+ * . get_vgids()
+ * . get_vgnames()
+ * . lvmcache_get_vgids()
+ * . lvmcache_get_vgnames()
  * . the vg->pvs_to_write list and pv_to_write struct
  */
 
