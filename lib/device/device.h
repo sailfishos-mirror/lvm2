@@ -19,6 +19,7 @@
 #include "uuid.h"
 
 #include <fcntl.h>
+#include <libaio.h>
 
 #define DEV_ACCESSED_W		0x00000001	/* Device written to? */
 #define DEV_REGULAR		0x00000002	/* Regular file? */
@@ -91,6 +92,37 @@ struct device_area {
 };
 
 /*
+ * We'll collect the results of this many async reads
+ * in one system call.  It shouldn't matter much what
+ * number is used here.
+ */
+#define MAX_GET_EVENTS 16
+
+/*
+ * The number of events to use in io_setup(),
+ * which is the limit on the number of concurrent
+ * async i/o's we can submit.  After all these are
+ * used, io_submit() returns -EAGAIN, and we revert
+ * to doing synchronous io.
+ */
+#define MAX_ASYNC_EVENTS 1024
+
+struct dev_async_context {
+	io_context_t aio_ctx;
+	struct io_event events[MAX_GET_EVENTS];
+};
+
+struct dev_async_io {
+	char *buf;
+	struct iocb iocb;
+	struct device *dev;
+	uint32_t buf_len; /* size of buf */
+	uint32_t len; /* size of submitted io */
+	int done;
+	int result;
+};
+
+/*
  * Support for external device info.
  */
 const char *dev_ext_name(struct device *dev);
@@ -143,5 +175,13 @@ void dev_destroy_file(struct device *dev);
 
 /* Return a valid device name from the alias list; NULL otherwise */
 const char *dev_name_confirmed(struct device *dev, int quiet);
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count);
+struct dev_async_io *dev_async_io_alloc(int buf_len);
+void dev_async_context_destroy(struct dev_async_context *ac);
+void dev_async_io_destroy(struct dev_async_io *aio);
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+                          struct device *dev, uint32_t len, uint64_t offset, int *nospace);
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout);
 
 #endif

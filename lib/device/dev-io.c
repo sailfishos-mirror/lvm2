@@ -827,3 +827,137 @@ int dev_set(struct device *dev, uint64_t offset, size_t len, int value)
 
 	return (len == 0);
 }
+
+/* io_setup() wrapper */
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count)
+{
+	struct dev_async_context *ac;
+	int max_submit_events = MAX_ASYNC_EVENTS;
+	int error;
+
+	if (async_event_count)
+		max_submit_events = async_event_count;
+
+	if (!(ac = malloc(sizeof(struct dev_async_context))))
+		return_0;
+
+	memset(ac, 0, sizeof(struct dev_async_context));
+
+	error = io_setup(max_submit_events, &ac->aio_ctx);
+
+	if (error < 0) {
+		free(ac);
+		return_0;
+	}
+	return ac;
+}
+
+struct dev_async_io *dev_async_io_alloc(int buf_len)
+{
+	struct dev_async_io *aio;
+	char *buf;
+	char **p_buf;
+
+	/*
+	 * mem pool doesn't seem to work for this, probably because
+	 * of the memalign that follows.
+	 */
+	if (!(aio = malloc(sizeof(struct dev_async_io))))
+		return_0;
+
+	memset(aio, 0, sizeof(struct dev_async_io));
+
+	buf = NULL;
+	p_buf = &buf;
+
+	if (posix_memalign((void *)p_buf, getpagesize(), buf_len)) {
+		free(aio);
+		return_NULL;
+	}
+
+	memset(buf, 0, buf_len);
+
+	aio->buf = buf;
+	aio->buf_len = buf_len;
+	return aio;
+}
+
+void dev_async_context_destroy(struct dev_async_context *ac)
+{
+	io_destroy(ac->aio_ctx);
+	free(ac);
+}
+
+void dev_async_io_destroy(struct dev_async_io *aio)
+{
+	if (aio->buf)
+		free(aio->buf);
+	free(aio);
+}
+
+/* io_submit() wrapper */
+
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+			  struct device *dev, uint32_t len, uint64_t offset, int *nospace)
+{
+	struct iocb *iocb = &aio->iocb;
+	int error;
+
+	*nospace = 0;
+
+	if (len > aio->buf_len)
+		return_0;
+
+	aio->len = len;
+
+	iocb->data = aio;
+	iocb->aio_fildes = dev_fd(dev);
+	iocb->aio_lio_opcode = IO_CMD_PREAD;
+	iocb->u.c.buf = aio->buf;
+	iocb->u.c.nbytes = len;
+	iocb->u.c.offset = offset;
+
+	error = io_submit(ac->aio_ctx, 1, &iocb);
+	if (error == -EAGAIN)
+		*nospace = 1;
+	if (error < 0)
+		return 0;
+	return 1;
+}
+
+/* io_getevents() wrapper */
+
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout)
+{
+	int wait_nr;
+	int rv;
+	int i;
+
+ retry:
+	memset(&ac->events, 0, sizeof(ac->events));
+
+	if (wait_count >= MAX_GET_EVENTS)
+		wait_nr = MAX_GET_EVENTS;
+	else
+		wait_nr = wait_count;
+
+	rv = io_getevents(ac->aio_ctx, 1, wait_nr, (struct io_event *)&ac->events, timeout);
+
+	if (rv == -EINTR)
+		goto retry;
+	if (rv < 0)
+		return 0;
+	if (!rv)
+		return 1;
+
+	for (i = 0; i < rv; i++) {
+		struct iocb *iocb = ac->events[i].obj;
+		struct dev_async_io *aio = iocb->data;
+		aio->result = ac->events[i].res;
+		aio->done = 1;
+	}
+
+	return 1;
+}
+
