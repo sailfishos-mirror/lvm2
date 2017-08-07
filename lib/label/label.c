@@ -457,8 +457,8 @@ static void _free_label_read_list(int do_close)
 		dm_list_del(&ld->list);
 		if (do_close)
 			dev_close(ld->dev);
-		if (ld->buf)
-			free(ld->buf);
+		if (ld->aio)
+			dev_async_io_destroy(ld->aio);
 		free(ld);
 	}
 }
@@ -477,31 +477,15 @@ struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct devi
 /*
  * Start label aio read on a device.
  */
-static int _label_read_async_start(struct cmd_context *cmd, io_context_t aio_ctx, struct label_read_data *ld)
+static int _label_read_async_start(struct dev_async_context *ac, struct label_read_data *ld)
 {
-	struct iocb *iocb = &ld->iocb;
-	int ret;
+	int nospace = 0;
 
-	iocb->data = ld;
-	iocb->aio_fildes = dev_fd(ld->dev);
-	iocb->aio_lio_opcode = IO_CMD_PREAD;
-	iocb->u.c.buf = ld->buf;
-	iocb->u.c.nbytes = ld->buf_len;
-	iocb->u.c.offset = 0;
-
-	ret = io_submit(aio_ctx, 1, &iocb);
-
-	/*
-	 * This means that the number of devices exceeded the number of events
-	 * set up in io_setup().
-	 */
-	if (ret == -EAGAIN) {
-		log_debug_devs("Reading label no aio event for %s", dev_name(ld->dev));
-		return 0;
-	}
-
-	if (ret < 0) {
-		log_debug_devs("Reading label aio submit error %d for %s", ret, dev_name(ld->dev));
+	if (!dev_async_read_submit(ac, ld->aio, ld->dev, ld->buf_len, 0, &nospace)) {
+		if (nospace)
+			log_debug_devs("Reading label no aio event for %s", dev_name(ld->dev));
+		else
+			log_debug_devs("Reading label aio submit error for %s", dev_name(ld->dev));
 		return 0;
 	}
 
@@ -509,46 +493,11 @@ static int _label_read_async_start(struct cmd_context *cmd, io_context_t aio_ctx
 }
 
 /*
- * We'll collect the results of this many async reads
- * in one system call.  It shouldn't matter much what
- * number is used here.
- */
-#define MAX_GET_EVENTS 16
-
-/*
  * Reap aio reads from devices.
  */
-static int _label_read_async_wait(struct cmd_context *cmd, io_context_t aio_ctx, int wait_count)
+static int _label_read_async_wait(struct dev_async_context *ac, int wait_count)
 {
-	struct io_event events[MAX_GET_EVENTS];
-	int wait_nr;
-	int ret;
-	int i;
-
- retry:
-	memset(&events, 0, sizeof(events));
-
-	if (wait_count >= MAX_GET_EVENTS)
-		wait_nr = MAX_GET_EVENTS;
-	else
-		wait_nr = wait_count;
-
-	ret = io_getevents(aio_ctx, 1, wait_nr, (struct io_event *)&events, NULL);
-	if (ret == -EINTR)
-		goto retry;
-	if (ret < 0)
-		return 0;
-	if (!ret)
-		return 1;
-
-	for (i = 0; i < ret; i++) {
-		struct iocb *iocb = events[i].obj;
-		struct label_read_data *ld = iocb->data;
-		ld->read_result = events[i].res;
-		ld->read_done = 1;
-	}
-
-	return 1;
+	return dev_async_getevents(ac, wait_count, NULL);
 }
 
 /*
@@ -565,9 +514,9 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 	uint64_t sector;
 	int r = 0;
 
-	if ((ld->read_result < 0) || (ld->read_result != ld->buf_len)) {
+	if ((ld->aio->result < 0) || (ld->aio->result != ld->aio->len)) {
 		/* FIXME: handle errors */
-		log_error("Reading label sectors aio error %d from %s", ld->read_result, dev_name(ld->dev));
+		log_error("Reading label sectors aio error %d from %s", ld->aio->result, dev_name(ld->dev));
 		goto out;
 	}
 
@@ -600,15 +549,6 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 }
 
 /*
- * The number of events to use in io_setup(),
- * which is the limit on the number of concurrent
- * async i/o's we can submit.  After all these are
- * used, io_submit() returns -EAGAIN, and we revert
- * to doing synchronous io.
- */
-#define MAX_ASYNC_EVENTS 1024
-
-/*
  * label_scan run at the start of a command iterates over all visible devices,
  * looking for any that belong to lvm, and fills lvmcache with basic info about
  * them.  It's main job is to prepare for subsequent vg_reads.  vg_read(vgname)
@@ -628,15 +568,12 @@ int label_scan_async(struct cmd_context *cmd)
 	struct label_read_data *ld, *ld2;
 	struct dev_iter *iter;
 	struct device *dev;
-	io_context_t aio_ctx;
+	struct dev_async_context *ac;
 	struct lvmcache_info *info;
-	char *buf;
-	char **p_buf;
 	int buf_len;
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
-	int error;
 
 	_free_label_read_list(0);
 
@@ -661,17 +598,19 @@ int label_scan_async(struct cmd_context *cmd)
 	 */
 	buf_len = ASYNC_SCAN_SIZE;
 
-	memset(&aio_ctx, 0, sizeof(io_context_t));
-
 	/*
 	 * if aio setup fails, caller will revert to sync scan
 	 * The number of events set up here is the max number of
 	 * concurrent async reads that can be submitted.  After
 	 * all of those are used, we revert to synchronous reads.
+	 *
+	 * FIXME: add a config setting to control the number passed
+	 * into setup used for max async events in io_setup().
+	 * (0 uses default)
 	 */
-	error = io_setup(MAX_ASYNC_EVENTS, &aio_ctx);
-	if (error < 0) {
-		log_debug_devs("async io setup error %d, reverting to sync io.", error);
+
+	if (!(ac = dev_async_context_setup(0))) {
+		log_debug_devs("async io setup error, reverting to sync io.");
 		return_0;
 	}
 
@@ -710,24 +649,18 @@ int label_scan_async(struct cmd_context *cmd)
 		/*
 		 * FIXME: mem pool code doesn't work for this, probably because
 		 * of the posix_memalign below.  Try using mem pool to allocate
-		 * all the ld structs first, then allocate all the aligned aio
-		 * buffers.
+		 * all the ld structs first, then allocate all aio and aio->buf.
 		 */
 		if (!(ld = malloc(sizeof(*ld))))
 			goto_bad;
 
 		memset(ld, 0, sizeof(*ld));
 
-		buf = NULL;
-		p_buf = &buf;
-
-		if (posix_memalign((void *)p_buf, getpagesize(), buf_len))
+		if (!(ld->aio = dev_async_io_alloc(buf_len)))
 			goto_bad;
 
-		memset(buf, 0, buf_len);
-
 		ld->dev = dev;
-		ld->buf = buf;
+		ld->buf = ld->aio->buf;
 		ld->buf_len = buf_len;
 
 		dm_list_add(&label_read_list, &ld->list);
@@ -740,7 +673,7 @@ int label_scan_async(struct cmd_context *cmd)
 	 * fail and the next loop will try a sync read for it.
 	 */
 	dm_list_iterate_items(ld, &label_read_list) {
-		if (!_label_read_async_start(cmd, aio_ctx, ld))
+		if (!_label_read_async_start(ac, ld))
 			ld->try_sync = 1;
 		else
 			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
@@ -748,6 +681,7 @@ int label_scan_async(struct cmd_context *cmd)
 
 	/*
 	 * Try a synchronous read for any dev where aio couldn't be submitted.
+	 * Reuse the aio buffer, result and done fields.
 	 */
 	dm_list_iterate_items(ld, &label_read_list) {
 		if (ld->try_sync) {
@@ -755,11 +689,11 @@ int label_scan_async(struct cmd_context *cmd)
 
 			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
 				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
-				ld->read_result = -1;
+				ld->aio->result = -1;
 			} else {
-				ld->read_result = ld->buf_len;
+				ld->aio->result = ld->buf_len;
 			}
-			ld->read_done = 1;
+			ld->aio->done = 1;
 		}
 	}
 
@@ -772,7 +706,7 @@ int label_scan_async(struct cmd_context *cmd)
 	need_process_count = 0;
 
 	dm_list_iterate_items(ld, &label_read_list) {
-		if (!ld->read_done)
+		if (!ld->aio->done)
 			need_wait_count++;
 		else if (!ld->process_done)
 			need_process_count++;
@@ -784,7 +718,7 @@ int label_scan_async(struct cmd_context *cmd)
 	 */
 	if (need_process_count) {
 		dm_list_iterate_items(ld, &label_read_list) {
-			if (!ld->read_done || ld->process_done)
+			if (!ld->aio->done || ld->process_done)
 				continue;
 			log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
 			_label_read_async_process(cmd, ld);
@@ -796,7 +730,7 @@ int label_scan_async(struct cmd_context *cmd)
 	 * Wait for more devices to finish reading label sectors.
 	 */
 	if (need_wait_count) {
-		if (_label_read_async_wait(cmd, aio_ctx, need_wait_count))
+		if (_label_read_async_wait(ac, need_wait_count))
 			goto check_aio;
 
 		/* TODO: handle this error */
@@ -805,7 +739,7 @@ int label_scan_async(struct cmd_context *cmd)
 		log_error(INTERNAL_ERROR "aio getevents error");
 	}
 
-	io_destroy(aio_ctx);
+	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &label_read_list)
 		dev_close(ld->dev);
@@ -818,13 +752,12 @@ bad:
 	log_error("async label scan failed, reverting to sync scan.");
 
 	dev_iter_destroy(iter);
-	io_destroy(aio_ctx);
+	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
 		dm_list_del(&ld->list);
 		dev_close(ld->dev);
-		if (ld->buf)
-			free(ld->buf);
+		dev_async_io_destroy(ld->aio);
 		free(ld);
 	}
 	return 0;
@@ -841,19 +774,15 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 	struct label_read_data *ld, *ld2;
 	struct device_list *devl;
 	struct device *dev;
-	io_context_t aio_ctx;
+	struct dev_async_context *ac;
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
-	int error;
 
 	dm_list_init(&tmp_label_read_list);
 
-	memset(&aio_ctx, 0, sizeof(io_context_t));
-
-	error = io_setup(MAX_ASYNC_EVENTS, &aio_ctx);
-	if (error < 0) {
-		log_debug_devs("async io setup error %d, reverting to sync io.", error);
+	if (!(ac = dev_async_context_setup(0))) {
+		log_debug_devs("async io setup error, reverting to sync io.");
 		return_0;
 	}
 
@@ -877,10 +806,10 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 		}
 
 		ld->try_sync = 0;
-		ld->read_done = 0;
+		ld->aio->done = 0;
 		ld->process_done = 0;
 
-		if (!_label_read_async_start(cmd, aio_ctx, ld))
+		if (!_label_read_async_start(ac, ld))
 			ld->try_sync = 1;
 		else
 			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
@@ -897,11 +826,11 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 
 			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
 				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
-				ld->read_result = -1;
+				ld->aio->result = -1;
 			} else {
-				ld->read_result = ld->buf_len;
+				ld->aio->result = ld->buf_len;
 			}
-			ld->read_done = 1;
+			ld->aio->done = 1;
 		}
 	}
 
@@ -914,7 +843,7 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 	need_process_count = 0;
 
 	dm_list_iterate_items(ld, &tmp_label_read_list) {
-		if (!ld->read_done)
+		if (!ld->aio->done)
 			need_wait_count++;
 		else if (!ld->process_done)
 			need_process_count++;
@@ -932,7 +861,7 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 	 */
 	if (need_process_count) {
 		dm_list_iterate_items(ld, &tmp_label_read_list) {
-			if (!ld->read_done || ld->process_done)
+			if (!ld->aio->done || ld->process_done)
 				continue;
 			log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
 			_label_read_async_process(cmd, ld);
@@ -944,7 +873,7 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 	 * Wait for more devices to finish reading label sectors.
 	 */
 	if (need_wait_count) {
-		if (_label_read_async_wait(cmd, aio_ctx, need_wait_count))
+		if (_label_read_async_wait(ac, need_wait_count))
 			goto check_aio;
 
 		/* TODO: handle this error */
@@ -953,7 +882,7 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 		log_error(INTERNAL_ERROR "aio getevents error");
 	}
 
-	io_destroy(aio_ctx);
+	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &tmp_label_read_list)
 		dev_close(ld->dev);
