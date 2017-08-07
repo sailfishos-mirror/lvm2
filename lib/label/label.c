@@ -453,12 +453,15 @@ static void _free_label_read_list(int do_close)
 {
 	struct label_read_data *ld, *ld2;
 
-	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
-		dm_list_del(&ld->list);
+	dm_list_iterate_items(ld, &label_read_list) {
 		if (do_close)
 			dev_close(ld->dev);
 		if (ld->aio)
 			dev_async_io_destroy(ld->aio);
+	}
+
+	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+		dm_list_del(&ld->list);
 		free(ld);
 	}
 }
@@ -651,22 +654,24 @@ int label_scan_async(struct cmd_context *cmd)
 		 * of the posix_memalign below.  Try using mem pool to allocate
 		 * all the ld structs first, then allocate all aio and aio->buf.
 		 */
-		if (!(ld = malloc(sizeof(*ld))))
+		if (!(ld = dm_malloc(sizeof(*ld))))
 			goto_bad;
 
 		memset(ld, 0, sizeof(*ld));
 
-		if (!(ld->aio = dev_async_io_alloc(buf_len)))
-			goto_bad;
-
 		ld->dev = dev;
-		ld->buf = ld->aio->buf;
-		ld->buf_len = buf_len;
-
 		dm_list_add(&label_read_list, &ld->list);
 		dev_count++;
 	};
 	dev_iter_destroy(iter);
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		if (!(ld->aio = dev_async_io_alloc(buf_len)))
+			goto_bad;
+
+		ld->buf = ld->aio->buf;
+		ld->buf_len = buf_len;
+	}
 
 	/*
 	 * Start the aio reads on each dev.  Flag any that
@@ -754,12 +759,16 @@ bad:
 	dev_iter_destroy(iter);
 	dev_async_context_destroy(ac);
 
-	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
-		dm_list_del(&ld->list);
+	dm_list_iterate_items(ld, &label_read_list) {
 		dev_close(ld->dev);
 		dev_async_io_destroy(ld->aio);
-		free(ld);
 	}
+
+	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+		dm_list_del(&ld->list);
+		dm_free(ld);
+	}
+
 	return 0;
 }
 
