@@ -1756,6 +1756,7 @@ int lvmetad_pv_gone_by_dev(struct device *dev)
  */
 
 struct _lvmetad_pvscan_baton {
+	struct cmd_context *cmd;
 	struct volume_group *vg;
 	struct format_instance *fid;
 };
@@ -1763,10 +1764,14 @@ struct _lvmetad_pvscan_baton {
 static int _lvmetad_pvscan_single(struct metadata_area *mda, void *baton)
 {
 	struct _lvmetad_pvscan_baton *b = baton;
+	struct device *mda_dev = mda_get_device(mda);
+	struct label_read_data *ld;
 	struct volume_group *vg;
 
+	ld = get_label_read_data(b->cmd, mda_dev);
+
 	if (mda_is_ignored(mda) ||
-	    !(vg = mda->ops->vg_read(b->fid, "", mda, NULL, NULL, NULL)))
+	    !(vg = mda->ops->vg_read(b->fid, "", mda, ld, NULL, NULL)))
 		return 1;
 
 	/* FIXME Also ensure contents match etc. */
@@ -1860,6 +1865,7 @@ scan_more:
 
 		info = (struct lvmcache_info *) label->info;
 
+		baton.cmd = cmd;
 		baton.vg = NULL;
 		baton.fid = lvmcache_fmt(info)->ops->create_instance(lvmcache_fmt(info), &fic);
 		if (!baton.fid)
@@ -2087,15 +2093,21 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
 		return 1;
 	}
 
-	if (!label_read(dev, &label, 0)) {
-		log_print_unless_silent("No PV label found on %s.", dev_name(dev));
+	if (!(info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
+		log_print_unless_silent("No PV info found on %s for PVID %s.", dev_name(dev), dev->pvid);
 		if (!lvmetad_pv_gone_by_dev(dev))
 			goto_bad;
 		return 1;
 	}
 
-	info = (struct lvmcache_info *) label->info;
+	if (!(label = lvmcache_get_label(info))) {
+		log_print_unless_silent("No PV label found for %s.", dev_name(dev));
+		if (!lvmetad_pv_gone_by_dev(dev))
+			goto_bad;
+		return 1;
+	}
 
+	baton.cmd = cmd;
 	baton.vg = NULL;
 	baton.fid = lvmcache_fmt(info)->ops->create_instance(lvmcache_fmt(info), &fic);
 
@@ -2184,6 +2196,9 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 		log_warn("WARNING: lvmetad update is interrupting another update in progress.");
 		replacing_other_update = 1;
 	}
+
+	if (!cmd->use_aio || !label_scan_async(cmd))
+		label_scan_sync(cmd);
 
 	log_verbose("Scanning all devices to update lvmetad.");
 

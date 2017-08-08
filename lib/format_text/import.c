@@ -256,7 +256,7 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
 
 static struct volume_group *_import_vg_from_config_tree(const struct dm_config_tree *cft,
 							struct format_instance *fid,
-							unsigned allow_lvmetad_extensions)
+							unsigned for_lvmetad)
 {
 	struct volume_group *vg = NULL;
 	struct text_vg_version_ops **vsn;
@@ -271,7 +271,7 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
 		 * The only path to this point uses cached vgmetadata,
 		 * so it can use cached PV state too.
 		 */
-		if (!(vg = (*vsn)->read_vg(fid, cft, allow_lvmetad_extensions)))
+		if (!(vg = (*vsn)->read_vg(fid, cft, for_lvmetad)))
 			stack;
 		else if ((vg_missing = vg_missing_pv_count(vg))) {
 			log_verbose("There are %d physical volumes missing.",

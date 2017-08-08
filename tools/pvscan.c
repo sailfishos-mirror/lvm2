@@ -434,8 +434,10 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
 	 *  to drop any devices that have left.)
 	 */
 
-	if (argc || devno_args)
+	if (argc || devno_args) {
 		log_verbose("Scanning devices on command line.");
+		cmd->pvscan_cache_single = 1;
+	}
 
 	while (argc--) {
 		pv_name = *argv++;
@@ -453,6 +455,12 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
 			} else {
 				/* Add device path to lvmetad. */
 				log_debug("Scanning dev %s for lvmetad cache.", pv_name);
+
+				/* FIXME: add a label read async for single dev to use here */
+				if (!label_read(dev, NULL, 0)) {
+					add_errors++;
+					continue;
+				}
 				if (!lvmetad_pvscan_single(cmd, dev, &found_vgnames, &pp.changed_vgnames))
 					add_errors++;
 			}
@@ -471,6 +479,12 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
 			} else {
 				/* Add major:minor to lvmetad. */
 				log_debug("Scanning dev %d:%d for lvmetad cache.", major, minor);
+
+				/* FIXME: add a label read async for single dev to use here */
+				if (!label_read(dev, NULL, 0)) {
+					add_errors++;
+					continue;
+				}
 				if (!lvmetad_pvscan_single(cmd, dev, &found_vgnames, &pp.changed_vgnames))
 					add_errors++;
 			}
