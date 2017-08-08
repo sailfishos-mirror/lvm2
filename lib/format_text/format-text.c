@@ -1784,15 +1784,18 @@ static struct metadata_area_ops _metadata_text_raw_ops = {
 	.mda_import_text = _mda_import_text_raw
 };
 
+/* used only for sending info to lvmetad */
+
 static int _mda_export_text_raw(struct metadata_area *mda,
 				struct dm_config_tree *cft,
 				struct dm_config_node *parent)
 {
 	struct mda_context *mdc = (struct mda_context *) mda->metadata_locn;
-	char mdah[MDA_HEADER_SIZE]; /* temporary */
 
-	if (!mdc || !_raw_read_mda_header((struct mda_header *)mdah, &mdc->area, NULL))
+	if (!mdc) {
+		log_error(INTERNAL_ERROR "mda_export_text_raw no mdc");
 		return 1; /* pretend the MDA does not exist */
+	}
 
 	return config_make_nodes(cft, parent, NULL,
 				 "ignore = %" PRId64, (int64_t) mda_is_ignored(mda),
@@ -1801,6 +1804,8 @@ static int _mda_export_text_raw(struct metadata_area *mda,
 				 "free_sectors = %" PRId64, (int64_t) mdc->free_sectors,
 				 NULL) ? 1 : 0;
 }
+
+/* used only for receiving info from lvmetad */
 
 static int _mda_import_text_raw(struct lvmcache_info *info, const struct dm_config_node *cn)
 {
