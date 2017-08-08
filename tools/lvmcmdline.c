@@ -2798,7 +2798,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 	cmd->position_argv = argv;
 
 	set_cmd_name(cmd->name);
-
+	
 	if (arg_is_set(cmd, backgroundfork_ARG)) {
 		if (!become_daemon(cmd, 1)) {
 			/* parent - quit immediately */
