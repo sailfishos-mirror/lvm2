@@ -1178,8 +1178,8 @@ int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const 
 		dm_list_add(&devs, &devl->list);
 	}
 
-	if (!cmd->use_aio || !label_rescan_async(cmd, &devs))
-		label_rescan_sync(cmd, &devs);
+	if (!cmd->use_aio || !label_scan_devs_async(cmd, &devs))
+		label_scan_devs_sync(cmd, &devs);
 
 	/*
 	 * TODO: grab vginfo again, and compare vginfo->infos
@@ -1427,6 +1427,23 @@ struct dm_list *lvmcache_get_pvids(struct cmd_context *cmd, const char *vgname,
 	}
 
 	return pvids;
+}
+
+int lvmcache_get_vg_devs(struct cmd_context *cmd,
+			 struct lvmcache_vginfo *vginfo,
+			 struct dm_list *devs)
+{
+	struct lvmcache_info *info;
+	struct device_list *devl;
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+			return_0;
+
+		devl->dev = info->dev;
+		dm_list_add(devs, &devl->list);
+	}
+	return 1;
 }
 
 static struct device *_device_from_pvid(const struct id *pvid, uint64_t *label_sector)
