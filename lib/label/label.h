@@ -127,8 +127,17 @@ void label_destroy(struct label *label);
 
 int label_scan_async(struct cmd_context *cmd);
 int label_scan_sync(struct cmd_context *cmd);
-int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs);
-int label_rescan_sync(struct cmd_context *cmd, struct dm_list *devs);
+int label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs);
+int label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs);
 struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct device *dev);
+
+/*
+ * FIXME: get rid of these force variations by making label_scan
+ * never skip scanning when info is cached.
+ * _force versions don't skip scanning label when info exists
+ * in lvmcache.
+ */
+int label_scan_async_force(struct cmd_context *cmd);
+int label_scan_sync_force(struct cmd_context *cmd);
 
 #endif
