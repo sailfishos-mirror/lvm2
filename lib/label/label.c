@@ -462,7 +462,7 @@ static void _free_label_read_list(int do_close)
 
 	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
 		dm_list_del(&ld->list);
-		free(ld);
+		dm_free(ld);
 	}
 }
 
@@ -552,6 +552,31 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 }
 
 /*
+ * ld->buf is the buffer into which the first ASYNC_SCAN_SIZE bytes
+ * of each device are read.  The memory for buf needs to be aligned.
+ *
+ * This data is meant to big large enough to cover all the
+ * headers and metadata that need to be read from the device
+ * during the label scan for most common cases.
+ *
+ * 1. one of the first four sectors holds:
+ *    label_header, pv_header, pv_header_extention
+ *
+ * 2. the mda_header whose location is found from 1.
+ *
+ * 3. the metadata whose location is from found 2.
+ *
+ * If during processing, metadata needs to be read in a region
+ * beyond this buffer, then the code will revert do doing a
+ * synchronous read of the data it needs.
+ */
+static int _get_async_scan_size(struct cmd_context *cmd)
+{
+	/* FIXME: make this a config setting, default to a multiple of optimal_io_size? */
+	return ASYNC_SCAN_SIZE;
+}
+
+/*
  * label_scan run at the start of a command iterates over all visible devices,
  * looking for any that belong to lvm, and fills lvmcache with basic info about
  * them.  It's main job is to prepare for subsequent vg_reads.  vg_read(vgname)
@@ -564,9 +589,16 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 
 /*
  * Scan labels/metadata for all devices (async)
+ *
+ * Reads and looks at label_header, pv_header, pv_header_extension,
+ * mda_header, raw_locns, vg metadata from each device.
+ *
+ * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
+ * from the devs.  If a scanned device does not have a label_header,
+ * its info is removed from lvmcache.
  */
 
-int label_scan_async(struct cmd_context *cmd)
+static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 {
 	struct label_read_data *ld, *ld2;
 	struct dev_iter *iter;
@@ -580,26 +612,7 @@ int label_scan_async(struct cmd_context *cmd)
 
 	_free_label_read_list(0);
 
-	/*
-	 * "buf" is the buffer into which the first ASYNC_SCAN_SIZE bytes
-	 * of each device are read.  The memory for buf needs to be aligned.
-	 *
-	 * This data is meant to big large enough to cover all the
-	 * headers and metadata that need to be read from the device
-	 * during the label scan for most common cases.
-	 *
-	 * 1. one of the first four sectors holds:
-	 *    label_header, pv_header, pv_header_extention
-	 *
-	 * 2. the mda_header whose location is found from 1.
-	 *
-	 * 3. the metadata whose location is from found 2.
-	 *
-	 * If during processing, metadata needs to be read in a region
-	 * beyond this buffer, then the code will revert do doing a
-	 * synchronous read of the data it needs.
-	 */
-	buf_len = ASYNC_SCAN_SIZE;
+	buf_len = _get_async_scan_size(cmd);
 
 	/*
 	 * if aio setup fails, caller will revert to sync scan
@@ -621,10 +634,10 @@ int label_scan_async(struct cmd_context *cmd)
 
 	dev_cache_full_scan(cmd->full_filter);
 
-	log_debug_devs("Scanning all labels async");
+	log_debug_devs("Scanning data from all devs async");
 
 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
-		log_error("Scanning labels failed to get devices.");
+		log_error("Scanning data failed to get devices.");
 		return 0;
 	}
 
@@ -639,7 +652,7 @@ int label_scan_async(struct cmd_context *cmd)
 		 * FIXME: fix code so it's not scanning labels when it's not needed,
 		 * then stuff like this can be removed.
 		 */
-		if ((info = lvmcache_info_from_pvid(dev->pvid, dev, 1))) {
+		if (skip_cached && (info = lvmcache_info_from_pvid(dev->pvid, dev, 1))) {
 			log_debug_devs("Reading label skipped in cache %s", dev_name(dev));
 			continue;
         	}
@@ -749,19 +762,20 @@ int label_scan_async(struct cmd_context *cmd)
 	dm_list_iterate_items(ld, &label_read_list)
 		dev_close(ld->dev);
 
-	log_debug_devs("Scanned %d labels async", dev_count);
+	log_debug_devs("Scanned data from all %d devs async", dev_count);
 	return 1;
 
 bad:
 	/* caller will try sync scan */
-	log_error("async label scan failed, reverting to sync scan.");
+	log_error("async data scan failed, reverting to sync scan.");
 
 	dev_iter_destroy(iter);
 	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &label_read_list) {
 		dev_close(ld->dev);
-		dev_async_io_destroy(ld->aio);
+		if (ld->aio)
+			dev_async_io_destroy(ld->aio);
 	}
 
 	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
@@ -772,21 +786,40 @@ bad:
 	return 0;
 }
 
+int label_scan_async(struct cmd_context *cmd)
+{
+	return _label_scan_async(cmd, 1);
+}
+
+int label_scan_async_force(struct cmd_context *cmd)
+{
+	return _label_scan_async(cmd, 0);
+}
+
 /*
- * Rescan labels/metadata for select devices (async)
- * (devs from a specific VG)
+ * Read or reread label/metadata from selected devs (async).
+ *
+ * Reads and looks at label_header, pv_header, pv_header_extension,
+ * mda_header, raw_locns, vg metadata from each device.
+ *
+ * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
+ * from the devs.  If a scanned device does not have a label_header,
+ * its info is removed from lvmcache.
  */
 
-int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
+int label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 {
 	struct dm_list tmp_label_read_list;
 	struct label_read_data *ld, *ld2;
 	struct device_list *devl;
 	struct device *dev;
 	struct dev_async_context *ac;
+	int buf_len;
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
+
+	buf_len = _get_async_scan_size(cmd);
 
 	dm_list_init(&tmp_label_read_list);
 
@@ -795,18 +828,32 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 		return_0;
 	}
 
-	log_debug_devs("Scanning labels for VG devs async");
+	log_debug_devs("Scanning data from devs async");
 
 	dm_list_iterate_items(devl, devs) {
 		dev = devl->dev;
 
 		if (!(ld = get_label_read_data(cmd, dev))) {
-			log_warn("WARNING: label rescan cannot find dev %s", dev_name(dev));
-			continue;
+			/* New device hasn't been scanned before. */
+
+			if (!(ld = dm_malloc(sizeof(*ld))))
+				goto_bad;
+
+			memset(ld, 0, sizeof(*ld));
+
+			if (!(ld->aio = dev_async_io_alloc(buf_len))) {
+				dm_free(ld);
+				goto_bad;
+			}
+
+			ld->buf = ld->aio->buf;
+			ld->buf_len = buf_len;
+			ld->dev = dev;
+		} else {
+			/* Temporarily move structs being reread onto local list. */
+			dm_list_del(&ld->list);
 		}
 
-		/* Temporarily move structs being reread onto local list. */
-		dm_list_del(&ld->list);
 		dm_list_add(&tmp_label_read_list, &ld->list);
 
 		if (!dev_open_readonly(ld->dev)) {
@@ -860,7 +907,8 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 
 	/*
 	 * Process devices that have finished reading label sectors.
-	 * Processing includes sync i/o to read mda locations and vg metadata.
+	 * Processing can include sync i/o to read metadata areas
+	 * beyond the ASYNC_SCAN_SIZE.
 	 *
 	 * FIXME: we shouldn't need to fully reprocess everything when rescanning.
 	 * lvmcache is already populated from the previous scan, and if nothing
@@ -902,12 +950,54 @@ int label_rescan_async(struct cmd_context *cmd, struct dm_list *devs)
 		dm_list_add(&label_read_list, &ld->list);
 	}
 
-	log_debug_devs("Scanned %d labels for VG devs async", dev_count);
+	log_debug_devs("Scanned data from %d devs async", dev_count);
 	return 1;
+
+bad:
+	/* caller will try sync scan */
+	log_error("async data scan failed, reverting to sync scan.");
+
+	dev_async_context_destroy(ac);
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		dev_close(ld->dev);
+		if (ld->aio)
+			dev_async_io_destroy(ld->aio);
+	}
+
+	dm_list_iterate_items(ld, &tmp_label_read_list) {
+		dev_close(ld->dev);
+		if (ld->aio)
+			dev_async_io_destroy(ld->aio);
+	}
+
+	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
+		dm_list_del(&ld->list);
+		dm_free(ld);
+	}
+
+	dm_list_iterate_items_safe(ld, ld2, &tmp_label_read_list) {
+		dm_list_del(&ld->list);
+		dm_free(ld);
+	}
+
+	return 0;
 }
 
 /*
  * Read label/metadata for one dev (sync)
+ *
+ * Reads and looks at label_header, pv_header, pv_header_extension,
+ * mda_header, raw_locns, vg metadata from each device.
+ *
+ * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
+ * from the devs.  If a scanned device does not have a label_header,
+ * its info is removed from lvmcache.
+ *
+ * FIXME: allocate label_read_data structs for devs and read data
+ * into there rather than into stack buffers.  Then the data can
+ * be found and reused throughout the scan path, rather than doing
+ * a separate disk read for everything.
  */
 
 static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
@@ -959,9 +1049,16 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 
 /*
  * Scan labels/metadata for all devices (sync)
+ *
+ * Reads and looks at label_header, pv_header, pv_header_extension,
+ * mda_header, raw_locns, vg metadata from each device.
+ *
+ * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
+ * from the devs.  If a scanned device does not have a label_header,
+ * its info is removed from lvmcache.
  */
 
-int label_scan_sync(struct cmd_context *cmd)
+static int _label_scan_sync(struct cmd_context *cmd, int skip_cached)
 {
 	struct dev_iter *iter;
 	struct device *dev;
@@ -974,15 +1071,15 @@ int label_scan_sync(struct cmd_context *cmd)
 
 	dev_cache_full_scan(cmd->full_filter);
 
-	log_very_verbose("Scanning all labels sync");
+	log_very_verbose("Scanning data from all devs sync");
 
 	if (!(iter = dev_iter_create(cmd->full_filter, 0))) {
-		log_error("Scanning labels failed to get devices.");
+		log_error("Scanning data failed to get devices.");
 		return 0;
 	}
 
 	while ((dev = dev_iter_get(iter))) {
-		if ((info = lvmcache_info_from_pvid(dev->pvid, dev, 1))) {
+		if (skip_cached && (info = lvmcache_info_from_pvid(dev->pvid, dev, 1))) {
 			log_debug_devs("Reading label skipped in cache %s", dev_name(dev));
 			continue;
         	}
@@ -1001,21 +1098,37 @@ int label_scan_sync(struct cmd_context *cmd)
 	}
 	dev_iter_destroy(iter);
 
-	log_very_verbose("Scanned %d labels sync", dev_count);
+	log_very_verbose("Scanned data from all %d devs sync", dev_count);
 	return 1;
 }
 
+int label_scan_sync(struct cmd_context *cmd)
+{
+	return _label_scan_sync(cmd, 1);
+}
+
+int label_scan_sync_force(struct cmd_context *cmd)
+{
+	return _label_scan_sync(cmd, 0);
+}
+
 /*
- * Rescan labels/metadata for select devices (sync)
- * (devs from a specific VG)
+ * Read or reread label/metadata from selected devs (sync).
+ *
+ * Reads and looks at label_header, pv_header, pv_header_extension,
+ * mda_header, raw_locns, vg metadata from each device.
+ *
+ * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
+ * from the devs.  If a scanned device does not have a label_header,
+ * its info is removed from lvmcache.
  */
 
-int label_rescan_sync(struct cmd_context *cmd, struct dm_list *devs)
+int label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs)
 {
 	struct device_list *devl;
 	int dev_count = 0;
 
-	log_debug_devs("Scanning labels for VG devs sync");
+	log_debug_devs("Scanning data from devs sync");
 
 	dm_list_iterate_items(devl, devs) {
 		if (!dev_open_readonly(devl->dev)) {
@@ -1031,7 +1144,7 @@ int label_rescan_sync(struct cmd_context *cmd, struct dm_list *devs)
 		dev_count++;
 	}
 
-	log_very_verbose("Scanned %d labels for VG devs sync", dev_count);
+	log_very_verbose("Scanned data from %d devs sync", dev_count);
 	return 1;
 }
 
