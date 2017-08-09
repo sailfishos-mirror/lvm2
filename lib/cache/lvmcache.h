@@ -215,4 +215,8 @@ void lvmcache_save_suspended_vg(struct volume_group *vg, int precommitted);
 struct volume_group *lvmcache_get_suspended_vg(const char *vgid);
 void lvmcache_drop_suspended_vg(struct volume_group *vg);
 
+int lvmcache_get_vg_devs(struct cmd_context *cmd,
+                         struct lvmcache_vginfo *vginfo,
+                         struct dm_list *devs);
+
 #endif
