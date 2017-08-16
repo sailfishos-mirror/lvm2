@@ -828,6 +828,8 @@ int dev_set(struct device *dev, uint64_t offset, size_t len, int value)
 	return (len == 0);
 }
 
+#ifdef AIO_SUPPORT
+
 /* io_setup() wrapper */
 
 struct dev_async_context *dev_async_context_setup(unsigned async_event_count)
@@ -961,3 +963,35 @@ int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct tim
 	return 1;
 }
 
+#else /* AIO_SUPPORT */
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count)
+{
+	return NULL;
+}
+
+struct dev_async_io *dev_async_io_alloc(int buf_len)
+{
+	return NULL;
+}
+
+void dev_async_context_destroy(struct dev_async_context *ac)
+{
+}
+
+void dev_async_io_destroy(struct dev_async_io *aio)
+{
+}
+
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+			  struct device *dev, uint32_t len, uint64_t offset, int *nospace)
+{
+	return 0;
+}
+
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout)
+{
+	return 0;
+}
+
+#endif /* AIO_SUPPORT */
