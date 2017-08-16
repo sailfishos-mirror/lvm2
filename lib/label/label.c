@@ -786,16 +786,6 @@ bad:
 	return 0;
 }
 
-int label_scan_async(struct cmd_context *cmd)
-{
-	return _label_scan_async(cmd, 1);
-}
-
-int label_scan_async_force(struct cmd_context *cmd)
-{
-	return _label_scan_async(cmd, 0);
-}
-
 /*
  * Read or reread label/metadata from selected devs (async).
  *
@@ -807,7 +797,7 @@ int label_scan_async_force(struct cmd_context *cmd)
  * its info is removed from lvmcache.
  */
 
-int label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
+static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 {
 	struct dm_list tmp_label_read_list;
 	struct label_read_data *ld, *ld2;
@@ -1102,16 +1092,6 @@ static int _label_scan_sync(struct cmd_context *cmd, int skip_cached)
 	return 1;
 }
 
-int label_scan_sync(struct cmd_context *cmd)
-{
-	return _label_scan_sync(cmd, 1);
-}
-
-int label_scan_sync_force(struct cmd_context *cmd)
-{
-	return _label_scan_sync(cmd, 0);
-}
-
 /*
  * Read or reread label/metadata from selected devs (sync).
  *
@@ -1123,7 +1103,7 @@ int label_scan_sync_force(struct cmd_context *cmd)
  * its info is removed from lvmcache.
  */
 
-int label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs)
+static int _label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs)
 {
 	struct device_list *devl;
 	int dev_count = 0;
@@ -1146,5 +1126,51 @@ int label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs)
 
 	log_very_verbose("Scanned data from %d devs sync", dev_count);
 	return 1;
+}
+
+/*
+ * FIXME: get rid of the force variations by making label_scan
+ * never skip scanning when info is cached.
+ * _force versions don't skip scanning label when info exists
+ * in lvmcache.
+ */
+
+int label_scan_force(struct cmd_context *cmd)
+{
+	int ret = 0;
+
+	if (cmd->use_aio)
+		ret = _label_scan_async(cmd, 0);
+
+	if (!ret)
+		ret = _label_scan_sync(cmd, 0);
+
+	return ret;
+}
+
+int label_scan(struct cmd_context *cmd)
+{
+	int ret = 0;
+
+	if (cmd->use_aio)
+		ret = _label_scan_async(cmd, 1);
+
+	if (!ret)
+		ret = _label_scan_sync(cmd, 1);
+
+	return ret;
+}
+
+int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs)
+{
+	int ret = 0;
+
+	if (cmd->use_aio)
+		ret = _label_scan_devs_async(cmd, devs);
+
+	if (!ret)
+		ret = _label_scan_devs_sync(cmd, devs);
+
+	return ret;
 }
 
