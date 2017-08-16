@@ -46,7 +46,7 @@ LDFLAGS += -L$(top_builddir)/lib -L$(top_builddir)/daemons/dmeventd
 LIBS += $(LVMINTERNAL_LIBS) -ldevmapper
 
 ifeq ("@AIO@", "yes")
-	LIBS += -laio
+	LIBS += $(AIO_LIBS)
 endif
 
 .PHONY: install_dynamic install_static install_include install_pkgconfig

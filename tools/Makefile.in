@@ -110,7 +110,7 @@ ifeq ("@CMDLIB@", "yes")
 endif
 
 ifeq ("@AIO@", "yes")
-	LVMLIBS += -laio
+	LVMLIBS += $(AIO_LIBS)
 endif
 
 EXPORTED_HEADER = $(srcdir)/lvm2cmd.h
