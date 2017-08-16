@@ -705,6 +705,7 @@ ELDFLAGS
 DM_LIB_PATCHLEVEL
 DMEVENTD_PATH
 DL_LIBS
+AIO
 DEVMAPPER
 DEFAULT_USE_LVMLOCKD
 DEFAULT_USE_LVMPOLLD
@@ -951,6 +952,7 @@ enable_profiling
 enable_testing
 enable_valgrind_pool
 enable_devmapper
+enable_aio
 enable_lvmetad
 enable_lvmpolld
 enable_lvmlockd_sanlock
@@ -1689,6 +1691,7 @@ Optional Features:
   --enable-testing        enable testing targets in the makefile
   --enable-valgrind-pool  enable valgrind awareness of pools
   --disable-devmapper     disable LVM2 device-mapper interaction
+  --disable-aio           disable async i/o
   --enable-lvmetad        enable the LVM Metadata Daemon
   --enable-lvmpolld       enable the LVM Polling Daemon
   --enable-lvmlockd-sanlock
@@ -3177,6 +3180,7 @@ case "$host_os" in
 		LDDEPS="$LDDEPS .export.sym"
 		LIB_SUFFIX=so
 		DEVMAPPER=yes
+		AIO=yes
 		BUILD_LVMETAD=no
 		BUILD_LVMPOLLD=no
 		LOCKDSANLOCK=no
@@ -3196,6 +3200,7 @@ case "$host_os" in
 		CLDNOWHOLEARCHIVE=
 		LIB_SUFFIX=dylib
 		DEVMAPPER=yes
+		AIO=no
 		ODIRECT=no
 		DM_IOCTLS=no
 		SELINUX=no
@@ -11841,6 +11846,23 @@ $as_echo "#define DEVMAPPER_SUPPORT 1" >>confdefs.h
 fi
 
 ################################################################################
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use aio" >&5
+$as_echo_n "checking whether to use aio... " >&6; }
+# Check whether --enable-aio was given.
+if test "${enable_aio+set}" = set; then :
+  enableval=$enable_aio; AIO=$enableval
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $AIO" >&5
+$as_echo "$AIO" >&6; }
+
+if test "$AIO" = yes; then
+
+$as_echo "#define AIO_SUPPORT 1" >>confdefs.h
+
+fi
+
+################################################################################
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to build LVMetaD" >&5
 $as_echo_n "checking whether to build LVMetaD... " >&6; }
 # Check whether --enable-lvmetad was given.
@@ -15631,6 +15653,7 @@ _ACEOF
 
 
 ################################################################################
+
 
 
 
