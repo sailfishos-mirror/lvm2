@@ -78,7 +78,7 @@ LIBS += $(LVMINTERNAL_LIBS) -ldevmapper $(PTHREAD_LIBS)
 CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
 
 ifeq ("@AIO@", "yes")
-	LIBS += -laio
+	LIBS += $(AIO_LIBS)
 endif
 
 INSTALL_TARGETS = \
