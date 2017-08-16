@@ -2386,7 +2386,13 @@ static int _get_current_settings(struct cmd_context *cmd)
 	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
 		return EINVALID_CMD_LINE;
 
+#ifdef AIO_SUPPORT
 	cmd->use_aio = find_config_tree_bool(cmd, metadata_scan_async_CFG, NULL);
+#else
+	cmd->use_aio = 0;
+	if (find_config_tree_bool(cmd, metadata_scan_async_CFG, NULL))
+		log_verbose("No async I/O support, ignoring metadata/scan_async.");
+#endif
 
 	/* Zero indicates success */
 	return 0;
