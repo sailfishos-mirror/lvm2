@@ -32,7 +32,7 @@ endif
 endif
 
 ifeq ("@AIO@", "yes")
-	LVMLIBS += -laio
+	LVMLIBS += $(AIO_LIBS)
 endif
 
 LVM_SCRIPTS = lvmdump.sh lvmconf.sh
