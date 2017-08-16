@@ -1881,8 +1881,7 @@ static struct volume_group *_lvmetad_pvscan_vg(struct cmd_context *cmd, struct v
 	 */
 	log_debug_lvmetad("Rescan VG %s scanning data from devs in previous metadata.", vg->name);
 
-	if (!cmd->use_aio || !label_scan_devs_async(cmd, &pvs_scan))
-		label_scan_devs_sync(cmd, &pvs_scan);
+	label_scan_devs(cmd, &pvs_scan);
 
 	/*
 	 * Check if any pvs_scan entries are no longer PVs.
@@ -2149,8 +2148,7 @@ static struct volume_group *_lvmetad_pvscan_vg(struct cmd_context *cmd, struct v
 		if (found_new_pvs)
 			log_debug_lvmetad("Rescan VG %s scanning all devs to find new PVs.", vg->name);
 
-		if (!cmd->use_aio || !label_scan_async_force(cmd))
-			label_scan_sync_force(cmd);
+		label_scan_force(cmd);
 
 		if (!(vginfo = lvmcache_vginfo_from_vgname(vg->name, NULL))) {
 			log_error("VG %s vg info not found after rescanning devices.", vg->name);
@@ -2365,8 +2363,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 		replacing_other_update = 1;
 	}
 
-	if (!cmd->use_aio || !label_scan_async(cmd))
-		label_scan_sync(cmd);
+	label_scan(cmd);
 
 	log_verbose("Scanning all devices to update lvmetad.");
 

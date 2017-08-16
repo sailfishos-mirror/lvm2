@@ -1178,8 +1178,7 @@ int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const 
 		dm_list_add(&devs, &devl->list);
 	}
 
-	if (!cmd->use_aio || !label_scan_devs_async(cmd, &devs))
-		label_scan_devs_sync(cmd, &devs);
+	label_scan_devs(cmd, &devs);
 
 	/*
 	 * TODO: grab vginfo again, and compare vginfo->infos
@@ -1246,14 +1245,11 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	 * with infos/vginfos based on reading headers from
 	 * each device, and a vg summary from each mda.
 	 *
-	 * Note that these will *skip* scanning a device if
+	 * Note that this will *skip* scanning a device if
 	 * an info struct already exists in lvmcache for
-	 * the device.  To really scan every device here,
-	 * you need to destroy lvmcache first.
-	 * (even "force" does not force this to scan devices.)
+	 * the device.
 	 */
-	if (!cmd->use_aio || !label_scan_async(cmd))
-		label_scan_sync(cmd);
+	label_scan(cmd);
 
 	/*
 	 * _choose_preferred_devs() returns:
