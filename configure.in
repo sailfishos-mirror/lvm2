@@ -1143,7 +1143,12 @@ AC_ARG_ENABLE(aio,
 AC_MSG_RESULT($AIO)
 
 if test "$AIO" = yes; then
-	AC_DEFINE([AIO_SUPPORT], 1, [Define to 1 to enable async i/o.])
+	AC_CHECK_LIB(aio, io_setup,
+		[AC_DEFINE([AIO_SUPPORT], 1, [Define to 1 if aio is available.])
+		AIO_LIBS="-laio"
+		AIO_SUPPORT=yes],
+		[AIO_LIBS=
+		AIO_SUPPORT=no ])
 fi
 
 ################################################################################
@@ -2091,6 +2096,7 @@ AC_SUBST(AIO)
 AC_SUBST(DLM_CFLAGS)
 AC_SUBST(DLM_LIBS)
 AC_SUBST(DL_LIBS)
+AC_SUBST(AIO_LIBS)
 AC_SUBST(DMEVENTD_PATH)
 AC_SUBST(DM_LIB_PATCHLEVEL)
 AC_SUBST(ELDFLAGS)
