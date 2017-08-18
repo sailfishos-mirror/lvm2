@@ -98,6 +98,40 @@ int lv_merge_segments(struct logical_volume *lv)
 		return; \
 }
 
+/* Check RAID @seg for proper delta disks flags */
+static void _check_raid_delta_disks(struct lv_segment *seg, int *error_count)
+{
+	uint32_t disks_minus = 0, disks_plus = 0, s;
+
+	for (s = 0; s < seg->area_count; s++) {
+		if (seg_lv(seg, s)->status & LV_RESHAPE_DELTA_DISKS_PLUS)
+			disks_plus++;
+		if (seg_lv(seg, s)->status & LV_RESHAPE_DELTA_DISKS_MINUS)
+			disks_minus++;
+		if (seg_is_striped_raid(seg) &&
+		    (disks_plus || disks_minus) &&
+		    s < 2 * seg->segtype->parity_devs)
+			raid_seg_error("LV_RESHAPE_DELTA_DISK_PLUS/MINUS set on wrong rimage");
+	}
+
+	if (disks_plus && disks_minus)
+		raid_seg_error("both LV_RESHAPE_DELTA_DISK_PLUS flag and LV_RESHAPE_DELTA_DISK_MINUS");
+
+	if (seg->area_count + disks_plus > DEFAULT_RAID_MAX_IMAGES)
+		raid_seg_error("too many LV_RESHAPE_DELTA_DISK_PLUS rimages");
+
+	if (seg_is_striped_raid(seg) &&
+	    seg->area_count - disks_minus < 2 * seg->segtype->parity_devs)
+		raid_seg_error("too many LV_RESHAPE_DELTA_DISK_PLUS/MINUS rimage(s)");
+
+	if (!seg_is_striped_raid(seg)) {
+		if (disks_plus)
+			raid_seg_error("bogus LV_RESHAPE_DELTA_DISK_PLUS");
+		if (disks_minus)
+			raid_seg_error("bogus LV_RESHAPE_DELTA_DISK_MINUS");
+	}
+}
+
 /* Check raid0 segment properties in @seg */
 static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
 {
@@ -119,8 +153,9 @@ static void _check_raid0_seg(struct lv_segment *seg, int *error_count)
 		raid_seg_error_val("non-zero min recovery rate", seg->min_recovery_rate);
 	if (seg->max_recovery_rate)
 		raid_seg_error_val("non-zero max recovery rate", seg->max_recovery_rate);
-	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset)
+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || (seg->data_offset > 1))
 		raid_seg_error_val("data_offset", seg->data_offset);
+	_check_raid_delta_disks(seg, error_count);
 }
 
 /* Check RAID @seg for non-zero, power of 2 region size and min recovery rate <= max */
@@ -143,8 +178,9 @@ static void _check_raid1_seg(struct lv_segment *seg, int *error_count)
 		raid_seg_error("no meta areas");
 	if (seg->stripe_size)
 		raid_seg_error_val("non-zero stripe size", seg->stripe_size);
-	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || seg->data_offset)
+	if ((seg->lv->status & LV_RESHAPE_DATA_OFFSET) || (seg->data_offset > 1))
 		raid_seg_error_val("data_offset", seg->data_offset);
+	_check_raid_delta_disks(seg, error_count);
 	_check_raid_region_recovery(seg, error_count);
 }
 
@@ -170,10 +206,13 @@ static void _check_raid45610_seg(struct lv_segment *seg, int *error_count)
 	/* END: checks applying to any raid4/5/6/10 */
 
 	if (seg->lv->status & LV_RESHAPE_DATA_OFFSET) {
-		if (seg->data_offset & (seg->lv->vg->extent_size - 1))
+		if (seg->data_offset > 1 &&
+		   (seg->data_offset & (seg->lv->vg->extent_size - 1)))
 			raid_seg_error_val("data_offset", seg->data_offset);
-	} else if (seg->data_offset)
+	} else if (seg->data_offset > 1)
 		raid_seg_error_val("data_offset", seg->data_offset);
+
+	_check_raid_delta_disks(seg, error_count);
 
 	/* Specific checks per raid level */
 	if (seg_is_raid4(seg) ||
