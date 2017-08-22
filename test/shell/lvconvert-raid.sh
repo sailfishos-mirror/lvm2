@@ -100,6 +100,17 @@ done
 done
 
 ##############################################
+# RAID1 - stripes option not allowed
+##############################################
+lvcreate -aey -l 2 -n $lv1 $vg
+not lvconvert --type raid1 -y -m 1 --stripes 2 $vg/$lv1
+not lvconvert --type raid1 -y -m 1 --stripesize 64k $vg/$lv1
+not lvconvert --type raid1 -y -m 1 -I 64k $vg/$lv1
+# NOTE: -i is --interval not --stripe here!
+lvconvert --type raid1 -y -m 1 -i 2 $vg/$lv1
+lvremove -ff $vg
+
+##############################################
 # RAID1 - shouldn't be able to add image
 #         if created '--nosync', but should
 #         be able to after 'lvchange --resync'
