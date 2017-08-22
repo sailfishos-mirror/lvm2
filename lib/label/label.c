@@ -27,6 +27,54 @@
 
 static DM_LIST_INIT(label_read_list);
 
+/*
+ * Label reading/scanning
+ *
+ * label_scan
+ *   label_scan_async
+ *   label_scan_sync
+ *
+ * label_scan_devs
+ *   label_scan_devs_async
+ *   label_scan_devs_sync
+ *
+ * label_scan_force
+ *
+ * label_scan() run at the start of a command iterates over all visible devices,
+ * reading them, looking for any that belong to lvm, and fills lvmcache with
+ * basic info about them.  It's main job is to prepare for subsequent vg_reads.
+ * vg_read(vgname) needs to know which devices/locations to read metadata from
+ * for the given vg name.  The label_scan has scanned all devices and saved info
+ * in lvmcache about: the device, the mda locations on that device, and the vgname
+ * referenced in those mdas.  So, using the info gathered during label_scan,
+ * vg_read(vgname) can map the vgname to a the subset of devices it needs to read
+ * for that VG.
+ *
+ * label_scan_devs() is run at the beginning of vg_read(vgname) to repeat the
+ * reading done by label_scan() on only the devices related to the given vgname.
+ * The label_scan() was done without a lock on the vg name, so the vg may have
+ * changed between the label_scan() and the vg_read(vgname) in which the vg
+ * lock is now held.  Repeating the reading ensures that the correct data from
+ * the devices is being used by the vg_read().  vg_read() itself then uses
+ * the data that has been reread by label_scan_devs() to process the full metadata.
+ *
+ * To illustrate the device reads being done, consider the 'vgs' command
+ * with three devices: PV1 and PV2 in VGA, and PV3 in VGB.
+ *
+ * 1. label_scan() reads data from PV1, PV2, PV3,
+ * and fills lvmcache with info/vginfo structs that show
+ * PV1 and PV2 are used by VGA, and PV3 is used by VGB.
+ *
+ * 2. vg_read(VGA) rereads the same data from from PV1 and PV2
+ * and processes the metadata for VGA.
+ *
+ * 3. vg_read(VGB) rereads the same data from PV3 and processes
+ * the metadata for VGB.
+ *
+ * In total there are six device reads: three in step 1, two in step 2,
+ * and one in step 3.
+ */
+
 /* FIXME Allow for larger labels?  Restricted to single sector currently */
 
 /*
@@ -192,6 +240,24 @@ static struct labeller *_find_label_header(struct device *dev,
 	return r;
 }
 
+static void _remove_label_read_data(struct device *dev)
+{
+	struct label_read_data *ld;
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		if (ld->dev == dev) {
+			dm_list_del(&ld->list);
+			if (ld->aio)
+				dev_async_io_destroy(ld->aio);
+			else if (ld->buf)
+				dm_free(ld->buf);
+			dm_free(ld);
+			return;
+		}
+
+	}
+}
+
 /* FIXME Also wipe associated metadata area headers? */
 int label_remove(struct device *dev)
 {
@@ -203,6 +269,8 @@ int label_remove(struct device *dev)
 	struct labeller_i *li;
 	struct label_header *lh;
 	struct lvmcache_info *info;
+
+	_remove_label_read_data(dev);
 
 	memset(buf, 0, LABEL_SIZE);
 
@@ -349,12 +417,68 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	return r;
 }
 
+#if 0
+static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
+{
+	char scanbuf[LABEL_SCAN_SIZE] __attribute__((aligned(8)));
+	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
+	struct label *label = NULL;
+	struct labeller *l;
+	uint64_t sector;
+	int r = 0;
+
+	memset(scanbuf, 0, sizeof(scanbuf));
+
+	log_debug_devs("Reading label sectors from device %s", dev_name(dev));
+
+	/*
+	 * Read first four sectors into scanbuf.
+	 */
+	if (!dev_read(dev, 0, LABEL_SCAN_SIZE, scanbuf)) {
+		log_debug_devs("%s: Failed to read label area", dev_name(dev));
+		goto out;
+	}
+
+	log_debug_devs("Parsing label and data from device %s", dev_name(dev));
+
+	/*
+	 * Finds the sector from scanbuf containing the label and copies into label_buf.
+	 * label_buf: struct label_header + struct pv_header + struct pv_header_extension
+	 */
+	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, 0))) {
+		/* FIXME: handle bad label */
+		goto_out;
+	}
+
+	/*
+	 * ops->read() is usually _text_read() which reads
+	 * the pv_header, mda locations, mda contents.
+	 * It saves the info it finds into lvmcache info/vginfo structs.
+	 */
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, &label)) && label) {
+		label->dev = dev;
+		label->sector = sector;
+	} else {
+		/* FIXME: handle errors */
+	}
+ out:
+	return r;
+}
+#endif
+
 /* Caller may need to use label_get_handler to create label struct! */
 int label_write(struct device *dev, struct label *label)
 {
 	char buf[LABEL_SIZE] __attribute__((aligned(8)));
 	struct label_header *lh = (struct label_header *) buf;
 	int r = 1;
+
+	/*
+	 * This shouldn't necessary because there's nothing that would
+	 * use the existing ld, but there's no sense in keeping around
+	 * data we know is stale.
+	 */
+	_remove_label_read_data(dev);
 
 	if (!label->labeller->ops->write) {
 		log_error("Label handler does not support label writes");
@@ -429,6 +553,7 @@ int label_verify(struct device *dev)
 
 void label_destroy(struct label *label)
 {
+	_remove_label_read_data(label->dev);
 	label->labeller->ops->destroy_label(label->labeller, label);
 	dm_free(label);
 }
@@ -458,6 +583,11 @@ static void _free_label_read_list(int do_close)
 			dev_close(ld->dev);
 		if (ld->aio)
 			dev_async_io_destroy(ld->aio);
+		else if (ld->buf) {
+			/* when aio exists, ld->buf just points to aio->buf,
+			   but when aio is not used, ld->buf is allocated. */
+			dm_free(ld->buf);
+		}
 	}
 
 	dm_list_iterate_items_safe(ld, ld2, &label_read_list) {
@@ -478,38 +608,42 @@ struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct devi
 }
 
 /*
- * Start label aio read on a device.
+ * ld->buf is the buffer into which the first scan_size bytes
+ * of each device are read.
+ *
+ * This data is meant to big large enough to cover all the
+ * headers and metadata that need to be read from the device
+ * during the label scan for most common cases.
+ *
+ * 1. one of the first four sectors holds:
+ *    label_header, pv_header, pv_header_extention
+ *
+ * 2. the mda_header whose location is found from 1.
+ *
+ * 3. the metadata whose location is from found 2.
+ *
+ * If during processing, metadata needs to be read in a region
+ * beyond this buffer, then the code will revert do doing a
+ * synchronous read of the data it needs.
  */
-static int _label_read_async_start(struct dev_async_context *ac, struct label_read_data *ld)
+static int _get_scan_size(struct cmd_context *cmd)
 {
-	int nospace = 0;
-
-	if (!dev_async_read_submit(ac, ld->aio, ld->dev, ld->buf_len, 0, &nospace)) {
-		if (nospace)
-			log_debug_devs("Reading label no aio event for %s", dev_name(ld->dev));
-		else
-			log_debug_devs("Reading label aio submit error for %s", dev_name(ld->dev));
-		return 0;
-	}
-
-	return 1;
+	/* FIXME: make this a config setting, default to a multiple of optimal_io_size? */
+	return ASYNC_SCAN_SIZE;
 }
 
 /*
- * Reap aio reads from devices.
- */
-static int _label_read_async_wait(struct dev_async_context *ac, int wait_count)
-{
-	return dev_async_getevents(ac, wait_count, NULL);
-}
-
-/*
- * Process / parse headers from buffer holding label header.
+ * scan_size bytes of data has been read into ld->buf, using either
+ * async or sync io.  Now process/parse the headers from that buffer.
  * Populates lvmcache with device / mda locations / vgname
  * so that vg_read(vgname) will know which devices/locations
  * to read metadata from.
+ *
+ * If during processing, headers/metadata are found to be needed
+ * beyond the range of LABEL_SCAN_SIZE, then additional synchronous
+ * reads are performed in the processing functions to get that data.
  */
-static int _label_read_async_process(struct cmd_context *cmd, struct label_read_data *ld)
+static int _label_read_data_process(struct cmd_context *cmd, struct label_read_data *ld)
 {
 	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
 	struct label *label = NULL;
@@ -517,9 +651,9 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 	uint64_t sector;
 	int r = 0;
 
-	if ((ld->aio->result < 0) || (ld->aio->result != ld->aio->len)) {
+	if ((ld->result < 0) || (ld->result != ld->buf_len)) {
 		/* FIXME: handle errors */
-		log_error("Reading label sectors aio error %d from %s", ld->aio->result, dev_name(ld->dev));
+		log_error("Reading label sectors aio error %d from %s", ld->result, dev_name(ld->dev));
 		goto out;
 	}
 
@@ -552,40 +686,30 @@ static int _label_read_async_process(struct cmd_context *cmd, struct label_read_
 }
 
 /*
- * ld->buf is the buffer into which the first ASYNC_SCAN_SIZE bytes
- * of each device are read.  The memory for buf needs to be aligned.
- *
- * This data is meant to big large enough to cover all the
- * headers and metadata that need to be read from the device
- * during the label scan for most common cases.
- *
- * 1. one of the first four sectors holds:
- *    label_header, pv_header, pv_header_extention
- *
- * 2. the mda_header whose location is found from 1.
- *
- * 3. the metadata whose location is from found 2.
- *
- * If during processing, metadata needs to be read in a region
- * beyond this buffer, then the code will revert do doing a
- * synchronous read of the data it needs.
+ * Start label aio read on a device.
  */
-static int _get_async_scan_size(struct cmd_context *cmd)
+static int _label_read_async_start(struct dev_async_context *ac, struct label_read_data *ld)
 {
-	/* FIXME: make this a config setting, default to a multiple of optimal_io_size? */
-	return ASYNC_SCAN_SIZE;
+	int nospace = 0;
+
+	if (!dev_async_read_submit(ac, ld->aio, ld->dev, ld->buf_len, 0, &nospace)) {
+		if (nospace)
+			log_debug_devs("Reading label no aio event for %s", dev_name(ld->dev));
+		else
+			log_debug_devs("Reading label aio submit error for %s", dev_name(ld->dev));
+		return 0;
+	}
+
+	return 1;
 }
 
 /*
- * label_scan run at the start of a command iterates over all visible devices,
- * looking for any that belong to lvm, and fills lvmcache with basic info about
- * them.  It's main job is to prepare for subsequent vg_reads.  vg_read(vgname)
- * needs to know which devices/locations to read metadata from for the given vg
- * name.  The label_scan has scanned all devices and saved info in lvmcache
- * about: the device, the mda locations on that device, and the vgname
- * referenced in those mdas.  So, vg_read(vgname) can map the vgname to a the
- * subset of devices it needs to read for that VG.
+ * Reap aio reads from devices.
  */
+static int _label_read_async_wait(struct dev_async_context *ac, int wait_count)
+{
+	return dev_async_getevents(ac, wait_count, NULL);
+}
 
 /*
  * Scan labels/metadata for all devices (async)
@@ -612,7 +736,7 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 
 	_free_label_read_list(0);
 
-	buf_len = _get_async_scan_size(cmd);
+	buf_len = _get_scan_size(cmd);
 
 	/*
 	 * if aio setup fails, caller will revert to sync scan
@@ -707,9 +831,9 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 
 			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
 				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
-				ld->aio->result = -1;
+				ld->result = -1;
 			} else {
-				ld->aio->result = ld->buf_len;
+				ld->result = ld->buf_len;
 			}
 			ld->aio->done = 1;
 		}
@@ -738,8 +862,9 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 		dm_list_iterate_items(ld, &label_read_list) {
 			if (!ld->aio->done || ld->process_done)
 				continue;
+			ld->result = ld->aio->result;
 			log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
-			_label_read_async_process(cmd, ld);
+			_label_read_data_process(cmd, ld);
 			ld->process_done = 1;
 		}
 	}
@@ -809,7 +934,7 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 	int need_process_count;
 	int dev_count = 0;
 
-	buf_len = _get_async_scan_size(cmd);
+	buf_len = _get_scan_size(cmd);
 
 	dm_list_init(&tmp_label_read_list);
 
@@ -872,9 +997,9 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 
 			if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
 				log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
-				ld->aio->result = -1;
+				ld->result = -1;
 			} else {
-				ld->aio->result = ld->buf_len;
+				ld->result = ld->buf_len;
 			}
 			ld->aio->done = 1;
 		}
@@ -910,8 +1035,9 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 		dm_list_iterate_items(ld, &tmp_label_read_list) {
 			if (!ld->aio->done || ld->process_done)
 				continue;
+			ld->result = ld->aio->result;
 			log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
-			_label_read_async_process(cmd, ld);
+			_label_read_data_process(cmd, ld);
 			ld->process_done = 1;
 		}
 	}
@@ -975,69 +1101,6 @@ bad:
 }
 
 /*
- * Read label/metadata for one dev (sync)
- *
- * Reads and looks at label_header, pv_header, pv_header_extension,
- * mda_header, raw_locns, vg metadata from each device.
- *
- * Effect is populating lvmcache with latest info/vginfo (PV/VG) data
- * from the devs.  If a scanned device does not have a label_header,
- * its info is removed from lvmcache.
- *
- * FIXME: allocate label_read_data structs for devs and read data
- * into there rather than into stack buffers.  Then the data can
- * be found and reused throughout the scan path, rather than doing
- * a separate disk read for everything.
- */
-
-static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
-{
-	char scanbuf[LABEL_SCAN_SIZE] __attribute__((aligned(8)));
-	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
-	struct label *label = NULL;
-	struct labeller *l;
-	uint64_t sector;
-	int r = 0;
-
-	memset(scanbuf, 0, sizeof(scanbuf));
-
-	log_debug_devs("Reading label sectors from device %s", dev_name(dev));
-
-	/*
-	 * Read first four sectors into scanbuf.
-	 */
-	if (!dev_read(dev, 0, LABEL_SCAN_SIZE, scanbuf)) {
-		log_debug_devs("%s: Failed to read label area", dev_name(dev));
-		goto out;
-	}
-
-	log_debug_devs("Parsing label and data from device %s", dev_name(dev));
-
-	/*
-	 * Finds the sector from scanbuf containing the label and copies into label_buf.
-	 * label_buf: struct label_header + struct pv_header + struct pv_header_extension
-	 */
-	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, 0))) {
-		/* FIXME: handle bad label */
-		goto_out;
-	}
-
-	/*
-	 * ops->read() is usually _text_read() which reads
-	 * the pv_header, mda locations, mda contents.
-	 * It saves the info it finds into lvmcache info/vginfo structs.
-	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, NULL, &label)) && label) {
-		label->dev = dev;
-		label->sector = sector;
-	} else {
-		/* FIXME: handle errors */
-	}
- out:
-	return r;
-}
-
-/*
  * Scan labels/metadata for all devices (sync)
  *
  * Reads and looks at label_header, pv_header, pv_header_extension,
@@ -1050,12 +1113,16 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 
 static int _label_scan_sync(struct cmd_context *cmd, int skip_cached)
 {
+	struct label_read_data *ld;
 	struct dev_iter *iter;
 	struct device *dev;
-	int dev_count = 0;
 	struct lvmcache_info *info;
+	int buf_len;
+	int dev_count = 0;
 
 	_free_label_read_list(0);
+
+	buf_len = _get_scan_size(cmd);
 
 	log_debug_devs("Finding devices to scan");
 
@@ -1079,17 +1146,50 @@ static int _label_scan_sync(struct cmd_context *cmd, int skip_cached)
 			continue;
 		}
 
-		_label_read_sync(cmd, dev);
+		if (!(ld = dm_malloc(sizeof(*ld))))
+			goto_bad;
 
-		if (!dev_close(dev))
-			stack;
+		memset(ld, 0, sizeof(*ld));
 
+		if (!(ld->buf = dm_malloc(buf_len)))
+			goto_bad;
+
+		memset(ld->buf, 0, buf_len);
+		ld->dev = dev;
+		ld->buf_len = buf_len;
+		dm_list_add(&label_read_list, &ld->list);
 		dev_count++;
 	}
 	dev_iter_destroy(iter);
 
+	/* Do the sync i/o on each dev. */
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		log_debug_devs("Reading sectors from device %s sync", dev_name(ld->dev));
+
+		if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
+			log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
+			ld->result = -1;
+       		} else {
+			ld->result = ld->buf_len;
+		}
+	}
+
+	dm_list_iterate_items(ld, &label_read_list) {
+		log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
+		_label_read_data_process(cmd, ld);
+		ld->process_done = 1;
+	}
+
+	dm_list_iterate_items(ld, &label_read_list)
+		dev_close(ld->dev);
+
 	log_very_verbose("Scanned data from all %d devs sync", dev_count);
 	return 1;
+
+bad:
+	_free_label_read_list(1);
+	return_0;
 }
 
 /*
@@ -1105,27 +1205,83 @@ static int _label_scan_sync(struct cmd_context *cmd, int skip_cached)
 
 static int _label_scan_devs_sync(struct cmd_context *cmd, struct dm_list *devs)
 {
+	struct dm_list tmp_label_read_list;
+	struct label_read_data *ld, *ld2;
 	struct device_list *devl;
+	struct device *dev;
+	int buf_len;
 	int dev_count = 0;
+
+	buf_len = _get_scan_size(cmd);
+
+	dm_list_init(&tmp_label_read_list);
 
 	log_debug_devs("Scanning data from devs sync");
 
 	dm_list_iterate_items(devl, devs) {
-		if (!dev_open_readonly(devl->dev)) {
-			log_debug_devs("Reading label skipped can't open %s", dev_name(devl->dev));
+		dev = devl->dev;
+
+		if (!dev_open_readonly(dev)) {
+			log_debug_devs("Reading label skipped can't open %s", dev_name(dev));
 			continue;
 		}
 
-		_label_read_sync(cmd, devl->dev);
+		if (!(ld = get_label_read_data(cmd, dev))) {
+                        /* New device hasn't been scanned before. */
 
-		if (!dev_close(devl->dev))
-			stack;
+			if (!(ld = dm_malloc(sizeof(*ld))))
+				goto_bad;
 
+			memset(ld, 0, sizeof(*ld));
+
+			if (!(ld->buf = dm_malloc(buf_len)))
+				goto_bad;
+
+			memset(ld->buf, 0, buf_len);
+			ld->dev = dev;
+			ld->buf_len = buf_len;
+                } else {
+                        /* Temporarily move structs being reread onto local list. */
+                        dm_list_del(&ld->list);
+                }
+
+		ld->process_done = 0;
+		dm_list_add(&tmp_label_read_list, &ld->list);
 		dev_count++;
 	}
 
-	log_very_verbose("Scanned data from %d devs sync", dev_count);
+	dm_list_iterate_items(ld, &tmp_label_read_list) {
+		log_debug_devs("Reading sectors from device %s sync", dev_name(ld->dev));
+
+		if (!dev_read(ld->dev, 0, ld->buf_len, ld->buf)) {
+			log_debug_devs("%s: Failed to read label area", dev_name(ld->dev));
+			ld->result = -1;
+		} else {
+			ld->result = ld->buf_len;
+		}
+	}
+
+	dm_list_iterate_items(ld, &tmp_label_read_list) {
+		log_debug_devs("Parsing label and data from device %s", dev_name(ld->dev));
+		_label_read_data_process(cmd, ld);
+		ld->process_done = 1;
+	}
+
+	dm_list_iterate_items(ld, &tmp_label_read_list)
+		dev_close(ld->dev);
+
+	/* Move structs being reread back to normal list */
+	dm_list_iterate_items_safe(ld, ld2, &tmp_label_read_list) {
+		dm_list_del(&ld->list);
+		dm_list_add(&label_read_list, &ld->list);
+	}
+
+	log_debug_devs("Scanned data from %d devs sync", dev_count);
 	return 1;
+
+bad:
+	_free_label_read_list(1);
+	return_0;
 }
 
 /*
