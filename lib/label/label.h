@@ -43,6 +43,7 @@ struct label_read_data {
 	struct device *dev;
 	struct dm_list list;
 	int buf_len; /* same as aio->buf_len */
+	int result; /* same as aio->result */
 	int try_sync;
 	int process_done;
 };
