@@ -209,10 +209,11 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
 		lp->type_str = SEG_TYPE_NAME_STRIPED;
 
 	if ((arg_is_set(cmd, stripes_long_ARG) || arg_is_set(cmd, stripesize_ARG)) &&
-	    !(_mirror_or_raid_type_requested(cmd, lp->type_str) || _striped_type_requested(lp->type_str) ||
+	    !((_mirror_or_raid_type_requested(cmd, lp->type_str) && strcmp(lp->type_str, SEG_TYPE_NAME_RAID1)) ||
+              _striped_type_requested(lp->type_str) ||
 	      _raid0_type_requested(lp->type_str) || arg_is_set(cmd, thinpool_ARG))) {
 		log_error("--stripes or --stripesize argument is only valid "
-			  "with --mirrors/--type mirror/--type raid*/--type striped/--type linear, --repair and --thinpool");
+			  "with --mirrors/--type mirror/--type raid{4,5,6,10}/--type striped/--type linear, --repair and --thinpool");
 		return 0;
 	}
 
