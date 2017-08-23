@@ -39,6 +39,7 @@ struct config_info {
 	int udev_rules;
 	int udev_sync;
 	int udev_fallback;
+	int scan_size_kb;
 	const char *msg_prefix;
 	const char *fmt_name;
 	uint64_t unit_factor;

@@ -628,8 +628,7 @@ struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct devi
  */
 static int _get_scan_size(struct cmd_context *cmd)
 {
-	/* FIXME: make this a config setting, default to a multiple of optimal_io_size? */
-	return ASYNC_SCAN_SIZE;
+	return cmd->current_settings.scan_size_kb * 1024;
 }
 
 /*
@@ -1023,7 +1022,7 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 	/*
 	 * Process devices that have finished reading label sectors.
 	 * Processing can include sync i/o to read metadata areas
-	 * beyond the ASYNC_SCAN_SIZE.
+	 * beyond the scan_size.
 	 *
 	 * FIXME: we shouldn't need to fully reprocess everything when rescanning.
 	 * lvmcache is already populated from the previous scan, and if nothing
