@@ -56,7 +56,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 			/*
 			 * Needs data beyond the end of the async read buffer.
 			 * Will do a new synchronous read to get the data.
-			 * (ASYNC_SCAN_SIZE could also be made larger.)
+			 * (scan_size could also be made larger.)
 			 */
 			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
 					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
@@ -177,7 +177,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 			/*
 			 * Needs data beyond the end of the async read buffer.
 			 * Will do a new synchronous read to get the data.
-			 * (ASYNC_SCAN_SIZE could also be made larger.)
+			 * (scan_size could also be made larger.)
 			 */
 			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
 					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
