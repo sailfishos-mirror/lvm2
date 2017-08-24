@@ -2365,6 +2365,11 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 
 	label_scan(cmd);
 
+	if (lvmcache_found_duplicate_pvs()) {
+		log_warn("WARNING: Scan found duplicate PVs.");
+		return 0;
+	}
+
 	log_verbose("Scanning all devices to update lvmetad.");
 
 	if (!(iter = dev_iter_create(cmd->lvmetad_filter, 1))) {
