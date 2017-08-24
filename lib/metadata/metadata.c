@@ -4345,6 +4345,25 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	if (use_precommitted && !(fmt->features & FMT_PRECOMMIT))
 		use_precommitted = 0;
 
+	/*
+	 * A "format instance" is an abstraction for a VG location,
+	 * i.e. where a VG's metadata exists on disk.
+	 *
+	 * An fic/fid pair (format_instance_ctx/format_instance) exists
+	 * for each VG.  The fic/fid is set up by create_instance() to
+	 * describe the VG location.  This happens before the VG metadata
+	 * is assembled into the more familiar struct volume_group "vg".
+	 *
+	 * The fic/fid has one main purpose: to keep track of the metadata
+	 * locations for a given VG.  It does this by putting 'mda'
+	 * structs on fid->metadata_areas_in_use, which specify where
+	 * metadata is located on disk.  It gets this information
+	 * (metadata locations for a specific VG) from the command's
+	 * initial label scan.  The info is passed indirectly via
+	 * lvmcache info/vginfo structs, which are created by the
+	 * label scan and then copied into fic/fid by create_instance().
+	 */
+
 	/* create format instance with appropriate metadata area */
 	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
 	fic.context.vg_ref.vg_name = vgname;
