@@ -63,6 +63,7 @@ struct lvmcache_vginfo {
 	char *lock_type;
 	uint32_t mda_checksum;
 	size_t mda_size;
+	int independent_metadata_location; /* metadata read from independent areas */
 	/*
 	 * The following are not related to lvmcache or vginfo,
 	 * but are borrowing the vginfo to store the data.
@@ -1168,6 +1169,16 @@ int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const 
 
 	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid)))
 		return_0;
+
+	/*
+	 * When the VG metadata is from an independent location,
+	 * then rescanning the devices in the VG won't find the
+	 * metadata, and will destroy the vginfo/info associations
+	 * that were created during label scan when the
+	 * independent locations were read.
+	 */
+	if (vginfo->independent_metadata_location)
+		return 1;
 
 	dm_list_iterate_items(info, &vginfo->infos) {
 		if (!(devl = dm_malloc(sizeof(*devl)))) {
@@ -2618,6 +2629,14 @@ int lvmcache_vgid_is_cached(const char *vgid) {
 		return 0;
 
 	return 1;
+}
+
+void lvmcache_set_independent_location(const char *vgname)
+{
+	struct lvmcache_vginfo *vginfo;
+
+	if ((vginfo = lvmcache_vginfo_from_vgname(vgname, NULL)))
+		vginfo->independent_metadata_location = 1;
 }
 
 /*
