@@ -219,4 +219,5 @@ int lvmcache_get_vg_devs(struct cmd_context *cmd,
                          struct lvmcache_vginfo *vginfo,
                          struct dm_list *devs);
 
+void lvmcache_set_independent_location(const char *vgname);
 #endif
