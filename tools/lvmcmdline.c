@@ -2388,13 +2388,13 @@ static int _get_current_settings(struct cmd_context *cmd)
 		return EINVALID_CMD_LINE;
 
 #ifdef AIO_SUPPORT
-	cmd->use_aio = find_config_tree_bool(cmd, metadata_scan_async_CFG, NULL);
+	cmd->use_aio = find_config_tree_bool(cmd, devices_scan_async_CFG, NULL);
 #else
 	cmd->use_aio = 0;
-	if (find_config_tree_bool(cmd, metadata_scan_async_CFG, NULL))
+	if (find_config_tree_bool(cmd, devices_scan_async_CFG, NULL))
 		log_verbose("Ignoring scan_async, no async I/O support.");
 #endif
-	scan_size = find_config_tree_int(cmd, metadata_scan_size_CFG, NULL);
+	scan_size = find_config_tree_int(cmd, devices_scan_size_CFG, NULL);
 
 	if (!scan_size || (scan_size < 0)) {
 		log_warn("WARNING: Ignoring invalid metadata/scan_size %d, using default %u.",
