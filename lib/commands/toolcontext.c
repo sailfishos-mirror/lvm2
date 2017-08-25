@@ -542,6 +542,7 @@ static int _process_config(struct cmd_context *cmd)
 	const struct dm_config_value *cv;
 	int64_t pv_min_kb;
 	int udev_disabled = 0;
+	int scan_size;
 	char sysfs_dir[PATH_MAX];
 
 	if (!_check_config(cmd))
@@ -624,6 +625,29 @@ static int _process_config(struct cmd_context *cmd)
 
 	cmd->default_settings.udev_sync = udev_disabled ? 0 :
 		find_config_tree_bool(cmd, activation_udev_sync_CFG, NULL);
+
+#ifdef AIO_SUPPORT
+	cmd->use_aio = find_config_tree_bool(cmd, devices_scan_async_CFG, NULL);
+#else
+	cmd->use_aio = 0;
+	if (find_config_tree_bool(cmd, devices_scan_async_CFG, NULL))
+		log_verbose("Ignoring scan_async, no async I/O support.");
+#endif
+	scan_size = find_config_tree_int(cmd, devices_scan_size_CFG, NULL);
+
+	if (!scan_size || (scan_size < 0)) {
+		log_warn("WARNING: Ignoring invalid metadata/scan_size %d, using default %u.",
+			 scan_size, DEFAULT_SCAN_SIZE_KB);
+		scan_size = DEFAULT_SCAN_SIZE_KB;
+	}
+
+	if (cmd->use_aio && (scan_size % 4)) {
+		log_warn("WARNING: Ignoring invalid metadata/scan_size %d with scan_async, using default %u.",
+			 scan_size, DEFAULT_SCAN_SIZE_KB);
+		scan_size = DEFAULT_SCAN_SIZE_KB;
+	}
+
+	cmd->default_settings.scan_size_kb = scan_size;
 
 	/*
 	 * Set udev_fallback lazily on first use since it requires
