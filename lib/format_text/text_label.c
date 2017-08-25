@@ -367,11 +367,10 @@ close_dev:
 }
 
 /*
- * When label_read_data *ld is set, it means that we
- * have asynchronously read the first ld->buf_len bytes
- * of the device and already have that data, so we don't
- * need do do any dev_read's (as long as the desired
- * dev_read offset+size is less then ld->buf_len).
+ * When label_read_data *ld is set, it means that we have read the first
+ * ld->buf_len bytes of the device and already have that data, so we don't need
+ * to do any dev_read's (as long as the desired dev_read offset+size is less
+ * then ld->buf_len).
  */
 
 static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
