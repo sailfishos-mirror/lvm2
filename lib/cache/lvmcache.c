@@ -768,23 +768,42 @@ char *lvmcache_vgname_from_pvid(struct cmd_context *cmd, const char *pvid)
 	return vgname;
 }
 
-static int _scan_invalid_dev_count;
-
-static void _rescan_entry(struct lvmcache_info *info)
+/*
+ * FIXME: get rid of the CACHE_INVALID state and rescanning
+ * infos with that flag.  The code should just know which devices
+ * need scanning and when.
+ */
+static int _label_scan_invalid(struct cmd_context *cmd)
 {
-	if (info->status & CACHE_INVALID) {
-		label_read(info->dev, NULL, UINT64_C(0));
-		_scan_invalid_dev_count++;
+	struct dm_list devs;
+	struct dm_hash_node *n;
+	struct device_list *devl;
+	struct lvmcache_info *info;
+	int dev_count = 0;
+	int ret;
+
+	dm_list_init(&devs);
+
+	dm_hash_iterate(n, _pvid_hash) {
+		if (!(info = dm_hash_get_data(_pvid_hash, n)))
+			continue;
+
+		if (!(info->status & CACHE_INVALID))
+			continue;
+
+		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+			return_0;
+
+		devl->dev = info->dev;
+		dm_list_add(&devs, &devl->list);
+		dev_count++;
 	}
-}
 
-static int _label_scan_invalid(void)
-{
-	_scan_invalid_dev_count = 0;
+	log_debug_cache("Scanning %d devs with invalid info.", dev_count);
 
-	dm_hash_iter(_pvid_hash, (dm_hash_iterate_fn) _rescan_entry);
+	ret = label_scan_devs(cmd, &devs);
 
-	return 1;
+	return ret;
 }
 
 /*
@@ -1187,10 +1206,14 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 		goto out;
 	}
 
+	/*
+	 * Scan devices whose info struct has the INVALID flag set.
+	 * When scanning has read the pv_header, mda_header and
+	 * mda locations, it will clear the INVALID flag (via
+	 * lvmcache_make_valid).
+	 */
 	if (_has_scanned && !_force_label_scan) {
-		log_debug_devs("Scanning labels of invalid infos");
-		r = _label_scan_invalid();
-		log_debug_devs("Scanned %d labels of invalid infos", _scan_invalid_dev_count);
+		r = _label_scan_invalid(cmd);
 		goto out;
 	}
 
