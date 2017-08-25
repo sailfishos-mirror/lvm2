@@ -46,21 +46,21 @@ int text_read_metadata_summary(const struct format_type *fmt,
 {
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
-	char *buf_async = NULL;
+	char *buf = NULL;
 	int r = 0;
 
 	if (ld) {
 		if (ld->buf_len >= (offset + size))
-			buf_async = ld->buf;
+			buf = ld->buf;
 		else {
 			/*
-			 * Needs data beyond the end of the async read buffer.
+			 * Needs data beyond the end of the ld buffer.
 			 * Will do a new synchronous read to get the data.
 			 * (scan_size could also be made larger.)
 			 */
-			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
+			log_debug_metadata("label scan buffer for %s too small %u for metadata offset %llu size %u",
 					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
-			buf_async = NULL;
+			buf = NULL;
 		}
 	}
 
@@ -70,7 +70,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		return_0;
 
 	if (dev) {
-		if (buf_async)
+		if (buf)
 			log_debug_metadata("Copying metadata summary for %s at %llu size %d (+%d)",
 					   dev_name(dev), (unsigned long long)offset,
 					   size, size2);
@@ -79,7 +79,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 					    dev_name(dev), (unsigned long long)offset,
 					    size, size2);
 
-		if (!config_file_read_fd(cft, dev, buf_async, offset, size,
+		if (!config_file_read_fd(cft, dev, buf, offset, size,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
 					 checksum_only, 1)) {
@@ -139,7 +139,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	struct volume_group *vg = NULL;
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
-	char *buf_async = NULL;
+	char *buf = NULL;
 	int skip_parse;
 
 	/*
@@ -172,21 +172,21 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 
 	if (ld) {
 		if (ld->buf_len >= (offset + size))
-			buf_async = ld->buf;
+			buf = ld->buf;
 		else {
 			/*
-			 * Needs data beyond the end of the async read buffer.
+			 * Needs data beyond the end of the ld buffer.
 			 * Will do a new synchronous read to get the data.
 			 * (scan_size could also be made larger.)
 			 */
-			log_debug_metadata("async read buffer for %s too small %u for metadata offset %llu size %u",
+			log_debug_metadata("label scan buffer for %s too small %u for metadata offset %llu size %u",
 					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
-			buf_async = NULL;
+			buf = NULL;
 		}
 	}
 
 	if (dev) {
-		if (buf_async)
+		if (buf)
 			log_debug_metadata("Copying metadata for %s at %llu size %d (+%d)",
 					   dev_name(dev), (unsigned long long)offset,
 					   size, size2);
@@ -195,7 +195,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 				   	   dev_name(dev), (unsigned long long)offset,
 				           size, size2);
 
-		if (!config_file_read_fd(cft, dev, buf_async, offset, size,
+		if (!config_file_read_fd(cft, dev, buf, offset, size,
 					 offset2, size2, checksum_fn, checksum,
 					 skip_parse, 1)) {
 			/* FIXME: handle errors */
