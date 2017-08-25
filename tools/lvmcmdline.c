@@ -2266,7 +2266,6 @@ static void _apply_current_output_settings(struct cmd_context *cmd)
 static int _get_current_settings(struct cmd_context *cmd)
 {
 	const char *activation_mode;
-	int scan_size;
 
 	_get_current_output_settings_from_args(cmd);
 
@@ -2386,29 +2385,6 @@ static int _get_current_settings(struct cmd_context *cmd)
 	    (!strncmp(cmd->name, "vg", 2) &&
 	     !_merge_synonym(cmd, metadatacopies_ARG, vgmetadatacopies_ARG)))
 		return EINVALID_CMD_LINE;
-
-#ifdef AIO_SUPPORT
-	cmd->use_aio = find_config_tree_bool(cmd, devices_scan_async_CFG, NULL);
-#else
-	cmd->use_aio = 0;
-	if (find_config_tree_bool(cmd, devices_scan_async_CFG, NULL))
-		log_verbose("Ignoring scan_async, no async I/O support.");
-#endif
-	scan_size = find_config_tree_int(cmd, devices_scan_size_CFG, NULL);
-
-	if (!scan_size || (scan_size < 0)) {
-		log_warn("WARNING: Ignoring invalid metadata/scan_size %d, using default %u.",
-			 scan_size, DEFAULT_SCAN_SIZE_KB);
-		scan_size = DEFAULT_SCAN_SIZE_KB;
-	}
-
-	if (cmd->use_aio && (scan_size % 4)) {
-		log_warn("WARNING: Ignoring invalid metadata/scan_size %d with scan_async, using default %u.",
-			 scan_size, DEFAULT_SCAN_SIZE_KB);
-		scan_size = DEFAULT_SCAN_SIZE_KB;
-	}
-
-	cmd->current_settings.scan_size_kb = scan_size;
 
 	/* Zero indicates success */
 	return 0;
