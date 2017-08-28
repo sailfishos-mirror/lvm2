@@ -1097,7 +1097,9 @@ struct volume_group *lvmetad_vg_lookup(struct cmd_context *cmd, const char *vgna
 				vg = NULL;
 				goto out;
 			}
+			fid->ref_count++;
 			release_vg(vg);
+			fid->ref_count--;
 			fmt->ops->destroy_instance(fid);
 			vg = vg2;
 			fid = vg2->fid;
