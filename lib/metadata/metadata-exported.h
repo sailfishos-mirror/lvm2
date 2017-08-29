@@ -1016,6 +1016,9 @@ void lv_set_activation_skip(struct logical_volume *lv, int override_default, int
 int lv_activation_skip(struct logical_volume *lv, activation_change_t activate,
 		       int override_lv_skip_flag);
 
+int lv_maintenance_skip(struct logical_volume *lv, activation_change_t activate,
+                       int override_maintenance_flag);
+
 /*
  * Functions for layer manipulation
  */

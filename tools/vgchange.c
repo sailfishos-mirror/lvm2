@@ -122,6 +122,9 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		if (lv_activation_skip(lv, activate, arg_is_set(cmd, ignoreactivationskip_ARG)))
 			continue;
 
+		if (lv_maintenance_skip(lv, activate, arg_is_set(cmd, maintenance_ARG)))
+			continue;
+
 		if ((activate == CHANGE_AAY) &&
 		    !lv_passes_auto_activation_filter(cmd, lv))
 			continue;

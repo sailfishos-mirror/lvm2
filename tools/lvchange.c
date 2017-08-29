@@ -215,6 +215,9 @@ static int _lvchange_activate(struct cmd_context *cmd, struct logical_volume *lv
 	if (lv_activation_skip(lv, activate, arg_is_set(cmd, ignoreactivationskip_ARG)))
 		return 1;
 
+	if (lv_maintenance_skip(lv, activate, arg_is_set(cmd, maintenance_ARG)))
+		return 1;
+
 	if (lv_is_cow(lv) && !lv_is_virtual_origin(origin_from_cow(lv)))
 		lv = origin_from_cow(lv);
 

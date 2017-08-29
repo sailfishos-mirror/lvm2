@@ -7239,6 +7239,19 @@ int lv_activation_skip(struct logical_volume *lv, activation_change_t activate,
 	return 1;
 }
 
+int lv_maintenance_skip(struct logical_volume *lv, activation_change_t activate,
+		       int override_maintenance_flag)
+{
+	if (!(lv->status & LV_MAINTENANCE) ||
+	    !is_change_activating(activate) || /* Do not skip deactivation */
+	    override_maintenance_flag)
+		return 0;
+
+	log_verbose("MAINTENANCE flag set for LV %s/%s, skipping activation.",
+		    lv->vg->name, lv->name);
+	return 1;
+}
+
 static int _should_wipe_lv(struct lvcreate_params *lp,
 			   struct logical_volume *lv, int warn)
 {

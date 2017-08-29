@@ -287,6 +287,9 @@ arg(logonly_ARG, '\0', "logonly", 0, 0, 0,
 arg(longhelp_ARG, '\0', "longhelp", 0, 0, 0,
     "Display long help text.\n")
 
+arg(maintenance_ARG, '\0', "maintenance", 0, 0, 0,
+    "Allow command to operate on an LV in maintenance mode.\n")
+
 arg(maxrecoveryrate_ARG, '\0', "maxrecoveryrate", sizekb_VAL, 0, 0,
     "Sets the maximum recovery rate for a RAID LV.  The rate value\n"
     "is an amount of data per second for each device in the array.\n"

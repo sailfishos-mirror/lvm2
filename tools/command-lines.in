@@ -276,7 +276,7 @@ RULE: all not LV_raid0
 
 lvchange --activate Active VG|LV|Tag|Select ...
 OO: --activationmode ActivationMode, --partial, --poll Bool, --monitor Bool,
---ignoreactivationskip, --ignorelockingfailure, --sysinit, OO_LVCHANGE
+--ignoreactivationskip, --ignorelockingfailure, --sysinit, --maintenance, OO_LVCHANGE
 ID: lvchange_activate
 DESC: Activate or deactivate an LV.
 
@@ -1506,7 +1506,7 @@ DESC: Start or stop processing LV conversions.
 
 vgchange --activate Active
 OO: --activationmode ActivationMode, --ignoreactivationskip, --partial, --sysinit,
---ignorelockingfailure, --monitor Bool, --poll Bool, OO_VGCHANGE
+--ignorelockingfailure, --monitor Bool, --poll Bool, --maintenance, OO_VGCHANGE
 OP: VG|Tag|Select ...
 ID: vgchange_activate
 DESC: Activate or deactivate LVs.
