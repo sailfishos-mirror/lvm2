@@ -732,23 +732,21 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
+	int async_event_count;
 
 	_free_label_read_list(0);
 
 	buf_len = _get_scan_size(cmd);
+
+	async_event_count = find_config_tree_int(cmd, devices_async_events_CFG, NULL);
 
 	/*
 	 * if aio setup fails, caller will revert to sync scan
 	 * The number of events set up here is the max number of
 	 * concurrent async reads that can be submitted.  After
 	 * all of those are used, we revert to synchronous reads.
-	 *
-	 * FIXME: add a config setting to control the number passed
-	 * into setup used for max async events in io_setup().
-	 * (0 uses default)
 	 */
-
-	if (!(ac = dev_async_context_setup(0))) {
+	if (!(ac = dev_async_context_setup(async_event_count))) {
 		log_debug_devs("async io setup error, reverting to sync io.");
 		return_0;
 	}
@@ -932,12 +930,25 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
+	int async_event_count;
+	int num_devs;
 
 	buf_len = _get_scan_size(cmd);
 
 	dm_list_init(&tmp_label_read_list);
 
-	if (!(ac = dev_async_context_setup(0))) {
+	async_event_count = find_config_tree_int(cmd, devices_async_events_CFG, NULL);
+	num_devs = dm_list_size(devs);
+
+	if (num_devs < async_event_count)
+		async_event_count = num_devs;
+
+	/*
+	 * Should we set up one global aio context when the command starts,
+	 * and then use/reuse that one context from multiple calls to
+	 * label_scan/label_scan_devs?
+	 */
+	if (!(ac = dev_async_context_setup(async_event_count))) {
 		log_debug_devs("async io setup error, reverting to sync io.");
 		return_0;
 	}

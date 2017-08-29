@@ -835,20 +835,21 @@ int dev_set(struct device *dev, uint64_t offset, size_t len, int value)
 struct dev_async_context *dev_async_context_setup(unsigned async_event_count)
 {
 	struct dev_async_context *ac;
-	int max_submit_events = MAX_ASYNC_EVENTS;
+	unsigned nr_events = DEFAULT_ASYNC_EVENTS;
 	int error;
 
 	if (async_event_count)
-		max_submit_events = async_event_count;
+		nr_events = async_event_count;
 
 	if (!(ac = malloc(sizeof(struct dev_async_context))))
 		return_0;
 
 	memset(ac, 0, sizeof(struct dev_async_context));
 
-	error = io_setup(max_submit_events, &ac->aio_ctx);
+	error = io_setup(nr_events, &ac->aio_ctx);
 
 	if (error < 0) {
+		log_warn("WARNING: async io setup error %d with %u events.", error, nr_events);
 		free(ac);
 		return_0;
 	}
