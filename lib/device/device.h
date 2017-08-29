@@ -98,15 +98,6 @@ struct device_area {
  */
 #define MAX_GET_EVENTS 16
 
-/*
- * The number of events to use in io_setup(),
- * which is the limit on the number of concurrent
- * async i/o's we can submit.  After all these are
- * used, io_submit() returns -EAGAIN, and we revert
- * to doing synchronous io.
- */
-#define MAX_ASYNC_EVENTS 1024
-
 struct dev_async_context {
 	io_context_t aio_ctx;
 	struct io_event events[MAX_GET_EVENTS];
