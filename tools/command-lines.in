@@ -302,6 +302,11 @@ ID: lvchange_persistent
 DESC: Make the minor device number persistent for an LV.
 RULE: all not LV_thinpool LV_cachepool
 
+lvchange --setmaintenance Bool VG|LV|Tag|Select ...
+OO: OO_LVCHANGE
+ID: lvchange_set_maintenance
+DESC: Change maintenance mode of an LV.
+
 ---
 
 OO_LVCONVERT_POOL: --poolmetadata LV, --poolmetadatasize SizeMB,

@@ -102,6 +102,7 @@ static const struct command_function command_functions[CMD_COUNT] = {
 	{ lvchange_monitor_CMD, lvchange_monitor_poll_cmd },
 	{ lvchange_poll_CMD, lvchange_monitor_poll_cmd },
 	{ lvchange_persistent_CMD, lvchange_persistent_cmd },
+	{ lvchange_set_maintenance_CMD, lvchange_set_maintenance_cmd },
 
 	{ vgchange_locktype_CMD, vgchange_locktype_cmd },
 	{ vgchange_lockstart_CMD, vgchange_lock_start_stop_cmd },

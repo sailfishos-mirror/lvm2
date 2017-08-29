@@ -1668,6 +1668,47 @@ int lvchange_persistent_cmd(struct cmd_context *cmd, int argc, char **argv)
 	return ret;
 }
 
+static int _lvchange_set_maintenance_check(struct cmd_context *cmd,
+				     struct logical_volume *lv,
+				     struct processing_handle *handle,
+				     int lv_is_named_arg)
+{
+	if (!lv_is_visible(lv)) {
+		if (lv_is_named_arg)
+			return 1;
+		return 0;
+	}
+
+	return 1;
+}
+
+static int _lvchange_set_maintenance_single(struct cmd_context *cmd,
+				       struct logical_volume *lv,
+				       struct processing_handle *handle)
+{
+	/* If LV is inactive here, ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_ECMD_FAILED;
+
+	if (arg_int_value(cmd, setmaintenance_ARG, 0))
+		lv->status |= LV_MAINTENANCE;
+	else
+		lv->status &= ~LV_MAINTENANCE;
+
+	if (!_vg_write_commit(lv, NULL))
+		return ECMD_FAILED;
+
+	return ECMD_PROCESSED;
+}
+
+int lvchange_set_maintenance_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	cmd->handles_missing_pvs = 1;
+
+	return process_each_lv(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE,
+			      NULL, &_lvchange_set_maintenance_check, &_lvchange_set_maintenance_single);
+}
+
 int lvchange(struct cmd_context *cmd, int argc, char **argv)
 {
 	log_error(INTERNAL_ERROR "Missing function for command definition %d:%s.",
