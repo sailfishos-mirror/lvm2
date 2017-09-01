@@ -220,4 +220,10 @@ int lvmcache_get_vg_devs(struct cmd_context *cmd,
                          struct dm_list *devs);
 
 void lvmcache_set_independent_location(const char *vgname);
+
+void lvmcache_remove_defective_dev(struct device *dev);
+int lvmcache_add_defective_dev(struct device *dev);
+int lvmcache_dev_is_defective(struct device *dev);
+int lvmcache_get_defective_devs(struct cmd_context *cmd, struct dm_list *head);
+
 #endif

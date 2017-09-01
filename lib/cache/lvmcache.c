@@ -105,6 +105,7 @@ static struct dm_hash_table *_vgid_hash = NULL;
 static struct dm_hash_table *_vgname_hash = NULL;
 static struct dm_hash_table *_lock_hash = NULL;
 static DM_LIST_INIT(_vginfos);
+static DM_LIST_INIT(_found_defective_devs);
 static DM_LIST_INIT(_found_duplicate_devs);
 static DM_LIST_INIT(_unused_duplicate_devs);
 static int _scanning_in_progress = 0;
@@ -123,6 +124,7 @@ int lvmcache_init(void)
 	_vgs_locked = 0;
 
 	dm_list_init(&_vginfos);
+	dm_list_init(&_found_defective_devs);
 	dm_list_init(&_found_duplicate_devs);
 	dm_list_init(&_unused_duplicate_devs);
 
@@ -524,7 +526,7 @@ void lvmcache_remove_unchosen_duplicate(struct device *dev)
 	}
 }
 
-static void _destroy_duplicate_device_list(struct dm_list *head)
+static void _destroy_device_list(struct dm_list *head)
 {
 	struct device_list *devl, *devl2;
 
@@ -956,7 +958,7 @@ next:
 	}
 
 	if (!alt) {
-		_destroy_duplicate_device_list(&_unused_duplicate_devs);
+		_destroy_device_list(&_unused_duplicate_devs);
 		dm_list_splice(&_unused_duplicate_devs, &new_unused);
 		return;
 	}
@@ -1266,7 +1268,12 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	/*
 	 * Duplicates found during this label scan are added to _found_duplicate_devs().
 	 */
-	_destroy_duplicate_device_list(&_found_duplicate_devs);
+	_destroy_device_list(&_found_duplicate_devs);
+
+	/*
+	 * Devs found during this label scan that have problems so they can't be used.
+	 */
+	_destroy_device_list(&_found_defective_devs);
 
 	/*
 	 * Do the actual scanning.  This populates lvmcache
@@ -2320,9 +2327,11 @@ void lvmcache_destroy(struct cmd_context *cmd, int retain_orphans, int reset)
 	 */
 	dm_list_init(&cmd->unused_duplicate_devs);
 	lvmcache_get_unused_duplicate_devs(cmd, &cmd->unused_duplicate_devs);
-	_destroy_duplicate_device_list(&_unused_duplicate_devs);
-	_destroy_duplicate_device_list(&_found_duplicate_devs); /* should be empty anyway */
+	_destroy_device_list(&_unused_duplicate_devs);
+	_destroy_device_list(&_found_duplicate_devs); /* should be empty anyway */
 	_found_duplicate_pvs = 0;
+
+	_destroy_device_list(&_found_defective_devs);
 
 	if (retain_orphans)
 		if (!init_lvmcache_orphans(cmd))
@@ -2662,6 +2671,58 @@ void lvmcache_set_independent_location(const char *vgname)
  */
 int lvmcache_uncertain_ownership(struct lvmcache_info *info) {
 	return mdas_empty_or_ignored(&info->mdas);
+}
+
+void lvmcache_remove_defective_dev(struct device *dev)
+{
+	struct device_list *devl;
+
+	dm_list_iterate_items(devl, &_found_defective_devs) {
+		if (devl->dev == dev) {
+			dm_list_del(&devl->list);
+			return;
+		}
+	}
+}
+
+/*
+ * FIXME: We might need to use a new struct for this list that can hold more
+ * info about the defective dev.
+ */
+
+int lvmcache_add_defective_dev(struct device *dev)
+{
+	struct device_list *devl;
+	
+	if (_dev_in_device_list(dev, &_found_defective_devs))
+		return 1;
+
+	if (!(devl = dm_zalloc(sizeof(*devl))))
+		return_0;
+	devl->dev = dev;
+
+	dm_list_add(&_found_defective_devs, &devl->list);
+	return 1;
+}
+
+int lvmcache_dev_is_defective(struct device *dev)
+{
+	return _dev_in_device_list(dev, &_found_defective_devs);
+}
+
+int lvmcache_get_defective_devs(struct cmd_context *cmd, struct dm_list *head)
+{
+	struct device_list *devl, *devl2;
+
+	dm_list_iterate_items(devl, &_found_defective_devs) {
+		if (!(devl2 = dm_pool_alloc(cmd->mem, sizeof(*devl2)))) {
+			log_error("device_list element allocation failed");
+			return 0;
+		}
+		devl2->dev = devl->dev;
+		dm_list_add(head, &devl2->list);
+	}
+	return 1;
 }
 
 uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info)

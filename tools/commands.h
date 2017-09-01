@@ -127,7 +127,11 @@ xx(pvdata,
 
 xx(pvdisplay,
    "Display various attributes of physical volume(s)",
-   PERMITTED_READ_ONLY | ENABLE_ALL_DEVS | ENABLE_DUPLICATE_DEVS | LOCKD_VG_SH)
+   PERMITTED_READ_ONLY |
+   ENABLE_ALL_DEVS |
+   ENABLE_DUPLICATE_DEVS |
+   ENABLE_DEFECTIVE_DEVS |
+   LOCKD_VG_SH)
 
 /* ALL_VGS_IS_DEFAULT is for polldaemon to find pvmoves in-progress using process_each_vg. */
 
@@ -145,7 +149,12 @@ xx(pvremove,
 
 xx(pvs,
    "Display information about physical volumes",
-   PERMITTED_READ_ONLY | ALL_VGS_IS_DEFAULT | ENABLE_ALL_DEVS | ENABLE_DUPLICATE_DEVS | LOCKD_VG_SH)
+   PERMITTED_READ_ONLY |
+   ALL_VGS_IS_DEFAULT |
+   ENABLE_ALL_DEVS |
+   ENABLE_DUPLICATE_DEVS |
+   ENABLE_DEFECTIVE_DEVS |
+   LOCKD_VG_SH)
 
 xx(pvscan,
    "List all physical volumes",

@@ -4144,6 +4144,62 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
 	return ECMD_PROCESSED;
 }
 
+/*
+ * FIXME: add a new letter for defective devs to show in pv_attr and
+ * a new reporting field pvs -o defective.
+ */
+
+static int _process_defective_pvs(struct cmd_context *cmd,
+				  struct dm_list *all_devices,
+				  struct dm_list *arg_devices,
+				  int process_all_devices,
+				  struct processing_handle *handle,
+				  process_single_pv_fn_t process_single_pv)
+{
+	struct physical_volume pv_dummy;
+	struct physical_volume *pv;
+	struct device_id_list *dil;
+	struct device_list *devl;
+	struct dm_list defective_devs;
+	int ret_max = ECMD_PROCESSED;
+	int ret = 0;
+
+	dm_list_init(&defective_devs);
+
+	if (!lvmcache_get_defective_devs(cmd, &defective_devs))
+		return_ECMD_FAILED;
+
+	dm_list_iterate_items(devl, &defective_devs) {
+
+		_device_list_remove(all_devices, devl->dev);
+
+		if ((dil = _device_list_find_dev(arg_devices, devl->dev)))
+			_device_list_remove(arg_devices, devl->dev);
+
+		if (!(cmd->cname->flags & ENABLE_DEFECTIVE_DEVS))
+			continue;
+
+		log_very_verbose("Processing defective device %s.", dev_name(devl->dev));
+
+		memset(&pv_dummy, 0, sizeof(pv_dummy));
+		dm_list_init(&pv_dummy.tags);
+		dm_list_init(&pv_dummy.segments);
+		pv_dummy.dev = devl->dev;
+		pv_dummy.fmt = cmd->fmt;
+		pv = &pv_dummy;
+
+		ret = process_single_pv(cmd, NULL, pv, handle);
+
+		if (ret > ret_max)
+			ret_max = ret;
+
+		if (sigint_caught())
+			return_ECMD_FAILED;
+	}
+
+	return ECMD_PROCESSED;
+}
+
 static int _process_pvs_in_vg(struct cmd_context *cmd,
 			      struct volume_group *vg,
 			      struct dm_list *all_devices,
@@ -4539,6 +4595,13 @@ int process_each_pv(struct cmd_context *cmd,
 	 */
 
 	ret = _process_duplicate_pvs(cmd, &all_devices, &arg_devices, process_all_devices,
+				     handle, process_single_pv);
+	if (ret != ECMD_PROCESSED)
+		stack;
+	if (ret > ret_max)
+		ret_max = ret;
+
+	ret = _process_defective_pvs(cmd, &all_devices, &arg_devices, process_all_devices,
 				     handle, process_single_pv);
 	if (ret != ECMD_PROCESSED)
 		stack;
