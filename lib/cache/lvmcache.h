@@ -25,6 +25,9 @@
 #define ORPHAN_PREFIX VG_ORPHANS
 #define ORPHAN_VG_NAME(fmt) ORPHAN_PREFIX "_" fmt
 
+#define FAILED_LABEL_CHECKSUM		0x00000001
+#define FAILED_LABEL_SECTOR_NUMBER	0x00000002
+
 /* LVM specific per-volume info */
 /* Eventual replacement for struct physical_volume perhaps? */
 

@@ -148,17 +148,12 @@ struct labeller *label_get_handler(const char *name)
 	return NULL;
 }
 
-/*
- * FIXME: handle errors, if there is lvm data on the device but
- * it's bad, then we need to move this device into a special
- * set of defective devices that can be reported or repaired.
- */
-
 static struct labeller *_find_label_header(struct device *dev,
 				   char *scan_buf,
 				   char *label_buf,
 				   uint64_t *label_sector,
-				   uint64_t scan_sector)
+				   uint64_t scan_sector,
+				   uint32_t *failed_flags)
 {
 	struct labeller_i *li;
 	struct labeller *r = NULL;
@@ -166,14 +161,18 @@ static struct labeller *_find_label_header(struct device *dev,
 	struct lvmcache_info *info;
 	uint64_t sector;
 	int found = 0;
+	int bad_checksum = 0;
+	int bad_sector_number = 0;
 
 	/*
 	 * Find which sector in scan_buf starts with a valid label,
 	 * and copy it into label_buf.
+	 *
+	 * This is an obfuscated way of looking at sectors 0, 1, 2, 3.
 	 */
 
-	for (sector = 0; sector < LABEL_SCAN_SECTORS;
-	     sector += LABEL_SIZE >> SECTOR_SHIFT) {
+	for (sector = 0; sector < LABEL_SCAN_SECTORS; sector += LABEL_SIZE >> SECTOR_SHIFT) {
+
 		lh = (struct label_header *) (scan_buf + (sector << SECTOR_SHIFT));
 
 		if (!strncmp((char *)lh->id, LABEL_ID, sizeof(lh->id))) {
@@ -188,6 +187,7 @@ static struct labeller *_find_label_header(struct device *dev,
 						 " - ignoring", dev_name(dev),
 						 (uint64_t)xlate64(lh->sector_xl),
 						 sector + scan_sector);
+				bad_sector_number = 1;
 				continue;
 			}
 			if (calc_crc(INITIAL_CRC, (uint8_t *)&lh->offset_xl, LABEL_SIZE -
@@ -195,6 +195,7 @@ static struct labeller *_find_label_header(struct device *dev,
 			    xlate32(lh->crc_xl)) {
 				log_very_verbose("Label checksum incorrect on %s - "
 						 "ignoring", dev_name(dev));
+				bad_checksum = 1;
 				continue;
 			}
 			if (found)
@@ -225,6 +226,21 @@ static struct labeller *_find_label_header(struct device *dev,
 		}
 	}
 
+	/*
+	 * If a good label was found in one sector, that that label is used and
+	 * it doesn't matter if there is bad label data in another sector.
+	 */
+	if (!found && (bad_checksum || bad_sector_number)) {
+		if (failed_flags && bad_checksum)
+			*failed_flags |= FAILED_LABEL_CHECKSUM;
+		if (failed_flags && bad_sector_number)
+			*failed_flags |= FAILED_LABEL_SECTOR_NUMBER;
+		return NULL;
+	}
+
+	/*
+	 * The device does not have an LVM label, so it doesn't belong to LVM.
+	 */
 	if (!found) {
 		log_very_verbose("%s: No label detected", dev_name(dev));
 
@@ -350,6 +366,7 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	struct label *label;
 	struct labeller *l;
 	uint64_t sector;
+	uint32_t failed_flags = 0;
 	struct lvmcache_info *info;
 	int r = 0;
 
@@ -394,8 +411,11 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	 * Finds the sector from scanbuf containing the label and copies into label_buf.
 	 * label_buf: struct label_header + struct pv_header + struct pv_header_extension
 	 */
-	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, scan_sector))) {
-		/* FIXME: handle bad label */
+	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, scan_sector, &failed_flags))) {
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad LVM label header.", dev_name(dev));
+			lvmcache_add_defective_dev(dev);
+		}
 		goto_out;
 	}
 
@@ -445,7 +465,7 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 	 * Finds the sector from scanbuf containing the label and copies into label_buf.
 	 * label_buf: struct label_header + struct pv_header + struct pv_header_extension
 	 */
-	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, 0))) {
+	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, 0, NULL))) {
 		/* FIXME: handle bad label */
 		goto_out;
 	}
@@ -527,6 +547,7 @@ int label_verify(struct device *dev)
 	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
 	struct labeller *l;
 	uint64_t sector;
+	uint32_t failed_flags = 0;
 	int r = 0;
 
 	if (!dev_open_readonly(dev))
@@ -537,8 +558,11 @@ int label_verify(struct device *dev)
 		goto out;
 	}
 
-	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, UINT64_C(0)))) {
-		/* FIXME: handle bad label */
+	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, UINT64_C(0), &failed_flags))) {
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad LVM label header.", dev_name(dev));
+			lvmcache_add_defective_dev(dev);
+		}
 		goto out;
 	}
 
@@ -648,6 +672,7 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 	struct label *label = NULL;
 	struct labeller *l;
 	uint64_t sector;
+	uint32_t failed_flags = 0;
 	int r = 0;
 
 	if ((ld->result < 0) || (ld->result != ld->buf_len)) {
@@ -663,9 +688,13 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 	 * FIXME: we don't need to copy one sector from ld->buf into label_buf,
 	 * we can just point label_buf at one sector in ld->buf.
 	 */
-	if (!(l = _find_label_header(ld->dev, ld->buf, label_buf, &sector, 0))) {
-		/* Non-PVs exit here */
-		/* FIXME: check for PVs with errors that also exit here. */
+	if (!(l = _find_label_header(ld->dev, ld->buf, label_buf, &sector, 0, &failed_flags))) {
+		/* Non-PVs exit here when no LVM label is found on the device. */
+
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad LVM label header.", dev_name(ld->dev));
+			lvmcache_add_defective_dev(ld->dev);
+		}
 		goto_out;
 	}
 
