@@ -27,6 +27,8 @@
 
 #define FAILED_LABEL_CHECKSUM		0x00000001
 #define FAILED_LABEL_SECTOR_NUMBER	0x00000002
+#define FAILED_INTERNAL			0x00000004
+#define FAILED_PV_HEADER		0x00000008
 
 /* LVM specific per-volume info */
 /* Eventual replacement for struct physical_volume perhaps? */

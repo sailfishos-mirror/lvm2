@@ -1289,4 +1289,6 @@ int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
 
 int vg_strip_outdated_historical_lvs(struct volume_group *vg);
 
+const char *failed_flags_str(uint32_t failed_flags);
+
 #endif

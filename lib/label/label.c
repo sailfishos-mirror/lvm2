@@ -413,7 +413,8 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	 */
 	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, scan_sector, &failed_flags))) {
 		if (failed_flags) {
-			log_warn("Found defective device %s: bad LVM label header.", dev_name(dev));
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(dev), failed_flags_str(failed_flags));
 			lvmcache_add_defective_dev(dev);
 		}
 		goto_out;
@@ -424,11 +425,15 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, NULL, labelp)) && *labelp) {
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, labelp, &failed_flags)) && *labelp) {
 		(*labelp)->dev = dev;
 		(*labelp)->sector = sector;
 	} else {
-		/* FIXME: handle errors */
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(dev), failed_flags_str(failed_flags));
+			lvmcache_add_defective_dev(dev);
+		}
 	}
  out:
 	if (!dev_close(dev))
@@ -445,6 +450,7 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 	struct label *label = NULL;
 	struct labeller *l;
 	uint64_t sector;
+	uint32_t failed_flags;
 	int r = 0;
 
 	memset(scanbuf, 0, sizeof(scanbuf));
@@ -475,11 +481,15 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, NULL, &label)) && label) {
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, &label, &failed_flags)) && label) {
 		label->dev = dev;
 		label->sector = sector;
 	} else {
-		/* FIXME: handle errors */
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(dev), failed_flags_str(failed_flags));
+			lvmcache_add_defective_dev(dev);
+		}
 	}
  out:
 	return r;
@@ -560,7 +570,8 @@ int label_verify(struct device *dev)
 
 	if (!(l = _find_label_header(dev, scanbuf, label_buf, &sector, UINT64_C(0), &failed_flags))) {
 		if (failed_flags) {
-			log_warn("Found defective device %s: bad LVM label header.", dev_name(dev));
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(dev), failed_flags_str(failed_flags));
 			lvmcache_add_defective_dev(dev);
 		}
 		goto out;
@@ -692,7 +703,8 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 		/* Non-PVs exit here when no LVM label is found on the device. */
 
 		if (failed_flags) {
-			log_warn("Found defective device %s: bad LVM label header.", dev_name(ld->dev));
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(ld->dev), failed_flags_str(failed_flags));
 			lvmcache_add_defective_dev(ld->dev);
 		}
 		goto_out;
@@ -703,11 +715,15 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, ld->dev, label_buf, ld, &label)) && label) {
+	if ((r = (l->ops->read)(l, ld->dev, label_buf, ld, &label, &failed_flags)) && label) {
 		label->dev = ld->dev;
 		label->sector = sector;
 	} else {
-		/* FIXME: handle errors */
+		if (failed_flags) {
+			log_warn("Found defective device %s: bad %s.",
+				 dev_name(ld->dev), failed_flags_str(failed_flags));
+			lvmcache_add_defective_dev(ld->dev);
+		}
 	}
  out:
 	return r;

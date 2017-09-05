@@ -374,30 +374,115 @@ close_dev:
  */
 
 static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
-		      struct label_read_data *ld, struct label **label)
+		      struct label_read_data *ld, struct label **label,
+		      uint32_t *failed_flags)
 {
+	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
+	char uuid[64] __attribute__((aligned(8)));
+	struct id pv_id_check;
 	struct label_header *lh = (struct label_header *) label_buf;
 	struct pv_header *pvhdr;
 	struct pv_header_extension *pvhdr_ext;
 	struct lvmcache_info *info;
 	struct disk_locn *dlocn_xl;
 	uint64_t offset;
+	uint64_t device_size;
 	uint32_t ext_version;
-	struct _mda_baton baton;
+	uint32_t ext_flags;
+	unsigned int data_area_count = 0;
+	unsigned int meta_area_count = 0;
+	int add_errors = 0;
+	struct _mda_baton baton = { 0 };
 
 	/*
-	 * PV header base
+	 * pv_header has uuid and device_size
+	 * pv_header.disk_areas are two variable sequences of disk_locn's:
+	 * . first null terminated sequence of disk_locn's are data areas
+	 * . second null terminated sequence of disk_locn's are meta areas
+	 * pv_header_extension has version and flags
+	 * pv_header_extension.bootloader_areas is one set of disk_locn's:
+	 * . null terminated sequence of disk_locn's are bootloader areas
+	 *
+	 * Step 1: look through structs to summarize for log message.
 	 */
 	pvhdr = (struct pv_header *) ((char *) label_buf + xlate32(lh->offset_xl));
 
-	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
-				  FMT_TEXT_ORPHAN_VG_NAME,
-				  FMT_TEXT_ORPHAN_VG_NAME, 0)))
+	strncpy(pvid_s, (char *)pvhdr->pv_uuid, sizeof(pvid_s) - 1);
+	pvid_s[sizeof(pvid_s) - 1] = '\0';
+
+	if (!id_read_format_try(&pv_id_check, pvid_s)) {
+		log_debug_metadata("PV header on %s uuid cannot be read.", dev_name(dev));
+		*failed_flags |= FAILED_PV_HEADER;
 		return_0;
+	}
 
-	*label = lvmcache_get_label(info);
+	if (!id_write_format((const struct id *)&pvid_s, uuid, sizeof(uuid))) {
+		log_debug_metadata("PV header on %s uuid cannot be written.", dev_name(dev));
+		*failed_flags |= FAILED_INTERNAL;
+		return_0;
+	}
 
-	lvmcache_set_device_size(info, xlate64(pvhdr->device_size_xl));
+	/*
+	 * FIXME: check for invalid values of other pv_header fields.
+	 */
+
+	device_size = xlate64(pvhdr->device_size_xl);
+
+	/* Data areas holding the PEs */
+	dlocn_xl = pvhdr->disk_areas_xl;
+	while ((offset = xlate64(dlocn_xl->offset))) {
+		dlocn_xl++;
+		data_area_count++;
+	}
+
+	/* Metadata area headers */
+	dlocn_xl++;
+	while ((offset = xlate64(dlocn_xl->offset))) {
+		dlocn_xl++;
+		meta_area_count++;
+	}
+
+	/* PV header extension */
+	dlocn_xl++;
+	pvhdr_ext = (struct pv_header_extension *) ((char *) dlocn_xl);
+	ext_version = xlate32(pvhdr_ext->version);
+	ext_flags = xlate32(pvhdr_ext->flags);
+
+	log_debug_metadata("PV header on %s has device_size %llu uuid %s",
+			   dev_name(dev), (unsigned long long)device_size, uuid);
+
+	log_debug_metadata("PV header on %s has data areas %d metadata areas %d",
+			   dev_name(dev), data_area_count, meta_area_count);
+
+	log_debug_metadata("PV header on %s has extension version %u flags %x",
+			   dev_name(dev), ext_version, ext_flags);
+
+	/*
+	 * Step 2: look through structs to populate lvmcache
+	 * with pv_header/extension info for this device.
+	 *
+	 * An "info" struct represents a device in lvmcache
+	 * and is created by lvmcache_add().  The info struct
+	 * in lvmcache is not associated with any vginfo
+	 * struct until the VG name is known from the summary.
+	 *
+	 * lvmcache_add() calls _create_info() which creates
+	 * the label struct, saved at info->label.
+	 * lvmcache_get_label(info) then returns info->label.
+	 */
+	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev, FMT_TEXT_ORPHAN_VG_NAME, FMT_TEXT_ORPHAN_VG_NAME, 0))) {
+		log_error("PV %s info cannot be saved in cache.", dev_name(dev));
+		*failed_flags |= FAILED_INTERNAL;
+		return 0;
+	}
+
+	/* get the label that lvmcache_add() created */
+	if (!(*label = lvmcache_get_label(info))) {
+		*failed_flags |= FAILED_INTERNAL;
+		return_0;
+	}
+
+	lvmcache_set_device_size(info, device_size);
 
 	lvmcache_del_das(info);
 	lvmcache_del_mdas(info);
@@ -406,42 +491,49 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 	/* Data areas holding the PEs */
 	dlocn_xl = pvhdr->disk_areas_xl;
 	while ((offset = xlate64(dlocn_xl->offset))) {
-		lvmcache_add_da(info, offset, xlate64(dlocn_xl->size));
+		if (!lvmcache_add_da(info, offset, xlate64(dlocn_xl->size)))
+			add_errors++;
 		dlocn_xl++;
 	}
 
 	/* Metadata area headers */
 	dlocn_xl++;
 	while ((offset = xlate64(dlocn_xl->offset))) {
-		lvmcache_add_mda(info, dev, offset, xlate64(dlocn_xl->size), 0);
+		/* this is just a roundabout call to add_mda() */
+		if (!lvmcache_add_mda(info, dev, offset, xlate64(dlocn_xl->size), 0))
+			add_errors++;
 		dlocn_xl++;
 	}
 
+	/* PV header extension */
 	dlocn_xl++;
-
-	/*
-	 * PV header extension
-	 */
 	pvhdr_ext = (struct pv_header_extension *) ((char *) dlocn_xl);
-	if (!(ext_version = xlate32(pvhdr_ext->version)))
-		goto out;
 
-	log_debug_metadata("%s: PV header extension version %" PRIu32 " found",
-			   dev_name(dev), ext_version);
+	/* version 0 doesn't support extension */
+	if (!ext_version)
+		goto mda_read;
 
 	/* Extension version */
-	lvmcache_set_ext_version(info, xlate32(pvhdr_ext->version));
+	lvmcache_set_ext_version(info, ext_version);
 
 	/* Extension flags */
-	lvmcache_set_ext_flags(info, xlate32(pvhdr_ext->flags));
+	lvmcache_set_ext_flags(info, ext_flags);
 
 	/* Bootloader areas */
 	dlocn_xl = pvhdr_ext->bootloader_areas_xl;
 	while ((offset = xlate64(dlocn_xl->offset))) {
-		lvmcache_add_ba(info, offset, xlate64(dlocn_xl->size));
+		if (!lvmcache_add_ba(info, offset, xlate64(dlocn_xl->size)))
+			add_errors++;
 		dlocn_xl++;
 	}
-out:
+
+	if (add_errors) {
+		log_error("PV %s disk area info cannot be saved in cache.", dev_name(dev));
+		*failed_flags |= FAILED_INTERNAL;
+		return 0;
+	}
+
+mda_read:
 	baton.info = info;
 	baton.label = *label;
 	baton.ld = ld;

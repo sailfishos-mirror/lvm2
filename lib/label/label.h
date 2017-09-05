@@ -76,7 +76,8 @@ struct label_ops {
 	 */
 	int (*read) (struct labeller * l, struct device * dev,
 		     void *label_buf,
-		     struct label_read_data *ld, struct label ** label);
+		     struct label_read_data *ld, struct label ** label,
+		     uint32_t *failed_flags);
 
 	/*
 	 * Additional consistency checks for the paranoid.

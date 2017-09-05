@@ -57,7 +57,7 @@ static int _pool_write(struct label *label __attribute__((unused)), void *buf __
 
 static int _pool_read(struct labeller *l, struct device *dev, void *buf,
 		 struct label_read_data *ld,
-		 struct label **label)
+		 struct label **label, uint32_t *failed_flags)
 {
 	struct pool_list pl;
 

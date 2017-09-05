@@ -40,6 +40,7 @@
 #include <sys/param.h>
 
 static struct physical_volume *_pv_read(struct cmd_context *cmd,
+					struct format_type *fmt,
 					struct dm_pool *pvmem,
 					const char *pv_name,
 					struct format_instance *fid,
@@ -3253,6 +3254,7 @@ static int _check_mda_in_use(struct metadata_area *mda, void *_in_use)
 
 struct _vg_read_orphan_baton {
 	struct cmd_context *cmd;
+	struct format_type *fmt;
 	struct volume_group *vg;
 	uint32_t warn_flags;
 	int consistent;
@@ -3353,7 +3355,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
 	uint32_t ext_version;
 	uint32_t ext_flags;
 
-	if (!(pv = _pv_read(b->vg->cmd, b->vg->vgmem, dev_name(lvmcache_device(info)),
+	if (!(pv = _pv_read(b->vg->cmd, b->fmt, b->vg->vgmem, dev_name(lvmcache_device(info)),
 			    b->vg->fid, b->warn_flags, 0))) {
 		stack;
 		return 1;
@@ -3461,6 +3463,7 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
 	vg->free_count = 0;
 
 	baton.cmd = cmd;
+	baton.fmt = fmt;
 	baton.warn_flags = warn_flags;
 	baton.vg = vg;
 	baton.consistent = 1;
@@ -4643,6 +4646,7 @@ const char *find_vgname_from_pvname(struct cmd_context *cmd,
 
 /* FIXME Use label functions instead of PV functions */
 static struct physical_volume *_pv_read(struct cmd_context *cmd,
+					struct format_type *fmt,
 					struct dm_pool *pvmem,
 					const char *pv_name,
 					struct format_instance *fid,
@@ -4652,7 +4656,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
 	struct label *label;
 	struct lvmcache_info *info;
 	struct device *dev;
-	const struct format_type *fmt;
 	int found;
 
 	if (!(dev = dev_cache_get(pv_name, cmd->filter)))
@@ -4687,8 +4690,6 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
 		info = (struct lvmcache_info *) label->info;
 	}
 
-	fmt = lvmcache_fmt(info);
-
 	pv = _alloc_pv(pvmem, dev);
 	if (!pv) {
 		log_error("pv allocation for '%s' failed", pv_name);
@@ -4698,9 +4699,8 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
 	pv->label_sector = label->sector;
 
 	/* FIXME Move more common code up here */
-	if (!(lvmcache_fmt(info)->ops->pv_read(lvmcache_fmt(info), pv_name, pv, scan_label_only))) {
-		log_error("Failed to read existing physical volume '%s'",
-			  pv_name);
+	if (!(fmt->ops->pv_read(fmt, pv_name, pv, scan_label_only))) {
+		log_error("Failed to read existing physical volume '%s'", pv_name);
 		goto bad;
 	}
 
@@ -6055,3 +6055,17 @@ int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
 
 	return 1;
 }
+
+const char *failed_flags_str(uint32_t failed_flags)
+{
+	if (failed_flags & FAILED_LABEL_CHECKSUM)
+		return "LVM label header checksum";
+	if (failed_flags & FAILED_LABEL_SECTOR_NUMBER)
+		return "LVM label header number";
+	if (failed_flags & FAILED_INTERNAL)
+		return "LVM internal error";
+	if (failed_flags & FAILED_PV_HEADER)
+		return "PV header";
+	return "unknown";
+}
+
