@@ -1194,6 +1194,13 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
 	return 1;
 }
 
+/*
+ * FIXME: take a failed_flags arg from the caller and set a flag
+ * there according to the particular errors found here that cause
+ * us to return 0.  Also pass a failed_flags down to 
+ * text_read_metadata_summary() and _read_vgsummary() to get
+ * specific errors from the lowest levels and propagate those upward.
+ */
 int read_metadata_location(const struct format_type *fmt,
 		    struct mda_header *mdah, struct label_read_data *ld,
 		    struct device_area *dev_area,
@@ -1220,8 +1227,8 @@ int read_metadata_location(const struct format_type *fmt,
 	 * If no valid offset, do not try to search for vgname
 	 */
 	if (!rlocn->offset) {
-		log_debug("%s: found metadata with offset 0.",
-			  dev_name(dev_area->dev));
+		log_error("Metadata location on %s at %"PRIu64" has offset 0.",
+			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return 0;
 	}
 
@@ -1243,16 +1250,19 @@ int read_metadata_location(const struct format_type *fmt,
 	buf[len] = '\0';
 
 	/* Ignore this entry if the characters aren't permissible */
-	if (!validate_name(buf))
+	if (!validate_name(buf)) {
+		log_error("Metadata location on %s at %"PRIu64" begins with invalid VG name.",
+			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return_0;
+	}
 
 	/* We found a VG - now check the metadata */
 	if (rlocn->offset + rlocn->size > mdah->size)
 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
 
 	if (wrap > rlocn->offset) {
-		log_error("%s: metadata too large for circular buffer",
-			  dev_name(dev_area->dev));
+		log_error("Metadata location on %s at %"PRIu64" is too large for circular buffer.",
+			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return 0;
 	}
 
@@ -1266,15 +1276,19 @@ int read_metadata_location(const struct format_type *fmt,
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
 				vgsummary)) {
-		/* FIXME: detect and handle errors */
+		log_error("Metadata location on %s at %"PRIu64" has invalid summary for VG.",
+			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return_0;
 	}
 
 	/* Ignore this entry if the characters aren't permissible */
-	if (!validate_name(vgsummary->vgname))
+	if (!validate_name(vgsummary->vgname)) {
+		log_error("Metadata location on %s at %"PRIu64" has invalid VG name.",
+			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return_0;
+	}
 
-	log_debug_metadata("Read metadata summary from %s at %"PRIu64" size %"PRIu64" for VG %s",
+	log_debug_metadata("Metadata location on %s at %"PRIu64" size %"PRIu64" has summary for VG %s",
 			   dev_name(dev_area->dev),
 			   dev_area->start + rlocn->offset,
 			   rlocn->size,

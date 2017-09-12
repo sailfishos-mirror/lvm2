@@ -170,6 +170,7 @@ struct metadata_area {
 	struct metadata_area_ops *ops;
 	void *metadata_locn;
 	uint32_t status;
+	uint32_t read_failed_flags;
 };
 struct metadata_area *mda_copy(struct dm_pool *mem,
 			       struct metadata_area *mda);

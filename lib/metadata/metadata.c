@@ -6066,6 +6066,10 @@ const char *failed_flags_str(uint32_t failed_flags)
 		return "LVM internal error";
 	if (failed_flags & FAILED_PV_HEADER)
 		return "PV header";
+	if (failed_flags & FAILED_MDA_HEADER)
+		return "MDA header";
+	if (failed_flags & FAILED_VG_METADATA)
+		return "VG metadata";
 	return "unknown";
 }
 

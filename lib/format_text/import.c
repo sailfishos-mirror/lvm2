@@ -32,9 +32,6 @@ static void _init_text_import(void)
 	_text_import_initialised = 1;
 }
 
-/*
- * Find out vgname on a given device.
- */
 int text_read_metadata_summary(const struct format_type *fmt,
 		       struct device *dev,
 		       struct label_read_data *ld,
@@ -83,8 +80,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
 					 checksum_only, 1)) {
-			/* FIXME: handle errors */
-			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
+			log_error("Couldn't read volume group metadata from %s at %llu.", dev_name(dev), (unsigned long long)offset);
 			goto out;
 		}
 	} else {
@@ -96,6 +92,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 
 	if (checksum_only) {
 		/* Checksum matches already-cached content - no need to reparse. */
+		log_debug_metadata("Metadata summary checksum matches previous for %s.", dev ? dev_name(dev) : "file");
 		r = 1;
 		goto out;
 	}
@@ -107,8 +104,10 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		if (!(*vsn)->check_version(cft))
 			continue;
 
-		if (!(*vsn)->read_vgsummary(fmt, cft, vgsummary))
+		if (!(*vsn)->read_vgsummary(fmt, cft, vgsummary)) {
+			log_debug_metadata("Metadata summary is invalid for %s.", dev ? dev_name(dev) : "file");
 			goto_out;
+		}
 
 		r = 1;
 		break;

@@ -312,7 +312,19 @@ struct _mda_baton {
 	struct lvmcache_info *info;
 	struct label *label;
 	struct label_read_data *ld;
+	unsigned int fail_count;
+	unsigned int ignore_count;
+	unsigned int success_count;
 };
+
+/*
+ * The return value from this function is not the result;
+ * the success/failure of reading metadata is tracked by
+ * baton fields.
+ *
+ * If this function returns 0, no further mdas are read.
+ * If this function returns 1, other mdas are read.
+ */
 
 static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 {
@@ -320,46 +332,110 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 	const struct format_type *fmt = p->label->labeller->fmt;
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct mda_header *mdah;
+	struct raw_locn *rl;
+	int rl_count = 0;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 
-	/*
-	 * Using the labeller struct to preserve info about
-	 * the last parsed vgname, vgid, creation host
-	 *
-	 * TODO: make lvmcache smarter and move this cache logic there
-	 */
-
 	if (!dev_open_readonly(mdac->area.dev)) {
-		mda_set_ignored(mda, 1);
-		stack;
+		log_error("Can't open device %s to read metadata from mda.", dev_name(mdac->area.dev));
+		mda->read_failed_flags |= FAILED_INTERNAL;
+		p->fail_count++;
 		return 1;
 	}
 
+	/*
+	 * read mda_header
+	 *
+	 * metadata_area/mda_context/device_area (mda/mdac/area)
+	 * is the incore method of getting to the struct disk_locn
+	 * that followed the struct pv_header and points to the
+	 * struct mda_header.
+	 *
+	 * FIXME: pass failed_flags to raw_read_mda_header() so that a
+	 * more specific error result can be returned.
+	 *
+	 */
 	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, p->ld))) {
-		stack;
-		goto close_dev;
+		log_debug_metadata("MDA header on %s at %"PRIu64" is not valid.",
+				   dev_name(mdac->area.dev), mdac->area.start);
+		mda->read_failed_flags |= FAILED_MDA_HEADER;
+		p->fail_count++;
+		goto out;
 	}
 
 	mda_set_ignored(mda, rlocn_is_ignored(mdah->raw_locns));
 
 	if (mda_is_ignored(mda)) {
-		log_debug_metadata("Ignoring mda on device %s at offset %"PRIu64,
-				   dev_name(mdac->area.dev),
-				   mdac->area.start);
-		if (!dev_close(mdac->area.dev))
-			stack;
-		return 1;
+		log_debug_metadata("MDA header on %s at %"PRIu64" has ignored metdata.",
+				   dev_name(mdac->area.dev), mdac->area.start);
+		p->ignore_count++;
+		goto out;
+	} else {
+		rl = &mdah->raw_locns[0];
+		while (rl->offset) {
+			rl_count++;
+			rl++;
+		}
+		log_debug_metadata("MDA header on %s at %"PRIu64" has %d metadata locations.",
+				   dev_name(mdac->area.dev), mdac->area.start, rl_count);
 	}
 
-	if (read_metadata_location(fmt, mdah, p->ld, &mdac->area, &vgsummary,
-			     &mdac->free_sectors) &&
-	    !lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
-		if (!dev_close(mdac->area.dev))
-			stack;
-		return_0;
+	if (!rl_count)
+		goto out;
+
+	/*
+	 * read vg metadata, but saves only a few fields from it in vgsummary
+	 * (enough to create vginfo/info connections in lvmcache)
+	 *
+	 * FIXME: this should be unified with the very similar function
+	 * that reads metadata for vg_read(): read_metadata_location_vg().
+	 *
+	 * FIXME: pass failed_flags to read_metadata_location() so that a
+	 * more specific error result can be returned.
+	 *
+	 * (This is not using the checksum optimization because a new/zeroed
+	 * vgsummary struct is passed for each area, and read_metadata_location
+	 * decides to use the checksum optimization based on whether or not
+	 * the vgsummary.vgname is already set.)
+	 */
+	if (!read_metadata_location(fmt, mdah, p->ld, &mdac->area, &vgsummary, &mdac->free_sectors)) {
+		/* A more specific error has been logged prior to returning. */
+		log_debug_metadata("Metadata location on %s failed.", dev_name(mdac->area.dev));
+		mda->read_failed_flags |= FAILED_VG_METADATA;
+		p->fail_count++;
+		goto out;
 	}
 
-close_dev:
+	/*
+	 * Each copy of the metadata for a VG will call this to save the
+	 * VG summary fields in lvmcache.  When the checksum optimization
+	 * is used, this is a waste of time and could be skipped, because
+	 * we'd just be passing the same data again.  When the metadata
+	 * checksum doesn't match between copies, we should set a flag
+	 * in the vginfo.  Or, if we are not using the checksum optimization,
+	 * then we might be passing a metadata summary that doesn't match
+	 * the previous metadata summary (we should include the seqno in
+	 * the summary to make that clearer.)  If the summaries from
+	 * devices doesn't match, we should also set a flag in the vginfo,
+	 * as suggested above for mismatching checksums.  Later, the vg_read
+	 * code could look for the vginfo flag indicating mismatching
+	 * checksums or summary fields (including seqno), and if all the
+	 * copies matched, it could simply reuse the label_read_data
+	 * from the original scan, and avoid label_scan_devs to rescan.
+	 * This optimization would only apply to reporting commands,
+	 * but could reduce scanning to one read per device in the
+	 * common case.
+	 */
+	if (!lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
+		log_debug_metadata("Metadata summary on %s cannot be saved in lvmcache.", dev_name(mdac->area.dev));
+		mda->read_failed_flags |= FAILED_INTERNAL;
+		p->fail_count++;
+		goto out;
+	}
+
+	log_debug_metadata("Metadata summary on %s found for VG %s.", dev_name(mdac->area.dev), vgsummary.vgname);
+	p->success_count++;
+out:
 	if (!dev_close(mdac->area.dev))
 		stack;
 
@@ -396,10 +472,13 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 
 	/*
 	 * pv_header has uuid and device_size
+	 *
 	 * pv_header.disk_areas are two variable sequences of disk_locn's:
 	 * . first null terminated sequence of disk_locn's are data areas
 	 * . second null terminated sequence of disk_locn's are meta areas
+	 *
 	 * pv_header_extension has version and flags
+	 *
 	 * pv_header_extension.bootloader_areas is one set of disk_locn's:
 	 * . null terminated sequence of disk_locn's are bootloader areas
 	 *
@@ -479,6 +558,7 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 	/* get the label that lvmcache_add() created */
 	if (!(*label = lvmcache_get_label(info))) {
 		*failed_flags |= FAILED_INTERNAL;
+		lvmcache_del(info);
 		return_0;
 	}
 
@@ -488,7 +568,13 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 	lvmcache_del_mdas(info);
 	lvmcache_del_bas(info);
 
-	/* Data areas holding the PEs */
+	/*
+	 * Following the struct pv_header on disk are two lists of
+	 * struct disk_locn (each disk_locn is an offset+size pair).
+	 * The first list points to areas of data blocks holding PEs.
+	 * The list of disk_locn's is terminated by a disk_locn
+	 * holding zeros.
+	 */
 	dlocn_xl = pvhdr->disk_areas_xl;
 	while ((offset = xlate64(dlocn_xl->offset))) {
 		if (!lvmcache_add_da(info, offset, xlate64(dlocn_xl->size)))
@@ -496,7 +582,12 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 		dlocn_xl++;
 	}
 
-	/* Metadata area headers */
+	/*
+	 * Following the disk_locn structs for data areas is a
+	 * series of disk_locn structs each pointing to a
+	 * struct mda_header.  dlocn_xl->offset now points
+	 * to the first mda_header on disk.
+	 */
 	dlocn_xl++;
 	while ((offset = xlate64(dlocn_xl->offset))) {
 		/* this is just a roundabout call to add_mda() */
@@ -530,19 +621,64 @@ static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 	if (add_errors) {
 		log_error("PV %s disk area info cannot be saved in cache.", dev_name(dev));
 		*failed_flags |= FAILED_INTERNAL;
+		lvmcache_del(info);
 		return 0;
 	}
 
 mda_read:
+	/*
+	 * Step 3: read struct mda_header and vg metadata which is
+	 * saved into lvmcache and used to create a vginfo struct
+	 * and associate the vginfo with the info structs created
+	 * above.  The locations on disk of the mda_header structs
+	 * comes from the disk_locn structs above.  Those disk_locn
+	 * structs are confusingly not used directly, but were saved
+	 * into lvmcache as metadata_area+mda_context.  This means
+	 * that instead of looking at disk_locn/offset+size, we look
+	 * through a series of incore structs to get offset+size:
+	 * metadata_area/mda_context/device_area/start+size.
+	 * FIXME: get rid of these excessive abstractions.
+	 */
 	baton.info = info;
 	baton.label = *label;
 	baton.ld = ld;
 
+	/*
+	 * for each mda on info->mdas.  These metadata_area structs were
+	 * created and added to info->mdas above by lvmcache_add_mda().
+	 */
 	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
 
-	lvmcache_make_valid(info);
+	/*
+	 * Presumably the purpose of having multiple mdas on a device is
+	 * to have a backup that can be used in case one is bad.
+	 */
+	if (baton.fail_count && baton.success_count) {
+		log_warn("WARNING: Using device %s with mix of %d good and %d bad mdas.",
+			 dev_name(dev), baton.success_count, baton.fail_count);
+	}
 
-	return 1;
+	if (baton.success_count) {
+		/* if any mda was successful, we ignore other failed mdas */
+		log_debug_metadata("PV on %s has valid mda header and vg metadata.", dev_name(dev));
+		lvmcache_make_valid(info);
+		return 1;
+	} else if (baton.fail_count) {
+		/* FIXME: get failed_flags from mda->read_failed_flags */
+		log_debug_metadata("PV on %s has valid mda header and invalid vg metadata.", dev_name(dev));
+		*failed_flags |= FAILED_VG_METADATA;
+		lvmcache_del(info);
+		return 0;
+	} else if (baton.ignore_count) {
+		log_debug_metadata("PV on %s has valid mda header and ignored vg metadata.", dev_name(dev));
+		lvmcache_make_valid(info);
+		return 1;
+	} else {
+		/* no VG metadata */
+		log_debug_metadata("PV on %s has valid mda header and unused vg metadata.", dev_name(dev));
+		lvmcache_make_valid(info);
+		return 1;
+	}
 }
 
 static void _text_destroy_label(struct labeller *l __attribute__((unused)),
