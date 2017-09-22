@@ -441,12 +441,6 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 	size_t len;
 	char vgnamebuf[NAME_LEN + 2] __attribute__((aligned(8)));
 	struct raw_locn *rlocn, *rlocn_precommitted;
-	struct lvmcache_info *info;
-	struct lvmcache_vgsummary vgsummary_orphan = {
-		.vgname = FMT_TEXT_ORPHAN_VG_NAME,
-	};
-
-	memcpy(&vgsummary_orphan.vgid, FMT_TEXT_ORPHAN_VG_NAME, sizeof(FMT_TEXT_ORPHAN_VG_NAME));
 
 	rlocn = mdah->raw_locns;	/* Slot 0 */
 	rlocn_precommitted = rlocn + 1;	/* Slot 1 */
@@ -482,8 +476,10 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 		/* FIXME Loop through rlocns two-at-a-time.  List null-terminated. */
 		/* FIXME Ignore if checksum incorrect!!! */
 		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
-			      sizeof(vgnamebuf), vgnamebuf))
-			goto_bad;
+		      	      sizeof(vgnamebuf), vgnamebuf)) {
+			*failed_flags |= FAILED_VG_METADATA_IO;
+			return NULL;
+		}
 	} else {
 		memset(vgnamebuf, 0, sizeof(vgnamebuf));
 		memcpy(vgnamebuf, ld->buf + dev_area->start + rlocn->offset, NAME_LEN);
@@ -493,15 +489,10 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 	    (isspace(vgnamebuf[len]) || vgnamebuf[len] == '{'))
 		return rlocn;
 
-	log_debug_metadata("Volume group name found in metadata on %s at %" PRIu64 " does "
-			   "not match expected name %s.", 
-			   dev_name(dev_area->dev), dev_area->start + rlocn->offset, vgname);
+	log_error("Volume group name found in metadata on %s at %llu does not match expected name %s.",
+		  dev_name(dev_area->dev), (unsigned long long)dev_area->start + rlocn->offset, vgname);
 
-       bad:
-	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
-	    !lvmcache_update_vgname_and_id(info, &vgsummary_orphan))
-		stack;
-
+	*failed_flags |= FAILED_VG_METADATA_FIELD;
 	return NULL;
 }
 
