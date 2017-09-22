@@ -98,4 +98,6 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		       struct lvmcache_vgsummary *vgsummary,
 		       uint32_t *failed_flags);
 
+void set_pv_devices(struct format_instance *fid, struct volume_group *vg);
+
 #endif

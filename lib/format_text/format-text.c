@@ -633,6 +633,71 @@ static struct volume_group *_read_mda_header_and_metadata_vg(struct format_insta
 	return vg;
 }
 
+static void _set_pv_device(struct format_instance *fid,
+			   struct volume_group *vg,
+			   struct physical_volume *pv)
+{
+	uint64_t size;
+
+	/*
+	 * Convert the uuid into a device.
+	 */
+	if (fid->fmt->cmd && !fid->fmt->cmd->pvscan_cache_single) {
+		if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, &pv->label_sector))) {
+			char buffer[64] __attribute__((aligned(8)));
+
+			if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+				buffer[0] = '\0';
+			log_error_once("Couldn't find device with uuid %s.", buffer);
+		}
+	} else {
+		log_debug_metadata("Skip metadata pvid to device lookup for lvmetad pvscan.");
+	}
+
+	/* TODO is the !lvmetad_used() too coarse here? */
+	if (!pv->dev && !lvmetad_used())
+		pv->status |= MISSING_PV;
+
+	if ((pv->status & MISSING_PV) && pv->dev && pv_mda_used_count(pv) == 0) {
+		pv->status &= ~MISSING_PV;
+		log_info("Recovering a previously MISSING PV %s with no MDAs.",
+			 pv_dev_name(pv));
+	}
+
+	/* Fix up pv size if missing or impossibly large */
+	if ((!pv->size || pv->size > (1ULL << 62)) && pv->dev) {
+		if (!dev_get_size(pv->dev, &pv->size)) {
+			log_error("%s: Couldn't get size.", pv_dev_name(pv));
+			return;
+		}
+		log_verbose("Fixing up missing size (%s) "
+			    "for PV %s", display_size(fid->fmt->cmd, pv->size),
+			    pv_dev_name(pv));
+		size = pv->pe_count * (uint64_t) vg->extent_size + pv->pe_start;
+		if (size > pv->size)
+			log_warn("WARNING: Physical Volume %s is too large "
+				 "for underlying device", pv_dev_name(pv));
+	}
+}
+
+/*
+ * Finds the 'struct device' that correponds to each PV in the metadata,
+ * and may make some adjustments to vg fields based on the dev properties.
+ *
+ * FIXME: we shouldn't call this for each mda.  It should be done
+ * once by the layer above this on the final vg.
+ */
+void set_pv_devices(struct format_instance *fid, struct volume_group *vg)
+{
+	struct pv_list *pvl;
+
+	dm_list_iterate_items(pvl, &vg->pvs)
+		_set_pv_device(fid, vg, pvl->pv);
+
+	dm_list_iterate_items(pvl, &vg->pvs_outdated)
+		_set_pv_device(fid, vg, pvl->pv);
+}
+
 static struct volume_group *_vg_read_raw(struct format_instance *fid,
 					 const char *vgname,
 					 struct metadata_area *mda,
@@ -649,6 +714,10 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 	}
 
 	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 0);
+
+	/* FIXME: move this into vg_read() */
+	if (vg)
+		set_pv_devices(fid, vg);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
@@ -672,6 +741,10 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
 	}
 
 	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 1);
+
+	/* FIXME: move this into vg_read() */
+	if (vg)
+		set_pv_devices(fid, vg);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
