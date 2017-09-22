@@ -23,6 +23,7 @@
 #include "toolcontext.h"
 #include "lvm-file.h"
 #include "memlock.h"
+#include "lvmcache.h"
 
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -497,7 +498,8 @@ int override_config_tree_from_profile(struct cmd_context *cmd,
 int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *buf_async,
 			off_t offset, size_t size, off_t offset2, size_t size2,
 			checksum_fn_t checksum_fn, uint32_t checksum,
-			int checksum_only, int no_dup_node_check)
+			int checksum_only, int no_dup_node_check,
+			uint32_t *failed_flags)
 {
 	char *fb, *fe;
 	int r = 0;
@@ -510,6 +512,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 		log_error(INTERNAL_ERROR "config_file_read_fd: expected file, special file "
 					 "or profile config source, found %s config source.",
 					 _config_source_names[cs->type]);
+		*failed_flags |= FAILED_INTERNAL;
 		return 0;
 	}
 
@@ -535,6 +538,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 			  MAP_PRIVATE, dev_fd(dev), offset - mmap_offset);
 		if (fb == (caddr_t) (-1)) {
 			log_sys_error("mmap", dev_name(dev));
+			*failed_flags |= FAILED_VG_METADATA_IO;
 			goto out;
 		}
 		fb = fb + mmap_offset;
@@ -546,6 +550,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 
 		if (!dev_read_circular(dev, (uint64_t) offset, size,
 				       (uint64_t) offset2, size2, buf)) {
+			*failed_flags |= FAILED_VG_METADATA_IO;
 			goto out;
 		}
 		fb = buf;
@@ -555,17 +560,22 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 	    (checksum_fn(checksum_fn(INITIAL_CRC, (const uint8_t *)fb, size),
 			 (const uint8_t *)(fb + size), size2))) {
 		log_error("%s: Checksum error", dev_name(dev));
+		*failed_flags |= FAILED_VG_METADATA_CHECKSUM;
 		goto out;
 	}
 
 	if (!checksum_only) {
 		fe = fb + size + size2;
 		if (no_dup_node_check) {
-			if (!dm_config_parse_without_dup_node_check(cft, fb, fe))
+			if (!dm_config_parse_without_dup_node_check(cft, fb, fe)) {
+				*failed_flags |= FAILED_VG_METADATA_PARSE;
 				goto_out;
+			}
 		} else {
-			if (!dm_config_parse(cft, fb, fe))
+			if (!dm_config_parse(cft, fb, fe)) {
+				*failed_flags |= FAILED_VG_METADATA_PARSE;
 				goto_out;
+			}
 		}
 	}
 
@@ -578,6 +588,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 		/* unmap the file */
 		if (munmap(fb - mmap_offset, size + mmap_offset)) {
 			log_sys_error("munmap", dev_name(dev));
+			*failed_flags |= FAILED_INTERNAL;
 			r = 0;
 		}
 	}
@@ -591,6 +602,7 @@ int config_file_read(struct dm_config_tree *cft)
 	struct config_source *cs = dm_config_get_custom(cft);
 	struct config_file *cf;
 	struct stat info;
+	uint32_t failed_flags = 0;
 	int r;
 
 	if (!config_file_check(cft, &filename, &info))
@@ -614,7 +626,7 @@ int config_file_read(struct dm_config_tree *cft)
 	}
 
 	r = config_file_read_fd(cft, cf->dev, NULL, 0, (size_t) info.st_size, 0, 0,
-				(checksum_fn_t) NULL, 0, 0, 0);
+				(checksum_fn_t) NULL, 0, 0, 0, &failed_flags);
 
 	if (!cf->keep_open) {
 		if (!dev_close(cf->dev))

@@ -326,7 +326,7 @@ struct _mda_baton {
  * If this function returns 1, other mdas are read.
  */
 
-static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
+static int _read_mda_header_and_metadata_summary(struct metadata_area *mda, void *baton)
 {
 	struct _mda_baton *p = baton;
 	const struct format_type *fmt = p->label->labeller->fmt;
@@ -334,6 +334,7 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 	struct mda_header *mdah;
 	struct raw_locn *rl;
 	int rl_count = 0;
+	uint32_t failed_flags = 0;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 
 	if (!dev_open_readonly(mdac->area.dev)) {
@@ -350,15 +351,11 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 	 * is the incore method of getting to the struct disk_locn
 	 * that followed the struct pv_header and points to the
 	 * struct mda_header.
-	 *
-	 * FIXME: pass failed_flags to raw_read_mda_header() so that a
-	 * more specific error result can be returned.
-	 *
 	 */
-	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, p->ld))) {
+	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, p->ld, &failed_flags))) {
 		log_debug_metadata("MDA header on %s at %"PRIu64" is not valid.",
 				   dev_name(mdac->area.dev), mdac->area.start);
-		mda->read_failed_flags |= FAILED_MDA_HEADER;
+		mda->read_failed_flags |= failed_flags;
 		p->fail_count++;
 		goto out;
 	}
@@ -390,18 +387,15 @@ static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 	 * FIXME: this should be unified with the very similar function
 	 * that reads metadata for vg_read(): read_metadata_location_vg().
 	 *
-	 * FIXME: pass failed_flags to read_metadata_location() so that a
-	 * more specific error result can be returned.
-	 *
 	 * (This is not using the checksum optimization because a new/zeroed
 	 * vgsummary struct is passed for each area, and read_metadata_location
 	 * decides to use the checksum optimization based on whether or not
 	 * the vgsummary.vgname is already set.)
 	 */
-	if (!read_metadata_location(fmt, mdah, p->ld, &mdac->area, &vgsummary, &mdac->free_sectors)) {
+	if (!read_metadata_location_summary(fmt, mdah, p->ld, &mdac->area, &vgsummary, &mdac->free_sectors, &failed_flags)) {
 		/* A more specific error has been logged prior to returning. */
-		log_debug_metadata("Metadata location on %s failed.", dev_name(mdac->area.dev));
-		mda->read_failed_flags |= FAILED_VG_METADATA;
+		log_debug_metadata("Metadata location on %s returned no VG summary.", dev_name(mdac->area.dev));
+		mda->read_failed_flags |= failed_flags;
 		p->fail_count++;
 		goto out;
 	}
@@ -647,7 +641,7 @@ mda_read:
 	 * for each mda on info->mdas.  These metadata_area structs were
 	 * created and added to info->mdas above by lvmcache_add_mda().
 	 */
-	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
+	lvmcache_foreach_mda(info, _read_mda_header_and_metadata_summary, &baton);
 
 	/*
 	 * Presumably the purpose of having multiple mdas on a device is

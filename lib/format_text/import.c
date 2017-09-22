@@ -39,7 +39,8 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		       off_t offset2, uint32_t size2,
 		       checksum_fn_t checksum_fn,
 		       int checksum_only,
-		       struct lvmcache_vgsummary *vgsummary)
+		       struct lvmcache_vgsummary *vgsummary,
+		       uint32_t *failed_flags)
 {
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
@@ -63,8 +64,10 @@ int text_read_metadata_summary(const struct format_type *fmt,
 
 	_init_text_import();
 
-	if (!(cft = config_open(CONFIG_FILE_SPECIAL, NULL, 0)))
+	if (!(cft = config_open(CONFIG_FILE_SPECIAL, NULL, 0))) {
+		*failed_flags |= FAILED_INTERNAL;
 		return_0;
+	}
 
 	if (dev) {
 		if (buf)
@@ -79,7 +82,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		if (!config_file_read_fd(cft, dev, buf, offset, size,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
-					 checksum_only, 1)) {
+					 checksum_only, 1, failed_flags)) {
 			log_error("Couldn't read volume group metadata from %s at %llu.", dev_name(dev), (unsigned long long)offset);
 			goto out;
 		}
@@ -104,7 +107,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		if (!(*vsn)->check_version(cft))
 			continue;
 
-		if (!(*vsn)->read_vgsummary(fmt, cft, vgsummary)) {
+		if (!(*vsn)->read_vgsummary(fmt, cft, vgsummary, failed_flags)) {
 			log_debug_metadata("Metadata summary is invalid for %s.", dev ? dev_name(dev) : "file");
 			goto_out;
 		}
@@ -123,7 +126,19 @@ struct cached_vg_fmtdata {
         size_t cached_mda_size;
 };
 
-struct volume_group *text_read_metadata(struct format_instance *fid,
+/*
+ * FIXME: this function's results / return values are very
+ * badly defined.  It returns NULL both on an error, and
+ * when it skips parsing because of an optimization.  The
+ * use_previous_vg might help except that the way it's used
+ * means it won't tell you the result of each call.  So,
+ * failed_flags being returned as non-zero ends up being
+ * the only way to tell if a particular call to this
+ * function failed or not.  Toss out the whole mess and
+ * rewrite it sanely.
+ */
+
+struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 				       struct device *dev,
 				       const char *file,
 				       struct label_read_data *ld,
@@ -133,7 +148,8 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 				       off_t offset2, uint32_t size2,
 				       checksum_fn_t checksum_fn,
 				       uint32_t checksum,
-				       time_t *when, char **desc)
+				       time_t *when, char **desc,
+				       uint32_t *failed_flags)
 {
 	struct volume_group *vg = NULL;
 	struct dm_config_tree *cft;
@@ -153,6 +169,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	if (vg_fmtdata && !*vg_fmtdata &&
 	    !(*vg_fmtdata = dm_pool_zalloc(fid->mem, sizeof(**vg_fmtdata)))) {
 		log_error("Failed to allocate VG fmtdata for text format.");
+		*failed_flags |= FAILED_INTERNAL;
 		return NULL;
 	}
 
@@ -161,8 +178,10 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 	*desc = NULL;
 	*when = 0;
 
-	if (!(cft = config_open(CONFIG_FILE_SPECIAL, file, 0)))
+	if (!(cft = config_open(CONFIG_FILE_SPECIAL, file, 0))) {
+		*failed_flags |= FAILED_INTERNAL;
 		return_NULL;
+	}
 
 	/* Does the metadata match the already-cached VG? */
 	skip_parse = vg_fmtdata && 
@@ -178,7 +197,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 			 * Will do a new synchronous read to get the data.
 			 * (scan_size could also be made larger.)
 			 */
-			log_debug_metadata("label scan buffer for %s too small %u for metadata offset %llu size %u",
+			log_debug_metadata("scan buffer for %s too small %u for metadata offset %llu size %u",
 					   dev_name(dev), ld->buf_len, (unsigned long long)offset, size);
 			buf = NULL;
 		}
@@ -196,14 +215,21 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 
 		if (!config_file_read_fd(cft, dev, buf, offset, size,
 					 offset2, size2, checksum_fn, checksum,
-					 skip_parse, 1)) {
-			/* FIXME: handle errors */
+					 skip_parse, 1, failed_flags)) {
 			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
+
+			/* We have to be certain this has been set since it's the
+			 * only way the caller knows if the function failed or not. */
+			if (!*failed_flags)
+				*failed_flags |= FAILED_VG_METADATA;
 			goto out;
 		}
 	} else {
 		if (!config_file_read(cft)) {
 			log_error("Couldn't read volume group metadata from file.");
+
+			if (!*failed_flags)
+				*failed_flags |= FAILED_VG_METADATA;
 			goto out;
 		}
 	}
@@ -222,8 +248,11 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 		if (!(*vsn)->check_version(cft))
 			continue;
 
-		if (!(vg = (*vsn)->read_vg(fid, cft, 0)))
+		if (!(vg = (*vsn)->read_vg(fid, cft, 0, failed_flags))) {
+			if (!*failed_flags)
+				*failed_flags |= FAILED_VG_METADATA;
 			goto_out;
+		}
 
 		(*vsn)->read_desc(vg->vgmem, cft, when, desc);
 		break;
@@ -246,11 +275,13 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
 					 const char *file,
 					 time_t *when, char **desc)
 {
-	return text_read_metadata(fid, NULL, file, NULL, NULL, NULL,
+	uint32_t failed_flags = 0;
+
+	return text_read_metadata_vg(fid, NULL, file, NULL, NULL, NULL,
 				 (off_t)0, 0, (off_t)0, 0,
 				 NULL,
 				 0,
-				 when, desc);
+				 when, desc, &failed_flags);
 }
 
 static struct volume_group *_import_vg_from_config_tree(const struct dm_config_tree *cft,
@@ -259,6 +290,7 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
 {
 	struct volume_group *vg = NULL;
 	struct text_vg_version_ops **vsn;
+	uint32_t failed_flags = 0;
 	int vg_missing;
 
 	_init_text_import();
@@ -270,7 +302,7 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
 		 * The only path to this point uses cached vgmetadata,
 		 * so it can use cached PV state too.
 		 */
-		if (!(vg = (*vsn)->read_vg(fid, cft, for_lvmetad)))
+		if (!(vg = (*vsn)->read_vg(fid, cft, for_lvmetad, &failed_flags)))
 			stack;
 		else if ((vg_missing = vg_missing_pv_count(vg))) {
 			log_verbose("There are %d physical volumes missing.",

@@ -174,6 +174,12 @@ static int _read_str_list(struct dm_pool *mem, struct dm_list *list, const struc
 	return 1;
 }
 
+/*
+ * FIXME: move the special lvmetad bits out of here and let the
+ * high level lvmetad-specific code deal with it.  This function
+ * is the wrong place for it.
+ */
+
 static int _read_pv(struct format_instance *fid,
 		    struct volume_group *vg, const struct dm_config_node *pvn,
 		    const struct dm_config_node *vgn __attribute__((unused)),
@@ -960,6 +966,8 @@ static int _read_lvsegs(struct format_instance *fid,
 	return 1;
 }
 
+/* FIXME: add failed_flags so we can return specific errors. */
+
 static int _read_sections(struct format_instance *fid,
 			  const char *section, section_fn fn,
 			  struct volume_group *vg, const struct dm_config_node *vgn,
@@ -986,9 +994,29 @@ static int _read_sections(struct format_instance *fid,
 	return 1;
 }
 
+/*
+ * When for_lvmetad is set, this function will look for
+ * special sections that lvmetad adds to the metadata,
+ * which don't actually exist in the real metadata on disk.
+ */
+
+/*
+ * FIXME: this function and everything it calls should be split
+ * up into two phases.  The first should find all the necessary
+ * fields from the ondisk metadata (in cft), validate them,
+ * and save them in corresponding vg fields.  The second should
+ * use that data to set up other vg fields that is derived from
+ * the first.  When it's all mixed together, it's hard to pick
+ * out when there's a problem with the actual text metadata
+ * vs a problem with lvm setting up the vg struct.  Error handling
+ * for the first would involve fixing the metadata on disk,
+ * but error handling for the second wouldn't.
+ */
+
 static struct volume_group *_read_vg(struct format_instance *fid,
 				     const struct dm_config_tree *cft,
-				     unsigned for_lvmetad)
+				     unsigned for_lvmetad,
+				     uint32_t *failed_flags)
 {
 	const struct dm_config_node *vgn;
 	const struct dm_config_value *cv;
@@ -1007,7 +1035,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	}
 
 	if (!(vg = alloc_vg("read_vg", fid->fmt->cmd, vgn->key)))
-		return_NULL;
+		goto fail_internal;
 
 	/*
 	 * The pv hash memorises the pv section names -> pv
@@ -1015,7 +1043,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	 */
 	if (!(pv_hash = dm_hash_create(64))) {
 		log_error("Couldn't create pv hash table.");
-		goto bad;
+		goto fail_internal;
 	}
 
 	/*
@@ -1024,7 +1052,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	 */
 	if (!(lv_hash = dm_hash_create(1024))) {
 		log_error("Couldn't create lv hash table.");
-		goto bad;
+		goto fail_internal;
 	}
 
 	vgn = vgn->child;
@@ -1038,7 +1066,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 
 	if (dm_config_get_str(vgn, "lock_type", &str)) {
 		if (!(vg->lock_type = dm_pool_strdup(vg->vgmem, str)))
-			goto bad;
+			goto fail_internal;
 	}
 
 	/*
@@ -1064,7 +1092,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	 */
 	if (dm_config_get_str(vgn, "lock_args", &str)) {
 		if (!(vg->lock_args = dm_pool_strdup(vg->vgmem, str)))
-			goto bad;
+			goto fail_internal;
 	}
 
 	if (!_read_id(&vg->id, vgn, "id")) {
@@ -1090,11 +1118,11 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	if (dm_config_get_str(vgn, "system_id", &system_id)) {
 		if (!(vgstatus & LVM_WRITE_LOCKED)) {
 			if (!(vg->lvm1_system_id = dm_pool_zalloc(vg->vgmem, NAME_LEN + 1)))
-				goto_bad;
+				goto fail_internal;
 			strncpy(vg->lvm1_system_id, system_id, NAME_LEN);
 		} else if (!(vg->system_id = dm_pool_strdup(vg->vgmem, system_id))) {
 			log_error("Failed to allocate memory for system_id in _read_vg.");
-			goto bad;
+			goto fail_internal;
 		}
 	}
 
@@ -1158,8 +1186,10 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	if (for_lvmetad)
 		_read_sections(fid, "outdated_pvs", _read_pv, vg,
 			       vgn, pv_hash, lv_hash, 1);
-	else if (dm_config_has_node(vgn, "outdated_pvs"))
+	else if (dm_config_has_node(vgn, "outdated_pvs")) {
 		log_error(INTERNAL_ERROR "Unexpected outdated_pvs section in metadata of VG %s.", vg->name);
+		goto fail_internal;
+	}
 
 	/* Optional tags */
 	if (dm_config_get_list(vgn, "tags", &cv) &&
@@ -1199,7 +1229,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	if (!fixup_imported_mirrors(vg)) {
 		log_error("Failed to fixup mirror pointers after import for "
 			  "volume group %s.", vg->name);
-		goto bad;
+		goto fail_internal;
 	}
 
 	dm_hash_destroy(pv_hash);
@@ -1207,12 +1237,17 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 
 	vg_set_fid(vg, fid);
 
-	/*
-	 * Finished.
-	 */
 	return vg;
 
-      bad:
+ bad:
+	/*
+	 * FIXME: there are some internal errors that
+	 * still go through this exit path because functions
+	 * called by this function are not using
+	 * failed_flags yet.  For now we are assuming
+	 * every exit through this path is because there
+	 * is bad content in the metadata.
+	 */
 	if (pv_hash)
 		dm_hash_destroy(pv_hash);
 
@@ -1220,6 +1255,19 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 		dm_hash_destroy(lv_hash);
 
 	release_vg(vg);
+	*failed_flags |= FAILED_VG_METADATA_FIELD;
+	return NULL;
+
+ fail_internal:
+	if (pv_hash)
+		dm_hash_destroy(pv_hash);
+
+	if (lv_hash)
+		dm_hash_destroy(lv_hash);
+
+	if (vg)
+		release_vg(vg);
+	*failed_flags |= FAILED_INTERNAL;
 	return NULL;
 }
 
@@ -1248,7 +1296,7 @@ static void _read_desc(struct dm_pool *mem,
  * FIXME: why are these separate?
  */
 static int _read_vgsummary(const struct format_type *fmt, const struct dm_config_tree *cft, 
-			   struct lvmcache_vgsummary *vgsummary)
+			   struct lvmcache_vgsummary *vgsummary, uint32_t *failed_flags)
 {
 	const struct dm_config_node *vgn;
 	struct dm_pool *mem = fmt->cmd->mem;
@@ -1258,27 +1306,30 @@ static int _read_vgsummary(const struct format_type *fmt, const struct dm_config
 		str = "";
 
 	if (!(vgsummary->creation_host = dm_pool_strdup(mem, str)))
-		return_0;
+		goto fail_internal;
 
 	/* skip any top-level values */
 	for (vgn = cft->root; (vgn && vgn->v); vgn = vgn->sib) ;
 
 	if (!vgn) {
+		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		log_error("Couldn't find volume group in file.");
 		return 0;
 	}
 
 	if (!(vgsummary->vgname = dm_pool_strdup(mem, vgn->key)))
-		return_0;
+		goto fail_internal;
 
 	vgn = vgn->child;
 
 	if (!_read_id(&vgsummary->vgid, vgn, "id")) {
+		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		log_error("Couldn't read uuid for volume group %s.", vgsummary->vgname);
 		return 0;
 	}
 
 	if (!_read_flag_config(vgn, &vgsummary->vgstatus, VG_FLAGS)) {
+		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		log_error("Couldn't find status flags for volume group %s.",
 			  vgsummary->vgname);
 		return 0;
@@ -1286,13 +1337,17 @@ static int _read_vgsummary(const struct format_type *fmt, const struct dm_config
 
 	if (dm_config_get_str(vgn, "system_id", &str) &&
 	    (!(vgsummary->system_id = dm_pool_strdup(mem, str))))
-		return_0;
+		goto fail_internal;
 
 	if (dm_config_get_str(vgn, "lock_type", &str) &&
 	    (!(vgsummary->lock_type = dm_pool_strdup(mem, str))))
-		return_0;
+		goto fail_internal;
 
 	return 1;
+
+ fail_internal:
+	*failed_flags |= FAILED_INTERNAL;
+	return 0;
 }
 
 static struct text_vg_version_ops _vsn1_ops = {

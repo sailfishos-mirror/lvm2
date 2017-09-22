@@ -179,6 +179,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
 	char *buf=NULL;
 	struct device_area *area;
 	struct mda_context *mdac;
+	uint32_t failed_flags = 0;
 	int r=0;
 
 	mdac = (struct mda_context *) mda->metadata_locn;
@@ -190,7 +191,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
 	if (!dev_open_readonly(area->dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fmt, area, NULL)))
+	if (!(mdah = raw_read_mda_header(fmt, area, NULL, &failed_flags)))
 		goto_out;
 
 	rlocn = mdah->raw_locns;
@@ -317,10 +318,12 @@ static void _xlate_mdah(struct mda_header *mdah)
 }
 
 static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area,
-				struct label_read_data *ld)
+				struct label_read_data *ld, uint32_t *failed_flags)
 {
-	if (!dev_open_readonly(dev_area->dev))
+	if (!dev_open_readonly(dev_area->dev)) {
+		*failed_flags |= FAILED_INTERNAL;
 		return_0;
+	}
 
 	if (!ld || (ld->buf_len < dev_area->start + MDA_HEADER_SIZE)) {
 		log_debug_metadata("Reading mda header sector from %s at %llu",
@@ -329,6 +332,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		if (!dev_read(dev_area->dev, dev_area->start, MDA_HEADER_SIZE, mdah)) {
 			if (!dev_close(dev_area->dev))
 				stack;
+			*failed_flags |= FAILED_MDA_HEADER_IO;
 			return_0;
 		}
 	} else {
@@ -338,8 +342,10 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		memcpy(mdah, ld->buf + dev_area->start, MDA_HEADER_SIZE);
 	}
 
-	if (!dev_close(dev_area->dev))
+	if (!dev_close(dev_area->dev)) {
+		*failed_flags |= FAILED_INTERNAL;
 		return_0;
+	}
 
 	if (mdah->checksum_xl != xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
 						  MDA_HEADER_SIZE -
@@ -347,6 +353,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		log_error("Incorrect metadata area header checksum on %s"
 			  " at offset %"PRIu64, dev_name(dev_area->dev),
 			  dev_area->start);
+		*failed_flags |= FAILED_MDA_HEADER_CHECKSUM;
 		return 0;
 	}
 
@@ -356,6 +363,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		log_error("Wrong magic number in metadata area header on %s"
 			  " at offset %"PRIu64, dev_name(dev_area->dev),
 			  dev_area->start);
+		*failed_flags |= FAILED_MDA_HEADER_FIELD;
 		return 0;
 	}
 
@@ -363,6 +371,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		log_error("Incompatible metadata area header version: %d on %s"
 			  " at offset %"PRIu64, mdah->version,
 			  dev_name(dev_area->dev), dev_area->start);
+		*failed_flags |= FAILED_MDA_HEADER_FIELD;
 		return 0;
 	}
 
@@ -370,6 +379,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		log_error("Incorrect start sector in metadata area header: %"
 			  PRIu64" on %s at offset %"PRIu64, mdah->start,
 			  dev_name(dev_area->dev), dev_area->start);
+		*failed_flags |= FAILED_MDA_HEADER_FIELD;
 		return 0;
 	}
 
@@ -378,16 +388,18 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
 				       struct device_area *dev_area,
-				       struct label_read_data *ld)
+				       struct label_read_data *ld,
+				       uint32_t *failed_flags)
 {
 	struct mda_header *mdah;
 
 	if (!(mdah = dm_pool_alloc(fmt->cmd->mem, MDA_HEADER_SIZE))) {
 		log_error("struct mda_header allocation failed");
+		*failed_flags |= FAILED_INTERNAL;
 		return NULL;
 	}
 
-	if (!_raw_read_mda_header(mdah, dev_area, ld)) {
+	if (!_raw_read_mda_header(mdah, dev_area, ld, failed_flags)) {
 		dm_pool_free(fmt->cmd->mem, mdah);
 		return NULL;
 	}
@@ -415,7 +427,7 @@ static int _raw_write_mda_header(const struct format_type *fmt,
 }
 
 /*
- * FIXME: unify this with read_metadata_location() which is used
+ * FIXME: unify this with read_metadata_location_summary() which is used
  * in the label scanning path.
  */
 
@@ -423,7 +435,8 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 				       struct mda_header *mdah,
 				       struct label_read_data *ld,
 				       const char *vgname,
-				       int *precommitted)
+				       int *precommitted,
+				       uint32_t *failed_flags)
 {
 	size_t len;
 	char vgnamebuf[NAME_LEN + 2] __attribute__((aligned(8)));
@@ -445,9 +458,14 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 	} else
 		*precommitted = 0;
 
+	/* FIXME: why does read_metadata_location_summary() only check for zero offset? */
 	/* Do not check non-existent metadata. */
-	if (!rlocn->offset && !rlocn->size)
+	if (!rlocn->offset && !rlocn->size) {
+		log_error("Metadata location on %s at %"PRIu64" has zero offset and size.",
+			  dev_name(dev_area->dev), dev_area->start);
+		*failed_flags |= FAILED_MDA_HEADER_RLOCN;
 		return NULL;
+	}
 
 	/*
 	 * Don't try to check existing metadata
@@ -464,7 +482,7 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 		/* FIXME Loop through rlocns two-at-a-time.  List null-terminated. */
 		/* FIXME Ignore if checksum incorrect!!! */
 		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset,
-		      	      sizeof(vgnamebuf), vgnamebuf))
+			      sizeof(vgnamebuf), vgnamebuf))
 			goto_bad;
 	} else {
 		memset(vgnamebuf, 0, sizeof(vgnamebuf));
@@ -479,7 +497,7 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 			   "not match expected name %s.", 
 			   dev_name(dev_area->dev), dev_area->start + rlocn->offset, vgname);
 
-      bad:
+       bad:
 	if ((info = lvmcache_info_from_pvid(dev_area->dev->pvid, dev_area->dev, 0)) &&
 	    !lvmcache_update_vgname_and_id(info, &vgsummary_orphan))
 		stack;
@@ -511,14 +529,15 @@ static int _raw_holds_vgname(struct format_instance *fid,
 	int r = 0;
 	int noprecommit = 0;
 	struct mda_header *mdah;
+	uint32_t failed_flags = 0;
 
 	if (!dev_open_readonly(dev_area->dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area, NULL)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, dev_area, NULL, &failed_flags)))
 		return_0;
 
-	if (_read_metadata_location_vg(dev_area, mdah, NULL, vgname, &noprecommit))
+	if (_read_metadata_location_vg(dev_area, mdah, NULL, vgname, &noprecommit, &failed_flags))
 		r = 1;
 
 	if (!dev_close(dev_area->dev))
@@ -527,8 +546,14 @@ static int _raw_holds_vgname(struct format_instance *fid,
 	return r;
 }
 
-static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
+/*
+ * FIXME: unify with the very similar _read_mda_header_and_metadata_summary()
+ * that is used during the scanning phase.
+ */
+
+static struct volume_group *_read_mda_header_and_metadata_vg(struct format_instance *fid,
 					      const char *vgname,
+					      struct metadata_area *mda,
 					      struct device_area *area,
 					      struct label_read_data *ld,
 					      struct cached_vg_fmtdata **vg_fmtdata,
@@ -541,12 +566,32 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 	time_t when;
 	char *desc;
 	uint32_t wrap = 0;
+	uint32_t failed_flags = 0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, area, ld)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, area, ld, &failed_flags))) {
+		log_debug_metadata("MDA header on %s at %"PRIu64" is not valid.",
+				   dev_name(area->dev), area->start);
+		if (mda)
+			mda->read_failed_flags |= failed_flags;
 		goto_out;
+	}
 
-	if (!(rlocn = _read_metadata_location_vg(area, mdah, ld, vgname, &precommitted))) {
-		log_debug_metadata("VG %s not found on %s", vgname, dev_name(area->dev));
+	/*
+	 * N.B. in the label scan path:
+	 * read_mda_header_and_metadata_summary() calls only
+	 * read_metadata_location_summary() which calls
+	 * text_read_metadata_summary()
+	 *
+	 * but in the vg_read path:
+	 * read_mda_header_and_metadata_vg() calls both
+	 * read_metadata_location_vg() and
+	 * text_read_metadata_vg()
+	 */
+
+	if (!(rlocn = _read_metadata_location_vg(area, mdah, ld, vgname, &precommitted, &failed_flags))) {
+		log_debug_metadata("Metadata location on %s returned no location.", dev_name(area->dev));
+		if (mda)
+			mda->read_failed_flags |= failed_flags;
 		goto out;
 	}
 
@@ -554,30 +599,41 @@ static struct volume_group *_vg_read_raw_area(struct format_instance *fid,
 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
 
 	if (wrap > rlocn->offset) {
-		log_error("VG %s metadata too large for circular buffer",
-			  vgname);
+		log_error("Metadata location on %s at %"PRIu64" is too large for circular buffer.",
+			  dev_name(area->dev), area->start + rlocn->offset);
+		if (mda)
+			mda->read_failed_flags |= FAILED_VG_METADATA_SIZE;
 		goto out;
 	}
 
-	vg = text_read_metadata(fid, area->dev, NULL, ld, vg_fmtdata, use_previous_vg,
-				(off_t) (area->start + rlocn->offset),
-				(uint32_t) (rlocn->size - wrap),
-				(off_t) (area->start + MDA_HEADER_SIZE),
-				wrap,
-				calc_crc,
-				rlocn->checksum,
-				&when, &desc);
+	vg = text_read_metadata_vg(fid, area->dev, NULL, ld, vg_fmtdata, use_previous_vg,
+				   (off_t) (area->start + rlocn->offset),
+				   (uint32_t) (rlocn->size - wrap),
+				   (off_t) (area->start + MDA_HEADER_SIZE),
+				   wrap,
+				   calc_crc,
+				   rlocn->checksum,
+				   &when, &desc, &failed_flags);
 
 	if (!vg) {
-		/* FIXME: detect and handle errors, and distinguish from the optimization
-		   that skips parsing the metadata which also returns NULL. */
+		/*
+		 * FIXME: success/failure from this function is terribly defined.
+		 * NULL vg also means that the checksum optimization has been used.
+		 */
+
+		if (failed_flags) {
+			log_error("Metadata location on %s at %"PRIu64" has invalid metadata for VG.",
+				  dev_name(area->dev), area->start + rlocn->offset);
+			if (mda)
+				mda->read_failed_flags |= failed_flags;
+		}
 	}
 
-	log_debug_metadata("Found metadata on %s at %"PRIu64" size %"PRIu64" for VG %s",
+	log_debug_metadata("Metadata location on %s at %"PRIu64" size %"PRIu64" has VG %s",
 			   dev_name(area->dev),
 			   area->start + rlocn->offset,
 			   rlocn->size,
-			   vgname);
+			   vg ? vg->name : "");
 
 	if (vg && precommitted)
 		vg->status |= PRECOMMITTED;
@@ -596,10 +652,12 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct volume_group *vg;
 
-	if (!dev_open_readonly(mdac->area.dev))
+	if (!dev_open_readonly(mdac->area.dev)) {
+		mda->read_failed_flags |= FAILED_INTERNAL;
 		return_NULL;
+	}
 
-	vg = _vg_read_raw_area(fid, vgname, &mdac->area, ld, vg_fmtdata, use_previous_vg, 0);
+	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 0);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
@@ -617,10 +675,12 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct volume_group *vg;
 
-	if (!dev_open_readonly(mdac->area.dev))
+	if (!dev_open_readonly(mdac->area.dev)) {
+		mda->read_failed_flags |= FAILED_INTERNAL;
 		return_NULL;
+	}
 
-	vg = _vg_read_raw_area(fid, vgname, &mdac->area, ld, vg_fmtdata, use_previous_vg, 1);
+	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 1);
 
 	if (!dev_close(mdac->area.dev))
 		stack;
@@ -641,6 +701,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	int found = 0;
 	int noprecommit = 0;
 	const char *old_vg_name = NULL;
+	uint32_t failed_flags = 0;
 
 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
 	dm_list_iterate_items(pvl, &vg->pvs) {
@@ -658,10 +719,10 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!dev_open(mdac->area.dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL, &failed_flags)))
 		goto_out;
 
-	rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit);
+	rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit, &failed_flags);
 	mdac->rlocn.offset = _next_rlocn_offset(rlocn, mdah);
 
 	if (!fidtc->raw_metadata_buf &&
@@ -750,6 +811,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
 	int found = 0;
 	int noprecommit = 0;
 	const char *old_vg_name = NULL;
+	uint32_t failed_flags = 0;
 
 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
 	dm_list_iterate_items(pvl, &vg->pvs) {
@@ -764,10 +826,10 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
 	if (!found)
 		return 1;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL, &failed_flags)))
 		goto_out;
 
-	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit))) {
+	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, old_vg_name ? : vg->name, &noprecommit, &failed_flags))) {
 		mdah->raw_locns[0].offset = 0;
 		mdah->raw_locns[0].size = 0;
 		mdah->raw_locns[0].checksum = 0;
@@ -870,14 +932,15 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
 	struct raw_locn *rlocn;
 	int r = 0;
 	int noprecommit = 0;
+	uint32_t failed_flags = 0;
 
 	if (!dev_open(mdac->area.dev))
 		return_0;
 
-	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL)))
+	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, NULL, &failed_flags)))
 		goto_out;
 
-	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, vg->name, &noprecommit))) {
+	if (!(rlocn = _read_metadata_location_vg(&mdac->area, mdah, NULL, vg->name, &noprecommit, &failed_flags))) {
 		rlocn = &mdah->raw_locns[0];
 		mdah->raw_locns[1].offset = 0;
 	}
@@ -1201,10 +1264,13 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
  * text_read_metadata_summary() and _read_vgsummary() to get
  * specific errors from the lowest levels and propagate those upward.
  */
-int read_metadata_location(const struct format_type *fmt,
-		    struct mda_header *mdah, struct label_read_data *ld,
-		    struct device_area *dev_area,
-		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors)
+int read_metadata_location_summary(const struct format_type *fmt,
+			struct mda_header *mdah,
+			struct label_read_data *ld,
+			struct device_area *dev_area,
+			struct lvmcache_vgsummary *vgsummary,
+			uint64_t *mda_free_sectors,
+			uint32_t *failed_flags)
 {
 	struct raw_locn *rlocn;
 	uint32_t wrap = 0;
@@ -1217,6 +1283,7 @@ int read_metadata_location(const struct format_type *fmt,
 
 	if (!mdah) {
 		log_error(INTERNAL_ERROR "read_metadata_location called with NULL pointer for mda_header");
+		*failed_flags |= FAILED_INTERNAL;
 		return 0;
 	}
 
@@ -1229,6 +1296,7 @@ int read_metadata_location(const struct format_type *fmt,
 	if (!rlocn->offset) {
 		log_error("Metadata location on %s at %"PRIu64" has offset 0.",
 			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
+		*failed_flags |= FAILED_MDA_HEADER_RLOCN;
 		return 0;
 	}
 
@@ -1237,8 +1305,10 @@ int read_metadata_location(const struct format_type *fmt,
 	 * begins with a valid vgname.
 	 */
 	if (!ld || (ld->buf_len < dev_area->start + rlocn->offset + NAME_LEN)) {
-		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf))
+		if (!dev_read(dev_area->dev, dev_area->start + rlocn->offset, NAME_LEN, buf)) {
+			*failed_flags |= FAILED_VG_METADATA_IO;
 			return_0;
+		}
 	} else {
 		memcpy(buf, ld->buf + dev_area->start + rlocn->offset, NAME_LEN);
 	}
@@ -1253,6 +1323,7 @@ int read_metadata_location(const struct format_type *fmt,
 	if (!validate_name(buf)) {
 		log_error("Metadata location on %s at %"PRIu64" begins with invalid VG name.",
 			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
+		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		return_0;
 	}
 
@@ -1263,6 +1334,7 @@ int read_metadata_location(const struct format_type *fmt,
 	if (wrap > rlocn->offset) {
 		log_error("Metadata location on %s at %"PRIu64" is too large for circular buffer.",
 			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
+		*failed_flags |= FAILED_VG_METADATA_SIZE;
 		return 0;
 	}
 
@@ -1275,7 +1347,7 @@ int read_metadata_location(const struct format_type *fmt,
 				(uint32_t) (rlocn->size - wrap),
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
-				vgsummary)) {
+				vgsummary, failed_flags)) {
 		log_error("Metadata location on %s at %"PRIu64" has invalid summary for VG.",
 			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
 		return_0;
@@ -1285,6 +1357,7 @@ int read_metadata_location(const struct format_type *fmt,
 	if (!validate_name(vgsummary->vgname)) {
 		log_error("Metadata location on %s at %"PRIu64" has invalid VG name.",
 			  dev_name(dev_area->dev), dev_area->start + rlocn->offset);
+		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		return_0;
 	}
 
@@ -1318,6 +1391,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 	struct format_instance fid;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 	struct mda_header *mdah;
+	uint32_t failed_flags = 0;
 
 	raw_list = &((struct mda_lists *) fmt->private)->raws;
 
@@ -1337,14 +1411,14 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 			continue;
 		}
 
-		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area, NULL))) {
+		if (!(mdah = raw_read_mda_header(fmt, &rl->dev_area, NULL, &failed_flags))) {
 			stack;
 			goto close_dev;
 		}
 
-		/* TODO: caching as in read_metadata_location() (trigger this code?) */
-		if (read_metadata_location(fmt, mdah, NULL, &rl->dev_area, &vgsummary, NULL)) {
-			vg = _vg_read_raw_area(&fid, vgsummary.vgname, &rl->dev_area, NULL, NULL, NULL, 0);
+		/* TODO: caching as in read_metadata_location_summary() (trigger this code?) */
+		if (read_metadata_location_summary(fmt, mdah, NULL, &rl->dev_area, &vgsummary, NULL, &failed_flags)) {
+			vg = _read_mda_header_and_metadata_vg(&fid, vgsummary.vgname, NULL, &rl->dev_area, NULL, NULL, NULL, 0);
 			if (vg) {
 				lvmcache_update_vg(vg, 0);
 				lvmcache_set_independent_location(vg->name);
