@@ -746,9 +746,12 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 	 * concurrent async reads that can be submitted.  After
 	 * all of those are used, we revert to synchronous reads.
 	 */
-	if (!(ac = dev_async_context_setup(async_event_count))) {
-		log_debug_devs("async io setup error, reverting to sync io.");
-		return_0;
+	if (!cmd->ac) {
+		if (!(ac = dev_async_context_setup(async_event_count))) {
+			log_debug_devs("async io setup error, reverting to sync io.");
+			return_0;
+		}
+		cmd->ac = ac;
 	}
 
 	log_debug_devs("Finding devices to scan");
@@ -812,7 +815,7 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 	 * fail and the next loop will try a sync read for it.
 	 */
 	dm_list_iterate_items(ld, &label_read_list) {
-		if (!_label_read_async_start(ac, ld))
+		if (!_label_read_async_start(cmd->ac, ld))
 			ld->try_sync = 1;
 		else
 			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
@@ -870,7 +873,7 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 	 * Wait for more devices to finish reading label sectors.
 	 */
 	if (need_wait_count) {
-		if (_label_read_async_wait(ac, need_wait_count))
+		if (_label_read_async_wait(cmd->ac, need_wait_count))
 			goto check_aio;
 
 		/* TODO: handle this error */
@@ -878,8 +881,6 @@ static int _label_scan_async(struct cmd_context *cmd, int skip_cached)
 		   to doing sync dev_read() on any that aren't done? */
 		log_error(INTERNAL_ERROR "aio getevents error");
 	}
-
-	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &label_read_list)
 		dev_close(ld->dev);
@@ -892,7 +893,6 @@ bad:
 	log_error("async data scan failed, reverting to sync scan.");
 
 	dev_iter_destroy(iter);
-	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &label_read_list) {
 		dev_close(ld->dev);
@@ -925,33 +925,14 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 	struct label_read_data *ld, *ld2;
 	struct device_list *devl;
 	struct device *dev;
-	struct dev_async_context *ac;
 	int buf_len;
 	int need_wait_count;
 	int need_process_count;
 	int dev_count = 0;
-	int async_event_count;
-	int num_devs;
 
 	buf_len = _get_scan_size(cmd);
 
 	dm_list_init(&tmp_label_read_list);
-
-	async_event_count = find_config_tree_int(cmd, devices_async_events_CFG, NULL);
-	num_devs = dm_list_size(devs);
-
-	if (num_devs < async_event_count)
-		async_event_count = num_devs;
-
-	/*
-	 * Should we set up one global aio context when the command starts,
-	 * and then use/reuse that one context from multiple calls to
-	 * label_scan/label_scan_devs?
-	 */
-	if (!(ac = dev_async_context_setup(async_event_count))) {
-		log_debug_devs("async io setup error, reverting to sync io.");
-		return_0;
-	}
 
 	log_debug_devs("Scanning data from devs async");
 
@@ -990,7 +971,7 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 		ld->aio->done = 0;
 		ld->process_done = 0;
 
-		if (!_label_read_async_start(ac, ld))
+		if (!_label_read_async_start(cmd->ac, ld))
 			ld->try_sync = 1;
 		else
 			log_debug_devs("Reading sectors from device %s async", dev_name(ld->dev));
@@ -1056,7 +1037,7 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 	 * Wait for more devices to finish reading label sectors.
 	 */
 	if (need_wait_count) {
-		if (_label_read_async_wait(ac, need_wait_count))
+		if (_label_read_async_wait(cmd->ac, need_wait_count))
 			goto check_aio;
 
 		/* TODO: handle this error */
@@ -1064,8 +1045,6 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 		   to doing sync dev_read() on any that aren't done? */
 		log_error(INTERNAL_ERROR "aio getevents error");
 	}
-
-	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &tmp_label_read_list)
 		dev_close(ld->dev);
@@ -1082,8 +1061,6 @@ static int _label_scan_devs_async(struct cmd_context *cmd, struct dm_list *devs)
 bad:
 	/* caller will try sync scan */
 	log_error("async data scan failed, reverting to sync scan.");
-
-	dev_async_context_destroy(ac);
 
 	dm_list_iterate_items(ld, &label_read_list) {
 		dev_close(ld->dev);
@@ -1331,7 +1308,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs)
 {
 	int ret = 0;
 
-	if (cmd->use_aio)
+	if (cmd->use_aio && cmd->ac)
 		ret = _label_scan_devs_async(cmd, devs);
 
 	if (!ret)
