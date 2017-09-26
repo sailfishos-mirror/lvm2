@@ -225,6 +225,7 @@ struct cmd_context {
 	const char *time_format;
 	unsigned rand_seed;
 	struct dm_list unused_duplicate_devs; /* save preferences between lvmcache instances */
+	struct dev_async_context *ac; /* for async i/o */
 };
 
 /*
