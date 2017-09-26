@@ -2251,6 +2251,9 @@ void destroy_toolcontext(struct cmd_context *cmd)
 	    !cmd->filter->dump(cmd->filter, 1))
 		stack;
 
+	if (cmd->ac)
+		dev_async_context_destroy(cmd->ac);
+
 	archive_exit(cmd);
 	backup_exit(cmd);
 	lvmcache_destroy(cmd, 0, 0);
