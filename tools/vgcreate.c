@@ -26,7 +26,8 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	const char *clustered_message = "";
 	char *vg_name;
 	struct arg_value_group_list *current_group;
-	uint32_t rc;
+	int lock_failed = 0;
+	int name_exists = 0;
 
 	if (!argc) {
 		log_error("Please provide volume group name and "
@@ -72,8 +73,8 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	 * Check if the VG name already exists.  This should be done before
 	 * creating PVs on any of the devices.
 	 */
-	if ((rc = vg_lock_newname(cmd, vp_new.vg_name)) != SUCCESS) {
-		if (rc == FAILED_EXIST)
+	if (!vg_lock_newname(cmd, vp_new.vg_name, &lock_failed, &name_exists)) {
+		if (name_exists)
 			log_error("A volume group called %s already exists.", vp_new.vg_name);
 		else
 			log_error("Can't get lock for %s.", vp_new.vg_name);

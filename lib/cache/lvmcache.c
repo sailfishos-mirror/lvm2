@@ -63,6 +63,8 @@ struct lvmcache_vginfo {
 	char *lock_type;
 	uint32_t mda_checksum;
 	size_t mda_size;
+	int seqno;
+	int scan_mismatch;
 	int independent_metadata_location; /* metadata read from independent areas */
 	/*
 	 * The following are not related to lvmcache or vginfo,
@@ -587,6 +589,16 @@ struct lvmcache_vginfo *lvmcache_vginfo_from_vgname(const char *vgname, const ch
 				vgname, (vgid) ? " with VGID " : "", (vgid) ? : "");
 
 	return vginfo;
+}
+
+const struct format_type *lvmcache_get_fmt(struct cmd_context *cmd,
+					   const char *vgname, const char *vgid)
+{
+	struct lvmcache_vginfo *vginfo;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid)))
+		return_NULL;
+	return vginfo->fmt;
 }
 
 const struct format_type *lvmcache_fmt_from_vgname(struct cmd_context *cmd,
@@ -1946,28 +1958,6 @@ out:
 	return 1;
 }
 
-static int _lvmcache_update_vg_mda_info(struct lvmcache_info *info, uint32_t mda_checksum,
-					size_t mda_size)
-{
-	if (!info || !info->vginfo || !mda_size)
-		return 1;
-
-	if (info->vginfo->mda_checksum == mda_checksum || info->vginfo->mda_size == mda_size) 
-		return 1;
-
-	info->vginfo->mda_checksum = mda_checksum;
-	info->vginfo->mda_size = mda_size;
-
-	/* FIXME Add checksum index */
-
-	log_debug_cache("lvmcache %s: VG %s: stored metadata checksum 0x%08"
-			PRIx32 " with size %" PRIsize_t ".",
-			dev_name(info->dev), info->vginfo->vgname,
-			mda_checksum, mda_size);
-
-	return 1;
-}
-
 int lvmcache_add_orphan_vginfo(const char *vgname, struct format_type *fmt)
 {
 	if (!_lock_hash && !lvmcache_init()) {
@@ -1980,6 +1970,7 @@ int lvmcache_add_orphan_vginfo(const char *vgname, struct format_type *fmt)
 
 int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vgsummary *vgsummary)
 {
+	struct lvmcache_vginfo *vginfo;
 	const char *vgname = vgsummary->vgname;
 	const char *vgid = (char *)&vgsummary->vgid;
 
@@ -2000,15 +1991,64 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
 	if (!is_orphan_vg(vgname))
 		info->status &= ~CACHE_INVALID;
 
-	if (!_lvmcache_update_vgname(info, vgname, vgid, vgsummary->vgstatus,
-				     vgsummary->creation_host, info->fmt) ||
-	    !_lvmcache_update_vgid(info, info->vginfo, vgid) ||
-	    !_lvmcache_update_vgstatus(info, vgsummary->vgstatus, vgsummary->creation_host, vgsummary->lock_type, vgsummary->system_id) ||
-	    !_lvmcache_update_vg_mda_info(info, vgsummary->mda_checksum, vgsummary->mda_size))
-		return_0;
+
+	if (!_lvmcache_update_vgname(info, vgname, vgid, vgsummary->vgstatus, vgsummary->creation_host, info->fmt)) {
+		log_error("Failed to update VG %s info in lvmcache.", vgname);
+		return 0;
+	}
+
+	if (!_lvmcache_update_vgid(info, info->vginfo, vgid)) {
+		log_error("Failed to update VG %s info in lvmcache.", vgname);
+		return 0;
+	}
+
+	if (!_lvmcache_update_vgstatus(info, vgsummary->vgstatus, vgsummary->creation_host, vgsummary->lock_type, vgsummary->system_id)) {
+		log_error("Failed to update VG %s info in lvmcache.", vgname);
+		return 0;
+	}
+
+	/*
+	 * label scan sets seqno in summary, other callers do not.
+	 * FIXME: use separate functions for updating from label
+	 * scan summary and from real metadata.
+	 * FIXME: clear scan_mismatch if a second scan is fine
+	 */
+
+	if (!vgsummary->seqno && !vgsummary->mda_size && !vgsummary->mda_checksum)
+		return 1;
+
+	if (!(vginfo = info->vginfo))
+		return 1;
+
+	if (!vginfo->seqno) {
+		vginfo->seqno = vgsummary->seqno;
+
+	} else if (vgsummary->seqno != vginfo->seqno) {
+		log_warn("Scan of VG %s from %s found metadata seqno %d vs previous %d.",
+			 vgname, dev_name(info->dev), vgsummary->seqno, vginfo->seqno);
+		vginfo->scan_mismatch = 1;
+		return 1;
+	}
+
+	if (!vginfo->mda_size) {
+		vginfo->mda_checksum = vgsummary->mda_checksum;
+		vginfo->mda_size = vgsummary->mda_size;
+
+	} else if ((vginfo->mda_size != vgsummary->mda_size) || (vginfo->mda_checksum != vgsummary->mda_checksum)) {
+		log_warn("Scan of VG %s from %s found mda_checksum %x mda_size %zu vs previous %x %zu",
+			 vgname, dev_name(info->dev), vgsummary->mda_checksum, vgsummary->mda_size,
+			 vginfo->mda_checksum, vginfo->mda_size);
+		vginfo->scan_mismatch = 1;
+	}
+
+	log_debug_cache("lvmcache %s: VG %s: set seqno to %d mda_checksum to %x mda_size to %zu",
+			dev_name(info->dev), vginfo->vgname, vginfo->seqno,
+			vginfo->mda_checksum, vginfo->mda_size);
 
 	return 1;
 }
+
+/* FIXME: move all callers of this function to use update_vg_from_metadata */
 
 int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted)
 {
@@ -2031,6 +2071,230 @@ int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted)
 		if ((info = lvmcache_info_from_pvid(pvid_s, pvl->pv->dev, 0)) &&
 		    !lvmcache_update_vgname_and_id(info, &vgsummary))
 			return_0;
+	}
+
+	return 1;
+}
+
+/*
+ * vginfo fields are first set during label scan (while the
+ * VG is not locked).  The metadata is later read with the
+ * VG lock.  If vginfo fields chanced between those two,
+ * then update the vginfo fields from the metadata.
+ */
+
+static int _update_vginfo_from_metadata(struct lvmcache_vginfo *vginfo, struct volume_group *vg,
+					uint32_t meta_checksum, size_t meta_size)
+{
+	int updated = 0;
+
+	if (vginfo->status != vg->status) {
+		log_debug_cache("lvmcache updating %s status from 0x%llx to 0x%llx",
+				vg->name, (unsigned long long)vginfo->status,
+				(unsigned long long)vg->status);
+		vginfo->status = vg->status;
+		updated = 1;
+	}
+
+	/* FIXME: one or the other NULL vs not NULL */
+
+	if (vginfo->system_id && vg->system_id && strcmp(vginfo->system_id, vg->system_id)) {
+		log_debug_cache("lvmcache updating %s system_id from %s to %s",
+				vg->name, vginfo->system_id, vg->system_id);
+		dm_free(vginfo->system_id);
+		if (!(vginfo->system_id = dm_strdup(vg->system_id)))
+			return 0;
+		updated = 1;
+	}
+
+	if (vginfo->lock_type && vg->lock_type && strcmp(vginfo->lock_type, vg->lock_type)) {
+		log_debug_cache("lvmcache updating %s lock_type from %s to %s",
+				vg->name, vginfo->lock_type, vg->lock_type);
+		dm_free(vginfo->lock_type);
+		if (!(vginfo->lock_type = dm_strdup(vg->lock_type)))
+			return 0;
+		updated = 1;
+	}
+
+	if ((vginfo->mda_checksum != meta_checksum) || (vginfo->mda_size != meta_size)) {
+		log_debug_cache("lvmcache updating %s mda_checksum %x mda_size %zu to %x %zu",
+				vg->name, vginfo->mda_checksum, vginfo->mda_size,
+				meta_checksum, meta_size);
+		vginfo->mda_checksum = meta_checksum;
+		vginfo->mda_size = meta_size;
+		updated = 1;
+	}
+
+	if (vginfo->seqno != vg->seqno) {
+		log_debug_cache("lvmcache updating %s seqno from %u to %u",
+			 	vg->name, vginfo->seqno, vg->seqno);
+		vginfo->seqno = vg->seqno;
+		updated = 1;
+	}
+
+	if (!updated)
+		log_debug_cache("lvmcache VG %s info unchanged since scan.", vg->name);
+
+	return 1;
+}
+
+/*
+ * Make sure that the lvmcache representation of the VG (in terms of
+ * vginfo/infos) matches the VG metadata.  If there are any differences, make
+ * lvmcache vginfo/infos match the VG metadata.
+ *
+ * Only for real VGs, does not apply to orphan VG.
+ */
+
+int lvmcache_update_vg_from_metadata(struct volume_group *vg, unsigned precommitted,
+				     uint32_t meta_checksum, size_t meta_size)
+{
+	char vgid_s[ID_LEN + 1] __attribute__((aligned(8)));
+	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
+	struct lvmcache_vginfo *vginfo, *vginfo2;
+	struct lvmcache_info *info, *info2;
+	struct pv_list *pvl;
+	int found;
+
+	/* get vginfo, check/update any fields from vg */
+	/* look at all infos for vginfo and chec/update any fields from vg */
+	/* look for info's not attached to vginfo and update/attach them to vginfo */
+
+	log_debug_cache("lvmcache updating %s with metadata.", vg->name);
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vg->name, NULL))) {
+		/* shouldn't happen */
+		log_error(INTERNAL_ERROR "lvmcache_update_vg_from_metadata no vginfo for %s", vg->name);
+		return_0;
+	}
+
+	memset(vgid_s, 0, sizeof(vgid_s));
+	strncpy(vgid_s, (char *) &vg->id, sizeof(vgid_s) - 1);
+
+	if (strcmp(vginfo->vgid, vgid_s)) {
+		log_error("lvmcache updating %s id %s with wrong vg name %s id %s.",
+			  vginfo->vgname, vginfo->vgid, vg->name, vgid_s);
+		return 0;
+	}
+
+	/* Verify the vgid to vginfo hash mapping is also correct. */
+
+	vginfo2 = lvmcache_vginfo_from_vgid(vginfo->vgid);
+	if (!vginfo2 || (vginfo2 != vginfo)) {
+		/* shouldn't happen */
+		log_error(INTERNAL_ERROR "lvmcache_update_vg_from_metadata other vginfo for %s", vg->name);
+		return_0;
+	}
+
+	/*
+	 * Update vg fields that were saved in vginfo during label scan.
+	 */
+	_update_vginfo_from_metadata(vginfo, vg, meta_checksum, meta_size);
+
+	/*
+	 * Go through vginfo->infos, matching each to vg->pvs.
+	 */
+	dm_list_iterate_items_safe(info, info2, &vginfo->infos) {
+		found = 0;
+
+		dm_list_iterate_items(pvl, &vg->pvs) {
+			if (info->dev != pvl->pv->dev)
+				continue;
+			found = 1;
+			break;
+		}
+
+		if (found)
+			continue;
+
+		/*
+		 * label scan thought this dev/info belonged to this vg,
+		 * but the vg metadata doesn't think so.  We don't know
+		 * where this dev/info belongs, so drop it into the
+		 * defective list where it won't be used.
+		 */
+
+		log_warn("lvmcache update %s removing %s from VG.",
+			 vg->name, dev_name(info->dev));
+
+		lvmcache_add_defective_dev(info->dev);
+		lvmcache_del(info);
+	}
+
+	/*
+	 * Go through vg->pvs, matching each to vginfo->infos.
+	 */
+	dm_list_iterate_items(pvl, &vg->pvs) {
+		memset(pvid_s, 0, sizeof(pvid_s));
+		strncpy(pvid_s, (char *) &pvl->pv->id, sizeof(pvid_s) - 1);
+
+		found = 0;
+
+		dm_list_iterate_items(info, &vginfo->infos) {
+			if (info->dev != pvl->pv->dev)
+				continue;
+			found = 1;
+			break;
+		}
+
+		if (found)
+			continue;
+
+
+		if (!(info = lvmcache_info_from_pvid(pvid_s, pvl->pv->dev, 0))) {
+			/* FIXME: a common missing dev case? */
+			log_warn("lvmcache_update_vg_from_metadata %s no info for %s",
+				  vg->name, dev_name(pvl->pv->dev));
+			continue;
+		}
+
+		/*
+		 * The dev was apparently connected to one VG during label
+		 * scan, but now is connected to a different VG.  Perhaps this
+		 * can happen if the dev is removed from one VG and added to
+		 * another, between the time of label scan and vg_read.
+		 */
+		if (info->vginfo && strcmp(info->vginfo->vgname, vg->name)) {
+			log_warn("lvmcache updating %s info %s was in vginfo %s",
+				 vg->name, dev_name(info->dev), info->vginfo->vgname);
+			dm_list_del(&info->list);
+			info->vginfo = NULL;
+			_vginfo_attach_info(vginfo, info);
+			continue;
+		}
+
+#if 0
+		/*
+		 * This happens for devs without mdas where the VG isn't
+		 * known during label scan, so we only know which vginfo
+		 * they should be attached to once we have metadata.
+		 */
+		if (info->status & VG_PENDING) {
+			log_debug_cache("lvmcache updating %s with pending dev %s",
+					vg->name, dev_name(info->dev));
+			info->status &= ~VG_PENDING;
+			_vginfo_attach_info(vginfo, info);
+			info->fmt = vginfo->fmt;
+			continue;
+		}
+#endif
+
+		/*
+		 * A defective dev can't be used, and should be handled like
+		 * a missing dev, so it shouldn't be connected to a vginfo.
+		 * (Doesn't adding dev to defective list will remove it from
+		 * lvmcache, so we will not hit this case?)
+		 */
+		if (lvmcache_dev_is_defective(info->dev)) {
+			if (info->vginfo) {
+				dm_list_del(&info->list);
+				info->vginfo = NULL;
+			}
+			continue;
+		}
+
+		log_error("lvmcache updating %s found %s in unrecognized state.",
+			  vg->name, dev_name(info->dev));
 	}
 
 	return 1;
@@ -2223,6 +2487,9 @@ struct lvmcache_info *lvmcache_add(struct labeller *labeller,
 	}
 
 update_vginfo:
+	/*
+	 * In label scan, the only vg passed to lvmcache_add is the orphan vg.
+	 */
 	vgsummary.vgstatus = vgstatus;
 	vgsummary.vgname = vgname;
 	if (vgid)

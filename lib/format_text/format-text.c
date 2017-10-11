@@ -179,7 +179,7 @@ static int _pv_analyze_mda_raw (const struct format_type * fmt,
 	char *buf=NULL;
 	struct device_area *area;
 	struct mda_context *mdac;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	int r=0;
 
 	mdac = (struct mda_context *) mda->metadata_locn;
@@ -318,7 +318,7 @@ static void _xlate_mdah(struct mda_header *mdah)
 }
 
 static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev_area,
-				struct label_read_data *ld, uint32_t *failed_flags)
+				struct label_read_data *ld, uint64_t *failed_flags)
 {
 	if (!dev_open_readonly(dev_area->dev)) {
 		*failed_flags |= FAILED_INTERNAL;
@@ -389,7 +389,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
 				       struct device_area *dev_area,
 				       struct label_read_data *ld,
-				       uint32_t *failed_flags)
+				       uint64_t *failed_flags)
 {
 	struct mda_header *mdah;
 
@@ -436,7 +436,7 @@ static struct raw_locn *_read_metadata_location_vg(struct device_area *dev_area,
 				       struct label_read_data *ld,
 				       const char *vgname,
 				       int *precommitted,
-				       uint32_t *failed_flags)
+				       uint64_t *failed_flags)
 {
 	size_t len;
 	char vgnamebuf[NAME_LEN + 2] __attribute__((aligned(8)));
@@ -520,7 +520,7 @@ static int _raw_holds_vgname(struct format_instance *fid,
 	int r = 0;
 	int noprecommit = 0;
 	struct mda_header *mdah;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	if (!dev_open_readonly(dev_area->dev))
 		return_0;
@@ -547,8 +547,9 @@ static struct volume_group *_read_mda_header_and_metadata_vg(struct format_insta
 					      struct metadata_area *mda,
 					      struct device_area *area,
 					      struct label_read_data *ld,
-					      struct cached_vg_fmtdata **vg_fmtdata,
-					      unsigned *use_previous_vg,
+					      uint32_t last_meta_checksum,
+					      size_t last_meta_size,
+					      unsigned *last_meta_matches,
 					      int precommitted)
 {
 	struct volume_group *vg = NULL;
@@ -557,7 +558,7 @@ static struct volume_group *_read_mda_header_and_metadata_vg(struct format_insta
 	time_t when;
 	char *desc;
 	uint32_t wrap = 0;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	if (!(mdah = raw_read_mda_header(fid->fmt, area, ld, &failed_flags))) {
 		log_debug_metadata("MDA header on %s at %"PRIu64" is not valid.",
@@ -566,6 +567,10 @@ static struct volume_group *_read_mda_header_and_metadata_vg(struct format_insta
 			mda->read_failed_flags |= failed_flags;
 		goto_out;
 	}
+
+	/* pass back to vg_read() */
+	if (mda)
+		mda->header_start = mdah->start;
 
 	/*
 	 * N.B. in the label scan path:
@@ -597,11 +602,18 @@ static struct volume_group *_read_mda_header_and_metadata_vg(struct format_insta
 		goto out;
 	}
 
-	vg = text_read_metadata_vg(fid, area->dev, NULL, ld, vg_fmtdata, use_previous_vg,
+	/* pass back to vg_read() */
+	mda->vg_read_meta_checksum = rlocn->checksum;
+	mda->vg_read_meta_size = rlocn->size;
+
+	vg = text_read_metadata_vg(fid, area->dev, NULL, ld,
 				   (off_t) (area->start + rlocn->offset),
 				   (uint32_t) (rlocn->size - wrap),
 				   (off_t) (area->start + MDA_HEADER_SIZE),
 				   wrap,
+				   last_meta_checksum,
+				   last_meta_size,
+				   last_meta_matches,
 				   calc_crc,
 				   rlocn->checksum,
 				   &when, &desc, &failed_flags);
@@ -702,8 +714,9 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 					 const char *vgname,
 					 struct metadata_area *mda,
 					 struct label_read_data *ld,
-					 struct cached_vg_fmtdata **vg_fmtdata,
-					 unsigned *use_previous_vg)
+					 uint32_t last_meta_checksum,
+					 size_t last_meta_size,
+					 unsigned *last_meta_matches)
 {
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct volume_group *vg;
@@ -713,7 +726,8 @@ static struct volume_group *_vg_read_raw(struct format_instance *fid,
 		return_NULL;
 	}
 
-	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 0);
+	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld,
+					      last_meta_checksum, last_meta_size, last_meta_matches, 0);
 
 	/* FIXME: move this into vg_read() */
 	if (vg)
@@ -729,8 +743,9 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
 						   const char *vgname,
 						   struct metadata_area *mda,
 						   struct label_read_data *ld,
-						   struct cached_vg_fmtdata **vg_fmtdata,
-						   unsigned *use_previous_vg)
+						   uint32_t last_meta_checksum,
+						   size_t last_meta_size,
+						   unsigned *last_meta_matches)
 {
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct volume_group *vg;
@@ -740,7 +755,8 @@ static struct volume_group *_vg_read_precommit_raw(struct format_instance *fid,
 		return_NULL;
 	}
 
-	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld, vg_fmtdata, use_previous_vg, 1);
+	vg = _read_mda_header_and_metadata_vg(fid, vgname, mda, &mdac->area, ld,
+					      last_meta_checksum, last_meta_size, last_meta_matches, 1);
 
 	/* FIXME: move this into vg_read() */
 	if (vg)
@@ -765,7 +781,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	int found = 0;
 	int noprecommit = 0;
 	const char *old_vg_name = NULL;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
 	dm_list_iterate_items(pvl, &vg->pvs) {
@@ -875,7 +891,7 @@ static int _vg_commit_raw_rlocn(struct format_instance *fid,
 	int found = 0;
 	int noprecommit = 0;
 	const char *old_vg_name = NULL;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
 	dm_list_iterate_items(pvl, &vg->pvs) {
@@ -996,7 +1012,7 @@ static int _vg_remove_raw(struct format_instance *fid, struct volume_group *vg,
 	struct raw_locn *rlocn;
 	int r = 0;
 	int noprecommit = 0;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	if (!dev_open(mdac->area.dev))
 		return_0;
@@ -1065,8 +1081,9 @@ static struct volume_group *_vg_read_file(struct format_instance *fid,
 					  const char *vgname,
 					  struct metadata_area *mda,
 					  struct label_read_data *ld,
-					  struct cached_vg_fmtdata **vg_fmtdata,
-					  unsigned *use_previous_vg __attribute__((unused)))
+					  uint32_t last_meta_checksum,
+					  size_t last_meta_size,
+					  unsigned *last_meta_matches)
 {
 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
 
@@ -1077,8 +1094,9 @@ static struct volume_group *_vg_read_precommit_file(struct format_instance *fid,
 						    const char *vgname,
 						    struct metadata_area *mda,
 					  	    struct label_read_data *ld,
-						    struct cached_vg_fmtdata **vg_fmtdata,
-						    unsigned *use_previous_vg __attribute__((unused)))
+						    uint32_t last_meta_checksum,
+					            size_t last_meta_size,
+					            unsigned *last_meta_matches)
 {
 	struct text_context *tc = (struct text_context *) mda->metadata_locn;
 	struct volume_group *vg;
@@ -1321,20 +1339,13 @@ static int _scan_file(const struct format_type *fmt, const char *vgname)
 	return 1;
 }
 
-/*
- * FIXME: take a failed_flags arg from the caller and set a flag
- * there according to the particular errors found here that cause
- * us to return 0.  Also pass a failed_flags down to 
- * text_read_metadata_summary() and _read_vgsummary() to get
- * specific errors from the lowest levels and propagate those upward.
- */
 int read_metadata_location_summary(const struct format_type *fmt,
 			struct mda_header *mdah,
 			struct label_read_data *ld,
 			struct device_area *dev_area,
 			struct lvmcache_vgsummary *vgsummary,
 			uint64_t *mda_free_sectors,
-			uint32_t *failed_flags)
+			uint64_t *failed_flags)
 {
 	struct raw_locn *rlocn;
 	uint32_t wrap = 0;
@@ -1402,7 +1413,6 @@ int read_metadata_location_summary(const struct format_type *fmt,
 		return 0;
 	}
 
-	/* Did we see this metadata before? */
 	vgsummary->mda_checksum = rlocn->checksum;
 	vgsummary->mda_size = rlocn->size;
 
@@ -1455,7 +1465,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 	struct format_instance fid;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 	struct mda_header *mdah;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
 	raw_list = &((struct mda_lists *) fmt->private)->raws;
 
@@ -1482,7 +1492,7 @@ static int _scan_raw(const struct format_type *fmt, const char *vgname __attribu
 
 		/* TODO: caching as in read_metadata_location_summary() (trigger this code?) */
 		if (read_metadata_location_summary(fmt, mdah, NULL, &rl->dev_area, &vgsummary, NULL, &failed_flags)) {
-			vg = _read_mda_header_and_metadata_vg(&fid, vgsummary.vgname, NULL, &rl->dev_area, NULL, NULL, NULL, 0);
+			vg = _read_mda_header_and_metadata_vg(&fid, vgsummary.vgname, NULL, &rl->dev_area, NULL, 0, 0, NULL, 0);
 			if (vg) {
 				lvmcache_update_vg(vg, 0);
 				lvmcache_set_independent_location(vg->name);

@@ -19,12 +19,11 @@ static struct volume_group *_vgmerge_vg_read(struct cmd_context *cmd,
 					     const char *vg_name)
 {
 	struct volume_group *vg;
+
 	log_verbose("Checking for volume group \"%s\"", vg_name);
-	vg = vg_read_for_update(cmd, vg_name, NULL, 0, 0);
-	if (vg_read_error(vg)) {
-		release_vg(vg);
-		return NULL;
-	}
+
+	if (!(vg = vg_read(cmd, vg_name, NULL, READ_FOR_UPDATE, 0, NULL)))
+		return_NULL;
 
 	if (is_lockd_type(vg->lock_type)) {
 		log_error("vgmerge not allowed for lock_type %s", vg->lock_type);

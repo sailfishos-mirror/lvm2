@@ -1562,3 +1562,61 @@ const char *dev_name(const struct device *dev)
 	return (dev && dev->aliases.n) ? dm_list_item(dev->aliases.n, struct dm_str_list)->str :
 	    unknown_device_name();
 }
+
+int device_list_remove(struct dm_list *devices, struct device *dev)
+{
+	struct device_id_list *dil;
+
+	dm_list_iterate_items(dil, devices) {
+		if (dil->dev == dev) {
+			dm_list_del(&dil->list);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+struct device_id_list *device_list_find_dev(struct dm_list *devices, struct device *dev)
+{
+	struct device_id_list *dil;
+
+	dm_list_iterate_items(dil, devices) {
+		if (dil->dev == dev)
+			return dil;
+	}
+
+	return NULL;
+}
+
+struct device_id_list *device_list_find_pvid(struct dm_list *devices, const char *pvid)
+{
+	struct device_id_list *dil;
+
+	dm_list_iterate_items(dil, devices) {
+		if (!strncmp(dil->pvid, pvid, ID_LEN))
+			return dil;
+	}
+
+	return NULL;
+}
+
+int device_list_copy(struct cmd_context *cmd, struct dm_list *src, struct dm_list *dst)
+{
+	struct device_id_list *dil;
+	struct device_id_list *dil_new;
+
+	dm_list_iterate_items(dil, src) {
+		if (!(dil_new = dm_pool_alloc(cmd->mem, sizeof(*dil_new)))) {
+			log_error("device_id_list alloc failed.");
+			return 0;
+		}
+
+		dil_new->dev = dil->dev;
+		strncpy(dil_new->pvid, dil->pvid, ID_LEN);
+		dm_list_add(dst, &dil_new->list);
+	}
+
+	return 1;
+}
+

@@ -82,14 +82,17 @@ struct metadata_area_ops {
 					 const char *vg_name,
 					 struct metadata_area * mda,
 					 struct label_read_data *ld,
-					 struct cached_vg_fmtdata **vg_fmtdata,
-					 unsigned *use_previous_vg);
+					 uint32_t last_meta_checksum,
+					 size_t last_meta_size,
+					 unsigned *last_meta_matches);
+
 	struct volume_group *(*vg_read_precommit) (struct format_instance * fi,
 					 const char *vg_name,
 					 struct metadata_area * mda,
 					 struct label_read_data *ld,
-					 struct cached_vg_fmtdata **vg_fmtdata,
-					 unsigned *use_previous_vg);
+					 uint32_t last_meta_checksum,
+					 size_t last_meta_size,
+					 unsigned *last_meta_matches);
 	/*
 	 * Write out complete VG metadata.  You must ensure internal
 	 * consistency before calling. eg. PEs can't refer to PVs not
@@ -169,8 +172,15 @@ struct metadata_area {
 	struct dm_list list;
 	struct metadata_area_ops *ops;
 	void *metadata_locn;
+	uint64_t header_start; /* mda_header.start */
+	uint64_t read_failed_flags;
 	uint32_t status;
-	uint32_t read_failed_flags;
+	uint32_t vg_read_seqno;
+	uint32_t vg_read_meta_checksum;
+	size_t vg_read_meta_size;
+	unsigned vg_read_skipped:1;
+	unsigned vg_read_success:1;
+	unsigned vg_read_failed:1;
 };
 struct metadata_area *mda_copy(struct dm_pool *mem,
 			       struct metadata_area *mda);

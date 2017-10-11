@@ -37,8 +37,7 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
 	 * Even multiple --yes are equivalent to single --force
 	 * When we require -ff it cannot be replaces with -f -y
 	 */
-	force_t force = (force_t) arg_count(cmd, force_ARG)
-		? : (arg_is_set(cmd, yes_ARG) ? DONT_PROMPT : PROMPT);
+	force_t force = (force_t) arg_count(cmd, force_ARG) ? : (arg_is_set(cmd, yes_ARG) ? DONT_PROMPT : PROMPT);
 	unsigned lv_count, missing;
 	int ret;
 
@@ -71,8 +70,28 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
 	if (!lockd_free_vg_before(cmd, vg, 0))
 		return_ECMD_FAILED;
 
-	if (!force && !vg_remove_check(vg))
-		return_ECMD_FAILED;
+	if (!force) {
+		/*
+		 * FIXME: are there other things we need to check which were
+		 * allowed in vg_read because of handles_missing_pvs, but we
+		 * don't want to handle without force?
+		 */
+
+		if (vg_missing_pv_count(vg))
+			return_ECMD_FAILED;
+
+		if (!vg_check_status(vg, EXPORTED_VG))
+			return_ECMD_FAILED;
+
+		if ((lv_count = vg_visible_lvs(vg))) {
+			log_error("Volume group \"%s\" still contains %u logical volume(s)",
+				  vg->name, lv_count);
+			return_ECMD_FAILED;
+		}
+
+        	if (!archive(vg))
+			return_ECMD_FAILED;
+	}
 
 	vg_remove_pvs(vg);
 

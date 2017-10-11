@@ -50,13 +50,13 @@ struct text_vg_version_ops {
 	struct volume_group *(*read_vg) (struct format_instance * fid,
 					 const struct dm_config_tree *cf,
 					 unsigned allow_lvmetad_extensions,
-					 uint32_t *failed_flags);
+					 uint64_t *failed_flags);
 	void (*read_desc) (struct dm_pool * mem, const struct dm_config_tree *cf,
 			   time_t *when, char **desc);
 	int (*read_vgsummary) (const struct format_type *fmt,
 			       const struct dm_config_tree *cft,
 			       struct lvmcache_vgsummary *vgsummary,
-			       uint32_t *failed_flags);
+			       uint64_t *failed_flags);
 };
 
 struct text_vg_version_ops *text_vg_vsn1_init(void);
@@ -75,17 +75,18 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
 
 /* Called in the vg_read path to return the full VG. */
 struct volume_group *text_read_metadata_vg(struct format_instance *fid,
-				       struct device *dev,
-				       const char *file,
-				       struct label_read_data *ld,
-				       struct cached_vg_fmtdata **vg_fmtdata,
-				       unsigned *use_previous_vg,
-				       off_t offset, uint32_t size,
-				       off_t offset2, uint32_t size2,
-				       checksum_fn_t checksum_fn,
-				       uint32_t checksum,
-				       time_t *when, char **desc,
-				       uint32_t *failed_flags);
+                                       struct device *dev,
+                                       const char *file,
+                                       struct label_read_data *ld,
+                                       off_t offset, uint32_t size,
+                                       off_t offset2, uint32_t size2,
+                                       uint32_t last_meta_checksum,
+                                       size_t last_meta_size,
+                                       unsigned *last_meta_matches,
+                                       checksum_fn_t checksum_fn,
+                                       uint32_t checksum,
+                                       time_t *when, char **desc,
+                                       uint64_t *failed_flags);
 
 /* Called in the label_scan path to return a partial VG summary. */
 int text_read_metadata_summary(const struct format_type *fmt,
@@ -96,7 +97,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		       checksum_fn_t checksum_fn,
 		       int checksum_only,
 		       struct lvmcache_vgsummary *vgsummary,
-		       uint32_t *failed_flags);
+		       uint64_t *failed_flags);
 
 void set_pv_devices(struct format_instance *fid, struct volume_group *vg);
 

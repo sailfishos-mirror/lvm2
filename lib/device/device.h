@@ -85,6 +85,12 @@ struct device_list {
 	struct device *dev;
 };
 
+struct device_id_list {
+	struct dm_list list;
+	struct device *dev;
+	char pvid[ID_LEN + 1];
+};
+
 struct device_area {
 	struct device *dev;
 	uint64_t start;		/* Bytes */

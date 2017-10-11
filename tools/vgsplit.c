@@ -464,11 +464,14 @@ static struct volume_group *_vgsplit_to(struct cmd_context *cmd,
 					int *existing_vg)
 {
 	struct volume_group *vg_to = NULL;
+	int lock_failed = 0;
+	int name_exists = 0;
 
 	log_verbose("Checking for new volume group \"%s\"", vg_name_to);
+
 	/*
-	 * First try to create a new VG.  If we cannot create it,
-	 * and we get FAILED_EXIST (we will not be holding a lock),
+	 * First try to create a new VG.  If we cannot create it 
+	 * and it already exists (we will not be holding a lock),
 	 * a VG must already exist with this name.  We then try to
 	 * read the existing VG - the vgsplit will be into an existing VG.
 	 *
@@ -476,26 +479,28 @@ static struct volume_group *_vgsplit_to(struct cmd_context *cmd,
 	 * we obtained a WRITE lock and could not find the vgname in the
 	 * system.  Thus, the split will be into a new VG.
 	 */
-	vg_to = vg_lock_and_create(cmd, vg_name_to);
-	if (vg_read_error(vg_to) == FAILED_LOCKING) {
+	vg_to = vg_lock_and_create(cmd, vg_name_to, &lock_failed, &name_exists);
+
+	if (vg_to)
+		return vg_to;
+
+	if (lock_failed) {
 		log_error("Can't get lock for %s", vg_name_to);
-		release_vg(vg_to);
 		return NULL;
 	}
-	if (vg_read_error(vg_to) == FAILED_EXIST) {
+
+	if (name_exists) {
 		*existing_vg = 1;
-		release_vg(vg_to);
-		vg_to = vg_read_for_update(cmd, vg_name_to, NULL, 0, 0);
 
-		if (vg_read_error(vg_to)) {
-			release_vg(vg_to);
+		if (!(vg_to = vg_read(cmd, vg_name_to, NULL, READ_NO_LOCK | READ_FOR_UPDATE, 0, NULL)))
 			return_NULL;
-		}
 
-	} else if (vg_read_error(vg_to) == SUCCESS) {
-		*existing_vg = 0;
+		return vg_to;
 	}
-	return vg_to;
+
+	/* shouldn't happen */
+	log_error("Failed to lock or create VG %s.", vg_name_to);
+	return_NULL;
 }
 
 /*
@@ -511,11 +516,8 @@ static struct volume_group *_vgsplit_from(struct cmd_context *cmd,
 
 	log_verbose("Checking for volume group \"%s\"", vg_name_from);
 
-	vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0, 0);
-	if (vg_read_error(vg_from)) {
-		release_vg(vg_from);
-		return NULL;
-	}
+	if (!(vg_from = vg_read(cmd, vg_name_from, NULL, READ_FOR_UPDATE, 0, NULL)))
+		return_NULL;
 
 	if (is_lockd_type(vg_from->lock_type)) {
 		log_error("vgsplit not allowed for lock_type %s", vg_from->lock_type);
@@ -578,6 +580,11 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 
 	if (!strcmp(vg_name_to, vg_name_from)) {
 		log_error("Duplicate volume group name \"%s\"", vg_name_from);
+		return ECMD_FAILED;
+	}
+
+	if (!validate_name(vg_name_to)) {
+		log_error("Invalid vg name %s", vg_name_to);
 		return ECMD_FAILED;
 	}
 
@@ -749,9 +756,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
 	 */
 	if (!test_mode()) {
 		release_vg(vg_to);
-		vg_to = vg_read_for_update(cmd, vg_name_to, NULL,
-					   READ_ALLOW_EXPORTED, 0);
-		if (vg_read_error(vg_to)) {
+		if (!(vg_to = vg_read(cmd, vg_name_to, NULL, READ_FOR_UPDATE | READ_ALLOW_EXPORTED, 0, NULL))) {
+			/* FIXME: this inconsistent message is not necessarily true. */
 			log_error("Volume group \"%s\" became inconsistent: "
 				  "please fix manually", vg_name_to);
 			goto bad;

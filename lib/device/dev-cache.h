@@ -72,4 +72,10 @@ struct device *dev_iter_get(struct dev_iter *iter);
 
 void dev_reset_error_count(struct cmd_context *cmd);
 
+/* device_id_list elements */
+int device_list_remove(struct dm_list *devices, struct device *dev);
+struct device_id_list *device_list_find_dev(struct dm_list *devices, struct device *dev);
+struct device_id_list *device_list_find_pvid(struct dm_list *devices, const char *pvid);
+int device_list_copy(struct cmd_context *cmd, struct dm_list *src, struct dm_list *dst);
+
 #endif

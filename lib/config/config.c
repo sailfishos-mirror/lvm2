@@ -499,7 +499,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *bu
 			off_t offset, size_t size, off_t offset2, size_t size2,
 			checksum_fn_t checksum_fn, uint32_t checksum,
 			int checksum_only, int no_dup_node_check,
-			uint32_t *failed_flags)
+			uint64_t *failed_flags)
 {
 	char *fb, *fe;
 	int r = 0;
@@ -602,7 +602,7 @@ int config_file_read(struct dm_config_tree *cft)
 	struct config_source *cs = dm_config_get_custom(cft);
 	struct config_file *cf;
 	struct stat info;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	int r;
 
 	if (!config_file_check(cft, &filename, &info))

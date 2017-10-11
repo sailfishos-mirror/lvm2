@@ -1774,8 +1774,13 @@ static int _lvmetad_pvscan_single(struct metadata_area *mda, void *baton)
 	ld = get_label_read_data(b->cmd, mda_dev);
 
 	if (mda_is_ignored(mda) ||
-	    !(vg = mda->ops->vg_read(b->fid, "", mda, ld, NULL, NULL)))
+	    !(vg = mda->ops->vg_read(b->fid, "", mda, ld, 0, 0, NULL)))
 		return 1;
+
+	if (mda->read_failed_flags) {
+		release_vg(vg);
+		return 1;
+	}
 
 	/* FIXME Also ensure contents match etc. */
 	if (!b->vg || vg->seqno > b->vg->seqno)
@@ -1803,8 +1808,13 @@ static int _lvmetad_pvscan_vg_single(struct metadata_area *mda, void *baton)
 
 	ld = get_label_read_data(b->cmd, mda_dev);
 
-	if (!(vg = mda->ops->vg_read(b->fid, "", mda, ld, NULL, NULL)))
+	if (!(vg = mda->ops->vg_read(b->fid, "", mda, ld, 0, 0, NULL)))
 		return 1;
+
+	if (mda->read_failed_flags) {
+		release_vg(vg);
+		return 1;
+	}
 
 	if (!b->vg)
 		b->vg = vg;

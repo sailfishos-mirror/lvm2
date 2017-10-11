@@ -976,7 +976,7 @@ static int _read_sections(struct format_instance *fid,
 static struct volume_group *_read_vg(struct format_instance *fid,
 				     const struct dm_config_tree *cft,
 				     unsigned for_lvmetad,
-				     uint32_t *failed_flags)
+				     uint64_t *failed_flags)
 {
 	const struct dm_config_node *vgn;
 	const struct dm_config_value *cv;
@@ -1256,11 +1256,12 @@ static void _read_desc(struct dm_pool *mem,
  * FIXME: why are these separate?
  */
 static int _read_vgsummary(const struct format_type *fmt, const struct dm_config_tree *cft, 
-			   struct lvmcache_vgsummary *vgsummary, uint32_t *failed_flags)
+			   struct lvmcache_vgsummary *vgsummary, uint64_t *failed_flags)
 {
 	const struct dm_config_node *vgn;
 	struct dm_pool *mem = fmt->cmd->mem;
 	const char *str;
+	uint64_t vgstatus;
 
 	if (!dm_config_get_str(cft->root, "creation_host", &str))
 		str = "";
@@ -1288,12 +1289,18 @@ static int _read_vgsummary(const struct format_type *fmt, const struct dm_config
 		return 0;
 	}
 
-	if (!_read_flag_config(vgn, &vgsummary->vgstatus, VG_FLAGS)) {
+	if (!_read_flag_config(vgn, &vgstatus, VG_FLAGS)) {
 		*failed_flags |= FAILED_VG_METADATA_FIELD;
 		log_error("Couldn't find status flags for volume group %s.",
 			  vgsummary->vgname);
 		return 0;
 	}
+
+	if (vgstatus & LVM_WRITE_LOCKED) {
+		vgstatus |= LVM_WRITE;
+		vgstatus &= ~LVM_WRITE_LOCKED;
+	}
+	vgsummary->vgstatus = vgstatus;
 
 	if (dm_config_get_str(vgn, "system_id", &str) &&
 	    (!(vgsummary->system_id = dm_pool_strdup(mem, str))))
@@ -1303,6 +1310,11 @@ static int _read_vgsummary(const struct format_type *fmt, const struct dm_config
 	    (!(vgsummary->lock_type = dm_pool_strdup(mem, str))))
 		goto fail_internal;
 
+	if (!_read_int32(vgn, "seqno", &vgsummary->seqno)) {
+		log_error("Couldn't read 'seqno' for volume group %s.",
+			  vgsummary->vgname);
+		return 0;
+	}
 	return 1;
 
  fail_internal:

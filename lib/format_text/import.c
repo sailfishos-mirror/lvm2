@@ -40,7 +40,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		       checksum_fn_t checksum_fn,
 		       int checksum_only,
 		       struct lvmcache_vgsummary *vgsummary,
-		       uint32_t *failed_flags)
+		       uint64_t *failed_flags)
 {
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
@@ -121,57 +121,25 @@ int text_read_metadata_summary(const struct format_type *fmt,
 	return r;
 }
 
-struct cached_vg_fmtdata {
-        uint32_t cached_mda_checksum;
-        size_t cached_mda_size;
-};
-
-/*
- * FIXME: this function's results / return values are very
- * badly defined.  It returns NULL both on an error, and
- * when it skips parsing because of an optimization.  The
- * use_previous_vg might help except that the way it's used
- * means it won't tell you the result of each call.  So,
- * failed_flags being returned as non-zero ends up being
- * the only way to tell if a particular call to this
- * function failed or not.  Toss out the whole mess and
- * rewrite it sanely.
- */
-
 struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 				       struct device *dev,
 				       const char *file,
 				       struct label_read_data *ld,
-				       struct cached_vg_fmtdata **vg_fmtdata,
-				       unsigned *use_previous_vg,
 				       off_t offset, uint32_t size,
 				       off_t offset2, uint32_t size2,
+                                       uint32_t last_meta_checksum,
+                                       size_t last_meta_size,
+                                       unsigned *last_meta_matches,
 				       checksum_fn_t checksum_fn,
 				       uint32_t checksum,
 				       time_t *when, char **desc,
-				       uint32_t *failed_flags)
+				       uint64_t *failed_flags)
 {
 	struct volume_group *vg = NULL;
 	struct dm_config_tree *cft;
 	struct text_vg_version_ops **vsn;
 	char *buf = NULL;
-	int skip_parse;
-
-	/*
-	 * This struct holds the checksum and size of the VG metadata
-	 * that was read from a previous device.  When we read the VG
-	 * metadata from this device, we can skip parsing it into a
-	 * cft (saving time) if the checksum of the metadata buffer
-	 * we read from this device matches the size/checksum saved in
-	 * the mda_header/rlocn struct on this device, and matches the
-	 * size/checksum from the previous device.
-	 */
-	if (vg_fmtdata && !*vg_fmtdata &&
-	    !(*vg_fmtdata = dm_pool_zalloc(fid->mem, sizeof(**vg_fmtdata)))) {
-		log_error("Failed to allocate VG fmtdata for text format.");
-		*failed_flags |= FAILED_INTERNAL;
-		return NULL;
-	}
+	unsigned last_matches;
 
 	_init_text_import();
 
@@ -183,10 +151,14 @@ struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 		return_NULL;
 	}
 
-	/* Does the metadata match the already-cached VG? */
-	skip_parse = vg_fmtdata && 
-		     ((*vg_fmtdata)->cached_mda_checksum == checksum) &&
-		     ((*vg_fmtdata)->cached_mda_size == (size + size2));
+	if (last_meta_checksum && last_meta_size &&
+	    (checksum == last_meta_checksum) && ((size + size2) == last_meta_size))
+		last_matches = 1;
+	else
+		last_matches = 0;
+
+	if (last_meta_matches)
+		*last_meta_matches = last_matches;
 
 	if (ld) {
 		if (ld->buf_len >= (offset + size))
@@ -215,7 +187,7 @@ struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 
 		if (!config_file_read_fd(cft, dev, buf, offset, size,
 					 offset2, size2, checksum_fn, checksum,
-					 skip_parse, 1, failed_flags)) {
+					 last_matches, 1, failed_flags)) {
 			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
 
 			/* We have to be certain this has been set since it's the
@@ -234,10 +206,9 @@ struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 		}
 	}
 
-	if (skip_parse) {
-		if (use_previous_vg)
-			*use_previous_vg = 1;
-		log_debug_metadata("Skipped parsing metadata on %s", dev_name(dev));
+	if (last_matches) {
+		log_debug_metadata("Skipped parsing metadata on %s with matching checksum 0x%x size %zu.",
+				   dev_name(dev), last_meta_checksum, last_meta_size);
 		goto out;
 	}
 
@@ -258,14 +229,6 @@ struct volume_group *text_read_metadata_vg(struct format_instance *fid,
 		break;
 	}
 
-	if (vg && vg_fmtdata && *vg_fmtdata) {
-		(*vg_fmtdata)->cached_mda_size = (size + size2);
-		(*vg_fmtdata)->cached_mda_checksum = checksum;
-	}
-
-	if (use_previous_vg)
-		*use_previous_vg = 0;
-
       out:
 	config_destroy(cft);
 	return vg;
@@ -275,13 +238,12 @@ struct volume_group *text_read_metadata_file(struct format_instance *fid,
 					 const char *file,
 					 time_t *when, char **desc)
 {
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 
-	return text_read_metadata_vg(fid, NULL, file, NULL, NULL, NULL,
-				 (off_t)0, 0, (off_t)0, 0,
-				 NULL,
-				 0,
-				 when, desc, &failed_flags);
+	return text_read_metadata_vg(fid, NULL, file, NULL,
+				     (off_t)0, 0, (off_t)0, 0,
+				     0, 0, NULL, NULL, 0,
+				     when, desc, &failed_flags);
 }
 
 static struct volume_group *_import_vg_from_config_tree(const struct dm_config_tree *cft,
@@ -290,7 +252,7 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
 {
 	struct volume_group *vg = NULL;
 	struct text_vg_version_ops **vsn;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	int vg_missing;
 
 	_init_text_import();

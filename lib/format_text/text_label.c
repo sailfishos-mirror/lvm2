@@ -334,7 +334,7 @@ static int _read_mda_header_and_metadata_summary(struct metadata_area *mda, void
 	struct mda_header *mdah;
 	struct raw_locn *rl;
 	int rl_count = 0;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 
 	if (!dev_open_readonly(mdac->area.dev)) {
@@ -445,7 +445,7 @@ out:
 
 static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
 		      struct label_read_data *ld, struct label **label,
-		      uint32_t *failed_flags)
+		      uint64_t *failed_flags)
 {
 	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
 	char uuid[64] __attribute__((aligned(8)));

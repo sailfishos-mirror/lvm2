@@ -25,24 +25,6 @@
 #define ORPHAN_PREFIX VG_ORPHANS
 #define ORPHAN_VG_NAME(fmt) ORPHAN_PREFIX "_" fmt
 
-/* FIXME: use a different prefix because other flags already use FAILED_ */
-#define FAILED_INTERNAL			0x00000001
-#define FAILED_LABEL_CHECKSUM		0x00000002
-#define FAILED_LABEL_SECTOR_NUMBER	0x00000004
-#define FAILED_PV_HEADER		0x00000008
-#define FAILED_MDA_HEADER		0x00000010
-#define FAILED_MDA_HEADER_IO		0x00000020
-#define FAILED_MDA_HEADER_CHECKSUM	0x00000040
-#define FAILED_MDA_HEADER_FIELD		0x00000080
-#define FAILED_MDA_HEADER_RLOCN		0x00000100
-#define FAILED_VG_METADATA		0x00000200
-#define FAILED_VG_METADATA_IO		0x00000400
-#define FAILED_VG_METADATA_CHECKSUM	0x00000800
-#define FAILED_VG_METADATA_PARSE	0x00001000
-#define FAILED_VG_METADATA_FIELD	0x00002000
-#define FAILED_VG_METADATA_SIZE		0x00004000
-
-
 /* LVM specific per-volume info */
 /* Eventual replacement for struct physical_volume perhaps? */
 
@@ -77,6 +59,7 @@ struct lvmcache_vgsummary {
 	const char *lock_type;
 	uint32_t mda_checksum;
 	size_t mda_size;
+	int seqno;
 };
 
 int lvmcache_init(void);
@@ -243,5 +226,9 @@ void lvmcache_remove_defective_dev(struct device *dev);
 int lvmcache_add_defective_dev(struct device *dev);
 int lvmcache_dev_is_defective(struct device *dev);
 int lvmcache_get_defective_devs(struct cmd_context *cmd, struct dm_list *head);
+const struct format_type *lvmcache_get_fmt(struct cmd_context *cmd, const char *vgname, const char *vgid);
+int lvmcache_update_vg_from_metadata(struct volume_group *vg, unsigned precommitted,
+				     uint32_t meta_checksum, size_t meta_size);
+
 
 #endif

@@ -153,7 +153,7 @@ static struct labeller *_find_label_header(struct device *dev,
 				   char *label_buf,
 				   uint64_t *label_sector,
 				   uint64_t scan_sector,
-				   uint32_t *failed_flags)
+				   uint64_t *failed_flags)
 {
 	struct labeller_i *li;
 	struct labeller *r = NULL;
@@ -366,7 +366,7 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	struct label *label;
 	struct labeller *l;
 	uint64_t sector;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	struct lvmcache_info *info;
 	int r = 0;
 
@@ -450,7 +450,7 @@ static int _label_read_sync(struct cmd_context *cmd, struct device *dev)
 	struct label *label = NULL;
 	struct labeller *l;
 	uint64_t sector;
-	uint32_t failed_flags;
+	uint64_t failed_flags;
 	int r = 0;
 
 	memset(scanbuf, 0, sizeof(scanbuf));
@@ -557,7 +557,7 @@ int label_verify(struct device *dev)
 	char label_buf[LABEL_SIZE] __attribute__((aligned(8)));
 	struct labeller *l;
 	uint64_t sector;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	int r = 0;
 
 	if (!dev_open_readonly(dev))
@@ -683,7 +683,7 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 	struct label *label = NULL;
 	struct labeller *l;
 	uint64_t sector;
-	uint32_t failed_flags = 0;
+	uint64_t failed_flags = 0;
 	int r = 0;
 
 	if ((ld->result < 0) || (ld->result != ld->buf_len)) {

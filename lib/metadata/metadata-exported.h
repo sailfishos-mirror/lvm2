@@ -27,6 +27,48 @@
 #include "lv.h"
 #include "lvm-percent.h"
 
+#define FAILED_INTERNAL                 0x0000000000000001
+#define FAILED_LABEL_CHECKSUM           0x0000000000000002
+#define FAILED_LABEL_SECTOR_NUMBER      0x0000000000000004
+#define FAILED_PV_HEADER                0x0000000000000008
+#define FAILED_MDA_HEADER               0x0000000000000010
+#define FAILED_MDA_HEADER_IO            0x0000000000000020
+#define FAILED_MDA_HEADER_CHECKSUM      0x0000000000000040
+#define FAILED_MDA_HEADER_FIELD         0x0000000000000080
+#define FAILED_MDA_HEADER_RLOCN         0x0000000000000100
+#define FAILED_VG_METADATA              0x0000000000000200
+#define FAILED_VG_METADATA_IO           0x0000000000000400
+#define FAILED_VG_METADATA_CHECKSUM     0x0000000000000800
+#define FAILED_VG_METADATA_PARSE        0x0000000000001000
+#define FAILED_VG_METADATA_FIELD        0x0000000000002000
+#define FAILED_VG_METADATA_SIZE         0x0000000000004000
+#define FAILED_NOT_FOUND                0x0000000000008000
+#define FAILED_BADNAME                  0x0000000000010000
+#define FAILED_VG_LOCKING               0x0000000000020000
+#define FAILED_ACCESS                   0x0000000000040000
+#define FAILED_MISSING_PVS              0x0000000000080000
+#define FAILED_MISSING_DEVS             0x0000000000100000
+#define FAILED_PV_DEV_SIZES             0x0000000000200000
+#define FAILED_BAD_PV_SEGS              0x0000000000400000
+#define FAILED_UNKNOWN_LV_SEGS          0x0000000000800000
+#define FAILED_BAD_LV_SEGS              0x0000000001000000
+#define FAILED_BAD_MDAS                 0x0000000002000000
+#define FAILED_OLD_PVS                  0x0000000004000000
+#define FAILED_REAPPEARED_PVS           0x0000000008000000
+#define FAILED_PARTIAL_LVS              0x0000000010000000
+#define FAILED_OUTDATED_HISTORICAL_LVS  0x0000000020000000
+#define FAILED_WRONG_PV_EXT             0x0000000040000000
+#define FAILED_CLUSTERED                0x0000000080000000
+#define FAILED_EXPORTED                 0x0000000100000000
+#define FAILED_READ_ONLY                0x0000000200000000
+#define FAILED_RESIZEABLE               0x0000000400000000
+#define FAILED_LOCK_TYPE                0x0000000800000000
+#define FAILED_LOCK_MODE                0x0000001000000000
+#define FAILED_SYSTEMID                 0x0000002000000000
+#define FAILED_REPAIR_UPDATE            0x0000004000000000
+#define FAILED_ERROR                    0x8000000000000000
+
+
 #define MAX_STRIPES 128U
 #define SECTOR_SHIFT 9L
 #define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
@@ -175,27 +217,12 @@
 #define MIRROR_SKIP_INIT_SYNC	0x00000010U	/* skip initial sync */
 
 /* vg_read and vg_read_for_update flags */
-#define READ_ALLOW_INCONSISTENT	0x00010000U
+#define READ_NO_REPAIR		0x00010000U
 #define READ_ALLOW_EXPORTED	0x00020000U
 #define READ_OK_NOTFOUND	0x00040000U
-#define READ_WARN_INCONSISTENT	0x00080000U
-#define READ_FOR_UPDATE		0x00100000U /* A meta-flag, useful with toollib for_each_* functions. */
-
-/* vg's "read_status" field */
-#define FAILED_INCONSISTENT	0x00000001U
-#define FAILED_LOCKING		0x00000002U
-#define FAILED_NOTFOUND		0x00000004U
-#define FAILED_READ_ONLY	0x00000008U
-#define FAILED_EXPORTED		0x00000010U
-#define FAILED_RESIZEABLE	0x00000020U
-#define FAILED_CLUSTERED	0x00000040U
-#define FAILED_ALLOCATION	0x00000080U
-#define FAILED_EXIST		0x00000100U
-#define FAILED_RECOVERY		0x00000200U
-#define FAILED_SYSTEMID		0x00000400U
-#define FAILED_LOCK_TYPE	0x00000800U
-#define FAILED_LOCK_MODE	0x00001000U
-#define SUCCESS			0x00000000U
+#define READ_FOR_UPDATE		0x00080000U /* A meta-flag, useful with toollib for_each_* functions. */
+#define READ_ALLOW_ERRORS	0x00100000U
+#define READ_NO_LOCK		0x00200000U /* vg_read should not do any vg locking */
 
 #define VGMETADATACOPIES_ALL UINT32_MAX
 #define VGMETADATACOPIES_UNMANAGED 0
@@ -628,8 +655,11 @@ void pvcreate_params_set_defaults(struct pvcreate_params *pp);
 int vg_write(struct volume_group *vg);
 int vg_commit(struct volume_group *vg);
 void vg_revert(struct volume_group *vg);
-struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name,
-				      const char *vgid, uint32_t warn_flags, int *consistent);
+struct volume_group *vg_read_internal(struct cmd_context *cmd, const char *vg_name, const char *vgid,
+				      int read_precommit_mdas,
+                                      uint64_t *failed_flags,
+                                      struct dm_list *bad_mdas,
+                                      struct dm_list *old_pvs);
 
 #define get_pvs( cmd ) get_pvs_internal((cmd), NULL, NULL)
 #define get_pvs_perserve_vg( cmd, pv_list, vg_list ) get_pvs_internal((cmd), (pv_list), (vg_list))
@@ -664,7 +694,7 @@ int vg_missing_pv_count(const struct volume_group *vg);
 int vgs_are_compatible(struct cmd_context *cmd,
 		       struct volume_group *vg_from,
 		       struct volume_group *vg_to);
-uint32_t vg_lock_newname(struct cmd_context *cmd, const char *vgname);
+int vg_lock_newname(struct cmd_context *cmd, const char *vgname, int *lock_failed, int *name_exists);
 
 int lv_resize(struct logical_volume *lv,
 	      struct lvresize_params *lp,
@@ -673,15 +703,8 @@ int lv_resize(struct logical_volume *lv,
 /*
  * Return a handle to VG metadata.
  */
-struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name,
-			     const char *vgid, uint32_t read_flags, uint32_t lockd_state);
-struct volume_group *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
-			 const char *vgid, uint32_t read_flags, uint32_t lockd_state);
-
-/* 
- * Test validity of a VG handle.
- */
-uint32_t vg_read_error(struct volume_group *vg_handle);
+struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const char *vgid,
+			     uint32_t read_flags, uint32_t lockd_state, uint64_t *failed_flags);
 
 /* pe_start and pe_end relate to any existing data so that new metadata
 * areas can avoid overlap */
@@ -709,7 +732,8 @@ uint32_t pv_list_extents_free(const struct dm_list *pvh);
 int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name);
 int vg_validate(struct volume_group *vg);
 struct volume_group *vg_create(struct cmd_context *cmd, const char *vg_name);
-struct volume_group *vg_lock_and_create(struct cmd_context *cmd, const char *vg_name);
+struct volume_group *vg_lock_and_create(struct cmd_context *cmd, const char *vg_name,
+					int *lock_failed, int *name_exists);
 int vg_remove_mdas(struct volume_group *vg);
 int vg_remove_check(struct volume_group *vg);
 void vg_remove_pvs(struct volume_group *vg);
@@ -1289,6 +1313,6 @@ int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
 
 int vg_strip_outdated_historical_lvs(struct volume_group *vg);
 
-const char *failed_flags_str(uint32_t failed_flags);
+const char *failed_flags_str(uint64_t failed_flags);
 
 #endif

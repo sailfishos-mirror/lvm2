@@ -157,12 +157,10 @@ int wait_for_single_lv(struct cmd_context *cmd, struct poll_operation_id *id,
 		}
 
 		/* Locks the (possibly renamed) VG again */
-		vg = vg_read(cmd, id->vg_name, NULL, READ_FOR_UPDATE, lockd_state);
-		if (vg_read_error(vg)) {
+		vg = vg_read(cmd, id->vg_name, NULL, READ_FOR_UPDATE, lockd_state, NULL);
+		if (!vg) {
 			/* What more could we do here? */
 			log_error("ABORTING: Can't reread VG for %s.", id->display_name);
-			release_vg(vg);
-			vg = NULL;
 			ret = 0;
 			goto out;
 		}
@@ -400,9 +398,8 @@ static int _report_progress(struct cmd_context *cmd, struct poll_operation_id *i
 	 * to the VG we're interested in is the change done locally.
 	 */
 
-	vg = vg_read(cmd, id->vg_name, NULL, 0, lockd_state);
-	if (vg_read_error(vg)) {
-		release_vg(vg);
+	vg = vg_read(cmd, id->vg_name, NULL, 0, lockd_state, NULL);
+	if (!vg) {
 		log_error("Can't reread VG for %s", id->display_name);
 		ret = 0;
 		goto out_ret;

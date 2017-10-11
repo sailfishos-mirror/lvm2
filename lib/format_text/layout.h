@@ -83,7 +83,7 @@ struct mda_header {
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
 				       struct device_area *dev_area,
 				       struct label_read_data *ld,
-				       uint32_t *failed_flags);
+				       uint64_t *failed_flags);
 
 struct mda_lists {
 	struct dm_list dirs;
@@ -111,6 +111,6 @@ int read_metadata_location_summary(const struct format_type *fmt,
 			struct device_area *dev_area,
 			struct lvmcache_vgsummary *vgsummary,
 			uint64_t *mda_free_sectors,
-			uint32_t *failed_flags);
+			uint64_t *failed_flags);
 
 #endif

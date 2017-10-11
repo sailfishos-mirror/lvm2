@@ -26,12 +26,6 @@
 					((ret_code) == ECMD_PROCESSED) ? REPORT_OBJECT_CMDLOG_SUCCESS \
 								   : REPORT_OBJECT_CMDLOG_FAILURE, (ret_code))
 
-struct device_id_list {
-	struct dm_list list;
-	struct device *dev;
-	char pvid[ID_LEN + 1];
-};
-
 const char *command_name(struct cmd_context *cmd)
 {
 	return cmd->command->name;
@@ -176,41 +170,66 @@ const char *skip_dev_dir(struct cmd_context *cmd, const char *vg_name,
 }
 
 /*
- * Three possible results:
- * a) return 0, skip 0: take the VG, and cmd will end in success
- * b) return 0, skip 1: skip the VG, and cmd will end in success
- * c) return 1, skip *: skip the VG, and cmd will end in failure
+ * Checks the FAILED flags returned by vg_read() to decide
+ * if they should produce an error message and command exit error.
  *
- * Case b is the special case, and includes the following:
- * . The VG is inconsistent, and the command allows for inconsistent VGs.
- * . The VG is clustered, the host cannot access clustered VG's,
- *   and the command option has been used to ignore clustered vgs.
+ * (This does not have any role in deciding if the command
+ * can use the VG.  Those override conditions allowing a command
+ * to use a VG in spite of failed flags are handled in vg_read(),
+ * and if those override conditions are met, vg_read() does not
+ * return FAILED_ERROR, and this function is not used.)
  *
- * Case c covers the other errors returned when reading the VG.
- *   If *skip is 1, it's OK for the caller to read the list of PVs in the VG.
+ * A number of FAILED flags have conditions in which they should
+ * not produce error messages.  For each of those FAILED flags,
+ * check its associated condition, and clear the flag if the
+ * message can be skipped.  At the end, if any failed flags remain
+ * set, then one or more failed flags cannot be suppressed,
+ * and we return 0 indicating that the error cannot be fully
+ * suppressed.  The flags that cannot be suppressed are returned in
+ * failed_flags_result.
+ *
+ * If all the failed flags that are set have conditions that allow
+ * them to be suppressed, then return 1 indicating that the vg can
+ * be silently skipped.  failed_flags_result will be 0.
+ *
+ * Many FAILED flags do not have conditions in which
+ * they can be suppressed.  If any of these are set,
+ * then this function will always return 0.
  */
-static int _ignore_vg(struct volume_group *vg, const char *vg_name,
-		      struct dm_list *arg_vgnames, uint32_t read_flags,
-		      int *skip, int *notfound)
+
+static int _suppress_failed_flags(struct volume_group *vg, const char *vg_name,
+				  struct dm_list *arg_vgnames, uint32_t read_flags,
+				  uint64_t failed_flags, uint64_t *failed_flags_result)
 {
-	uint32_t read_error = vg_read_error(vg);
+	uint64_t failed = failed_flags;
 
-	*skip = 0;
-	*notfound = 0;
-
-	if ((read_error & FAILED_NOTFOUND) && (read_flags & READ_OK_NOTFOUND)) {
-		*notfound = 1;
+	/*
+	 * This is an odd case that shouldn't generally happen
+	 * if the failed flags are used as intended.
+	 * Without another specific failed flag we don't really
+	 * know what this case is, and it's probably not right
+	 * to silently ignore it.
+	 */
+	failed &= ~FAILED_ERROR;
+	if (!failed) {
+		*failed_flags_result = FAILED_ERROR;
 		return 0;
 	}
 
-	if ((read_error & FAILED_INCONSISTENT) && (read_flags & READ_ALLOW_INCONSISTENT))
-		read_error &= ~FAILED_INCONSISTENT; /* Check for other errors */
+	/*
+	 * NOT_FOUND will not generally have any other flags set,
+	 * so check if we're done early.
+	 */
+	if ((!vg || (failed & FAILED_NOT_FOUND)) && (read_flags & READ_OK_NOTFOUND))
+		failed &= ~FAILED_NOT_FOUND;
 
-	if ((read_error & FAILED_CLUSTERED) && vg->cmd->ignore_clustered_vgs) {
-		read_error &= ~FAILED_CLUSTERED; /* Check for other errors */
-		log_verbose("Skipping volume group %s", vg_name);
-		*skip = 1;
+	if (!failed) {
+		*failed_flags_result = 0;
+		return 1;
 	}
+
+	if ((failed & FAILED_CLUSTERED) && vg->cmd->ignore_clustered_vgs)
+		failed &= ~FAILED_CLUSTERED;
 
 	/*
 	 * Commands that operate on "all vgs" shouldn't be bothered by
@@ -219,17 +238,9 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
 	 * operate on a foreign VG and it's skipped, then the command
 	 * would expect to fail.
 	 */
-	if (read_error & FAILED_SYSTEMID) {
-		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
-			log_error("Cannot access VG %s with system ID %s with %slocal system ID%s%s.",
-				  vg->name, vg->system_id, vg->cmd->system_id ? "" : "unknown ",
-				  vg->cmd->system_id ? " " : "", vg->cmd->system_id ? vg->cmd->system_id : "");
-			return 1;
-		} else {
-			read_error &= ~FAILED_SYSTEMID; /* Check for other errors */
-			log_verbose("Skipping foreign volume group %s", vg_name);
-			*skip = 1;
-		}
+	if (failed & FAILED_SYSTEMID) {
+		if (!arg_vgnames || !str_list_match_item(arg_vgnames, vg->name))
+			failed &= ~FAILED_SYSTEMID;
 	}
 
 	/*
@@ -241,37 +252,151 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
 	 * VG lock_type requires lvmlockd), and FAILED_LOCK_MODE (the
 	 * command failed to acquire the necessary lock.)
 	 */
-	if (read_error & (FAILED_LOCK_TYPE | FAILED_LOCK_MODE)) {
-		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
-			if (read_error & FAILED_LOCK_TYPE)
-				log_error("Cannot access VG %s with lock type %s that requires lvmlockd.",
-					  vg->name, vg->lock_type);
-			/* For FAILED_LOCK_MODE, the error is printed in vg_read. */
-			return 1;
-		} else {
-			read_error &= ~FAILED_LOCK_TYPE; /* Check for other errors */
-			read_error &= ~FAILED_LOCK_MODE;
-			log_verbose("Skipping volume group %s", vg_name);
-			*skip = 1;
+	if (failed & (FAILED_LOCK_TYPE | FAILED_LOCK_MODE)) {
+		if (!arg_vgnames || !str_list_match_item(arg_vgnames, vg->name)) {
+			failed &= ~FAILED_LOCK_TYPE;
+			failed &= ~FAILED_LOCK_MODE;
 		}
 	}
 
-	if (read_error == FAILED_CLUSTERED) {
-		*skip = 1;
-		stack;	/* Error already logged */
-		return 1;
+	/*
+	 * If failed flags remain set, then all the failures cannot be
+	 * suppressed, and we return 0.  If all failed flags have been
+	 * cleared by their associated conditions, then we can silently
+	 * suppress the error.
+	 */
+	if (failed) {
+		*failed_flags_result = failed;
+		return 0;
 	}
 
-	if (read_error != SUCCESS) {
-		*skip = 0;
-		if (is_orphan_vg(vg_name))
-			log_error("Cannot process standalone physical volumes");
-		else
-			log_error("Cannot process volume group %s", vg_name);
-		return 1;
+	*failed_flags_result = 0;
+	return 1;
+}
+
+static void _print_failed_flags(struct cmd_context *cmd, struct volume_group *vg,
+				const char *vg_name, uint64_t failed_flags_print)
+{
+	uint64_t failed = failed_flags_print;
+
+	/*
+	 * This shouldn't happen if failed_flags and suppress_failed_flags()
+	 * are used as intended.
+	 */
+	if (!failed) {
+		log_error(INTERNAL_ERROR "Cannot use VG %s (no failed flags).", vg_name);
+		return;
 	}
 
-	return 0;
+	if (failed & FAILED_ERROR) {
+		failed &= ~FAILED_ERROR;
+		/*
+		 * Usually this general flag is ignored and a more specific
+		 * flag is set, but if this happens to be the only flag set
+		 * for some reason then print a generic error.
+		 */
+		if (!failed)
+			log_error("Cannot read VG %s.", vg_name);
+		return;
+	}
+
+	if (failed & FAILED_INTERNAL) {
+		failed &= ~FAILED_INTERNAL;
+		log_error("Cannot read VG %s (internal error).", vg_name);
+	}
+
+	if (failed & FAILED_NOT_FOUND) {
+		failed &= ~FAILED_NOT_FOUND;
+		log_error("Volume group \"%s\" not found.", vg_name);
+	}
+
+	if (failed & FAILED_BADNAME) {
+		failed &= ~FAILED_BADNAME;
+		log_error("Volume group name \"%s\" has invalid characters.", vg_name);
+	}
+
+	if (failed & FAILED_VG_LOCKING) {
+		failed &= ~FAILED_VG_LOCKING;
+		log_error("Cannot lock VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_READ_ONLY) {
+		failed &= ~FAILED_READ_ONLY;
+		log_error("Cannot access read-only VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_EXPORTED) {
+		failed &= ~FAILED_EXPORTED;
+		log_error("Cannot access exported VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_RESIZEABLE) {
+		failed &= ~FAILED_RESIZEABLE;
+		log_error("Cannot access non-resizeable VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_CLUSTERED) {
+		failed &= ~FAILED_CLUSTERED;
+		log_error("Cannot access clustered VG %s that requires clvmd.", vg_name);
+	}
+
+	if (failed & FAILED_SYSTEMID) {
+		failed &= ~FAILED_SYSTEMID;
+		log_error("Cannot access VG %s with system ID %s with %slocal system ID%s%s.",
+			  vg_name, vg->system_id, vg->cmd->system_id ? "" : "unknown ",
+			  cmd->system_id ? " " : "", cmd->system_id ? cmd->system_id : "");
+	}
+
+	if (failed & FAILED_LOCK_TYPE) {
+		failed &= ~FAILED_LOCK_TYPE;
+		log_error("Cannot access VG %s with lock type %s that requires lvmlockd.",
+			  vg_name, vg->lock_type);
+	}
+
+	if (failed & FAILED_LOCK_MODE) {
+		failed &= ~FAILED_LOCK_MODE;
+		/* FIXME: remove same message in access_vg_lock_type() ? */
+		log_error("Cannot access VG %s due to failed lock in lvmlockd.", vg_name);
+	}
+
+	if (failed & FAILED_MISSING_PVS) {
+		failed &= ~FAILED_MISSING_PVS;
+		log_error("Cannot change VG %s while PVs are missing.", vg_name);
+		log_error("Consider vgreduce --removemissing.");
+	}
+
+	if (failed & FAILED_MISSING_DEVS) {
+		failed &= ~FAILED_MISSING_DEVS;
+		log_error("Cannot change VG %s while PVs have no devices.", vg_name);
+		log_error("Consider vgreduce --removemissing.");
+	}
+
+	if (failed & FAILED_BAD_PV_SEGS) {
+		failed &= ~FAILED_BAD_PV_SEGS;
+		log_error("Bad PV segments in VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_UNKNOWN_LV_SEGS) {
+		failed &= ~FAILED_UNKNOWN_LV_SEGS;
+		log_error("Unknown LV segments in VG %s.", vg_name);
+	}
+
+	if (failed & FAILED_BAD_LV_SEGS) {
+		failed &= ~FAILED_BAD_LV_SEGS;
+		log_error("Bad LV segments in VG %s.", vg_name);
+	}
+
+	/*
+	 * TODO: add a check and message for each failed flag 
+	 */
+
+	/*
+	 * This generic message should never be reached, but keep it
+	 * here in case a new failed flag is added without adding a
+	 * check above.
+	 */
+	if (failed)
+		log_error("Cannot use VG %s due to failed flags 0x%llx.", vg_name, (unsigned long long)failed);
 }
 
 /*
@@ -1900,13 +2025,12 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 	const char *vg_name;
 	const char *vg_uuid;
 	uint32_t lockd_state = 0;
+	uint64_t failed_flags;
+	uint64_t failed_flags_print;
 	int whole_selected = 0;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
-	int skip;
-	int notfound;
 	int process_all = 0;
-	int already_locked;
 	int do_report_ret_code = 1;
 
 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
@@ -1923,8 +2047,6 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 	dm_list_iterate_items(vgnl, vgnameids_to_process) {
 		vg_name = vgnl->vg_name;
 		vg_uuid = vgnl->vgid;
-		skip = 0;
-		notfound = 0;
 
 		uuid[0] = '\0';
 		if (is_orphan_vg(vg_name)) {
@@ -1949,17 +2071,31 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 			continue;
 		}
 
-		already_locked = lvmcache_vgname_is_locked(vg_name);
+		failed_flags = 0;
+		failed_flags_print = 0;
 
-		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state);
-		if (_ignore_vg(vg, vg_name, arg_vgnames, read_flags, &skip, &notfound)) {
+		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state, &failed_flags);
+		if (!vg || (failed_flags & FAILED_ERROR)) {
+			if (!_suppress_failed_flags(vg, vg_name, arg_vgnames, read_flags, failed_flags, &failed_flags_print)) {
+				_print_failed_flags(cmd, vg, vg_name, failed_flags_print);
+				ret_max = ECMD_FAILED;
+				report_log_ret_code(ret_max);
+			}
 			stack;
-			ret_max = ECMD_FAILED;
-			report_log_ret_code(ret_max);
 			goto endvg;
 		}
-		if (skip || notfound)
-			goto endvg;
+
+		/*
+		 * The VG can be used when failed_flags do not include ERROR.
+		 * TODO: in what cases do we want to warn about failed_flags
+		 * that are set?
+		 */
+		if (failed_flags) {
+			_suppress_failed_flags(vg, vg_name, arg_vgnames, read_flags, failed_flags, &failed_flags_print);
+			/* _print_warn_flags(cmd, vg, vg_name, failed_flags_print); */
+			/* FAILED_PV_DEV_SIZES WARNING: One or more devices used as PVs in VG  have changed sizes */
+			log_warn("WARNING: Processing VG %s with failed flags 0x%llx.", vg_name, (unsigned long long)failed_flags_print);
+		}
 
 		/* Process this VG? */
 		if ((process_all ||
@@ -1969,6 +2105,12 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 
 			log_very_verbose("Process single VG %s", vg_name);
 
+			/*
+			 * FIXME: pass failed_flags to single function so that
+			 * each command can decide what to do about any non-fatal
+			 * issues that still exist.
+			 */
+
 			ret = process_single_vg(cmd, vg_name, vg, handle);
 			_update_selection_result(handle, &whole_selected);
 			if (ret != ECMD_PROCESSED)
@@ -1977,11 +2119,11 @@ static int _process_vgnameid_list(struct cmd_context *cmd, uint32_t read_flags,
 			if (ret > ret_max)
 				ret_max = ret;
 		}
-
-		if (!vg_read_error(vg) && !already_locked)
-			unlock_vg(cmd, vg, vg_name);
 endvg:
-		release_vg(vg);
+		if (vg) {
+			unlock_vg(cmd, vg, vg_name);
+			release_vg(vg);
+		}
 		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
 			stack;
 
@@ -3567,15 +3709,14 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flag
 	struct dm_list *tags_arg;
 	struct dm_list lvnames;
 	uint32_t lockd_state = 0;
+	uint64_t failed_flags;
+	uint64_t failed_flags_print;
 	const char *vg_name;
 	const char *vg_uuid;
 	const char *vgn;
 	const char *lvn;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
-	int skip;
-	int notfound;
-	int already_locked;
 	int do_report_ret_code = 1;
 
 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
@@ -3583,8 +3724,6 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flag
 	dm_list_iterate_items(vgnl, vgnameids_to_process) {
 		vg_name = vgnl->vg_name;
 		vg_uuid = vgnl->vgid;
-		skip = 0;
-		notfound = 0;
 
 		uuid[0] = '\0';
 		if (vg_uuid && !id_write_format((const struct id*)vg_uuid, uuid, sizeof(uuid)))
@@ -3636,17 +3775,29 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flag
 			continue;
 		}
 
-		already_locked = lvmcache_vgname_is_locked(vg_name);
+		failed_flags = 0;
+		failed_flags_print = 0;
 
-		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state);
-		if (_ignore_vg(vg, vg_name, arg_vgnames, read_flags, &skip, &notfound)) {
+		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state, &failed_flags);
+		if (!vg || (failed_flags & FAILED_ERROR)) {
+			if (!_suppress_failed_flags(vg, vg_name, arg_vgnames, read_flags, failed_flags, &failed_flags_print)) {
+				_print_failed_flags(cmd, vg, vg_name, failed_flags_print);
+				ret_max = ECMD_FAILED;
+				report_log_ret_code(ret_max);
+			}
 			stack;
-			ret_max = ECMD_FAILED;
-			report_log_ret_code(ret_max);
 			goto endvg;
 		}
-		if (skip || notfound)
-			goto endvg;
+
+		/*
+		 * The VG can be used when failed_flags do not include ERROR.
+		 * TODO: in what cases do we want to warn about failed_flags
+		 * that are set?
+		 */
+		if (failed_flags) {
+			_suppress_failed_flags(vg, vg_name, arg_vgnames, read_flags, failed_flags, &failed_flags_print);
+			log_warn("WARNING: Processing VG %s with failed flags %llx.", vg_name, (unsigned long long)failed_flags_print);
+		}
 
 		ret = process_each_lv_in_vg(cmd, vg, &lvnames, tags_arg, 0,
 					    handle, check_single_lv, process_single_lv);
@@ -3655,13 +3806,14 @@ static int _process_lv_vgnameid_list(struct cmd_context *cmd, uint32_t read_flag
 		report_log_ret_code(ret);
 		if (ret > ret_max)
 			ret_max = ret;
-
-		if (!already_locked)
-			unlock_vg(cmd, vg, vg_name);
 endvg:
-		release_vg(vg);
+		if (vg) {
+			unlock_vg(cmd, vg, vg_name);
+			release_vg(vg);
+		}
 		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
 			stack;
+
 		log_set_report_object_name_and_id(NULL, NULL);
 	}
 	do_report_ret_code = 0;
@@ -3919,51 +4071,6 @@ out:
 	return r;
 }
 
-static int _device_list_remove(struct dm_list *devices, struct device *dev)
-{
-	struct device_id_list *dil;
-
-	dm_list_iterate_items(dil, devices) {
-		if (dil->dev == dev) {
-			dm_list_del(&dil->list);
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-static struct device_id_list *_device_list_find_dev(struct dm_list *devices, struct device *dev)
-{
-	struct device_id_list *dil;
-
-	dm_list_iterate_items(dil, devices) {
-		if (dil->dev == dev)
-			return dil;
-	}
-
-	return NULL;
-}
-
-static int _device_list_copy(struct cmd_context *cmd, struct dm_list *src, struct dm_list *dst)
-{
-	struct device_id_list *dil;
-	struct device_id_list *dil_new;
-
-	dm_list_iterate_items(dil, src) {
-		if (!(dil_new = dm_pool_alloc(cmd->mem, sizeof(*dil_new)))) {
-			log_error("device_id_list alloc failed.");
-			return ECMD_FAILED;
-		}
-
-		dil_new->dev = dil->dev;
-		strncpy(dil_new->pvid, dil->pvid, ID_LEN);
-		dm_list_add(dst, &dil_new->list);
-	}
-
-	return ECMD_PROCESSED;
-}
-
 /*
  * For each device in arg_devices or all_devices that has a pvid, add a copy of
  * that device to arg_missed.  All PVs (devices with a pvid) should have been
@@ -4080,13 +4187,13 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
 	dm_list_iterate_items(devl, &unused_duplicate_devs) {
 		/* Duplicates are displayed if -a is used or the dev is named as an arg. */
 
-		_device_list_remove(all_devices, devl->dev);
+		device_list_remove(all_devices, devl->dev);
 
 		if (!process_all_devices && dm_list_empty(arg_devices))
 			continue;
 
-		if ((dil = _device_list_find_dev(arg_devices, devl->dev)))
-			_device_list_remove(arg_devices, devl->dev);
+		if ((dil = device_list_find_dev(arg_devices, devl->dev)))
+			device_list_remove(arg_devices, devl->dev);
 
 		if (!process_all_devices && !dil)
 			continue;
@@ -4171,10 +4278,10 @@ static int _process_defective_pvs(struct cmd_context *cmd,
 
 	dm_list_iterate_items(devl, &defective_devs) {
 
-		_device_list_remove(all_devices, devl->dev);
+		device_list_remove(all_devices, devl->dev);
 
-		if ((dil = _device_list_find_dev(arg_devices, devl->dev)))
-			_device_list_remove(arg_devices, devl->dev);
+		if ((dil = device_list_find_dev(arg_devices, devl->dev)))
+			device_list_remove(arg_devices, devl->dev);
 
 		if (!(cmd->cname->flags & ENABLE_DEFECTIVE_DEVS))
 			continue;
@@ -4263,9 +4370,9 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
 		/* Remove each arg_devices entry as it is processed. */
 
 		if (!process_pv && !dm_list_empty(arg_devices) &&
-		    (dil = _device_list_find_dev(arg_devices, pv->dev))) {
+		    (dil = device_list_find_dev(arg_devices, pv->dev))) {
 			process_pv = 1;
-			_device_list_remove(arg_devices, dil->dev);
+			device_list_remove(arg_devices, dil->dev);
 		}
 
 		if (!process_pv && !dm_list_empty(arg_tags) &&
@@ -4280,7 +4387,7 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
 			else
 				log_very_verbose("Processing PV %s in VG %s.", pv_name, vg->name);
 
-			_device_list_remove(all_devices, pv->dev);
+			device_list_remove(all_devices, pv->dev);
 
 			/*
 			 * pv->dev should be found in all_devices unless it's a
@@ -4350,11 +4457,11 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
 	const char *vg_name;
 	const char *vg_uuid;
 	uint32_t lockd_state = 0;
+	uint64_t failed_flags;
+	uint64_t failed_flags_print;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
 	int skip;
-	int notfound;
-	int already_locked;
 	int do_report_ret_code = 1;
 
 	log_set_report_object_type(LOG_REPORT_OBJECT_TYPE_VG);
@@ -4363,7 +4470,6 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
 		vg_name = vgnl->vg_name;
 		vg_uuid = vgnl->vgid;
 		skip = 0;
-		notfound = 0;
 
 		uuid[0] = '\0';
 		if (is_orphan_vg(vg_name)) {
@@ -4388,25 +4494,42 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
 
 		log_debug("Processing PVs in VG %s", vg_name);
 
-		already_locked = lvmcache_vgname_is_locked(vg_name);
+		failed_flags = 0;
+		failed_flags_print = 0;
 
-		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state);
-		if (_ignore_vg(vg, vg_name, NULL, read_flags, &skip, &notfound)) {
+		vg = vg_read(cmd, vg_name, vg_uuid, read_flags, lockd_state, &failed_flags);
+		if (!vg || (failed_flags & FAILED_ERROR)) {
+			if (!_suppress_failed_flags(vg, vg_name, NULL, read_flags, failed_flags, &failed_flags_print)) {
+				_print_failed_flags(cmd, vg, vg_name, failed_flags_print);
+				ret_max = ECMD_FAILED;
+				report_log_ret_code(ret_max);
+			}
 			stack;
-			ret_max = ECMD_FAILED;
-			report_log_ret_code(ret_max);
-			if (!skip)
+
+			/*
+			 * FIXME: can we just do this instead of going
+			 * through the processing with the skip flag?
+			 * remove_pv_list_from_device_list(&vg->pvs, arg_devices);
+			 * remove_pv_list_from_device_list(&vg->pvs, all_devices);
+			 */
+			if (vg) {
+				skip = 1;
+				goto process;
+			} else {
 				goto endvg;
-			/* Drop through to eliminate a clustered VG's PVs from the devices list */
+			}
 		}
-		if (notfound)
-			goto endvg;
-		
+
 		/*
-		 * Don't continue when skip is set, because we need to remove
-		 * vg->pvs entries from devices list.
+		 * The VG can be used when failed_flags do not include ERROR.
+		 * TODO: in what cases do we want to warn about failed_flags
+		 * that are set?
 		 */
-		
+		if (failed_flags) {
+			_suppress_failed_flags(vg, vg_name, NULL, read_flags, failed_flags, &failed_flags_print);
+			log_warn("WARNING: Processing VG %s with failed flags 0x%llx.", vg_name, (unsigned long long)failed_flags_print);
+		}
+process:
 		ret = _process_pvs_in_vg(cmd, vg, all_devices, arg_devices, arg_tags,
 					 process_all_pvs, process_all_devices, skip,
 					 handle, process_single_pv);
@@ -4415,11 +4538,12 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
 		report_log_ret_code(ret);
 		if (ret > ret_max)
 			ret_max = ret;
-
-		if (!skip && !already_locked)
-			unlock_vg(cmd, vg, vg->name);
 endvg:
-		release_vg(vg);
+		if (vg) {
+			unlock_vg(cmd, vg, vg->name);
+			release_vg(vg);
+		}
+
 		if (!lockd_vg(cmd, vg_name, "un", 0, &lockd_state))
 			stack;
 
@@ -4470,9 +4594,7 @@ int process_each_pv(struct cmd_context *cmd,
 	 * if it was removed between creating the list of all VGs and then
 	 * processing each VG.
 	 */
-	if (only_this_vgname)
-		read_flags |= READ_WARN_INCONSISTENT;
-	else
+	if (!only_this_vgname)
 		read_flags |= READ_OK_NOTFOUND;
 
 	/* Disable error in vg_read so we can print it from ignore_vg. */
@@ -4636,7 +4758,7 @@ int process_each_pv(struct cmd_context *cmd,
 		struct dm_list arg_missed_orig;
 
 		dm_list_init(&arg_missed_orig);
-		_device_list_copy(cmd, &arg_missed, &arg_missed_orig);
+		device_list_copy(cmd, &arg_missed, &arg_missed_orig);
 
 		log_verbose("Some PVs were not found in first search, retrying.");
 
@@ -4658,8 +4780,8 @@ int process_each_pv(struct cmd_context *cmd,
 
 		/* Devices removed from arg_missed are removed from arg_devices. */
 		dm_list_iterate_items(dil, &arg_missed_orig) {
-			if (!_device_list_find_dev(&arg_missed, dil->dev))
-				_device_list_remove(&arg_devices, dil->dev);
+			if (!device_list_find_dev(&arg_missed, dil->dev))
+				device_list_remove(&arg_devices, dil->dev);
 		}
 	}
 
@@ -5489,7 +5611,6 @@ int pvcreate_each_device(struct cmd_context *cmd,
 	struct pv_list *pvl;
 	struct pv_list *vgpvl;
 	const char *pv_name;
-	int consistent = 0;
 	int must_use_all = (cmd->cname->flags & MUST_USE_ALL_ARGS);
 	int found;
 	unsigned i;
@@ -5781,9 +5902,11 @@ do_command:
 	 * and not recreate a new PV on top of an existing PV.
 	 */
 	if (pp->preserve_existing && pp->orphan_vg_name) {
+		uint64_t failed_flags = 0;
+
 		log_debug("Using existing orphan PVs in %s.", pp->orphan_vg_name);
 
-		if (!(orphan_vg = vg_read_internal(cmd, pp->orphan_vg_name, NULL, 0, &consistent))) {
+		if (!(orphan_vg = vg_read_internal(cmd, pp->orphan_vg_name, NULL, 0, &failed_flags, NULL, NULL))) {
 			log_error("Cannot read orphans VG %s.", pp->orphan_vg_name);
 			goto bad;
 		}
