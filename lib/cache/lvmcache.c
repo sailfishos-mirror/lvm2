@@ -1172,6 +1172,18 @@ next:
  * scan, and if they all match, consider it good enough to use for
  * reporting without rereading it.  (A command modifying the VG would
  * always want to reread while the lock is held before modifying.)
+ *
+ * A label scan is ultimately creating associations between devices
+ * and VGs so that when vg_read wants to get VG metadata, it knows
+ * which devices to read.  In the special case where VG metadata is
+ * stored in files on the file system (configured in lvm.conf), the
+ * vginfo->independent_metadata_location flag is set during label scan.
+ * When we get here to rescan, we are revalidating the device to VG
+ * mapping from label scan by repeating the label scan on a subset of
+ * devices.  If we see independent_metadata_location is set from the
+ * initial label scan, we know that there is nothing to do because
+ * there is no device to VG mapping to revalidate, since the VG metadata
+ * comes directly from files.
  */
 
 int lvmcache_label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid)
