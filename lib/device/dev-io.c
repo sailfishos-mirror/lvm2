@@ -827,3 +827,308 @@ int dev_set(struct device *dev, uint64_t offset, size_t len, int value)
 
 	return (len == 0);
 }
+
+#ifdef AIO_SUPPORT
+
+/*
+ * io_setup() wrapper:
+ * async_event_count is the max number of concurrent async
+ * i/os, i.e. the number of devices that can be read at once
+ *
+ * max_io_alloc_count: max number of aio structs to allocate,
+ * each with a buf_len size buffer.
+ *
+ * max_buf_alloc_bytes: max number of bytes to use for buffers
+ * attached to all aio structs; each aio struct gets a
+ * buf_len size buffer.
+ *
+ * When only max_io_alloc_count is set, it is used directly.
+ *
+ * When only max_buf_alloc_bytes is set, the number of aio
+ * structs is determined by this number divided by buf_len.
+ *
+ * When both are set, max_io_alloc_count is reduced, if needed,
+ * to whatever value max_buf_alloc_bytes would allow.
+ *
+ * When both are zero, there is no limit on the number of aio
+ * structs.  If allocation fails for an aio struct or its buffer,
+ * the code should revert to synchronous io.
+ */
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count,
+						  unsigned max_io_alloc_count,
+						  unsigned max_buf_alloc_bytes,
+						  int buf_len)
+{
+	struct dev_async_context *ac;
+	unsigned nr_events = DEFAULT_ASYNC_EVENTS;
+	int count;
+	int error;
+
+	if (async_event_count)
+		nr_events = async_event_count;
+
+	if (!(ac = malloc(sizeof(struct dev_async_context))))
+		return_0;
+
+	memset(ac, 0, sizeof(struct dev_async_context));
+
+	dm_list_init(&ac->unused_ios);
+
+	error = io_setup(nr_events, &ac->aio_ctx);
+
+	if (error < 0) {
+		log_warn("WARNING: async io setup error %d with %u events.", error, nr_events);
+		free(ac);
+		return_0;
+	}
+
+
+	if (!max_io_alloc_count && !max_buf_alloc_bytes)
+		count = 0;
+	else if (!max_io_alloc_count && max_buf_alloc_bytes)
+		count = max_buf_alloc_bytes / buf_len;
+	else if (max_io_alloc_count && max_buf_alloc_bytes) {
+		if (max_io_alloc_count * buf_len > max_buf_alloc_bytes)
+			count = max_buf_alloc_bytes / buf_len;
+	} else
+		count = max_io_alloc_count;
+
+	ac->max_ios = count;
+	return ac;
+}
+
+void dev_async_context_destroy(struct dev_async_context *ac)
+{
+	io_destroy(ac->aio_ctx);
+	free(ac);
+}
+
+static struct dev_async_io *_async_io_alloc(int buf_len)
+{
+	struct dev_async_io *aio;
+	char *buf;
+	char **p_buf;
+
+	/*
+	 * mem pool doesn't seem to work for this, probably because
+	 * of the memalign that follows.
+	 */
+	if (!(aio = malloc(sizeof(struct dev_async_io))))
+		return_0;
+
+	memset(aio, 0, sizeof(struct dev_async_io));
+
+	buf = NULL;
+	p_buf = &buf;
+
+	if (posix_memalign((void *)p_buf, getpagesize(), buf_len)) {
+		free(aio);
+		return_NULL;
+	}
+
+	memset(buf, 0, buf_len);
+
+	aio->buf = buf;
+	aio->buf_len = buf_len;
+	return aio;
+}
+
+static void _async_io_free(struct dev_async_io *aio)
+{
+	if (aio->buf)
+		free(aio->buf);
+	free(aio);
+}
+
+int dev_async_alloc_ios(struct dev_async_context *ac, int num, int buf_len, int *available)
+{
+	struct dev_async_io *aio;
+	int count;
+	int i;
+
+	/* 
+	 * When no limit is used and no pre-alloc number is set,
+	 * then no ios are allocated up front, but the are
+	 * allocated as needed in get().
+	 */
+	if (!ac->max_ios && !num) {
+		*available = 1;
+		return 1;
+	}
+
+	if (num && !ac->max_ios)
+		count = num;
+	else if (!num && ac->max_ios)
+		count = ac->max_ios;
+	else if (num > ac->max_ios)
+		count = ac->max_ios;
+	else if (num < ac->max_ios)
+		count = num;
+	else
+		count = ac->max_ios;
+
+	for (i = 0; i < count; i++) {
+		if (!(aio = _async_io_alloc(buf_len))) {
+			ac->num_ios = i;
+			*available = i;
+			return 1;
+		}
+		dm_list_add(&ac->unused_ios, &aio->list);
+	}
+
+	ac->num_ios = count;
+	*available = count;
+	return 1;
+}
+
+void dev_async_free_ios(struct dev_async_context *ac)
+{
+	struct dev_async_io *aio, *aio2;
+
+	dm_list_iterate_items_safe(aio, aio2, &ac->unused_ios) {
+		dm_list_del(&aio->list);
+		_async_io_free(aio);
+	}
+}
+
+struct dev_async_io *dev_async_io_get(struct dev_async_context *ac, int buf_len)
+{
+	struct dev_async_io *aio;
+
+	if (!(aio = dm_list_item(dm_list_first(&ac->unused_ios), struct dev_async_io))) {
+		/* alloc on demand if there is no max or we have used less than max */
+		if (!ac->max_ios || (ac->num_ios < ac->max_ios)) {
+			if ((aio = _async_io_alloc(buf_len))) {
+				ac->num_ios++;
+				return aio;
+			}
+		}
+
+		return NULL;
+	}
+	dm_list_del(&aio->list);
+	return aio;
+}
+
+void dev_async_io_put(struct dev_async_context *ac, struct dev_async_io *aio)
+{
+	/*
+	 * Some paths don't have cmd->ac available, so it's simpler for now
+	 * to just free the aio struct in those cases.
+	 */
+	if (!ac)
+		_async_io_free(aio);
+	else
+		dm_list_add(&ac->unused_ios, &aio->list);
+}
+
+/* io_submit() wrapper */
+
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+			  struct device *dev, uint32_t len, uint64_t offset, int *nospace)
+{
+	struct iocb *iocb = &aio->iocb;
+	int error;
+
+	*nospace = 0;
+
+	if (len > aio->buf_len)
+		return_0;
+
+	aio->len = len;
+
+	iocb->data = aio;
+	iocb->aio_fildes = dev_fd(dev);
+	iocb->aio_lio_opcode = IO_CMD_PREAD;
+	iocb->u.c.buf = aio->buf;
+	iocb->u.c.nbytes = len;
+	iocb->u.c.offset = offset;
+
+	error = io_submit(ac->aio_ctx, 1, &iocb);
+	if (error == -EAGAIN)
+		*nospace = 1;
+	if (error < 0)
+		return 0;
+	return 1;
+}
+
+/* io_getevents() wrapper */
+
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout)
+{
+	int wait_nr;
+	int rv;
+	int i;
+
+ retry:
+	memset(&ac->events, 0, sizeof(ac->events));
+
+	if (wait_count >= MAX_GET_EVENTS)
+		wait_nr = MAX_GET_EVENTS;
+	else
+		wait_nr = wait_count;
+
+	rv = io_getevents(ac->aio_ctx, 1, wait_nr, (struct io_event *)&ac->events, timeout);
+
+	if (rv == -EINTR)
+		goto retry;
+	if (rv < 0)
+		return 0;
+	if (!rv)
+		return 1;
+
+	for (i = 0; i < rv; i++) {
+		struct iocb *iocb = ac->events[i].obj;
+		struct dev_async_io *aio = iocb->data;
+		aio->result = ac->events[i].res;
+		aio->done = 1;
+	}
+
+	return 1;
+}
+
+#else /* AIO_SUPPORT */
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count,
+						  unsigned max_io_alloc_count,
+						  unsigned max_buf_alloc_bytes,
+						  int buf_len)
+{
+	return NULL;
+}
+
+void dev_async_context_destroy(struct dev_async_context *ac)
+{
+}
+
+int dev_async_alloc_ios(struct dev_async_context *ac, int num, int buf_len, int *available)
+{
+	return 0;
+}
+
+void dev_async_free_ios(struct dev_async_context *ac)
+{
+}
+
+struct dev_async_io *dev_async_io_get(struct dev_async_context *ac, int buf_len)
+{
+	return NULL;
+}
+
+void dev_async_io_put(struct dev_async_context *ac, struct dev_async_io *aio)
+{
+}
+
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+			  struct device *dev, uint32_t len, uint64_t offset, int *nospace)
+{
+	return 0;
+}
+
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout)
+{
+	return 0;
+}
+
+#endif /* AIO_SUPPORT */

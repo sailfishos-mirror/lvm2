@@ -19,6 +19,7 @@
 #include "uuid.h"
 
 #include <fcntl.h>
+#include <libaio.h>
 
 #define DEV_ACCESSED_W		0x00000001	/* Device written to? */
 #define DEV_REGULAR		0x00000002	/* Regular file? */
@@ -91,6 +92,32 @@ struct device_area {
 };
 
 /*
+ * We'll collect the results of this many async reads
+ * in one system call.  It shouldn't matter much what
+ * number is used here.
+ */
+#define MAX_GET_EVENTS 16
+
+struct dev_async_context {
+	io_context_t aio_ctx;
+	struct io_event events[MAX_GET_EVENTS]; /* for processing completions */
+	struct dm_list unused_ios; /* unused/available aio structcs */
+	int num_ios; /* number of allocated aio structs */
+	int max_ios; /* max number of aio structs to allocate */
+};
+
+struct dev_async_io {
+	struct dm_list list;
+	struct iocb iocb;
+	struct device *dev;
+	char *buf;
+	uint32_t buf_len; /* size of buf */
+	uint32_t len; /* size of submitted io */
+	int done;
+	int result;
+};
+
+/*
  * Support for external device info.
  */
 const char *dev_ext_name(struct device *dev);
@@ -143,5 +170,27 @@ void dev_destroy_file(struct device *dev);
 
 /* Return a valid device name from the alias list; NULL otherwise */
 const char *dev_name_confirmed(struct device *dev, int quiet);
+
+struct dev_async_context *dev_async_context_setup(unsigned async_event_count,
+						  unsigned max_io_alloc_count,
+						  unsigned max_buf_alloc_bytes,
+						  int buf_len);
+void dev_async_context_destroy(struct dev_async_context *ac);
+
+/* allocate aio structs (with buffers), up to the max specified during context setup */
+int dev_async_alloc_ios(struct dev_async_context *ac, int num, int buf_len, int *available);
+
+/* free aio structs (and buffers) */
+void dev_async_free_ios(struct dev_async_context *ac);
+
+/* get an available aio struct (with buffer) */
+struct dev_async_io *dev_async_io_get(struct dev_async_context *ac, int buf_len);
+
+/* make an aio struct (with buffer) available for use (by another get) */
+void dev_async_io_put(struct dev_async_context *ac, struct dev_async_io *aio);
+
+int dev_async_read_submit(struct dev_async_context *ac, struct dev_async_io *aio,
+                          struct device *dev, uint32_t len, uint64_t offset, int *nospace);
+int dev_async_getevents(struct dev_async_context *ac, int wait_count, struct timespec *timeout);
 
 #endif
