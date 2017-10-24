@@ -542,6 +542,7 @@ static int _process_config(struct cmd_context *cmd)
 	const struct dm_config_value *cv;
 	int64_t pv_min_kb;
 	int udev_disabled = 0;
+	int scan_size_kb;
 	char sysfs_dir[PATH_MAX];
 
 	if (!_check_config(cmd))
@@ -624,6 +625,29 @@ static int _process_config(struct cmd_context *cmd)
 
 	cmd->default_settings.udev_sync = udev_disabled ? 0 :
 		find_config_tree_bool(cmd, activation_udev_sync_CFG, NULL);
+
+#ifdef AIO_SUPPORT
+	cmd->use_aio = find_config_tree_bool(cmd, devices_scan_async_CFG, NULL);
+#else
+	cmd->use_aio = 0;
+	if (find_config_tree_bool(cmd, devices_scan_async_CFG, NULL))
+		log_verbose("Ignoring scan_async, no async I/O support.");
+#endif
+	scan_size_kb = find_config_tree_int(cmd, devices_scan_size_CFG, NULL);
+
+	if (!scan_size_kb || (scan_size_kb < 0) || (scan_size_kb % 4)) {
+		log_warn("WARNING: Ignoring invalid scan_size %d KB, using default %u KB.",
+			 scan_size_kb, DEFAULT_SCAN_SIZE_KB);
+		log_warn("scan_size has units of KB and must be a multiple of 4 KB.");
+		scan_size_kb = DEFAULT_SCAN_SIZE_KB;
+	}
+
+	cmd->default_settings.scan_size_kb = scan_size_kb;
+
+	if (cmd->use_aio)
+		log_debug("Using async io with scan_size %u KB.", scan_size_kb);
+	else
+		log_debug("Using sync io with scan_size %u KB.", scan_size_kb);
 
 	/*
 	 * Set udev_fallback lazily on first use since it requires
@@ -2225,6 +2249,8 @@ void destroy_toolcontext(struct cmd_context *cmd)
 	if (cmd->dump_filter && cmd->filter && cmd->filter->dump &&
 	    !cmd->filter->dump(cmd->filter, 1))
 		stack;
+
+	label_scan_destroy(cmd);
 
 	archive_exit(cmd);
 	backup_exit(cmd);
