@@ -40,6 +40,7 @@ struct config_info {
 	int udev_sync;
 	int udev_fallback;
 	int cache_vgmetadata;
+	int scan_size_kb;
 	const char *msg_prefix;
 	const char *fmt_name;
 	uint64_t unit_factor;
@@ -164,6 +165,7 @@ struct cmd_context {
 	unsigned vg_notify:1;
 	unsigned lv_notify:1;
 	unsigned pv_notify:1;
+	unsigned use_aio:1;
 
 	/*
 	 * Filtering.
@@ -223,6 +225,7 @@ struct cmd_context {
 	const char *time_format;
 	unsigned rand_seed;
 	struct dm_list unused_duplicate_devs; /* save preferences between lvmcache instances */
+	struct dev_async_context *ac; /* for async i/o */
 };
 
 /*
