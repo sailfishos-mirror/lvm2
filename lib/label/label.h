@@ -18,6 +18,7 @@
 
 #include "uuid.h"
 #include "device.h"
+#include "toolcontext.h"
 
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
@@ -27,6 +28,17 @@
 struct labeller;
 
 void allow_reads_with_lvmetad(void);
+
+struct label_read_data {
+	struct dev_async_io *aio;
+	char *buf; /* points to aio->buf */
+	struct device *dev;
+	struct dm_list list;
+	int buf_len; /* same as aio->buf_len */
+	int result; /* same as aio->result */
+	int try_sync;
+	int process_done;
+};
 
 /* On disk - 32 bytes */
 struct label_header {
@@ -63,7 +75,7 @@ struct label_ops {
 	 * Read a label from a volume.
 	 */
 	int (*read) (struct labeller * l, struct device * dev,
-		     void *buf, struct label ** label);
+		     void *label_buf, struct label ** label);
 
 	/*
 	 * Additional consistency checks for the paranoid.
@@ -99,11 +111,16 @@ int label_register_handler(struct labeller *handler);
 struct labeller *label_get_handler(const char *name);
 
 int label_remove(struct device *dev);
-int label_read(struct device *dev, struct label **result,
-		uint64_t scan_sector);
+int label_read(struct device *dev, struct label **label, uint64_t scan_sector);
 int label_write(struct device *dev, struct label *label);
 int label_verify(struct device *dev);
 struct label *label_create(struct labeller *labeller);
 void label_destroy(struct label *label);
+
+int label_scan_force(struct cmd_context *cmd);
+int label_scan(struct cmd_context *cmd);
+int label_scan_devs(struct cmd_context *cmd, struct dm_list *devs);
+struct label_read_data *get_label_read_data(struct cmd_context *cmd, struct device *dev);
+void label_scan_destroy(struct cmd_context *cmd);
 
 #endif
