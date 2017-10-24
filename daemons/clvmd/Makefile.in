@@ -77,6 +77,10 @@ include $(top_builddir)/make.tmpl
 LIBS += $(LVMINTERNAL_LIBS) -ldevmapper $(PTHREAD_LIBS)
 CFLAGS += -fno-strict-aliasing $(EXTRA_EXEC_CFLAGS)
 
+ifeq ("@AIO@", "yes")
+	LIBS += $(AIO_LIBS)
+endif
+
 INSTALL_TARGETS = \
 	install_clvmd
 
