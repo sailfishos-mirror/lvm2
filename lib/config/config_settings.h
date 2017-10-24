@@ -457,6 +457,26 @@ cfg(devices_allow_changes_with_duplicate_pvs_CFG, "allow_changes_with_duplicate_
 	"Enabling this setting allows the VG to be used as usual even with\n"
 	"uncertain devices.\n")
 
+cfg(devices_scan_async_CFG, "scan_async", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_SCAN_ASYNC, vsn(2, 2, 173), NULL, 0, NULL,
+	"Use async I/O to read headers and metadata from disks in parallel.\n")
+
+cfg(devices_scan_size_CFG, "scan_size", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_SCAN_SIZE_KB, vsn(2, 2, 173), NULL, 0, NULL,
+	"Number of KiB to read from each disk when scanning disks.\n"
+	"The initial scan size is intended to cover all the headers\n"
+	"and metadata that LVM places at the start of each disk so\n"
+	"that a single read operation can retrieve them all.\n"
+	"Any headers or metadata that lie beyond this size require\n"
+	"an additional disk read. Must be a multiple of 4KiB.\n")
+
+cfg(devices_async_events_CFG, "async_events", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_ASYNC_EVENTS, vsn(2, 2, 173), NULL, 0, NULL,
+	"Max number of concurrent async reads when scanning disks.\n"
+	"Up to this many disks can be read concurrently when scanning\n"
+	"disks with async I/O. If there are more disks than this,\n"
+	"they will be scanned serially with synchronous reads.\n"
+	"Increasing this number to match a larger number of disks may\n"
+	"improve performance, but will increase memory requirements.\n"
+	"This setting is limitted by the system aio configuration.\n")
+
 cfg_array(allocation_cling_tag_list_CFG, "cling_tag_list", allocation_CFG_SECTION, CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 77), NULL, 0, NULL,
 	"Advise LVM which PVs to use when searching for new space.\n"
 	"When searching for free space to extend an LV, the 'cling' allocation\n"
