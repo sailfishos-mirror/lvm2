@@ -661,6 +661,8 @@ int do_refresh_cache(void)
 		return -1;
 	}
 
+	cmd->use_aio = 0;
+	cmd->use_scan_cache = 0;
 	init_full_scan_done(0);
 	init_ignore_suspended_devices(1);
 	lvmcache_force_next_label_scan();
@@ -920,6 +922,8 @@ int init_clvm(struct dm_hash_table *excl_uuid)
 	/* Check lvm.conf is setup for cluster-LVM */
 	check_config();
 	init_ignore_suspended_devices(1);
+	cmd->use_aio = 0;
+	cmd->use_scan_cache = 0;
 
 	/* Trap log messages so we can pass them back to the user */
 	init_log_fn(lvm2_log_fn);
