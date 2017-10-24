@@ -109,6 +109,10 @@ ifeq ("@CMDLIB@", "yes")
 	INSTALL_LVM_TARGETS += $(INSTALL_CMDLIB_TARGETS)
 endif
 
+ifeq ("@AIO@", "yes")
+	LVMLIBS += $(AIO_LIBS)
+endif
+
 EXPORTED_HEADER = $(srcdir)/lvm2cmd.h
 EXPORTED_FN_PREFIX = lvm2
 
