@@ -1086,6 +1086,8 @@ static void _full_scan(int dev_scan)
 	if (_cache.has_scanned && !dev_scan)
 		return;
 
+	log_debug_devs("Adding device paths to dev cache");
+
 	_insert_dirs(&_cache.dirs);
 
 	(void) dev_cache_index_devs();
@@ -1095,6 +1097,8 @@ static void _full_scan(int dev_scan)
 
 	_cache.has_scanned = 1;
 	init_full_scan_done(1);
+
+	log_debug_devs("Added %d device paths to dev cache", dm_hash_get_num_entries(_cache.names));
 }
 
 int dev_cache_has_scanned(void)
