@@ -1438,8 +1438,6 @@ int lvmcache_get_vgnameids(struct cmd_context *cmd, int include_internal,
 	struct vgnameid_list *vgnl;
 	struct lvmcache_vginfo *vginfo;
 
-	lvmcache_label_scan(cmd);
-
 	dm_list_iterate_items(vginfo, &_vginfos) {
 		if (!include_internal && is_orphan_vg(vginfo->vgname))
 			continue;
@@ -1577,23 +1575,6 @@ static struct device *_device_from_pvid(const struct id *pvid, uint64_t *label_s
 struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector)
 {
 	struct device *dev;
-
-	dev = _device_from_pvid(pvid, label_sector);
-	if (dev)
-		return dev;
-
-	lvmcache_label_scan(cmd);
-
-	/* Try again */
-
-	dev = _device_from_pvid(pvid, label_sector);
-	if (dev)
-		return dev;
-
-	lvmcache_force_next_label_scan();
-	lvmcache_label_scan(cmd);
-
-	/* Try again */
 
 	dev = _device_from_pvid(pvid, label_sector);
 	if (dev)
