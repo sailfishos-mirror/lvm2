@@ -75,7 +75,8 @@ struct label_ops {
 	 * Read a label from a volume.
 	 */
 	int (*read) (struct labeller * l, struct device * dev,
-		     void *label_buf, struct label ** label);
+		     void *label_buf,
+		     struct label_read_data *ld, struct label ** label);
 
 	/*
 	 * Additional consistency checks for the paranoid.
