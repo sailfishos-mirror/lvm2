@@ -494,7 +494,7 @@ int override_config_tree_from_profile(struct cmd_context *cmd,
  * and function avoids parsing of mda into config tree which
  * remains unmodified and should not be used.
  */
-int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
+int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, char *buf_async,
 			off_t offset, size_t size, off_t offset2, size_t size2,
 			checksum_fn_t checksum_fn, uint32_t checksum,
 			int checksum_only, int no_dup_node_check)
@@ -517,7 +517,18 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
 	if (!(dev->flags & DEV_REGULAR) || size2)
 		use_mmap = 0;
 
-	if (use_mmap) {
+	if (buf_async) {
+		if (!(buf = dm_malloc(size + size2))) {
+			log_error("Failed to allocate circular buffer.");
+			return 0;
+		}
+
+		memcpy(buf, buf_async + offset, size);
+		if (size2)
+			memcpy(buf + size, buf_async + offset2, size2);
+
+		fb = buf;
+	} else if (use_mmap) {
 		mmap_offset = offset % lvm_getpagesize();
 		/* memory map the file */
 		fb = mmap((caddr_t) 0, size + mmap_offset, PROT_READ,
@@ -532,6 +543,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
 			log_error("Failed to allocate circular buffer.");
 			return 0;
 		}
+
 		if (!dev_read_circular(dev, (uint64_t) offset, size,
 				       (uint64_t) offset2, size2, buf)) {
 			goto out;
@@ -601,7 +613,7 @@ int config_file_read(struct dm_config_tree *cft)
 		}
 	}
 
-	r = config_file_read_fd(cft, cf->dev, 0, (size_t) info.st_size, 0, 0,
+	r = config_file_read_fd(cft, cf->dev, NULL, 0, (size_t) info.st_size, 0, 0,
 				(checksum_fn_t) NULL, 0, 0, 0);
 
 	if (!cf->keep_open) {
