@@ -308,14 +308,22 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
 	return 1;
 }
 
-struct _update_mda_baton {
+struct _mda_baton {
 	struct lvmcache_info *info;
 	struct label *label;
+	struct label_read_data *ld;
 };
 
-static int _update_mda(struct metadata_area *mda, void *baton)
+/*
+ * FIXME: optimize reads when there is a second mda at the end
+ * of the PV.  For the second mda we should also have a single
+ * large read covering mda_header and metadata, and we should
+ * be able to reuse it in vg_read.
+ */
+
+static int _read_mda_header_and_metadata(struct metadata_area *mda, void *baton)
 {
-	struct _update_mda_baton *p = baton;
+	struct _mda_baton *p = baton;
 	const struct format_type *fmt = p->label->labeller->fmt;
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct mda_header *mdah;
@@ -334,7 +342,7 @@ static int _update_mda(struct metadata_area *mda, void *baton)
 		return 1;
 	}
 
-	if (!(mdah = raw_read_mda_header(fmt, &mdac->area))) {
+	if (!(mdah = raw_read_mda_header(fmt, &mdac->area, p->ld))) {
 		stack;
 		goto close_dev;
 	}
@@ -350,7 +358,7 @@ static int _update_mda(struct metadata_area *mda, void *baton)
 		return 1;
 	}
 
-	if (vgname_from_mda(fmt, mdah, &mdac->area, &vgsummary,
+	if (read_metadata_location(fmt, mdah, p->ld, &mdac->area, &vgsummary,
 			     &mdac->free_sectors) &&
 	    !lvmcache_update_vgname_and_id(p->info, &vgsummary)) {
 		if (!dev_close(mdac->area.dev))
@@ -365,22 +373,29 @@ close_dev:
 	return 1;
 }
 
-static int _text_read(struct labeller *l, struct device *dev, void *buf,
-		 struct label **label)
+/*
+ * When label_read_data *ld is set, it means that we have read the first
+ * ld->buf_len bytes of the device and already have that data, so we don't need
+ * to do any dev_read's (as long as the desired dev_read offset+size is less
+ * then ld->buf_len).
+ */
+
+static int _text_read(struct labeller *l, struct device *dev, void *label_buf,
+		      struct label_read_data *ld, struct label **label)
 {
-	struct label_header *lh = (struct label_header *) buf;
+	struct label_header *lh = (struct label_header *) label_buf;
 	struct pv_header *pvhdr;
 	struct pv_header_extension *pvhdr_ext;
 	struct lvmcache_info *info;
 	struct disk_locn *dlocn_xl;
 	uint64_t offset;
 	uint32_t ext_version;
-	struct _update_mda_baton baton;
+	struct _mda_baton baton;
 
 	/*
 	 * PV header base
 	 */
-	pvhdr = (struct pv_header *) ((char *) buf + xlate32(lh->offset_xl));
+	pvhdr = (struct pv_header *) ((char *) label_buf + xlate32(lh->offset_xl));
 
 	if (!(info = lvmcache_add(l, (char *)pvhdr->pv_uuid, dev,
 				  FMT_TEXT_ORPHAN_VG_NAME,
@@ -436,9 +451,9 @@ static int _text_read(struct labeller *l, struct device *dev, void *buf,
 out:
 	baton.info = info;
 	baton.label = *label;
+	baton.ld = ld;
 
-	if (!lvmcache_foreach_mda(info, _update_mda, &baton))
-		return_0;
+	lvmcache_foreach_mda(info, _read_mda_header_and_metadata, &baton);
 
 	lvmcache_make_valid(info);
 
