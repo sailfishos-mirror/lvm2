@@ -55,6 +55,7 @@ static int _lvm1_write(struct label *label __attribute__((unused)), void *buf __
 }
 
 static int _lvm1_read(struct labeller *l, struct device *dev, void *buf,
+		 struct label_read_data *ld,
 		 struct label **label)
 {
 	struct pv_disk *pvd = (struct pv_disk *) buf;
