@@ -418,7 +418,7 @@ int label_read(struct device *dev, struct label **labelp, uint64_t scan_sector)
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, dev, label_buf, labelp)) && *labelp) {
+	if ((r = (l->ops->read)(l, dev, label_buf, NULL, labelp)) && *labelp) {
 		(*labelp)->dev = dev;
 		(*labelp)->sector = sector;
 	} else {
@@ -691,7 +691,7 @@ static int _label_read_data_process(struct cmd_context *cmd, struct label_read_d
 	 * the pv_header, mda locations, mda contents.
 	 * It saves the info it finds into lvmcache info/vginfo structs.
 	 */
-	if ((r = (l->ops->read)(l, ld->dev, label_buf, &label)) && label) {
+	if ((r = (l->ops->read)(l, ld->dev, label_buf, ld, &label)) && label) {
 		label->dev = ld->dev;
 		label->sector = sector;
 	} else {

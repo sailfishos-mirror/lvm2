@@ -34,6 +34,7 @@
 #include "lvmlockd.h"
 #include "time.h"
 #include "lvmnotify.h"
+#include "label.h"
 
 #include <math.h>
 #include <sys/param.h>
@@ -714,6 +715,10 @@ int check_pv_dev_sizes(struct volume_group *vg)
  * source file.  All the following and more are only used by liblvm:
  *
  * . get_pvs()
+ * . get_vgids()
+ * . get_vgnames()
+ * . lvmcache_get_vgids()
+ * . lvmcache_get_vgnames()
  * . the vg->pvs_to_write list and pv_to_write struct
  */
 
@@ -3948,12 +3953,17 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	/* Ensure contents of all metadata areas match - else do recovery */
 	inconsistent_mda_count=0;
 	dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
+		struct device *mda_dev = mda_get_device(mda);
+		struct label_read_data *ld;
+
 		use_previous_vg = 0;
 
-		if ((use_precommitted &&
-		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
-		    (!use_precommitted &&
-		     !(vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg, 0)) && !use_previous_vg)) {
+		log_debug_metadata("Reading VG %s from %s", vgname, dev_name(mda_dev));
+
+		ld = get_label_read_data(cmd, mda_dev);
+
+		if ((use_precommitted && !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, ld, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
+		    (!use_precommitted && !(vg = mda->ops->vg_read(fid, vgname, mda, ld, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg)) {
 			inconsistent = 1;
 			vg_fmtdata = NULL;
 			continue;
@@ -4143,9 +4153,9 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 			use_previous_vg = 0;
 
 			if ((use_precommitted &&
-			     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
+			     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, NULL, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
 			    (!use_precommitted &&
-			     !(vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg, 0)) && !use_previous_vg)) {
+			     !(vg = mda->ops->vg_read(fid, vgname, mda, NULL, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg)) {
 				inconsistent = 1;
 				vg_fmtdata = NULL;
 				continue;
