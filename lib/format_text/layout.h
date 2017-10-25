@@ -81,7 +81,8 @@ struct mda_header {
 } __attribute__ ((packed));
 
 struct mda_header *raw_read_mda_header(const struct format_type *fmt,
-				       struct device_area *dev_area);
+				       struct device_area *dev_area,
+				       struct label_read_data *ld);
 
 struct mda_lists {
 	struct dm_list dirs;
@@ -103,7 +104,8 @@ struct mda_context {
 #define LVM2_LABEL "LVM2 001"
 #define MDA_SIZE_MIN (8 * (unsigned) lvm_getpagesize())
 
-int vgname_from_mda(const struct format_type *fmt, struct mda_header *mdah,
+int read_metadata_location_summary(const struct format_type *fmt, struct mda_header *mdah,
+		    struct label_read_data *ld,
 		    struct device_area *dev_area, struct lvmcache_vgsummary *vgsummary,
 		    uint64_t *mda_free_sectors);
 
