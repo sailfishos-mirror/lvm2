@@ -1406,11 +1406,10 @@ bad:
 	return NULL;
 }
 
-// #if 0
 int lvmcache_vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo)
 {
 	log_debug_cache("VG %s decrementing %d holder(s) at %p.",
-			vginfo->cached_vg->name, vginfo->holders, vginfo->cached_vg);
+			vginfo->vgname, vginfo->holders, vginfo->cached_vg);
 
 	if (--vginfo->holders)
 		return 0;
@@ -1430,7 +1429,6 @@ int lvmcache_vginfo_holders_dec_and_test_for_zero(struct lvmcache_vginfo *vginfo
 
 	return 1;
 }
-// #endif
 
 int lvmcache_get_vgnameids(struct cmd_context *cmd, int include_internal,
 			   struct dm_list *vgnameids)
