@@ -39,7 +39,6 @@ struct config_info {
 	int udev_rules;
 	int udev_sync;
 	int udev_fallback;
-	int cache_vgmetadata;
 	int scan_size_kb;
 	const char *msg_prefix;
 	const char *fmt_name;
