@@ -179,43 +179,6 @@ static int _pool_pv_setup(const struct format_type *fmt __attribute__((unused)),
 	return 1;
 }
 
-static int _pool_pv_read(const struct format_type *fmt, const char *pv_name,
-			 struct physical_volume *pv,
-			 int scan_label_only __attribute__((unused)))
-{
-	struct dm_pool *mem = dm_pool_create("pool pv_read", 1024);
-	struct pool_list *pl;
-	struct device *dev;
-	int r = 0;
-
-	log_very_verbose("Reading physical volume data %s from disk", pv_name);
-
-	if (!mem)
-		return_0;
-
-	if (!(dev = dev_cache_get(pv_name, fmt->cmd->filter)))
-		goto_out;
-
-	/*
-	 * I need to read the disk and populate a pv structure here
-	 * I'll probably need to abstract some of this later for the
-	 * vg_read code
-	 */
-	if (!(pl = read_pool_disk(fmt, dev, mem, NULL)))
-		goto_out;
-
-	if (!import_pool_pv(fmt, fmt->cmd->mem, NULL, pv, pl))
-		goto_out;
-
-	pv->fmt = fmt;
-
-	r = 1;
-
-      out:
-	dm_pool_destroy(mem);
-	return r;
-}
-
 /* *INDENT-OFF* */
 static struct metadata_area_ops _metadata_format_pool_ops = {
 	.vg_read = _pool_vg_read,
@@ -266,7 +229,6 @@ static void _pool_destroy(struct format_type *fmt)
 
 /* *INDENT-OFF* */
 static struct format_handler _format_pool_ops = {
-	.pv_read = _pool_pv_read,
 	.pv_initialise = _pool_pv_initialise,
 	.pv_setup = _pool_pv_setup,
 	.create_instance = _pool_create_instance,

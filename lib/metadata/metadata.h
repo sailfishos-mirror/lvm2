@@ -255,12 +255,6 @@ struct format_handler {
 	int (*scan) (const struct format_type * fmt, const char *vgname);
 
 	/*
-	 * Return PV with given path.
-	 */
-	int (*pv_read) (const struct format_type * fmt, const char *pv_name,
-			struct physical_volume * pv, int scan_label_only);
-
-	/*
 	 * Initialise a new PV.
 	 */
 	int (*pv_initialise) (const struct format_type * fmt,

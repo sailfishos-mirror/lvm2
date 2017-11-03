@@ -313,37 +313,6 @@ static int _format1_vg_write(struct format_instance *fid, struct volume_group *v
 	return r;
 }
 
-static int _format1_pv_read(const struct format_type *fmt, const char *pv_name,
-		    struct physical_volume *pv, int scan_label_only __attribute__((unused)))
-{
-	struct dm_pool *mem = dm_pool_create("lvm1 pv_read", 1024);
-	struct disk_list *dl;
-	struct device *dev;
-	int r = 0;
-
-	log_very_verbose("Reading physical volume data %s from disk", pv_name);
-
-	if (!mem)
-		return_0;
-
-	if (!(dev = dev_cache_get(pv_name, fmt->cmd->filter)))
-		goto_out;
-
-	if (!(dl = read_disk(fmt, dev, mem, NULL)))
-		goto_out;
-
-	if (!import_pv(fmt, fmt->cmd->mem, dl->dev, NULL, pv, &dl->pvd, &dl->vgd))
-		goto_out;
-
-	pv->fmt = fmt;
-
-	r = 1;
-
-      out:
-	dm_pool_destroy(mem);
-	return r;
-}
-
 static int _format1_pv_initialise(const struct format_type * fmt,
 				  struct pv_create_args *pva,
 				  struct physical_volume * pv)
@@ -555,7 +524,6 @@ static void _format1_destroy(struct format_type *fmt)
 }
 
 static struct format_handler _format1_ops = {
-	.pv_read = _format1_pv_read,
 	.pv_initialise = _format1_pv_initialise,
 	.pv_setup = _format1_pv_setup,
 	.pv_write = _format1_pv_write,

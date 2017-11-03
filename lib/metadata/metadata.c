@@ -40,10 +40,8 @@
 #include <sys/param.h>
 
 static struct physical_volume *_pv_read(struct cmd_context *cmd,
-					struct dm_pool *pvmem,
-					const char *pv_name,
-					struct format_instance *fid,
-					uint32_t warn_flags, int scan_label_only);
+					struct volume_group *vg,
+					struct lvmcache_info *info);
 
 static int _alignment_overrides_default(unsigned long data_alignment,
 					unsigned long default_pe_align)
@@ -3254,9 +3252,6 @@ static int _check_mda_in_use(struct metadata_area *mda, void *_in_use)
 struct _vg_read_orphan_baton {
 	struct cmd_context *cmd;
 	struct volume_group *vg;
-	uint32_t warn_flags;
-	int consistent;
-	int repair;
 };
 
 /*
@@ -3353,8 +3348,7 @@ static int _vg_read_orphan_pv(struct lvmcache_info *info, void *baton)
 	uint32_t ext_version;
 	uint32_t ext_flags;
 
-	if (!(pv = _pv_read(b->vg->cmd, b->vg->vgmem, dev_name(lvmcache_device(info)),
-			    b->vg->fid, b->warn_flags, 0))) {
+	if (!(pv = _pv_read(b->cmd, b->vg, info))) {
 		stack;
 		return 1;
 	}
@@ -3461,10 +3455,21 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
 	vg->free_count = 0;
 
 	baton.cmd = cmd;
-	baton.warn_flags = warn_flags;
 	baton.vg = vg;
-	baton.consistent = 1;
-	baton.repair = *consistent;
+
+	/*
+	 * vg_read for a normal VG will rescan labels for all the devices
+	 * in the VG, in case something changed on disk between the initial
+	 * label scan and acquiring the VG lock.  We don't rescan labels
+	 * here because this is only called in two ways:
+	 *
+	 * 1. for reporting, in which case it doesn't matter if something
+	 *    changed between the label scan and printing the PVs here
+	 *
+	 * 2. pvcreate_each_device() for pvcreate//vgcreate/vgextend,
+	 *    which already does the label rescan after taking the
+	 *    orphan lock.
+	 */
 
 	while ((pvl = (struct pv_list *) dm_list_first(&head.list))) {
 		dm_list_del(&pvl->list);
@@ -3476,7 +3481,6 @@ static struct volume_group *_vg_read_orphans(struct cmd_context *cmd,
 	if (!lvmcache_foreach_pv(vginfo, _vg_read_orphan_pv, &baton))
 		return_NULL;
 
-	*consistent = baton.consistent;
 	return vg;
 }
 
@@ -4689,86 +4693,26 @@ const char *find_vgname_from_pvname(struct cmd_context *cmd,
 	return find_vgname_from_pvid(cmd, pvid);
 }
 
-/* FIXME Use label functions instead of PV functions */
 static struct physical_volume *_pv_read(struct cmd_context *cmd,
-					struct dm_pool *pvmem,
-					const char *pv_name,
-					struct format_instance *fid,
-					uint32_t warn_flags, int scan_label_only)
+					struct volume_group *vg,
+					struct lvmcache_info *info)
 {
 	struct physical_volume *pv;
-	struct label *label;
-	struct lvmcache_info *info;
-	struct device *dev;
-	const struct format_type *fmt;
-	int found;
 
-	if (!(dev = dev_cache_get(pv_name, cmd->filter)))
-		return_NULL;
-
-	if (lvmetad_used()) {
-		info = lvmcache_info_from_pvid(dev->pvid, dev, 0);
-		if (!info) {
-			if (!lvmetad_pv_lookup_by_dev(cmd, dev, &found))
-				return_NULL;
-			if (!found) {
-				if (warn_flags & WARN_PV_READ)
-					log_error("No physical volume found in lvmetad cache for %s",
-						  pv_name);
-				return NULL;
-			}
-			if (!(info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
-				if (warn_flags & WARN_PV_READ)
-					log_error("No cache info in lvmetad cache for %s.",
-						  pv_name);
-				return NULL;
-			}
-		}
-		label = lvmcache_get_label(info);
-	} else {
-		if (!(label_read(dev, &label, UINT64_C(0)))) {
-			if (warn_flags & WARN_PV_READ)
-				log_error("No physical volume label read from %s",
-					  pv_name);
-			return NULL;
-		}
-		info = (struct lvmcache_info *) label->info;
-	}
-
-	fmt = lvmcache_fmt(info);
-
-	pv = _alloc_pv(pvmem, dev);
-	if (!pv) {
-		log_error("pv allocation for '%s' failed", pv_name);
+	if (!(pv = _alloc_pv(vg->vgmem, NULL))) {
+		log_error("pv allocation failed");
 		return NULL;
 	}
 
-	pv->label_sector = label->sector;
-
-	/* FIXME Move more common code up here */
-	if (!(lvmcache_fmt(info)->ops->pv_read(lvmcache_fmt(info), pv_name, pv, scan_label_only))) {
-		log_error("Failed to read existing physical volume '%s'",
-			  pv_name);
-		goto bad;
-	}
-
-	if (!pv->size)
-		goto bad;
-
-	if (!alloc_pv_segment_whole_pv(pvmem, pv))
+	if (!lvmcache_populate_pv_fields(info, vg, pv))
 		goto_bad;
 
-	if (fid)
-		lvmcache_fid_add_mdas(info, fid, (const char *) &pv->id, ID_LEN);
-	else {
-		lvmcache_fid_add_mdas(info, fmt->orphan_vg->fid, (const char *) &pv->id, ID_LEN);
-		pv_set_fid(pv, fmt->orphan_vg->fid);
-	}
-
+	lvmcache_fid_add_mdas(info, vg->fid, (const char *) &pv->id, ID_LEN);
+	pv_set_fid(pv, vg->fid);
 	return pv;
 bad:
 	free_pv_fid(pv);
-	dm_pool_free(pvmem, pv);
+	dm_pool_free(vg->vgmem, pv);
 	return NULL;
 }
 
