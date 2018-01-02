@@ -130,8 +130,8 @@ devices {
 	# device path names. Each regex is delimited by a vertical bar '|'
 	# (or any character) and is preceded by 'a' to accept the path, or
 	# by 'r' to reject the path. The first regex in the list to match the
-	# path is used, producing the 'a' or 'r' result for the device.
-	# When multiple path names exist for a block device, if any path name
+	# path is used, producing the 'a' or 'r' result for that path.
+	# If any of multiple existing path names for a block device
 	# matches an 'a' pattern before an 'r' pattern, then the device is
 	# accepted. If all the path names match an 'r' pattern first, then the
 	# device is rejected. Unmatching path names do not affect the accept
