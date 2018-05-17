@@ -239,7 +239,8 @@ static struct segment_type *_init_segtype(struct cmd_context *cmd, const char *n
 
 	segtype->ops = &_striped_ops;
 	segtype->name = name;
-	segtype->flags = target | SEG_CAN_SPLIT | SEG_AREAS_STRIPED;
+	segtype->flags = target | SEG_CAN_SPLIT | SEG_AREAS_STRIPED |
+	    SEG_FORMAT1_SUPPORT;
 
 	log_very_verbose("Initialised segtype: %s", segtype->name);
 	return segtype;

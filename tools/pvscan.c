@@ -801,7 +801,7 @@ out:
  * display the PV info.
  *
  * iii. If lvmetad is being used, but has been disabled (because of
- * duplicate devs), or has a non-matching token
+ * duplicate devs or lvm1 metadata), or has a non-matching token
  * (because the device filter is different from the device filter last
  * used to populate lvmetad), then 'pvscan' will begin by rescanning
  * devices to repopulate lvmetad.  If lvmetad is enabled after the
@@ -814,7 +814,8 @@ out:
  * attempt to repopulate the lvmetad cache by rescanning all devs
  * (regardless of whether lvmetad was previously disabled or had an
  * unmatching token.)  lvmetad may be enabled or disabled after the
- * rescan (depending on whether duplicate devs).
+ * rescan (depending on whether duplicate devs or lvm1 metadata was
+ * found).
  *
  * 3. The 'pvscan --cache <dev>' command will attempt to repopulate the
  * lvmetad cache by rescanning all devs if lvmetad has a non-matching
