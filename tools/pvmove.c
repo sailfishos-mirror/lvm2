@@ -35,6 +35,7 @@ struct pvmove_params {
 	unsigned in_progress;
 	int setup_result;
 	int found_pv;
+	int shared_check_fail;
 };
 
 static int _pvmove_target_present(struct cmd_context *cmd, int clustered)
@@ -635,27 +636,17 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			log_error("Logical volume %s not found.", lv_name);
 			return ECMD_FAILED;
 		}
-	}
 
-	/*
-	 * We would need to avoid any PEs used by LVs that are active (ex) on
-	 * other hosts.  For LVs that are active on multiple hosts (sh), we
-	 * would need to used cluster mirrors.
-	 */
-	if (is_lockd_type(vg->lock_type)) {
-		if (!lv) {
-			log_error("pvmove in a shared VG requires a named LV.");
-			return ECMD_FAILED;
-		}
+		if (vg_is_shared(vg)) {
+			if (lv_is_lockd_sanlock_lv(lv)) {
+				log_error("pvmove not allowed on internal sanlock LV.");
+				return ECMD_FAILED;
+			}
 
-		if (lv_is_lockd_sanlock_lv(lv)) {
-			log_error("pvmove not allowed on internal sanlock LV.");
-			return ECMD_FAILED;
-		}
-
-		if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
-			log_error("pvmove in a shared VG requires exclusive lock on named LV.");
-			return ECMD_FAILED;
+			if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
+				log_error("pvmove in a shared VG requires exclusive lock on named LV.");
+				return ECMD_FAILED;
+			}
 		}
 	}
 
@@ -754,6 +745,64 @@ static int _pvmove_read_single(struct cmd_context *cmd,
 	return ret;
 }
 
+static int _pvmove_shared_check(struct cmd_context *cmd,
+			        struct volume_group *vg,
+			        struct physical_volume *pv,
+			        struct processing_handle *handle)
+{
+	struct pvmove_params *pp = (struct pvmove_params *) handle->custom_handle;
+	struct lv_list *lvl;
+	struct lv_list *lvlpp;
+	struct dm_list locked_lvs;
+
+	if (!vg_is_shared(vg))
+		return 1;
+
+	if (pv_status(pv) & ALLOCATABLE_PV) {
+		log_error("PV source must not be allocatable, see pvchange -xn.");
+		pp->shared_check_fail = 1;
+		return 0;
+	}
+
+	dm_list_init(&locked_lvs);
+
+	dm_list_iterate_items(lvl, &vg->lvs) {
+		if (lv_is_on_pv(lvl->lv, pv)) {
+
+			if (lv_is_lockd_sanlock_lv(lvl->lv)) {
+				log_error("Cannot move the PV under the sanlock LV.");
+				goto fail;
+			}
+
+			if (!lockd_lv_uses_lock(lvl->lv))
+				continue;
+
+			if (!lockd_lv(cmd, lvl->lv, "ex", LDLV_PERSISTENT)) {
+				log_error("Cannot lock LV %s which is using the source PV.",
+					   display_lvname(lvl->lv));
+				goto fail;
+			}
+
+			if (!(lvlpp = dm_pool_alloc(cmd->mem, sizeof(*lvlpp)))) {
+				lockd_lv(cmd, lvl->lv, "un", 0);
+				goto fail;
+			}
+
+			lvlpp->lv = lvl->lv;
+			dm_list_add(&locked_lvs, &lvlpp->list);
+		}
+	}
+
+	return 1;
+
+fail:
+	dm_list_iterate_items(lvlpp, &locked_lvs)
+		lockd_lv(cmd, lvlpp->lv, "un", 0);
+
+	pp->shared_check_fail = 1;
+	return 0;
+}
+
 static struct poll_functions _pvmove_fns = {
 	.get_copy_name_from_lv = get_pvmove_pvname_from_lv_mirr,
 	.poll_progress = poll_mirror_progress,
@@ -834,14 +883,9 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
 		return ECMD_FAILED;
 	}
 
-	if (lvmlockd_use() && !argc) {
-		/*
-		 * FIXME: move process_each_vg from polldaemon up to here,
-		 * then we can remove this limitation.
-		 */
-		log_error("Specify pvmove args when using lvmlockd.");
-		return ECMD_FAILED;
-	}
+	if (!lockd_gl(cmd, "ex", 0))
+		return_ECMD_FAILED;
+	cmd->lockd_gl_disable = 1;
 
 	if (argc) {
 		if (!(lvid = dm_pool_alloc(cmd->mem, sizeof(*lvid)))) {
@@ -894,6 +938,26 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
 
 		handle->custom_handle = &pp;
 
+		/*
+		 * In a shared VG, preemptively lock LVs that use the moving PV
+		 * to ensure that other hosts don't have them active and cannot
+		 * activate them during the move.  We lock them here to avoid
+		 * failing later when pvmove activates them and we'd have to
+		 * back out further.
+		 */
+		if (lvmlockd_use() && !pp.lv_name_arg && !is_abort) {
+			process_each_pv(cmd, 1, &pv_name, NULL, 0, 0, handle, &_pvmove_shared_check);
+			if (pp.shared_check_fail) {
+				destroy_processing_handle(cmd, handle);
+				return ECMD_FAILED;
+			}
+		}
+
+		if (is_abort)
+			log_debug("Find pvmove LV to abort.");
+		else
+			log_debug("Set up pvmove LV.");
+
 		process_each_pv(cmd, 1, &pv_name, NULL, 0,
 				is_abort ? 0 : READ_FOR_UPDATE,
 				handle,
@@ -918,14 +982,17 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
 			if (!pp.in_progress)
 				return ECMD_PROCESSED;
 		}
-
-		/*
-		 * The command may sit and report progress for some time,
-		 * and we do not want or need the lockd locks held during
-		 * that time.
-		 */
-		lockd_gl(cmd, "un", 0);
 	}
+
+	/*
+	 * The command may sit and report progress for some time,
+	 * and we do not want or need the lockd locks held during
+	 * that time.
+	 */
+	cmd->lockd_gl_disable = 0;
+	lockd_gl(cmd, "un", 0);
+
+	log_debug("Poll pvmove progress.");
 
 	return pvmove_poll(cmd, pv_name, lvid ? lvid->s : NULL,
 			   pp.id_vg_name, pp.id_lv_name,
