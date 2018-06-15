@@ -31,8 +31,8 @@
 #define DEV_USED_FOR_LV		0x00000100	/* Is device used for an LV */
 #define DEV_ASSUMED_FOR_LV	0x00000200	/* Is device assumed for an LV */
 #define DEV_NOT_O_NOATIME	0x00000400	/* Don't use O_NOATIME */
-#define DEV_IN_BCACHE		0x00000800      /* dev fd is open and used in bcache */
-#define DEV_BCACHE_EXCL		0x00001000      /* bcache_fd should be open EXCL */
+#define DEV_IN_BCACHE          0x00000800      /* dev fd is open and used in bcache */
+#define DEV_BCACHE_EXCL                0x00001000      /* bcache_fd should be open EXCL */
 #define DEV_FILTER_AFTER_SCAN	0x00002000	/* apply filter after bcache has data */
 #define DEV_FILTER_OUT_SCAN	0x00004000	/* filtered out during label scan */
 
@@ -63,13 +63,13 @@ struct device {
 
 	/* private */
 	int fd;
+	struct bcache_dev *bdev;   // FIXME: temporary
 	int open_count;
 	int error_count;
 	int max_error_count;
 	int phys_block_size;
 	int block_size;
 	int read_ahead;
-	int bcache_fd;
 	uint32_t flags;
 	unsigned size_seqno;
 	uint64_t size;

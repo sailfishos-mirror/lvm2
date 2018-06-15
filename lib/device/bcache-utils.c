@@ -39,32 +39,32 @@ static uint64_t _min(uint64_t lhs, uint64_t rhs)
 
 //----------------------------------------------------------------
 
-void bcache_prefetch_bytes(struct bcache *cache, int fd, uint64_t start, size_t len)
+void bcache_prefetch_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len)
 {
 	block_address bb, be;
 
 	byte_range_to_block_range(cache, start, len, &bb, &be);
 	while (bb < be) {
-		bcache_prefetch(cache, fd, bb);
+		bcache_prefetch(cache, dev, bb);
 		bb++;
 	}
 }
 
 //----------------------------------------------------------------
 
-bool bcache_read_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, void *data)
+bool bcache_read_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, void *data)
 {
 	struct block *b;
 	block_address bb, be;
 	uint64_t block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
 	uint64_t block_offset = start % block_size;
 
-	bcache_prefetch_bytes(cache, fd, start, len);
+	bcache_prefetch_bytes(cache, dev, start, len);
 
 	byte_range_to_block_range(cache, start, len, &bb, &be);
 
 	for (; bb != be; bb++) {
-        	if (!bcache_get(cache, fd, bb, 0, &b))
+        	if (!bcache_get(cache, dev, bb, 0, &b))
 			return false;
 
 		size_t blen = _min(block_size - block_offset, len);
@@ -86,8 +86,8 @@ bool bcache_read_bytes(struct bcache *cache, int fd, uint64_t start, size_t len,
  
 struct updater;
 
-typedef bool (*partial_update_fn)(struct updater *u, int fd, block_address bb, uint64_t offset, size_t len);
-typedef bool (*whole_update_fn)(struct updater *u, int fd, block_address bb, block_address be);
+typedef bool (*partial_update_fn)(struct updater *u, struct bcache_dev *dev, block_address bb, uint64_t offset, size_t len);
+typedef bool (*whole_update_fn)(struct updater *u, struct bcache_dev *dev, block_address bb, block_address be);
 
 struct updater {
 	struct bcache *cache;
@@ -96,7 +96,7 @@ struct updater {
 	void *data;
 };
 
-static bool _update_bytes(struct updater *u, int fd, uint64_t start, size_t len)
+static bool _update_bytes(struct updater *u, struct bcache_dev *dev, uint64_t start, size_t len)
 {
         struct bcache *cache = u->cache;
 	block_address bb, be;
@@ -109,12 +109,12 @@ static bool _update_bytes(struct updater *u, int fd, uint64_t start, size_t len)
 	// If the last block is partial, we will require a read, so let's 
 	// prefetch it.
 	if ((start + len) % block_size)
-        	bcache_prefetch(cache, fd, (start + len) / block_size);
+        	bcache_prefetch(cache, dev, (start + len) / block_size);
 
 	// First block may be partial
 	if (block_offset) {
         	size_t blen = _min(block_size - block_offset, len);
-		if (!u->partial_fn(u, fd, bb, block_offset, blen))
+		if (!u->partial_fn(u, dev, bb, block_offset, blen))
         		return false;
 
 		len -= blen;
@@ -126,7 +126,7 @@ static bool _update_bytes(struct updater *u, int fd, uint64_t start, size_t len)
 
         // Now we write out a set of whole blocks
         nr_whole = len / block_size;
-        if (!u->whole_fn(u, fd, bb, bb + nr_whole))
+        if (!u->whole_fn(u, dev, bb, bb + nr_whole))
                 return false;
 
 	bb += nr_whole;
@@ -136,17 +136,17 @@ static bool _update_bytes(struct updater *u, int fd, uint64_t start, size_t len)
         	return true;
 
         // Finally we write a partial end block
-        return u->partial_fn(u, fd, bb, 0, len);
+        return u->partial_fn(u, dev, bb, 0, len);
 }
 
 //----------------------------------------------------------------
 
-static bool _write_partial(struct updater *u, int fd, block_address bb,
+static bool _write_partial(struct updater *u, struct bcache_dev *dev, block_address bb,
                            uint64_t offset, size_t len)
 {
 	struct block *b;
 
-	if (!bcache_get(u->cache, fd, bb, GF_DIRTY, &b))
+	if (!bcache_get(u->cache, dev, bb, GF_DIRTY, &b))
 		return false;
 
 	memcpy(((unsigned char *) b->data) + offset, u->data, len);
@@ -156,7 +156,7 @@ static bool _write_partial(struct updater *u, int fd, block_address bb,
 	return true;
 }
 
-static bool _write_whole(struct updater *u, int fd, block_address bb, block_address be)
+static bool _write_whole(struct updater *u, struct bcache_dev *dev, block_address bb, block_address be)
 {
 	struct block *b;
 	uint64_t block_size = bcache_block_sectors(u->cache) << SECTOR_SHIFT;
@@ -164,7 +164,7 @@ static bool _write_whole(struct updater *u, int fd, block_address bb, block_addr
 	for (; bb != be; bb++) {
         	// We don't need to read the block since we are overwriting
         	// it completely.
-		if (!bcache_get(u->cache, fd, bb, GF_ZERO, &b))
+		if (!bcache_get(u->cache, dev, bb, GF_ZERO, &b))
         		return false;
 		memcpy(b->data, u->data, block_size);
 		u->data = ((unsigned char *) u->data) + block_size;
@@ -174,7 +174,7 @@ static bool _write_whole(struct updater *u, int fd, block_address bb, block_addr
 	return true;
 }
 
-bool bcache_write_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, void *data)
+bool bcache_write_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, void *data)
 {
         struct updater u;
 
@@ -183,16 +183,16 @@ bool bcache_write_bytes(struct bcache *cache, int fd, uint64_t start, size_t len
         u.whole_fn = _write_whole;
         u.data = data;
 
-	return _update_bytes(&u, fd, start, len);
+	return _update_bytes(&u, dev, start, len);
 }
 
 //----------------------------------------------------------------
 
-static bool _zero_partial(struct updater *u, int fd, block_address bb, uint64_t offset, size_t len)
+static bool _zero_partial(struct updater *u, struct bcache_dev *dev, block_address bb, uint64_t offset, size_t len)
 {
 	struct block *b;
 
-	if (!bcache_get(u->cache, fd, bb, GF_DIRTY, &b))
+	if (!bcache_get(u->cache, dev, bb, GF_DIRTY, &b))
 		return false;
 
 	memset(((unsigned char *) b->data) + offset, 0, len);
@@ -201,12 +201,12 @@ static bool _zero_partial(struct updater *u, int fd, block_address bb, uint64_t 
 	return true;
 }
 
-static bool _zero_whole(struct updater *u, int fd, block_address bb, block_address be)
+static bool _zero_whole(struct updater *u, struct bcache_dev *dev, block_address bb, block_address be)
 {
 	struct block *b;
 
 	for (; bb != be; bb++) {
-		if (!bcache_get(u->cache, fd, bb, GF_ZERO, &b))
+		if (!bcache_get(u->cache, dev, bb, GF_ZERO, &b))
         		return false;
         	bcache_put(b);
 	}
@@ -214,7 +214,7 @@ static bool _zero_whole(struct updater *u, int fd, block_address bb, block_addre
 	return true;
 }
 
-bool bcache_zero_bytes(struct bcache *cache, int fd, uint64_t start, size_t len)
+bool bcache_zero_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len)
 {
         struct updater u;
 
@@ -223,17 +223,17 @@ bool bcache_zero_bytes(struct bcache *cache, int fd, uint64_t start, size_t len)
         u.whole_fn = _zero_whole;
         u.data = NULL;
 
-	return _update_bytes(&u, fd, start, len);
+	return _update_bytes(&u, dev, start, len);
 }
 
 //----------------------------------------------------------------
 
-static bool _set_partial(struct updater *u, int fd, block_address bb, uint64_t offset, size_t len)
+static bool _set_partial(struct updater *u, struct bcache_dev *dev, block_address bb, uint64_t offset, size_t len)
 {
 	struct block *b;
 	uint8_t val = *((uint8_t *) u->data);
 
-	if (!bcache_get(u->cache, fd, bb, GF_DIRTY, &b))
+	if (!bcache_get(u->cache, dev, bb, GF_DIRTY, &b))
 		return false;
 
 	memset(((unsigned char *) b->data) + offset, val, len);
@@ -242,14 +242,14 @@ static bool _set_partial(struct updater *u, int fd, block_address bb, uint64_t o
 	return true;
 }
 
-static bool _set_whole(struct updater *u, int fd, block_address bb, block_address be)
+static bool _set_whole(struct updater *u, struct bcache_dev *dev, block_address bb, block_address be)
 {
 	struct block *b;
 	uint8_t val = *((uint8_t *) u->data);
         uint64_t len = bcache_block_sectors(u->cache) * 512;
 
 	for (; bb != be; bb++) {
-		if (!bcache_get(u->cache, fd, bb, GF_ZERO, &b))
+		if (!bcache_get(u->cache, dev, bb, GF_ZERO, &b))
         		return false;
         	memset((unsigned char *) b->data, val, len);
         	bcache_put(b);
@@ -258,7 +258,7 @@ static bool _set_whole(struct updater *u, int fd, block_address bb, block_addres
 	return true;
 }
 
-bool bcache_set_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, uint8_t val)
+bool bcache_set_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, uint8_t val)
 {
         struct updater u;
 
@@ -267,6 +267,6 @@ bool bcache_set_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, 
         u.whole_fn = _set_whole;
         u.data = &val;
 
-	return _update_bytes(&u, fd, start, len);
+	return _update_bytes(&u, dev, start, len);
 }
 

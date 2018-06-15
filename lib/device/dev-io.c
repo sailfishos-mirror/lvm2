@@ -327,9 +327,8 @@ static int _dev_get_size_file(struct device *dev, uint64_t *size)
 
 static int _dev_get_size_dev(struct device *dev, uint64_t *size)
 {
-	const char *name = dev_name(dev);
-	int fd = dev->bcache_fd;
-	int do_close = 0;
+	const char *name;
+	int fd;
 
 	if (dev->size_seqno == _dev_size_seqno) {
 		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
@@ -338,17 +337,17 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
 		return 1;
 	}
 
-	if (fd <= 0) {
-		if (!dev_open_readonly(dev))
-			return_0;
-		fd = dev_fd(dev);
-		do_close = 1;
-	}
+	name = dev_name_confirmed(dev, 0);
+	if (!name)
+        	return 0;
+
+	fd = open(name, O_RDONLY);
+	if (fd <= 0)
+        	return 0;
 
 	if (ioctl(fd, BLKGETSIZE64, size) < 0) {
 		log_sys_error("ioctl BLKGETSIZE64", name);
-		if (do_close && !dev_close_immediate(dev))
-			log_sys_error("close", name);
+		close(fd);
 		return 0;
 	}
 
@@ -358,9 +357,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
 
 	log_very_verbose("%s: size is %" PRIu64 " sectors", name, *size);
 
-	if (do_close && !dev_close_immediate(dev))
-		log_sys_error("close", name);
-
+	close(fd);
 	return 1;
 }
 

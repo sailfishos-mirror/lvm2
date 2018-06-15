@@ -158,6 +158,34 @@ static void _async_destroy(struct io_engine *ioe)
 	free(e);
 }
 
+static int _async_open(struct io_engine *e, const char *path, unsigned flags)
+{
+	int fd, os_flags = O_DIRECT | O_NOATIME;
+
+	if (flags & EF_READ_ONLY)
+		os_flags |= O_RDONLY;
+	else
+		os_flags |= O_RDWR;
+
+	if (flags & EF_EXCL)
+		os_flags |= O_EXCL;
+
+	fd = open(path, flags);
+	if (fd < 0) {
+		if ((errno == EBUSY) && (flags & O_EXCL))
+			log_error("Can't open %s exclusively.  Mounted filesystem?", path);
+		else
+			log_error("Couldn't open %s, errno = %d", path, errno);
+	}
+
+	return fd;
+}
+
+static void _async_close(struct io_engine *e, int fd)
+{
+	close(fd);
+}
+
 static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
 			 sector_t sb, sector_t se, void *data, void *context)
 {
@@ -259,6 +287,8 @@ struct io_engine *create_async_io_engine(void)
 		return NULL;
 
 	e->e.destroy = _async_destroy;
+	e->e.open = _async_open;
+	e->e.close = _async_close;
 	e->e.issue = _async_issue;
 	e->e.wait = _async_wait;
 	e->e.max_io = _async_max_io;
@@ -286,7 +316,7 @@ struct io_engine *create_async_io_engine(void)
 //----------------------------------------------------------------
 
 struct sync_io {
-        struct dm_list list;
+	struct dm_list list;
 	void *context;
 };
 
@@ -297,54 +327,54 @@ struct sync_engine {
 
 static struct sync_engine *_to_sync(struct io_engine *e)
 {
-        return container_of(e, struct sync_engine, e);
+	return container_of(e, struct sync_engine, e);
 }
 
 static void _sync_destroy(struct io_engine *ioe)
 {
-        struct sync_engine *e = _to_sync(ioe);
-        free(e);
+	struct sync_engine *e = _to_sync(ioe);
+	free(e);
 }
 
 static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
-                        sector_t sb, sector_t se, void *data, void *context)
+			sector_t sb, sector_t se, void *data, void *context)
 {
-        int r;
-        uint64_t len = (se - sb) * 512, where;
+	int r;
+	uint64_t len = (se - sb) * 512, where;
 	struct sync_engine *e = _to_sync(ioe);
 	struct sync_io *io = malloc(sizeof(*io));
 	if (!io) {
 		log_warn("unable to allocate sync_io");
-        	return false;
+		return false;
 	}
 
 	where = sb * 512;
 	r = lseek(fd, where, SEEK_SET);
 	if (r < 0) {
-        	log_warn("unable to seek to position %llu", (unsigned long long) where);
-        	return false;
+		log_warn("unable to seek to position %llu", (unsigned long long) where);
+		return false;
 	}
 
 	while (len) {
-        	do {
-                	if (d == DIR_READ)
-                                r = read(fd, data, len);
-                        else
-                                r = write(fd, data, len);
+		do {
+			if (d == DIR_READ)
+				r = read(fd, data, len);
+			else
+				r = write(fd, data, len);
 
-        	} while ((r < 0) && ((r == EINTR) || (r == EAGAIN)));
+		} while ((r < 0) && ((r == EINTR) || (r == EAGAIN)));
 
-        	if (r < 0) {
-                	log_warn("io failed %d", r);
-                	return false;
-        	}
+		if (r < 0) {
+			log_warn("io failed %d", r);
+			return false;
+		}
 
-                len -= r;
+		len -= r;
 	}
 
 	if (len) {
-        	log_warn("short io %u bytes remaining", (unsigned) len);
-        	return false;
+		log_warn("short io %u bytes remaining", (unsigned) len);
+		return false;
 	}
 
 
@@ -356,7 +386,7 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
 
 static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
 {
-        struct sync_io *io, *tmp;
+	struct sync_io *io, *tmp;
 	struct sync_engine *e = _to_sync(ioe);
 
 	dm_list_iterate_items_safe(io, tmp, &e->complete) {
@@ -370,7 +400,7 @@ static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
 
 static unsigned _sync_max_io(struct io_engine *e)
 {
-        return 1;
+	return 1;
 }
 
 struct io_engine *create_sync_io_engine(void)
@@ -378,15 +408,17 @@ struct io_engine *create_sync_io_engine(void)
 	struct sync_engine *e = malloc(sizeof(*e));
 
 	if (!e)
-        	return NULL;
+		return NULL;
 
-        e->e.destroy = _sync_destroy;
-        e->e.issue = _sync_issue;
-        e->e.wait = _sync_wait;
-        e->e.max_io = _sync_max_io;
+	e->e.destroy = _sync_destroy;
+	e->e.open = _async_open;
+	e->e.close = _async_close;
+	e->e.issue = _sync_issue;
+	e->e.wait = _sync_wait;
+	e->e.max_io = _sync_max_io;
 
-        dm_list_init(&e->complete);
-        return &e->e;
+	dm_list_init(&e->complete);
+	return &e->e;
 }
 
 //----------------------------------------------------------------
@@ -431,6 +463,14 @@ enum block_flags {
 	BF_DIRTY = (1 << 1),
 };
 
+struct bcache_dev {
+	int fd;
+
+	// The reference count tracks users that are holding the dev, plus
+	// all the blocks on that device that are currently in the cache.
+	unsigned ref_count;
+};
+
 struct bcache {
 	sector_t block_sectors;
 	uint64_t nr_data_blocks;
@@ -466,7 +506,55 @@ struct bcache {
 	unsigned write_hits;
 	unsigned write_misses;
 	unsigned prefetches;
+
+	struct radix_tree *dev_tree;
 };
+
+//----------------------------------------------------------------
+//
+static void _free_dev(struct bcache *cache, struct bcache_dev *dev)
+{
+	cache->engine->close(cache->engine, dev->fd);
+	free(dev);
+}
+
+static void _dev_dtr(void *context, union radix_value v)
+{
+        _free_dev(context, v.ptr);
+}
+
+struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsigned flags)
+{
+	union radix_value v;
+	struct bcache_dev *dev = NULL;
+
+	if (radix_tree_lookup(cache->dev_tree, (uint8_t *) path, (uint8_t *) (path + strlen(path)), &v)) {
+		dev = v.ptr;
+		dev->ref_count++;
+	} else {
+		dev = malloc(sizeof(*dev));
+		dev->fd = cache->engine->open(cache->engine, path, flags);
+		if (dev->fd < 0) {
+			log_error("couldn't open bcache_dev(%s)", path);
+			free(dev);
+			return NULL;
+		}
+
+		dev->ref_count = 1;
+	}
+
+	return dev;
+}
+
+void bcache_put_dev(struct bcache *cache, struct bcache_dev *dev)
+{
+	if (!dev->ref_count)
+		log_error("bcache_dev ref_count is already zero");
+
+	dev->ref_count--;
+	if (!dev->ref_count)
+		_free_dev(cache, dev);
+}
 
 //----------------------------------------------------------------
 
@@ -477,7 +565,7 @@ struct key_parts {
 
 union key {
 	struct key_parts parts;
-        uint8_t bytes[12];
+	uint8_t bytes[12];
 };
 
 static struct block *_block_lookup(struct bcache *cache, int fd, uint64_t i)
@@ -496,22 +584,22 @@ static struct block *_block_lookup(struct bcache *cache, int fd, uint64_t i)
 
 static bool _block_insert(struct block *b)
 {
-        union key k;
-        union radix_value v;
+	union key k;
+	union radix_value v;
 
-        k.parts.fd = b->fd;
-        k.parts.b = b->index;
-        v.ptr = b;
+	k.parts.fd = b->dev->fd;
+	k.parts.b = b->index;
+	v.ptr = b;
 
 	return radix_tree_insert(b->cache->rtree, k.bytes, k.bytes + sizeof(k.bytes), v);
 }
 
 static void _block_remove(struct block *b)
 {
-        union key k;
+	union key k;
 
-        k.parts.fd = b->fd;
-        k.parts.b = b->index;
+	k.parts.fd = b->dev->fd;
+	k.parts.b = b->index;
 
 	radix_tree_remove(b->cache->rtree, k.bytes, k.bytes + sizeof(k.bytes));
 }
@@ -650,7 +738,7 @@ static void _issue_low_level(struct block *b, enum dir d)
 
 	dm_list_move(&cache->io_pending, &b->list);
 
-	if (!cache->engine->issue(cache->engine, d, b->fd, sb, se, b->data, b)) {
+	if (!cache->engine->issue(cache->engine, d, b->dev->fd, sb, se, b->data, b)) {
 		/* FIXME: if io_submit() set an errno, return that instead of EIO? */
 		_complete_io(b, -EIO);
 		return;
@@ -726,7 +814,7 @@ static struct block *_find_unused_clean_block(struct bcache *cache)
 	return NULL;
 }
 
-static struct block *_new_block(struct bcache *cache, int fd, block_address i, bool can_wait)
+static struct block *_new_block(struct bcache *cache, struct bcache_dev *dev, block_address i, bool can_wait)
 {
 	struct block *b;
 
@@ -740,7 +828,7 @@ static struct block *_new_block(struct bcache *cache, int fd, block_address i, b
 				_wait_io(cache);
 			} else {
 				log_error("bcache no new blocks for fd %d index %u",
-					  fd, (uint32_t) i);
+					  dev->fd, (uint32_t) i);
 				return NULL;
 			}
 		}
@@ -750,13 +838,13 @@ static struct block *_new_block(struct bcache *cache, int fd, block_address i, b
 		dm_list_init(&b->list);
 		dm_list_init(&b->hash);
 		b->flags = 0;
-		b->fd = fd;
+		b->dev = dev;
 		b->index = i;
 		b->ref_count = 0;
 		b->error = 0;
 
 		if (!_block_insert(b)) {
-        		log_error("bcache unable to insert block in radix tree (OOM?)");
+			log_error("bcache unable to insert block in radix tree (OOM?)");
 			_free_block(b);
 			return NULL;
 		}
@@ -796,10 +884,10 @@ static void _miss(struct bcache *cache, unsigned flags)
 }
 
 static struct block *_lookup_or_read_block(struct bcache *cache,
-				  	   int fd, block_address i,
+				  	   struct bcache_dev *dev, block_address i,
 					   unsigned flags)
 {
-	struct block *b = _block_lookup(cache, fd, i);
+	struct block *b = _block_lookup(cache, dev->fd, i);
 
 	if (b) {
 		// FIXME: this is insufficient.  We need to also catch a read
@@ -824,7 +912,7 @@ static struct block *_lookup_or_read_block(struct bcache *cache,
 	} else {
 		_miss(cache, flags);
 
-		b = _new_block(cache, fd, i, true);
+		b = _new_block(cache, dev, i, true);
 		if (b) {
 			if (flags & GF_ZERO)
 				_zero_block(b);
@@ -903,7 +991,7 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
 	dm_list_init(&cache->clean);
 	dm_list_init(&cache->io_pending);
 
-        cache->rtree = radix_tree_create(NULL, NULL);
+	cache->rtree = radix_tree_create(NULL, NULL);
 	if (!cache->rtree) {
 		cache->engine->destroy(cache->engine);
 		free(cache);
@@ -918,6 +1006,15 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
 	cache->prefetches = 0;
 
 	if (!_init_free_list(cache, nr_cache_blocks, pgsize)) {
+		cache->engine->destroy(cache->engine);
+		radix_tree_destroy(cache->rtree);
+		free(cache);
+		return NULL;
+	}
+
+	cache->dev_tree = radix_tree_create(_dev_dtr, cache);
+	if (!cache->dev_tree) {
+		_exit_free_list(cache);
 		cache->engine->destroy(cache->engine);
 		radix_tree_destroy(cache->rtree);
 		free(cache);
@@ -955,13 +1052,13 @@ unsigned bcache_max_prefetches(struct bcache *cache)
 	return cache->max_io;
 }
 
-void bcache_prefetch(struct bcache *cache, int fd, block_address i)
+void bcache_prefetch(struct bcache *cache, struct bcache_dev *dev, block_address i)
 {
-	struct block *b = _block_lookup(cache, fd, i);
+	struct block *b = _block_lookup(cache, dev->fd, i);
 
 	if (!b) {
 		if (cache->nr_io_pending < cache->max_io) {
-			b = _new_block(cache, fd, i, false);
+			b = _new_block(cache, dev, i, false);
 			if (b) {
 				cache->prefetches++;
 				_issue_read(b);
@@ -979,12 +1076,12 @@ static void _recycle_block(struct bcache *cache, struct block *b)
 	_free_block(b);
 }
 
-bool bcache_get(struct bcache *cache, int fd, block_address i,
+bool bcache_get(struct bcache *cache, struct bcache_dev *dev, block_address i,
 	        unsigned flags, struct block **result)
 {
 	struct block *b;
 
-	b = _lookup_or_read_block(cache, fd, i, flags);
+	b = _lookup_or_read_block(cache, dev, i, flags);
 	if (b) {
 		if (b->error) {
 			if (b->io_dir == DIR_READ) {
@@ -1006,7 +1103,7 @@ bool bcache_get(struct bcache *cache, int fd, block_address i,
 
 	*result = NULL;
 
-	log_error("bcache failed to get block %u fd %d", (uint32_t) i, fd);
+	log_error("bcache failed to get block %u fd %d", (uint32_t) i, dev->fd);
 	return false;
 }
 
@@ -1070,7 +1167,7 @@ static bool _invalidate_block(struct bcache *cache, struct block *b)
 
 	if (b->ref_count) {
 		log_warn("bcache_invalidate: block (%d, %llu) still held",
-			 b->fd, (unsigned long long) b->index);
+			 b->dev->fd, (unsigned long long) b->index);
 		return false;
 	}
 
@@ -1079,7 +1176,7 @@ static bool _invalidate_block(struct bcache *cache, struct block *b)
 		_wait_specific(b);
 
 		if (b->error)
-        		return false;
+			return false;
 	}
 
 	_recycle_block(cache, b);
@@ -1087,9 +1184,9 @@ static bool _invalidate_block(struct bcache *cache, struct block *b)
 	return true;
 }
 
-bool bcache_invalidate(struct bcache *cache, int fd, block_address i)
+bool bcache_invalidate(struct bcache *cache, struct bcache_dev *dev, block_address i)
 {
-	return _invalidate_block(cache, _block_lookup(cache, fd, i));
+	return _invalidate_block(cache, _block_lookup(cache, dev->fd, i));
 }
 
 //----------------------------------------------------------------
@@ -1100,32 +1197,32 @@ struct invalidate_iterator {
 };
 
 static bool _writeback_v(struct radix_tree_iterator *it,
-                         uint8_t *kb, uint8_t *ke, union radix_value v)
+			 uint8_t *kb, uint8_t *ke, union radix_value v)
 {
 	struct block *b = v.ptr;
 
 	if (_test_flags(b, BF_DIRTY))
-        	_issue_write(b);
+		_issue_write(b);
 
-        return true;
+	return true;
 }
 
 static bool _invalidate_v(struct radix_tree_iterator *it,
-                          uint8_t *kb, uint8_t *ke, union radix_value v)
+			  uint8_t *kb, uint8_t *ke, union radix_value v)
 {
 	struct block *b = v.ptr;
-        struct invalidate_iterator *iit = container_of(it, struct invalidate_iterator, it);
+	struct invalidate_iterator *iit = container_of(it, struct invalidate_iterator, it);
 
 	if (b->error || _test_flags(b, BF_DIRTY)) {
-        	log_warn("bcache_invalidate: block (%d, %llu) still dirty",
-                         b->fd, (unsigned long long) b->index);
-        	iit->success = false;
-        	return true;
+		log_warn("bcache_invalidate: block (%d, %llu) still dirty",
+			 b->dev->fd, (unsigned long long) b->index);
+		iit->success = false;
+		return true;
 	}
 
 	if (b->ref_count) {
 		log_warn("bcache_invalidate: block (%d, %llu) still held",
-			 b->fd, (unsigned long long) b->index);
+			 b->dev->fd, (unsigned long long) b->index);
 		iit->success = false;
 		return true;
 	}
@@ -1138,12 +1235,12 @@ static bool _invalidate_v(struct radix_tree_iterator *it,
 	return true;
 }
 
-bool bcache_invalidate_fd(struct bcache *cache, int fd)
+bool bcache_invalidate_dev(struct bcache *cache, struct bcache_dev *dev)
 {
-        union key k;
+	union key k;
 	struct invalidate_iterator it;
 
-	k.parts.fd = fd;
+	k.parts.fd = dev->fd;
 
 	it.it.visit = _writeback_v;
 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd), &it.it);

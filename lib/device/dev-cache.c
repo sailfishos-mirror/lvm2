@@ -1464,6 +1464,8 @@ const char *dev_name_confirmed(struct device *dev, int quiet)
 			log_debug_devs("Path %s no longer valid for device(%d,%d)",
 				       name, (int) MAJOR(dev->dev),
 				       (int) MINOR(dev->dev));
+
+
 		else
 			log_warn("Path %s no longer valid for device(%d,%d)",
 				 name, (int) MAJOR(dev->dev),

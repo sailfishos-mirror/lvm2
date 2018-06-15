@@ -247,9 +247,7 @@ struct bcache *scan_bcache;
 
 static bool _in_bcache(struct device *dev)
 {
-	if (!dev)
-		return NULL;
-	return (dev->flags & DEV_IN_BCACHE) ? true : false;
+	return dev && (dev->flags & DEV_IN_BCACHE);
 }
 
 static struct labeller *_find_lvm_header(struct device *dev,
@@ -435,23 +433,22 @@ static int _scan_dev_open(struct device *dev)
 	const char *name;
 	struct stat sbuf;
 	int retried = 0;
-	int flags = 0;
-	int fd;
+	unsigned flags = 0;
+	struct bcache_dev *bdev;
 
 	if (!dev)
 		return 0;
 
 	if (dev->flags & DEV_IN_BCACHE) {
-		/* Shouldn't happen */
-		log_error("Device open %s has DEV_IN_BCACHE already set", dev_name(dev));
-		dev->flags &= ~DEV_IN_BCACHE;
+	       /* Shouldn't happen */
+	       log_error("Device open %s has DEV_IN_BCACHE already set", dev_name(dev));                                     
+	       dev->flags &= ~DEV_IN_BCACHE;
 	}
 
-	if (dev->bcache_fd > 0) {
-		/* Shouldn't happen */
-		log_error("Device open %s already open with fd %d",
-			  dev_name(dev), dev->bcache_fd);
-		return 0;
+	if (dev->bdev > 0) {
+	       /* Shouldn't happen */
+	       log_error("Device open %s already open", dev_name(dev));
+	       return 0;
 	}
 
 	/*
@@ -467,61 +464,53 @@ static int _scan_dev_open(struct device *dev)
 	name_sl = dm_list_item(name_list, struct dm_str_list);
 	name = name_sl->str;
 
-	flags |= O_RDWR;
-	flags |= O_DIRECT;
-	flags |= O_NOATIME;
-
 	if (dev->flags & DEV_BCACHE_EXCL)
-		flags |= O_EXCL;
+		flags |= EF_EXCL;
 
 retry_open:
 
-	fd = open(name, flags, 0777);
+	bdev = bcache_get_dev(scan_bcache, name, flags);
+	if (!bdev) {
+		int major, minor;
 
-	if (fd < 0) {
-		if ((errno == EBUSY) && (flags & O_EXCL)) {
-			log_error("Can't open %s exclusively.  Mounted filesystem?",
-				  dev_name(dev));
-		} else {
-			int major, minor;
+		/*
+		 * Shouldn't happen, if it does, print stat info to help figure
+		 * out what's wrong.
+		 */
 
-			/*
-			 * Shouldn't happen, if it does, print stat info to help figure
-			 * out what's wrong.
-			 */
+		major = (int)MAJOR(dev->dev);
+		minor = (int)MINOR(dev->dev);
 
-			major = (int)MAJOR(dev->dev);
-			minor = (int)MINOR(dev->dev);
+		log_error("Device open %s %d:%d failed errno %d", name, major, minor, errno);
 
-			log_error("Device open %s %d:%d failed errno %d", name, major, minor, errno);
-
-			if (stat(name, &sbuf)) {
-				log_debug_devs("Device open %s %d:%d stat failed errno %d",
-					       name, major, minor, errno);
-			} else if (sbuf.st_rdev != dev->dev) {
-				log_debug_devs("Device open %s %d:%d stat %d:%d does not match.",
-					       name, major, minor,
-					       (int)MAJOR(sbuf.st_rdev), (int)MINOR(sbuf.st_rdev));
-			}
-
-			if (!retried) {
-				/*
-				 * FIXME: remove this, the theory for this retry is that
-				 * there may be a udev race that we can sometimes mask by
-				 * retrying.  This is here until we can figure out if it's
-				 * needed and if so fix the real problem.
-				 */
-				usleep(5000);
-				log_debug_devs("Device open %s retry", dev_name(dev));
-				retried = 1;
-				goto retry_open;
-			}
+		if (stat(name, &sbuf)) {
+			log_debug_devs("Device open %s %d:%d stat failed errno %d",
+				       name, major, minor, errno);
+		} else if (sbuf.st_rdev != dev->dev) {
+			log_debug_devs("Device open %s %d:%d stat %d:%d does not match.",
+				       name, major, minor,
+				       (int)MAJOR(sbuf.st_rdev), (int)MINOR(sbuf.st_rdev));
 		}
+
+		if (!retried) {
+			/*
+			 * FIXME: remove this, the theory for this retry is that
+			 * there may be a udev race that we can sometimes mask by
+			 * retrying.  This is here until we can figure out if it's
+			 * needed and if so fix the real problem.
+			 */
+			usleep(5000);
+			log_debug_devs("Device open %s retry", dev_name(dev));
+			retried = 1;
+			goto retry_open;
+		}
+
 		return 0;
 	}
 
 	dev->flags |= DEV_IN_BCACHE;
-	dev->bcache_fd = fd;
+	dev->bdev = bdev;
+
 	return 1;
 }
 
@@ -533,14 +522,13 @@ static int _scan_dev_close(struct device *dev)
 	dev->flags &= ~DEV_IN_BCACHE;
 	dev->flags &= ~DEV_BCACHE_EXCL;
 
-	if (dev->bcache_fd < 0) {
+	if (dev->bdev < 0) {
 		log_error("scan_dev_close %s already closed", dev_name(dev));
 		return 0;
 	}
 
-	if (close(dev->bcache_fd))
-		log_warn("close %s errno %d", dev_name(dev), errno);
-	dev->bcache_fd = -1;
+	bcache_put_dev(scan_bcache, dev->bdev);
+	dev->bdev = NULL;
 	return 1;
 }
 
@@ -636,7 +624,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 			}
 		}
 
-		bcache_prefetch(scan_bcache, devl->dev->bcache_fd, 0);
+		bcache_prefetch(scan_bcache, devl->dev->bdev, 0);
 
 		rem_prefetches--;
 		submit_count++;
@@ -653,18 +641,18 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 		scan_failed = 0;
 		is_lvm_device = 0;
 
-		if (!bcache_get(scan_bcache, devl->dev->bcache_fd, 0, 0, &bb)) {
+		if (!bcache_get(scan_bcache, devl->dev->bdev, 0, 0, &bb)) {
 			log_debug_devs("Scan failed to read %s error %d.", dev_name(devl->dev), error);
 			scan_failed = 1;
 			scan_read_errors++;
 			scan_failed_count++;
 			lvmcache_del_dev(devl->dev);
 		} else {
-			log_debug_devs("Processing data from device %s %d:%d fd %d block %p",
+			log_debug_devs("Processing data from device %s %d:%d block %p",
 				       dev_name(devl->dev),
 				       (int)MAJOR(devl->dev->dev),
 				       (int)MINOR(devl->dev->dev),
-				       devl->dev->bcache_fd, bb);
+				       bb);
 
 			ret = _process_block(cmd, f, devl->dev, bb, 0, 0, &is_lvm_device);
 
@@ -687,7 +675,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 		 * drop it from bcache.
 		 */
 		if (scan_failed || !is_lvm_device) {
-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+			bcache_invalidate_dev(scan_bcache, devl->dev->bdev);
 			_scan_dev_close(devl->dev);
 		}
 
@@ -844,7 +832,7 @@ int label_scan(struct cmd_context *cmd)
 		 * so this will usually not be true.
 		 */
 		if (_in_bcache(dev)) {
-			bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+			bcache_invalidate_dev(scan_bcache, dev->bdev);
 			_scan_dev_close(dev);
 		}
 	};
@@ -888,7 +876,7 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
 
 	dm_list_iterate_items(devl, devs) {
 		if (_in_bcache(devl->dev)) {
-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+			bcache_invalidate_dev(scan_bcache, devl->dev->bdev);
 			_scan_dev_close(devl->dev);
 		}
 	}
@@ -907,7 +895,7 @@ int label_scan_devs_excl(struct dm_list *devs)
 
 	dm_list_iterate_items(devl, devs) {
 		if (_in_bcache(devl->dev)) {
-			bcache_invalidate_fd(scan_bcache, devl->dev->bcache_fd);
+			bcache_invalidate_dev(scan_bcache, devl->dev->bdev);
 			_scan_dev_close(devl->dev);
 		}
 		/*
@@ -927,7 +915,7 @@ int label_scan_devs_excl(struct dm_list *devs)
 void label_scan_invalidate(struct device *dev)
 {
 	if (_in_bcache(dev)) {
-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
 		_scan_dev_close(dev);
 	}
 }
@@ -1007,7 +995,7 @@ int label_read(struct device *dev)
 	dm_list_add(&one_dev, &devl->list);
 
 	if (_in_bcache(dev)) {
-		bcache_invalidate_fd(scan_bcache, dev->bcache_fd);
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
 		_scan_dev_close(dev);
 	}
 
@@ -1041,9 +1029,9 @@ int label_read_sector(struct device *dev, uint64_t read_sector)
 
 	label_scan_open(dev);
 
-	bcache_prefetch(scan_bcache, dev->bcache_fd, block_num);
+	bcache_prefetch(scan_bcache, dev->bdev, block_num);
 
-	if (!bcache_get(scan_bcache, dev->bcache_fd, block_num, 0, &bb)) {
+	if (!bcache_get(scan_bcache, dev->bdev, block_num, 0, &bb)) {
 		log_error("Scan failed to read %s at %llu",
 			  dev_name(dev), (unsigned long long)block_num);
 		ret = 0;
@@ -1122,7 +1110,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		return false;
 	}
 
-	if (dev->bcache_fd <= 0) {
+	if (dev->bdev<= 0) {
 		/* This is not often needed, perhaps only with lvmetad. */
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for reading at %llu length %u.",
@@ -1131,7 +1119,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		}
 	}
 
-	if (!bcache_read_bytes(scan_bcache, dev->bcache_fd, start, len, data)) {
+	if (!bcache_read_bytes(scan_bcache, dev->bdev, start, len, data)) {
 		log_error("Error reading device %s at %llu length %u.",
 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
 		label_scan_invalidate(dev);
@@ -1152,7 +1140,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		return false;
 	}
 
-	if (dev->bcache_fd <= 0) {
+	if (dev->bdev <= 0) {
 		/* This is not often needed, perhaps only with lvmetad. */
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
@@ -1161,7 +1149,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		}
 	}
 
-	if (!bcache_write_bytes(scan_bcache, dev->bcache_fd, start, len, data)) {
+	if (!bcache_write_bytes(scan_bcache, dev->bdev, start, len, data)) {
 		log_error("Error writing device %s at %llu length %u.",
 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
 		label_scan_invalidate(dev);
@@ -1187,7 +1175,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
 		return false;
 	}
 
-	if (dev->bcache_fd <= 0) {
+	if (dev->bdev<= 0) {
 		/* This is not often needed, perhaps only with lvmetad. */
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
@@ -1196,7 +1184,7 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
 		}
 	}
 
-	if (!bcache_zero_bytes(scan_bcache, dev->bcache_fd, start, len)) {
+	if (!bcache_zero_bytes(scan_bcache, dev->bdev, start, len)) {
 		log_error("Error writing device %s at %llu length %u.",
 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
 		label_scan_invalidate(dev);
@@ -1222,7 +1210,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 		return false;
 	}
 
-	if (dev->bcache_fd <= 0) {
+	if (dev->bdev<= 0) {
 		/* This is not often needed, perhaps only with lvmetad. */
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
@@ -1231,7 +1219,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 		}
 	}
 
-	if (!bcache_set_bytes(scan_bcache, dev->bcache_fd, start, len, val)) {
+	if (!bcache_set_bytes(scan_bcache, dev->bdev, start, len, val)) {
 		log_error("Error writing device %s at %llu length %u.",
 			  dev_name(dev), (unsigned long long)start, (uint32_t)len);
 		label_scan_invalidate(dev);

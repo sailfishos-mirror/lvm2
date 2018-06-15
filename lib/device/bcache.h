@@ -39,12 +39,21 @@ typedef uint64_t sector_t;
 
 typedef void io_complete_fn(void *context, int io_error);
 
+enum {
+        EF_READ_ONLY = 1,
+        EF_EXCL = 2
+};
+
 struct io_engine {
 	void (*destroy)(struct io_engine *e);
+
+	int (*open)(struct io_engine *e, const char *path, unsigned flags);
+	void (*close)(struct io_engine *e, int fd);
+
+	unsigned (*max_io)(struct io_engine *e);
 	bool (*issue)(struct io_engine *e, enum dir d, int fd,
 		      sector_t sb, sector_t se, void *data, void *context);
 	bool (*wait)(struct io_engine *e, io_complete_fn fn);
-	unsigned (*max_io)(struct io_engine *e);
 };
 
 struct io_engine *create_async_io_engine(void);
@@ -53,9 +62,10 @@ struct io_engine *create_sync_io_engine(void);
 /*----------------------------------------------------------------*/
 
 struct bcache;
+struct bcache_dev;
 struct block {
 	/* clients may only access these three fields */
-	int fd;
+	struct bcache_dev *dev;
 	uint64_t index;
 	void *data;
 
@@ -75,6 +85,22 @@ struct block {
 struct bcache *bcache_create(sector_t block_size, unsigned nr_cache_blocks,
 			     struct io_engine *engine);
 void bcache_destroy(struct bcache *cache);
+
+// IMPORTANT: It is up to the caller to normalise the device path.  bcache does
+// not detect if two relative path refer to the same file, or if 2 device nodes
+// refer to the same underlying dev.
+
+// There may be more than one holder of a device at a time.  But since we cannot
+// promote a dev from being opened non-exclusive to exclusive, there are some
+// restrictions:
+//
+// - You may have concurrent non-exclusive holders.
+// - You may have concurrent exclusive holders.
+// - You may not have mixed holders.
+// - If blocks are in the cache that were acquired by a non exclusive holder,
+//   they will all be invalidated if a device is opened exclusively. 
+struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsigned flags);
+void bcache_put_dev(struct bcache *cache, struct bcache_dev *dev);
 
 enum bcache_get_flags {
 	/*
@@ -101,10 +127,10 @@ unsigned bcache_max_prefetches(struct bcache *cache);
  * something like this:
  *
  * dm_list_iterate_items (dev, &devices)
- * 	bcache_prefetch(cache, dev->fd, block);
+ * 	bcache_prefetch(cache, dev, block);
  *
  * dm_list_iterate_items (dev, &devices) {
- *	if (!bcache_get(cache, dev->fd, block, &b))
+ *	if (!bcache_get(cache, dev, block, &b))
  *		fail();
  *
  *	process_block(b);
@@ -114,12 +140,12 @@ unsigned bcache_max_prefetches(struct bcache *cache);
  * they complete.  But we're talking a very small difference, and it's worth it
  * to keep callbacks out of this interface.
  */
-void bcache_prefetch(struct bcache *cache, int fd, block_address index);
+void bcache_prefetch(struct bcache *cache, struct bcache_dev *dev, block_address index);
 
 /*
  * Returns true on success.
  */
-bool bcache_get(struct bcache *cache, int fd, block_address index,
+bool bcache_get(struct bcache *cache, struct bcache_dev *dev, block_address index,
 	        unsigned flags, struct block **result);
 void bcache_put(struct block *b);
 
@@ -128,6 +154,7 @@ void bcache_put(struct block *b);
  * (return false), if any unlocked dirty data cannot be written back.
  */
 bool bcache_flush(struct bcache *cache);
+bool bcache_flush_dev(struct bcache *cache, struct bcache_dev *dev);
 
 /*
  * Removes a block from the cache.
@@ -137,26 +164,20 @@ bool bcache_flush(struct bcache *cache);
  * 
  * If the block is currently held false will be returned.
  */
-bool bcache_invalidate(struct bcache *cache, int fd, block_address index);
-
-/*
- * Invalidates all blocks on the given descriptor.  Call this before closing
- * the descriptor to make sure everything is written back.
- */
-bool bcache_invalidate_fd(struct bcache *cache, int fd);
-
+bool bcache_invalidate(struct bcache *cache, struct bcache_dev *dev, block_address index);
+bool bcache_invalidate_dev(struct bcache *cache, struct bcache_dev *dev);
 
 //----------------------------------------------------------------
 // The next four functions are utilities written in terms of the above api.
  
 // Prefetches the blocks neccessary to satisfy a byte range.
-void bcache_prefetch_bytes(struct bcache *cache, int fd, uint64_t start, size_t len);
+void bcache_prefetch_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len);
 
 // Reads, writes and zeroes bytes.  Returns false if errors occur.
-bool bcache_read_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, void *data);
-bool bcache_write_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, void *data);
-bool bcache_zero_bytes(struct bcache *cache, int fd, uint64_t start, size_t len);
-bool bcache_set_bytes(struct bcache *cache, int fd, uint64_t start, size_t len, uint8_t val);
+bool bcache_read_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, void *data);
+bool bcache_write_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, void *data);
+bool bcache_zero_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len);
+bool bcache_set_bytes(struct bcache *cache, struct bcache_dev *dev, uint64_t start, size_t len, uint8_t val);
 
 //----------------------------------------------------------------
 
