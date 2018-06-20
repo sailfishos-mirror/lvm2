@@ -34,9 +34,9 @@
 #define INIT_PATTERN 123
 
 struct fixture {
-	int fd;
 	char fname[32];
 	struct bcache *cache;
+	struct bcache_dev *dev;
 };
 
 static inline uint8_t _pattern_at(uint8_t pat, uint8_t byte)
@@ -49,57 +49,73 @@ static uint64_t byte(block_address b, uint64_t offset)
 	return b * T_BLOCK_SIZE + offset;
 }
 
+// With testing in tmpfs directory O_DIRECT cannot be used
+// tmpfs has  f_fsid == 0  (unsure if this is best guess)
+static bool _use_o_direct_internal(void)
+{
+	struct statvfs fsdata;
+
+	if (statvfs(".", &fsdata))
+		// assume we can
+		return true;
+
+	return  fsdata.f_fsid;
+}
+
+static bool _use_o_direct(void)
+{
+	static bool latch = false;
+	static bool result;
+
+	if (!latch) {
+		latch = true;
+		result = _use_o_direct_internal();
+		if (!result)
+			printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
+	}
+
+	return result;
+}
+
 static void *_fix_init(struct io_engine *engine)
 {
+	int fd;
         uint8_t buffer[T_BLOCK_SIZE];
         struct fixture *f = malloc(sizeof(*f));
         unsigned b, i;
-	struct statvfs fsdata;
-	static int _runs_is_tmpfs = -1;
-
-	if (_runs_is_tmpfs == -1) {
-		// With testing in tmpfs directory O_DIRECT cannot be used
-		// tmpfs has  f_fsid == 0  (unsure if this is best guess)
-		_runs_is_tmpfs = (statvfs(".", &fsdata) == 0 && !fsdata.f_fsid) ? 1 : 0;
-		if (_runs_is_tmpfs)
-			printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
-	}
 
         T_ASSERT(f);
 
         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
-	f->fd = mkstemp(f->fname);
-	T_ASSERT(f->fd >= 0);
+	fd = mkstemp(f->fname);
+	T_ASSERT(fd >= 0);
 
 	for (b = 0; b < NR_BLOCKS; b++) {
         	for (i = 0; i < sizeof(buffer); i++)
                 	buffer[i] = _pattern_at(INIT_PATTERN, byte(b, i));
-		T_ASSERT(write(f->fd, buffer, T_BLOCK_SIZE) > 0);
+		T_ASSERT(write(fd, buffer, T_BLOCK_SIZE) > 0);
 	}
-
-	if (!_runs_is_tmpfs) {
-		close(f->fd);
-		// reopen with O_DIRECT
-		f->fd = open(f->fname, O_RDWR | O_DIRECT);
-		T_ASSERT(f->fd >= 0);
-	}
+	close(fd);
 
 	f->cache = bcache_create(T_BLOCK_SIZE / 512, NR_BLOCKS, engine);
 	T_ASSERT(f->cache);
+
+	f->dev = bcache_get_dev(f->cache, f->fname, 0);
+	T_ASSERT(f->dev);
 
         return f;
 }
 
 static void *_async_init(void)
 {
-	struct io_engine *e = create_async_io_engine();
+	struct io_engine *e = create_async_io_engine(_use_o_direct());
 	T_ASSERT(e);
 	return _fix_init(e);
 }
 
 static void *_sync_init(void)
 {
-	struct io_engine *e = create_sync_io_engine();
+	struct io_engine *e = create_sync_io_engine(_use_o_direct());
 	T_ASSERT(e);
 	return _fix_init(e);
 }
@@ -108,8 +124,8 @@ static void _fix_exit(void *fixture)
 {
         struct fixture *f = fixture;
 
+	bcache_put_dev(f->dev);
 	bcache_destroy(f->cache);
-	close(f->fd);
 	unlink(f->fname);
         free(f);
 }
@@ -143,7 +159,7 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
         	unsigned i;
         	size_t len2 = byte_e - byte_b;
 		uint8_t *buffer = malloc(len2);
-		T_ASSERT(bcache_read_bytes(f->cache, f->fd, byte_b, len2, buffer));
+		T_ASSERT(bcache_read_bytes(f->cache, f->dev, byte_b, len2, buffer));
 		for (i = 0; i < len; i++)
         		T_ASSERT_EQUAL(buffer[i], _pattern_at(pat, byte_b + i));
         	free(buffer);
@@ -151,7 +167,7 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 
 	// Verify again, driving bcache directly
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->fd, bb, 0, &b));
+        	T_ASSERT(bcache_get(f->cache, f->dev, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
         	_verify_bytes(b, bb * T_BLOCK_SIZE, offset, blen, pat);
@@ -173,7 +189,7 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
 	uint64_t blen, len = byte_e - byte_b;
 
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->fd, bb, 0, &b));
+        	T_ASSERT(bcache_get(f->cache, f->dev, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
 		for (i = 0; i < blen; i++)
@@ -201,29 +217,34 @@ static void _do_write(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8
         for (i = 0; i < len; i++)
 		buffer[i] = _pattern_at(pat, byte_b + i);
 
-        T_ASSERT(bcache_write_bytes(f->cache, f->fd, byte_b, byte_e - byte_b, buffer));
+        T_ASSERT(bcache_write_bytes(f->cache, f->dev, byte_b, byte_e - byte_b, buffer));
 	free(buffer);
 }
 
 static void _do_zero(struct fixture *f, uint64_t byte_b, uint64_t byte_e)
 {
-	T_ASSERT(bcache_zero_bytes(f->cache, f->fd, byte_b, byte_e - byte_b));
+	T_ASSERT(bcache_zero_bytes(f->cache, f->dev, byte_b, byte_e - byte_b));
 }
 
 static void _do_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t val)
 {
-	T_ASSERT(bcache_set_bytes(f->cache, f->fd, byte_b, byte_e - byte_b, val));
+	T_ASSERT(bcache_set_bytes(f->cache, f->dev, byte_b, byte_e - byte_b, val));
 }
 
 static void _reopen(struct fixture *f)
 {
         struct io_engine *engine;
 
+	bcache_put_dev(f->dev);
 	bcache_destroy(f->cache);
-	engine = create_async_io_engine();
+
+	engine = create_async_io_engine(_use_o_direct());
 	T_ASSERT(engine);
 
 	f->cache = bcache_create(T_BLOCK_SIZE / 512, NR_BLOCKS, engine);
+	T_ASSERT(f->cache);
+
+	f->dev = bcache_get_dev(f->cache, f->fname, 0);
 	T_ASSERT(f->cache);
 }
 

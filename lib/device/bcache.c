@@ -136,6 +136,7 @@ struct async_engine {
 	io_context_t aio_context;
 	struct cb_set *cbs;
 	unsigned page_mask;
+	bool use_o_direct;
 };
 
 static struct async_engine *_to_async(struct io_engine *e)
@@ -158,9 +159,31 @@ static void _async_destroy(struct io_engine *ioe)
 	free(e);
 }
 
-static int _async_open(struct io_engine *e, const char *path, unsigned flags)
+// Used by both the async and sync engines
+static int _open_common(const char *path, int os_flags)
 {
-	int fd, os_flags = O_DIRECT | O_NOATIME;
+	int fd;
+
+	os_flags |= O_NOATIME;
+
+	fd = open(path, os_flags);
+	if (fd < 0) {
+		if ((errno == EBUSY) && (os_flags & O_EXCL))
+			log_error("Can't open %s exclusively.  Mounted filesystem?", path);
+		else
+			log_error("Couldn't open %s, errno = %d", path, errno);
+	}
+
+	return fd;
+}
+
+static int _async_open(struct io_engine *ioe, const char *path, unsigned flags)
+{
+	struct async_engine *e = _to_async(ioe);
+	int os_flags = 0;
+
+	if (e->use_o_direct)
+		os_flags |= O_DIRECT;
 
 	if (flags & EF_READ_ONLY)
 		os_flags |= O_RDONLY;
@@ -170,15 +193,7 @@ static int _async_open(struct io_engine *e, const char *path, unsigned flags)
 	if (flags & EF_EXCL)
 		os_flags |= O_EXCL;
 
-	fd = open(path, flags);
-	if (fd < 0) {
-		if ((errno == EBUSY) && (flags & O_EXCL))
-			log_error("Can't open %s exclusively.  Mounted filesystem?", path);
-		else
-			log_error("Couldn't open %s, errno = %d", path, errno);
-	}
-
-	return fd;
+	return _open_common(path, os_flags);
 }
 
 static void _async_close(struct io_engine *e, int fd)
@@ -278,7 +293,7 @@ static unsigned _async_max_io(struct io_engine *e)
 	return MAX_IO;
 }
 
-struct io_engine *create_async_io_engine(void)
+struct io_engine *create_async_io_engine(bool use_o_direct)
 {
 	int r;
 	struct async_engine *e = malloc(sizeof(*e));
@@ -309,6 +324,7 @@ struct io_engine *create_async_io_engine(void)
 	}
 
 	e->page_mask = sysconf(_SC_PAGESIZE) - 1;
+	e->use_o_direct = use_o_direct;
 
 	return &e->e;
 }
@@ -323,6 +339,7 @@ struct sync_io {
 struct sync_engine {
 	struct io_engine e;
 	struct dm_list complete;
+	bool use_o_direct;
 };
 
 static struct sync_engine *_to_sync(struct io_engine *e)
@@ -334,6 +351,25 @@ static void _sync_destroy(struct io_engine *ioe)
 {
 	struct sync_engine *e = _to_sync(ioe);
 	free(e);
+}
+
+static int _sync_open(struct io_engine *ioe, const char *path, unsigned flags)
+{
+	struct sync_engine *e = _to_sync(ioe);
+	int os_flags = 0;
+
+	if (e->use_o_direct)
+		os_flags |= O_DIRECT;
+
+	if (flags & EF_READ_ONLY)
+		os_flags |= O_RDONLY;
+	else
+		os_flags |= O_RDWR;
+
+	if (flags & EF_EXCL)
+		os_flags |= O_EXCL;
+
+	return _open_common(path, os_flags);
 }
 
 static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
@@ -403,7 +439,7 @@ static unsigned _sync_max_io(struct io_engine *e)
 	return 1;
 }
 
-struct io_engine *create_sync_io_engine(void)
+struct io_engine *create_sync_io_engine(bool use_o_direct)
 {
 	struct sync_engine *e = malloc(sizeof(*e));
 
@@ -411,11 +447,12 @@ struct io_engine *create_sync_io_engine(void)
 		return NULL;
 
 	e->e.destroy = _sync_destroy;
-	e->e.open = _async_open;
+	e->e.open = _sync_open;
 	e->e.close = _async_close;
 	e->e.issue = _sync_issue;
 	e->e.wait = _sync_wait;
 	e->e.max_io = _sync_max_io;
+	e->use_o_direct = use_o_direct;
 
 	dm_list_init(&e->complete);
 	return &e->e;
@@ -464,11 +501,17 @@ enum block_flags {
 };
 
 struct bcache_dev {
+	// The unit tests are relying on fd being the first element.
 	int fd;
 
-	// The reference count tracks users that are holding the dev, plus
+	struct bcache *cache;
+	char *path;
+	unsigned flags;
+
+	// The reference counts tracks users that are holding the dev, plus
 	// all the blocks on that device that are currently in the cache.
-	unsigned ref_count;
+	unsigned holders;
+	unsigned blocks;
 };
 
 struct bcache {
@@ -511,16 +554,63 @@ struct bcache {
 };
 
 //----------------------------------------------------------------
-//
+
 static void _free_dev(struct bcache *cache, struct bcache_dev *dev)
 {
 	cache->engine->close(cache->engine, dev->fd);
+	free(dev->path);
 	free(dev);
 }
 
 static void _dev_dtr(void *context, union radix_value v)
 {
         _free_dev(context, v.ptr);
+}
+
+static void _inc_holders(struct bcache_dev *dev)
+{
+	dev->holders++;
+}
+
+static void _inc_blocks(struct bcache_dev *dev)
+{
+	dev->blocks++;
+}
+
+static void _dev_maybe_close(struct bcache_dev *dev)
+{
+	if (dev->holders || dev->blocks)
+		return;
+
+	if (!radix_tree_remove(dev->cache->dev_tree,
+                                  (uint8_t *) dev->path,
+                                  (uint8_t *) dev->path + strlen(dev->path)))
+		log_error("couldn't remove bcache dev: %s", dev->path);
+}
+
+static void _dec_holders(struct bcache_dev *dev)
+{
+	if (!dev->holders)
+		log_error("internal error: holders refcount already at zero (%s)", dev->path);
+	else {
+		dev->holders--;
+		_dev_maybe_close(dev);
+	}
+}
+
+static void _dec_blocks(struct bcache_dev *dev)
+{
+	if (!dev->blocks)
+		log_error("internal error: blocks refcount already at zero (%s)", dev->path);
+	else {
+		dev->blocks--;
+		_dev_maybe_close(dev);
+	}
+}
+
+static bool _eflags(unsigned flags, unsigned flag)
+{
+	return flags & flag;
 }
 
 struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsigned flags)
@@ -530,7 +620,21 @@ struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsign
 
 	if (radix_tree_lookup(cache->dev_tree, (uint8_t *) path, (uint8_t *) (path + strlen(path)), &v)) {
 		dev = v.ptr;
-		dev->ref_count++;
+		_inc_holders(dev);
+
+		if (_eflags(flags, EF_EXCL) && !_eflags(dev->flags, EF_EXCL)) {
+			if (dev->holders != 1) {
+				log_error("you can't update a bcache dev to exclusive with a concurrent holder (%s)",
+                                          dev->path);
+				_dec_holders(dev);
+				return NULL;
+			}
+
+			bcache_invalidate_dev(cache, dev);
+			_dec_holders(dev);
+			return bcache_get_dev(cache, path, flags);
+		}
+
 	} else {
 		dev = malloc(sizeof(*dev));
 		dev->fd = cache->engine->open(cache->engine, path, flags);
@@ -540,20 +644,36 @@ struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsign
 			return NULL;
 		}
 
-		dev->ref_count = 1;
+		dev->path = strdup(path);
+		if (!dev->path) {
+			log_error("couldn't copy path when getting new device (%s)", path);
+			cache->engine->close(cache->engine, dev->fd);
+			free(dev);
+			return NULL;
+		}
+		dev->flags = flags;
+
+		dev->cache = cache;
+		dev->holders = 1;
+		dev->blocks = 0;
+
+
+		v.ptr = dev;
+		if (!radix_tree_insert(cache->dev_tree, (uint8_t *) path, (uint8_t *) (path + strlen(path)), v)) {
+			log_error("couldn't insert device into radix tree: %s", path);
+			cache->engine->close(cache->engine, dev->fd);
+			free(dev->path);
+			free(dev);
+			return NULL;
+		}
 	}
 
 	return dev;
 }
 
-void bcache_put_dev(struct bcache *cache, struct bcache_dev *dev)
+void bcache_put_dev(struct bcache_dev *dev)
 {
-	if (!dev->ref_count)
-		log_error("bcache_dev ref_count is already zero");
-
-	dev->ref_count--;
-	if (!dev->ref_count)
-		_free_dev(cache, dev);
+	_dec_holders(dev);
 }
 
 //----------------------------------------------------------------
@@ -838,6 +958,7 @@ static struct block *_new_block(struct bcache *cache, struct bcache_dev *dev, bl
 		dm_list_init(&b->list);
 		dm_list_init(&b->hash);
 		b->flags = 0;
+		_inc_blocks(dev);
 		b->dev = dev;
 		b->index = i;
 		b->ref_count = 0;
@@ -1024,18 +1145,58 @@ struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
 	return cache;
 }
 
+//----------------------------------------------------------------
+
+struct dev_iterator {
+	bool chastised;
+	struct radix_tree_iterator it;
+};
+
+static bool _check_dev(struct radix_tree_iterator *it,
+			 uint8_t *kb, uint8_t *ke, union radix_value v)
+{
+	struct dev_iterator *dit = container_of(it, struct dev_iterator, it);
+	struct bcache_dev *dev = v.ptr;
+
+	if (dev->holders) {
+		if (!dit->chastised) {
+			log_warn("Destroying a bcache whilst devices are still held:");
+			dit->chastised = true;
+		}
+
+		log_warn("    %s", dev->path);
+	}
+
+	return true;
+}
+
+static void _check_for_holders(struct bcache *cache)
+{
+	struct dev_iterator dit;
+
+	dit.chastised = false;
+	dit.it.visit = _check_dev;
+	radix_tree_iterate(cache->dev_tree, NULL, NULL, &dit.it);
+}
+
 void bcache_destroy(struct bcache *cache)
 {
 	if (cache->nr_locked)
 		log_warn("some blocks are still locked");
 
+	_check_for_holders(cache);
+
 	bcache_flush(cache);
 	_wait_all(cache);
+
 	_exit_free_list(cache);
 	radix_tree_destroy(cache->rtree);
+	radix_tree_destroy(cache->dev_tree);
 	cache->engine->destroy(cache->engine);
 	free(cache);
 }
+
+//----------------------------------------------------------------
 
 sector_t bcache_block_sectors(struct bcache *cache)
 {
@@ -1073,6 +1234,7 @@ static void _recycle_block(struct bcache *cache, struct block *b)
 {
 	_unlink_block(b);
 	_block_remove(b);
+	_dec_blocks(b->dev);
 	_free_block(b);
 }
 
@@ -1228,6 +1390,7 @@ static bool _invalidate_v(struct radix_tree_iterator *it,
 	}
 
 	_unlink_block(b);
+	_dec_blocks(b->dev);
 	_free_block(b);
 
 	// We can't remove the block from the radix tree yet because
@@ -1252,6 +1415,21 @@ bool bcache_invalidate_dev(struct bcache *cache, struct bcache_dev *dev)
 	radix_tree_iterate(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd), &it.it);
 	radix_tree_remove_prefix(cache->rtree, k.bytes, k.bytes + sizeof(k.parts.fd));
 	return it.success;
+}
+
+bool bcache_is_well_formed(struct bcache *cache)
+{
+	if (!radix_tree_is_well_formed(cache->rtree)) {
+		log_error("block tree is badly formed");
+		return false;
+	}
+
+	if (!radix_tree_is_well_formed(cache->dev_tree)) {
+		log_error("dev tree is badly formed");
+		return false;
+	}
+
+	return true;
 }
 
 //----------------------------------------------------------------

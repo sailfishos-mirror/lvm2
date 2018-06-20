@@ -23,6 +23,13 @@
 
 #define SHOW_MOCK_CALLS 0
 
+//----------------------------------------------------------------
+// We're assuming the file descriptor is the first element of the
+// bcache_dev.
+struct bcache_dev {
+	int fd;
+};
+
 /*----------------------------------------------------------------
  * Mock engine
  *--------------------------------------------------------------*/
@@ -32,10 +39,13 @@ struct mock_engine {
 	struct dm_list issued_io;
 	unsigned max_io;
 	sector_t block_size;
+	int last_fd;
 };
 
 enum method {
 	E_DESTROY,
+	E_OPEN,
+	E_CLOSE,
 	E_ISSUE,
 	E_WAIT,
 	E_MAX_IO
@@ -47,10 +57,11 @@ struct mock_call {
 
 	bool match_args;
 	enum dir d;
-	int fd;
+	struct bcache_dev *dev;
 	block_address b;
 	bool issue_r;
 	bool wait_r;
+	unsigned engine_flags;
 };
 
 struct mock_io {
@@ -68,6 +79,10 @@ static const char *_show_method(enum method m)
 	switch (m) {
 	case E_DESTROY:
 		return "destroy()";
+	case E_OPEN:
+		return "open()";
+	case E_CLOSE:
+		return "close()";
 	case E_ISSUE:
 		return "issue()";
 	case E_WAIT:
@@ -87,13 +102,13 @@ static void _expect(struct mock_engine *e, enum method m)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read(struct mock_engine *e, int fd, block_address b)
+static void _expect_read(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = true;
 	mc->wait_r = true;
@@ -110,68 +125,77 @@ static void _expect_read_any(struct mock_engine *e)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write(struct mock_engine *e, int fd, block_address b)
+static void _expect_write(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = true;
 	mc->wait_r = true;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read_bad_issue(struct mock_engine *e, int fd, block_address b)
+static void _expect_read_bad_issue(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = false;
 	mc->wait_r = true;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write_bad_issue(struct mock_engine *e, int fd, block_address b)
+static void _expect_write_bad_issue(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = false;
 	mc->wait_r = true;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read_bad_wait(struct mock_engine *e, int fd, block_address b)
+static void _expect_read_bad_wait(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = true;
 	mc->wait_r = false;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write_bad_wait(struct mock_engine *e, int fd, block_address b)
+static void _expect_write_bad_wait(struct mock_engine *e, struct bcache_dev *dev, block_address b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = fd;
+	mc->dev = dev;
 	mc->b = b;
 	mc->issue_r = true;
 	mc->wait_r = false;
+	dm_list_add(&e->expected_calls, &mc->list);
+}
+
+static void _expect_open(struct mock_engine *e, unsigned eflags)
+{
+	struct mock_call *mc = malloc(sizeof(*mc));
+	mc->m = E_OPEN;
+	mc->match_args = true;
+	mc->engine_flags = eflags;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
@@ -228,6 +252,27 @@ static void _mock_destroy(struct io_engine *e)
 	free(_to_mock(e));
 }
 
+static int _mock_open(struct io_engine *e, const char *path, unsigned flags)
+{
+	struct mock_engine *me = _to_mock(e);
+	struct mock_call *mc;
+
+	mc = _match_pop(me, E_OPEN);
+	if (mc->match_args)
+		T_ASSERT_EQUAL(mc->engine_flags, flags);
+	free(mc);
+	return me->last_fd++;
+}
+
+static void _mock_close(struct io_engine *e, int fd)
+{
+	struct mock_engine *me = _to_mock(e);
+	struct mock_call *mc;
+
+	mc = _match_pop(me, E_CLOSE);
+	free(mc);
+}
+
 static bool _mock_issue(struct io_engine *e, enum dir d, int fd,
 	      		sector_t sb, sector_t se, void *data, void *context)
 {
@@ -239,7 +284,7 @@ static bool _mock_issue(struct io_engine *e, enum dir d, int fd,
 	mc = _match_pop(me, E_ISSUE);
 	if (mc->match_args) {
 		T_ASSERT(d == mc->d);
-		T_ASSERT(fd == mc->fd);
+		T_ASSERT(fd == mc->dev->fd);
 		T_ASSERT(sb == mc->b * me->block_size);
 		T_ASSERT(se == (mc->b + 1) * me->block_size);
 	}
@@ -294,6 +339,8 @@ static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
 	struct mock_engine *m = malloc(sizeof(*m));
 
 	m->e.destroy = _mock_destroy;
+	m->e.open = _mock_open;
+	m->e.close = _mock_close;
 	m->e.issue = _mock_issue;
 	m->e.wait = _mock_wait;
 	m->e.max_io = _mock_max_io;
@@ -302,6 +349,7 @@ static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
 	m->block_size = block_size;
 	dm_list_init(&m->expected_calls);
 	dm_list_init(&m->issued_io);
+	m->last_fd = 2;
 
 	return m;
 }
@@ -420,184 +468,240 @@ static void test_get_triggers_read(void *context)
 {
 	struct fixture *f = context;
 
-	int fd = 17;   // arbitrary key
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct block *b;
 
-	_expect_read(f->me, fd, 0);
+	_expect(f->me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	T_ASSERT(dev);
+	_expect_read(f->me, dev, 0);
 	_expect(f->me, E_WAIT);
-	T_ASSERT(bcache_get(f->cache, fd, 0, 0, &b));
+	T_ASSERT(bcache_get(f->cache, dev, 0, 0, &b));
 	bcache_put(b);
 
-	_expect_read(f->me, fd, 1);
+	_expect_read(f->me, dev, 1);
 	_expect(f->me, E_WAIT);
-	T_ASSERT(bcache_get(f->cache, fd, 1, GF_DIRTY, &b));
-	_expect_write(f->me, fd, 1);
+	T_ASSERT(bcache_get(f->cache, dev, 1, GF_DIRTY, &b));
+	_expect_write(f->me, dev, 1);
 	_expect(f->me, E_WAIT);
 	bcache_put(b);
+
+	_expect(f->me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_repeated_reads_are_cached(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 
-	int fd = 17;   // arbitrary key
 	unsigned i;
 	struct block *b;
 
-	_expect_read(f->me, fd, 0);
+	_expect(f->me, E_OPEN);
+	dev = bcache_get_dev(f->cache, path, 0);
+	_expect_read(f->me, dev, 0);
 	_expect(f->me, E_WAIT);
 	for (i = 0; i < 100; i++) {
-		T_ASSERT(bcache_get(f->cache, fd, 0, 0, &b));
+		T_ASSERT(bcache_get(f->cache, dev, 0, 0, &b));
 		bcache_put(b);
 	}
+	_expect(f->me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_block_gets_evicted_with_many_reads(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	const unsigned nr_cache_blocks = 16;
 
-	int fd = 17;   // arbitrary key
 	unsigned i;
 	struct block *b;
 
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	fprintf(stderr, "1\n");
 	for (i = 0; i < nr_cache_blocks; i++) {
-		_expect_read(me, fd, i);
+		_expect_read(me, dev, i);
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, fd, i, 0, &b));
+		T_ASSERT(bcache_get(cache, dev, i, 0, &b));
 		bcache_put(b);
 	}
 
+	fprintf(stderr, "2\n");
 	// Not enough cache blocks to hold this one
-	_expect_read(me, fd, nr_cache_blocks);
+	_expect_read(me, dev, nr_cache_blocks);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, nr_cache_blocks, 0, &b));
+	T_ASSERT(bcache_get(cache, dev, nr_cache_blocks, 0, &b));
 	bcache_put(b);
 
+	fprintf(stderr, "3\n");
 	// Now if we run through we should find one block has been
 	// evicted.  We go backwards because the oldest is normally
 	// evicted first.
 	_expect_read_any(me);
 	_expect(me, E_WAIT);
 	for (i = nr_cache_blocks; i; i--) {
-		T_ASSERT(bcache_get(cache, fd, i - 1, 0, &b));
+		T_ASSERT(bcache_get(cache, dev, i - 1, 0, &b));
 		bcache_put(b);
+		T_ASSERT(bcache_is_well_formed(cache));
 	}
+
+	fprintf(stderr, "4\n");
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_prefetch_issues_a_read(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	const unsigned nr_cache_blocks = 16;
 
-	int fd = 17;   // arbitrary key
 	unsigned i;
 	struct block *b;
 
+	_expect(me, E_OPEN);
+	dev = bcache_get_dev(f->cache, path, 0);
+
 	for (i = 0; i < nr_cache_blocks; i++) {
 		// prefetch should not wait
-		_expect_read(me, fd, i);
-		bcache_prefetch(cache, fd, i);
+		_expect_read(me, dev, i);
+		bcache_prefetch(cache, dev, i);
 	}
 	_no_outstanding_expectations(me);
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, fd, i, 0, &b));
+		T_ASSERT(bcache_get(cache, dev, i, 0, &b));
 		bcache_put(b);
 	}
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_too_many_prefetches_does_not_trigger_a_wait(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 
 	const unsigned nr_cache_blocks = 16;
-	int fd = 17;   // arbitrary key
 	unsigned i;
 
+	_expect(me, E_OPEN);
+	dev = bcache_get_dev(f->cache, path, 0);
 	for (i = 0; i < 10 * nr_cache_blocks; i++) {
 		// prefetch should not wait
 		if (i < nr_cache_blocks)
-			_expect_read(me, fd, i);
-		bcache_prefetch(cache, fd, i);
+			_expect_read(me, dev, i);
+		bcache_prefetch(cache, dev, i);
 	}
 
 	// Destroy will wait for any in flight IO triggered by prefetches.
 	for (i = 0; i < nr_cache_blocks; i++)
 		_expect(me, E_WAIT);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_dirty_data_gets_written_back(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 
-	int fd = 17;   // arbitrary key
 	struct block *b;
 
+	_expect(f->me, E_OPEN);
+	dev = bcache_get_dev(f->cache, path, 0);
+
 	// Expect the read
-	_expect_read(me, fd, 0);
+	_expect_read(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, 0, GF_DIRTY, &b));
+	T_ASSERT(bcache_get(cache, dev, 0, GF_DIRTY, &b));
 	bcache_put(b);
 
 	// Expect the write
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
+
+	bcache_put_dev(dev);
+	_expect(f->me, E_CLOSE);
 }
 
 static void test_zeroed_data_counts_as_dirty(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 
-	int fd = 17;   // arbitrary key
 	struct block *b;
 
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
 	// No read
-	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
+	T_ASSERT(bcache_get(cache, dev, 0, GF_ZERO, &b));
 	bcache_put(b);
 
 	// Expect the write
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_flush_waits_for_all_dirty(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 
 	const unsigned count = 16;
-	int fd = 17;   // arbitrary key
 	unsigned i;
 	struct block *b;
 
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
 	for (i = 0; i < count; i++) {
 		if (i % 2) {
-			T_ASSERT(bcache_get(cache, fd, i, GF_ZERO, &b));
+			T_ASSERT(bcache_get(cache, dev, i, GF_ZERO, &b));
 		} else {
-			_expect_read(me, fd, i);
+			_expect_read(me, dev, i);
 			_expect(me, E_WAIT);
-			T_ASSERT(bcache_get(cache, fd, i, 0, &b));
+			T_ASSERT(bcache_get(cache, dev, i, 0, &b));
 		}
 		bcache_put(b);
 	}
 
 	for (i = 0; i < count; i++) {
 		if (i % 2)
-			_expect_write(me, fd, i);
+			_expect_write(me, dev, i);
 	}
 
 	for (i = 0; i < count; i++) {
@@ -607,207 +711,415 @@ static void test_flush_waits_for_all_dirty(void *context)
 
 	bcache_flush(cache);
 	_no_outstanding_expectations(me);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_multiple_files(void *context)
 {
-	static int _fds[] = {1, 128, 345, 678, 890};
+	static const char *_paths[] = {"/dev/dm-1", "/dev/dm-2", "/dev/dm-3", "/dev/dm-4"};
 
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
+	struct bcache_dev *dev;
 	struct block *b;
 	unsigned i;
 
-	for (i = 0; i < DM_ARRAY_SIZE(_fds); i++) {
-		_expect_read(me, _fds[i], 0);
+	for (i = 0; i < DM_ARRAY_SIZE(_paths); i++) {
+		_expect(me, E_OPEN);
+		dev = bcache_get_dev(cache, _paths[i], 0);
+		_expect_read(me, dev, 0);
 		_expect(me, E_WAIT);
 
-		T_ASSERT(bcache_get(cache, _fds[i], 0, 0, &b));
+		T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 		bcache_put(b);
+		bcache_put_dev(dev);
 	}
+
+	for (i = 0; i < DM_ARRAY_SIZE(_paths); i++)
+		_expect(me, E_CLOSE);
 }
 
 static void test_read_bad_issue(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
 
-	_expect_read_bad_issue(me, 17, 0);
-	T_ASSERT(!bcache_get(cache, 17, 0, 0, &b));
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	_expect_read_bad_issue(me, dev, 0);
+	T_ASSERT(!bcache_get(cache, dev, 0, 0, &b));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_read_bad_issue_intermittent(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	_expect_read_bad_issue(me, fd, 0);
-	T_ASSERT(!bcache_get(cache, fd, 0, 0, &b));
+	_expect(me, E_OPEN);
+	dev = bcache_get_dev(f->cache, path, 0);
 
-	_expect_read(me, fd, 0);
+	_expect_read_bad_issue(me, dev, 0);
+	T_ASSERT(!bcache_get(cache, dev, 0, 0, &b));
+
+	_expect_read(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 	bcache_put(b);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_read_bad_wait(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	_expect_read_bad_wait(me, fd, 0);
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	_expect_read_bad_wait(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_get(cache, fd, 0, 0, &b));
+	T_ASSERT(!bcache_get(cache, dev, 0, 0, &b));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_read_bad_wait_intermittent(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	_expect_read_bad_wait(me, fd, 0);
-	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_get(cache, fd, 0, 0, &b));
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
 
-	_expect_read(me, fd, 0);
+	_expect_read_bad_wait(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
+	T_ASSERT(!bcache_get(cache, dev, 0, 0, &b));
+
+	_expect_read(me, dev, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 	bcache_put(b);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_write_bad_issue_stops_flush(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
-	_expect_write_bad_issue(me, fd, 0);
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	T_ASSERT(bcache_get(cache, dev, 0, GF_ZERO, &b));
+	_expect_write_bad_issue(me, dev, 0);
 	bcache_put(b);
 	T_ASSERT(!bcache_flush(cache));
 
 	// we'll let it succeed the second time
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
 	T_ASSERT(bcache_flush(cache));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_write_bad_io_stops_flush(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
-	_expect_write_bad_wait(me, fd, 0);
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	T_ASSERT(bcache_get(cache, dev, 0, GF_ZERO, &b));
+	_expect_write_bad_wait(me, dev, 0);
 	_expect(me, E_WAIT);
 	bcache_put(b);
 	T_ASSERT(!bcache_flush(cache));
 
 	// we'll let it succeed the second time
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
 	T_ASSERT(bcache_flush(cache));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_invalidate_not_present(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct bcache *cache = f->cache;
-	int fd = 17;
 
-	T_ASSERT(bcache_invalidate(cache, fd, 0));
+	_expect(f->me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+	T_ASSERT(bcache_invalidate(cache, dev, 0));
+	_expect(f->me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_invalidate_present(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	_expect_read(me, fd, 0);
+	_expect(f->me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+
+	_expect_read(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 	bcache_put(b);
 
-	T_ASSERT(bcache_invalidate(cache, fd, 0));
+	T_ASSERT(bcache_invalidate(cache, dev, 0));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_invalidate_after_read_error(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	_expect_read_bad_issue(me, fd, 0);
-	T_ASSERT(!bcache_get(cache, fd, 0, 0, &b));
-	T_ASSERT(bcache_invalidate(cache, fd, 0));
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+	_expect_read_bad_issue(me, dev, 0);
+	T_ASSERT(!bcache_get(cache, dev, 0, 0, &b));
+	T_ASSERT(bcache_invalidate(cache, dev, 0));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_invalidate_after_write_error(void *context)
 {
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+	T_ASSERT(bcache_get(cache, dev, 0, GF_ZERO, &b));
 	bcache_put(b);
 
 	// invalidate should fail if the write fails
-	_expect_write_bad_wait(me, fd, 0);
+	_expect_write_bad_wait(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_invalidate(cache, fd, 0));
+	T_ASSERT(!bcache_invalidate(cache, dev, 0));
 
 	// and should succeed if the write does
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_invalidate(cache, fd, 0));
+	T_ASSERT(bcache_invalidate(cache, dev, 0));
 
 	// a read is not required to get the block
-	_expect_read(me, fd, 0);
+	_expect_read(me, dev, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, fd, 0, 0, &b));
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 	bcache_put(b);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 static void test_invalidate_held_block(void *context)
 {
-
 	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 	struct block *b;
-	int fd = 17;
 
-	T_ASSERT(bcache_get(cache, fd, 0, GF_ZERO, &b));
+	_expect(me, E_OPEN);
+ 	dev = bcache_get_dev(f->cache, path, 0);
+	T_ASSERT(bcache_get(cache, dev, 0, GF_ZERO, &b));
 
-	T_ASSERT(!bcache_invalidate(cache, fd, 0));
+	T_ASSERT(!bcache_invalidate(cache, dev, 0));
 
-	_expect_write(me, fd, 0);
+	_expect_write(me, dev, 0);
 	_expect(me, E_WAIT);
 	bcache_put(b);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
+}
+
+//----------------------------------------------------------------
+
+static void test_concurrent_devs(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct bcache *cache = f->cache;
+
+	const char *path = "/dev/foo/bar";
+	struct bcache_dev *dev1, *dev2;
+
+	_expect(me, E_OPEN);
+	dev1 = bcache_get_dev(cache, path, 0);
+	dev2 = bcache_get_dev(cache, path, 0);
+
+	_expect(me, E_CLOSE);  // only one close
+
+	bcache_put_dev(dev1);
+	bcache_put_dev(dev2);
+}
+
+static void test_concurrent_devs_exclusive(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct bcache *cache = f->cache;
+
+	const char *path = "/dev/foo/bar";
+	struct bcache_dev *dev1, *dev2;
+
+	_expect(me, E_OPEN);
+	dev1 = bcache_get_dev(cache, path, EF_EXCL);
+	dev2 = bcache_get_dev(cache, path, EF_EXCL);
+
+	_expect(me, E_CLOSE);  // only one close
+
+	bcache_put_dev(dev1);
+	bcache_put_dev(dev2);
+}
+
+static void test_exclusive_flags_gets_passed_to_engine(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct bcache *cache = f->cache;
+
+	const char *path = "/dev/foo/bar";
+	struct bcache_dev *dev;
+
+	_expect_open(me, EF_EXCL);
+	dev = bcache_get_dev(cache, path, EF_EXCL);
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
+
+	_expect_open(me, EF_READ_ONLY);
+	dev = bcache_get_dev(cache, path, EF_READ_ONLY);
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
+
+	_expect_open(me, EF_EXCL | EF_READ_ONLY);
+	dev = bcache_get_dev(cache, path, EF_EXCL | EF_READ_ONLY);
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
+}
+
+static void test_reopen_exclusive_triggers_invalidate(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct bcache *cache = f->cache;
+
+	const char *path = "/dev/foo/bar";
+	struct bcache_dev *dev;
+	struct block *b;
+
+	_expect_open(me, 0);
+	dev = bcache_get_dev(cache, path, 0);
+	T_ASSERT(dev);
+	_expect_read(me, dev, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
+	bcache_put(b);
+	bcache_put_dev(dev);
+
+	_no_outstanding_expectations(me);
+
+	_expect(me, E_CLOSE);
+	_expect_open(me, EF_EXCL);
+
+	dev = bcache_get_dev(cache, path, EF_EXCL);
+	T_ASSERT(dev);
+	_expect_read(me, dev, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
+	bcache_put(b);
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
+}
+
+static void test_concurrent_reopen_excl_fails(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct bcache *cache = f->cache;
+
+	const char *path = "/dev/foo/bar";
+	struct bcache_dev *dev;
+	struct block *b;
+
+	_expect_open(me, 0);
+	dev = bcache_get_dev(cache, path, 0);
+	T_ASSERT(dev);
+	_expect_read(me, dev, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
+	bcache_put(b);
+
+	_no_outstanding_expectations(me);
+
+	T_ASSERT(!bcache_get_dev(cache, path, EF_EXCL));
+
+	_expect(me, E_CLOSE);
+	bcache_put_dev(dev);
 }
 
 //----------------------------------------------------------------
@@ -815,6 +1127,8 @@ static void test_invalidate_held_block(void *context)
 
 static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
 {
+	char buffer[64];
+	struct bcache_dev *dev;
 	struct mock_engine *me = f->me;
 	struct bcache *cache = f->cache;
 
@@ -822,18 +1136,25 @@ static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
 	struct block *b;
 
 	for (i = 0; i < nr_cache_blocks; i++) {
+		snprintf(buffer, sizeof(buffer) - 1, "/dev/dm-%u", i);
+		_expect(me, E_OPEN);
+		dev = bcache_get_dev(f->cache, buffer, 0);
 		// prefetch should not wait
-		_expect_read(me, i, 0);
-		bcache_prefetch(cache, i, 0);
+		_expect_read(me, dev, 0);
+		bcache_prefetch(cache, dev, 0);
+		bcache_put_dev(dev);
 	}
 
 	// This double checks the reads occur in response to the prefetch
 	_no_outstanding_expectations(me);
 
 	for (i = 0; i < nr_cache_blocks; i++) {
+		snprintf(buffer, sizeof(buffer) - 1, "/dev/dm-%u", i);
+		dev = bcache_get_dev(f->cache, buffer, 0);
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, i, 0, 0, &b));
+		T_ASSERT(bcache_get(cache, dev, 0, 0, &b));
 		bcache_put(b);
+		bcache_put_dev(dev);
 	}
 
 	_no_outstanding_expectations(me);
@@ -842,18 +1163,30 @@ static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
 static void test_concurrent_reads_after_invalidate(void *context)
 {
 	struct fixture *f = context;
+	char buffer[64];
 	unsigned i, nr_cache_blocks = 16;
+	struct bcache_dev *dev;
 
 	_cycle(f, nr_cache_blocks);
-	for (i = 0; i < nr_cache_blocks; i++)
-        	bcache_invalidate_fd(f->cache, i);
+	for (i = 0; i < nr_cache_blocks; i++) {
+		snprintf(buffer, sizeof(buffer) - 1, "/dev/dm-%u", i);
+		dev = bcache_get_dev(f->cache, buffer, 0);
+        	bcache_invalidate_dev(f->cache, dev);
+        	_expect(f->me, E_CLOSE);
+        	bcache_put_dev(dev);
+        	_no_outstanding_expectations(f->me);
+	}
+
         _cycle(f, nr_cache_blocks);
+
+        for (i = 0; i < nr_cache_blocks; i++)
+	        _expect(f->me, E_CLOSE);
 }
 
 /*----------------------------------------------------------------
  * Top level
  *--------------------------------------------------------------*/
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/bcache/core/" path, desc, fn)
 
 static struct test_suite *_tiny_tests(void)
 {
@@ -900,6 +1233,11 @@ static struct test_suite *_small_tests(void)
 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
           test_concurrent_reads_after_invalidate);
+	T("concurrent-devs", "a device may have more than one holder", test_concurrent_devs);
+	T("concurrent-devs-exclusive", "a device, opened exclusively, may have more than one holder", test_concurrent_devs_exclusive);
+	T("dev-flags-get-passed-to-engine", "EF_EXCL and EF_READ_ONLY get passed down", test_exclusive_flags_gets_passed_to_engine);
+	T("reopen-excl-invalidates", "reopening a dev EF_EXCL indicates you want to invalidate everything", test_reopen_exclusive_triggers_invalidate);
+	T("concurrent-reopen-excl-fails", "you can't reopen a dev EF_EXCL if there's already a holder", test_concurrent_reopen_excl_fails);
 
 	return ts;
 }

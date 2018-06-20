@@ -18,8 +18,8 @@
 #include "device_mapper/all.h"
 
 #include <linux/fs.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /*----------------------------------------------------------------*/
 
@@ -56,8 +56,8 @@ struct io_engine {
 	bool (*wait)(struct io_engine *e, io_complete_fn fn);
 };
 
-struct io_engine *create_async_io_engine(void);
-struct io_engine *create_sync_io_engine(void);
+struct io_engine *create_async_io_engine(bool use_o_direct);
+struct io_engine *create_sync_io_engine(bool use_o_direct);
 
 /*----------------------------------------------------------------*/
 
@@ -100,7 +100,7 @@ void bcache_destroy(struct bcache *cache);
 // - If blocks are in the cache that were acquired by a non exclusive holder,
 //   they will all be invalidated if a device is opened exclusively. 
 struct bcache_dev *bcache_get_dev(struct bcache *cache, const char *path, unsigned flags);
-void bcache_put_dev(struct bcache *cache, struct bcache_dev *dev);
+void bcache_put_dev(struct bcache_dev *dev);
 
 enum bcache_get_flags {
 	/*
@@ -166,6 +166,9 @@ bool bcache_flush_dev(struct bcache *cache, struct bcache_dev *dev);
  */
 bool bcache_invalidate(struct bcache *cache, struct bcache_dev *dev, block_address index);
 bool bcache_invalidate_dev(struct bcache *cache, struct bcache_dev *dev);
+
+// For debug only
+bool bcache_is_well_formed(struct bcache *cache);
 
 //----------------------------------------------------------------
 // The next four functions are utilities written in terms of the above api.
