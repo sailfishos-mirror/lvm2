@@ -30,43 +30,43 @@
  *
  * (This is assuming lvm.conf md_component_detection=1.)
  *
- * If lvm does *not* ignore the components, then lvm will read lvm
- * labels from the md dev and from the component devs, and will see
- * them all as duplicates of each other.  LVM duplicate resolution
- * will then kick in and keep the md dev around to use and ignore
- * the components.
+ * If lvm does *not* ignore the components, then lvm may read lvm
+ * labels from the component devs and potentially the md dev,
+ * which can trigger duplicate detection, and/or cause lvm to display
+ * md components as PVs rather than ignoring them.
  *
- * It is better to exclude the components as early as possible during
- * lvm processing, ideally before lvm even looks for labels on the
- * components, so that duplicate resolution can be avoided.  There are
- * a number of ways that md components can be excluded earlier than
- * the duplicate resolution phase:
+ * If scanning md componenents causes duplicates to be seen, then
+ * the lvm duplicate resolution will exclude the components.
  *
- * - When external_device_info_source="udev", lvm discovers a device is
- *   an md component by asking udev during the initial filtering phase.
- *   However, lvm's default is to not use udev for this.  The
- *   alternative is "native" detection in which lvm tries to detect
- *   md components itself.
+ * The lvm md filter has three modes:
  *
- * - When using native detection, lvm's md filter looks for the md
- *   superblock at the start of devices.  It will see the md superblock
- *   on the components, exclude them in the md filter, and avoid
- *   handling them later in duplicate resolution.
+ * 1. look for md superblock at the start of the device
+ * 2. look for md superblock at the start and end of the device
+ * 3. use udev to detect components
  *
- * - When using native detection, lvm's md filter will not detect
- *   components when the md device has an older superblock version that
- *   places the superblock at the end of the device.  This case will
- *   fall back to duplicate resolution to exclude components.
+ * mode 1 will not detect and exclude components of md devices
+ * that use superblock version 1.0 which is at the end of the device.
  *
- * A variation of the description above occurs for lvm commands that
- * intend to create new PVs on devices (pvcreate, vgcreate, vgextend).
- * For these commands, the native md filter also reads the end of all
- * devices to check for the odd md superblocks.
+ * mode 2 will detect these, but mode 2 doubles the i/o done by label
+ * scan, since there's a read at both the start and end of every device.
  *
- * (The reason that external_device_info_source is not set to udev by
- * default is that there have be issues with udev not being promptly
- * or reliably updated about md state changes, causing the udev info
- * that lvm uses to be occasionally wrong.)
+ * mode 3 is used when external_device_info_source="udev".  It does
+ * not require any io from lvm, but this mode is not used by default
+ * because there have been problems getting reliable info from udev.
+ *
+ * lvm uses mode 2 when:
+ *
+ * - the command is pvcreate/vgcreate/vgextend, which format new
+ *   devices, and if the user ran these commands on a component
+ *   device of an md device 1.0, then it would cause problems.
+ *   FIXME: this would only really need to scan the end of the
+ *   devices being formatted, not all devices.
+ *
+ * - it sees an md device on the system using version 1.0.
+ *   The point of this is just to avoid displaying md components
+ *   from the 'pvs' command.
+ *   FIXME: the cost (double i/o) may not be worth the benefit
+ *   (not showing md components).
  */
 
 /*
@@ -81,7 +81,7 @@
  * that will not pass.
  */
 
-static int _passes_md_filter(struct device *dev, int full)
+static int _passes_md_filter(struct cmd_context *cmd, struct dev_filter *f __attribute__((unused)), struct device *dev)
 {
 	int ret;
 
@@ -92,7 +92,7 @@ static int _passes_md_filter(struct device *dev, int full)
 	if (!md_filtering())
 		return 1;
 
-	ret = dev_is_md(dev, NULL, full);
+	ret = dev_is_md(dev, NULL, cmd->use_full_md_check);
 
 	if (ret == -EAGAIN) {
 		/* let pass, call again after scan */
@@ -122,18 +122,6 @@ static int _passes_md_filter(struct device *dev, int full)
 	return 1;
 }
 
-static int _passes_md_filter_lite(struct dev_filter *f __attribute__((unused)),
-				  struct device *dev)
-{
-	return _passes_md_filter(dev, 0);
-}
-
-static int _passes_md_filter_full(struct dev_filter *f __attribute__((unused)),
-				  struct device *dev)
-{
-	return _passes_md_filter(dev, 1);
-}
-
 static void _destroy(struct dev_filter *f)
 {
 	if (f->use_count)
@@ -151,18 +139,7 @@ struct dev_filter *md_filter_create(struct cmd_context *cmd, struct dev_types *d
 		return NULL;
 	}
 
-	/*
-	 * FIXME: for commands that want a full md check (pvcreate, vgcreate,
-	 * vgextend), we do an extra read at the end of every device that the
-	 * filter looks at.  This isn't necessary; we only need to do the full
-	 * md check on the PVs that these commands are trying to use.
-	 */
-
-	if (cmd->use_full_md_check)
-		f->passes_filter = _passes_md_filter_full;
-	else
-		f->passes_filter = _passes_md_filter_lite;
-
+	f->passes_filter = _passes_md_filter;
 	f->destroy = _destroy;
 	f->use_count = 0;
 	f->private = dt;

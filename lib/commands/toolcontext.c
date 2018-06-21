@@ -974,9 +974,6 @@ static int _init_dev_cache(struct cmd_context *cmd)
 	int len_diff;
 	int device_list_from_udev;
 
-	init_dev_disable_after_error_count(
-		find_config_tree_int(cmd, devices_disable_after_error_count_CFG, NULL));
-
 	if (!dev_cache_init(cmd))
 		return_0;
 
@@ -1765,7 +1762,6 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 	cmd->threaded = threaded ? 1 : 0;
 	cmd->handles_missing_pvs = 0;
 	cmd->handles_unknown_segments = 0;
-	cmd->ignore_clustered_vgs = 0;
 	cmd->hosttags = 0;
 	dm_list_init(&cmd->arg_value_groups);
 	dm_list_init(&cmd->formats);

@@ -173,6 +173,8 @@ const char *skip_dev_dir(struct cmd_context *cmd, const char *vg_name,
 	return vg_name;
 }
 
+static int _printed_clustered_vg_advice = 0;
+
 /*
  * Three possible results:
  * a) return 0, skip 0: take the VG, and cmd will end in success
@@ -204,10 +206,23 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
 	if ((read_error & FAILED_INCONSISTENT) && (read_flags & READ_ALLOW_INCONSISTENT))
 		read_error &= ~FAILED_INCONSISTENT; /* Check for other errors */
 
-	if ((read_error & FAILED_CLUSTERED) && vg->cmd->ignore_clustered_vgs) {
-		read_error &= ~FAILED_CLUSTERED; /* Check for other errors */
-		log_verbose("Skipping volume group %s", vg_name);
-		*skip = 1;
+	if (read_error & FAILED_CLUSTERED) {
+		if (arg_vgnames && str_list_match_item(arg_vgnames, vg->name)) {
+			log_error("Cannot access clustered VG %s.", vg->name);
+			if (!_printed_clustered_vg_advice) {
+				_printed_clustered_vg_advice = 1;
+				log_error("See lvmlockd(8) for changing a clvm/clustered VG to a shared VG.");
+			}
+			return 1;
+		} else {
+			log_warn("Skipping clustered VG %s.", vg_name);
+			if (!_printed_clustered_vg_advice) {
+				_printed_clustered_vg_advice = 1;
+				log_error("See lvmlockd(8) for changing a clvm/clustered VG to a shared VG.");
+			}
+			*skip = 1;
+			return 0;
+		}
 	}
 
 	/*
@@ -252,12 +267,6 @@ static int _ignore_vg(struct volume_group *vg, const char *vg_name,
 			log_verbose("Skipping volume group %s", vg_name);
 			*skip = 1;
 		}
-	}
-
-	if (read_error == FAILED_CLUSTERED) {
-		*skip = 1;
-		stack;	/* Error already logged */
-		return 1;
 	}
 
 	if (read_error != SUCCESS) {
@@ -1470,7 +1479,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
 
 	if (argc) {
 		for (; opt < argc; opt++) {
-			if (!(dev = dev_cache_get(argv[opt], cmd->full_filter))) {
+			if (!(dev = dev_cache_get(cmd, argv[opt], cmd->full_filter))) {
 				log_error("Failed to find device "
 					  "\"%s\".", argv[opt]);
 				ret_max = ECMD_FAILED;
@@ -1547,7 +1556,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
 		goto out;
 	}
 
-	while ((dev = dev_iter_get(iter)))
+	while ((dev = dev_iter_get(cmd, iter)))
 	{
 		if (!(label = lvmcache_get_dev_label(dev)))
 			continue;
@@ -3870,7 +3879,7 @@ static int _get_arg_devices(struct cmd_context *cmd,
 			return ECMD_FAILED;
 		}
 
-		if (!(dil->dev = dev_cache_get(sl->str, cmd->filter))) {
+		if (!(dil->dev = dev_cache_get(cmd, sl->str, cmd->filter))) {
 			log_error("Failed to find device for physical volume \"%s\".", sl->str);
 			ret_max = ECMD_FAILED;
 		} else {
@@ -3898,7 +3907,7 @@ static int _get_all_devices(struct cmd_context *cmd, struct dm_list *all_devices
 		return ECMD_FAILED;
 	}
 
-	while ((dev = dev_iter_get(iter))) {
+	while ((dev = dev_iter_get(cmd, iter))) {
 		if (!(dil = dm_pool_alloc(cmd->mem, sizeof(*dil)))) {
 			log_error("device_id_list alloc failed.");
 			goto out;
@@ -5398,7 +5407,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
 	 * Translate arg names into struct device's.
 	 */
 	dm_list_iterate_items(pd, &pp->arg_devices)
-		pd->dev = dev_cache_get(pd->name, cmd->full_filter);
+		pd->dev = dev_cache_get(cmd, pd->name, cmd->full_filter);
 
 	/*
 	 * Use process_each_pv to search all existing PVs and devices.

@@ -62,13 +62,12 @@ static int _insert(const char *path, const struct stat *info,
 		   int rec, int check_with_udev_db);
 
 /* Setup non-zero members of passed zeroed 'struct device' */
-static void _dev_init(struct device *dev, int max_error_count)
+static void _dev_init(struct device *dev)
 {
 	dev->phys_block_size = -1;
 	dev->block_size = -1;
 	dev->fd = -1;
 	dev->read_ahead = -1;
-	dev->max_error_count = max_error_count;
 
 	dev->ext.enabled = 0;
 	dev->ext.src = DEV_EXT_NONE;
@@ -129,7 +128,7 @@ struct device *dev_create_file(const char *filename, struct device *dev,
 		return NULL;
 	}
 
-	_dev_init(dev, NO_DEV_ERROR_COUNT_LIMIT);
+	_dev_init(dev);
 	dev->flags = DEV_REGULAR | ((use_malloc) ? DEV_ALLOCED : 0);
 	dm_list_add(&dev->aliases, &alias->list);
 
@@ -145,7 +144,7 @@ static struct device *_dev_create(dev_t d)
 		return NULL;
 	}
 
-	_dev_init(dev, dev_disable_after_error_count());
+	_dev_init(dev);
 	dev->dev = d;
 
 	return dev;
@@ -1506,7 +1505,7 @@ const char *dev_cache_filtered_reason(const char *name)
 	return reason;
 }
 
-struct device *dev_cache_get(const char *name, struct dev_filter *f)
+struct device *dev_cache_get(struct cmd_context *cmd, const char *name, struct dev_filter *f)
 {
 	struct stat buf;
 	struct device *d = (struct device *) dm_hash_lookup(_cache.names, name);
@@ -1546,7 +1545,7 @@ struct device *dev_cache_get(const char *name, struct dev_filter *f)
 		return d;
 
 	if (f && !(d->flags & DEV_REGULAR)) {
-		ret = f->passes_filter(f, d);
+		ret = f->passes_filter(cmd, f, d);
 
 		if (ret == -EAGAIN) {
 			log_debug_devs("get device by name defer filter %s", dev_name(d));
@@ -1578,7 +1577,7 @@ static struct device *_dev_cache_seek_devt(dev_t dev)
  * TODO This is very inefficient. We probably want a hash table indexed by
  * major:minor for keys to speed up these lookups.
  */
-struct device *dev_cache_get_by_devt(dev_t dev, struct dev_filter *f)
+struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t dev, struct dev_filter *f)
 {
 	char path[PATH_MAX];
 	const char *sysfs_dir;
@@ -1619,7 +1618,7 @@ struct device *dev_cache_get_by_devt(dev_t dev, struct dev_filter *f)
 	if (!f)
 		return d;
 
-	ret = f->passes_filter(f, d);
+	ret = f->passes_filter(cmd, f, d);
 
 	if (ret == -EAGAIN) {
 		log_debug_devs("get device by number defer filter %s", dev_name(d));
@@ -1664,7 +1663,7 @@ static struct device *_iter_next(struct dev_iter *iter)
 	return d;
 }
 
-struct device *dev_iter_get(struct dev_iter *iter)
+struct device *dev_iter_get(struct cmd_context *cmd, struct dev_iter *iter)
 {
 	struct dev_filter *f;
 	int ret;
@@ -1676,7 +1675,7 @@ struct device *dev_iter_get(struct dev_iter *iter)
 		f = iter->filter;
 
 		if (f && !(d->flags & DEV_REGULAR)) {
-			ret = f->passes_filter(f, d);
+			ret = f->passes_filter(cmd, f, d);
 
 			if (ret == -EAGAIN) {
 				log_debug_devs("get device by iter defer filter %s", dev_name(d));
@@ -1690,18 +1689,6 @@ struct device *dev_iter_get(struct dev_iter *iter)
 	}
 
 	return NULL;
-}
-
-void dev_reset_error_count(struct cmd_context *cmd)
-{
-	struct dev_iter iter;
-
-	if (!_cache.devices)
-		return;
-
-	iter.current = btree_first(_cache.devices);
-	while (iter.current)
-		_iter_next(&iter)->error_count = 0;
 }
 
 int dev_fd(struct device *dev)

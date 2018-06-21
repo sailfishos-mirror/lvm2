@@ -364,7 +364,7 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 
 		log_debug_devs("Scan filtering %s", dev_name(dev));
 		
-		pass = f->passes_filter(f, dev);
+		pass = f->passes_filter(cmd, f, dev);
 
 		if ((pass == -EAGAIN) || (dev->flags & DEV_FILTER_AFTER_SCAN)) {
 			/* Shouldn't happen */
@@ -464,8 +464,18 @@ static int _scan_dev_open(struct device *dev)
 	name_sl = dm_list_item(name_list, struct dm_str_list);
 	name = name_sl->str;
 
+	/*
+	 * FIXME: udev is a train wreck when we open RDWR and close, so we
+	 * need to only use RDWR when we actually need to write, and use
+	 * RDONLY otherwise.  Fix, disable or scrap udev nonsense so we can
+	 * just open with RDWR by default.
+	 */
+
 	if (dev->flags & DEV_BCACHE_EXCL)
 		flags |= EF_EXCL;
+
+	else if (!(dev->flags & DEV_BCACHE_WRITE))
+		flags |= EF_READ_ONLY;
 
 retry_open:
 
@@ -527,7 +537,7 @@ static int _scan_dev_close(struct device *dev)
 		return 0;
 	}
 
-	bcache_put_dev(scan_bcache, dev->bdev);
+	bcache_put_dev(dev->bdev);
 	dev->bdev = NULL;
 	return 1;
 }
@@ -777,7 +787,7 @@ static int _setup_bcache(int cache_blocks)
 	if (cache_blocks > MAX_BCACHE_BLOCKS)
 		cache_blocks = MAX_BCACHE_BLOCKS;
 
-	if (!(ioe = create_async_io_engine())) {
+	if (!(ioe = create_async_io_engine(true))) {
 		log_error("Failed to create bcache io engine.");
 		return 0;
 	}
@@ -821,7 +831,7 @@ int label_scan(struct cmd_context *cmd)
 		return 0;
 	}
 
-	while ((dev = dev_iter_get(iter))) {
+	while ((dev = dev_iter_get(cmd, iter))) {
 		if (!(devl = zalloc(sizeof(*devl))))
 			continue;
 		devl->dev = dev;
@@ -835,6 +845,20 @@ int label_scan(struct cmd_context *cmd)
 			bcache_invalidate_dev(scan_bcache, dev->bdev);
 			_scan_dev_close(dev);
 		}
+
+		/*
+		 * When md devices exist that use the old superblock at the
+		 * end of the device, then in order to detect and filter out
+		 * the component devices of those md devs, we need to enable
+		 * the full md filter which scans both the start and the end
+		 * of every device.  This doubles the amount of scanning i/o,
+		 * which we want to avoid.  FIXME: it may not be worth the
+		 * cost of double i/o just to avoid displaying md component
+		 * devs in 'pvs', which is a pretty harmless effect from a
+		 * pretty uncommon situation.
+		 */
+		if (dev_is_md_with_end_superblock(cmd->dev_types, dev))
+			cmd->use_full_md_check = 1;
 	};
 	dev_iter_destroy(iter);
 
@@ -934,7 +958,7 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
 
 	lv_info(cmd, lv, 0, &lvinfo, 0, 0);
 	devt = MKDEV(lvinfo.major, lvinfo.minor);
-	if ((dev = dev_cache_get_by_devt(devt, NULL)))
+	if ((dev = dev_cache_get_by_devt(cmd, devt, NULL)))
 		label_scan_invalidate(dev);
 }
 
@@ -951,7 +975,7 @@ void label_scan_drop(struct cmd_context *cmd)
 	if (!(iter = dev_iter_create(NULL, 0)))
 		return;
 
-	while ((dev = dev_iter_get(iter))) {
+	while ((dev = dev_iter_get(cmd, iter))) {
 		if (_in_bcache(dev))
 			_scan_dev_close(dev);
 	}
@@ -1098,7 +1122,14 @@ int label_scan_open(struct device *dev)
 
 int label_scan_open_excl(struct device *dev)
 {
+	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_EXCL)) {
+		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+		log_debug("Close and reopen excl %s", dev_name(dev));
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
+		_scan_dev_close(dev);
+	}
 	dev->flags |= DEV_BCACHE_EXCL;
+	dev->flags |= DEV_BCACHE_WRITE;
 	return label_scan_open(dev);
 }
 
@@ -1140,8 +1171,19 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		return false;
 	}
 
-	if (dev->bdev <= 0) {
+	if (!(dev->flags & DEV_BCACHE_WRITE)) {
+		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+		log_debug("Close and reopen to write %s", dev_name(dev));
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
+		_scan_dev_close(dev);
+
+		dev->flags |= DEV_BCACHE_WRITE;
+		label_scan_open(dev);
+	}
+
+	if (!dev->bdev) {
 		/* This is not often needed, perhaps only with lvmetad. */
+		dev->flags |= DEV_BCACHE_WRITE;
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
@@ -1175,8 +1217,19 @@ bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
 		return false;
 	}
 
-	if (dev->bdev<= 0) {
+	if (!(dev->flags & DEV_BCACHE_WRITE)) {
+		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+		log_debug("Close and reopen to write %s", dev_name(dev));
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
+		_scan_dev_close(dev);
+
+		dev->flags |= DEV_BCACHE_WRITE;
+		label_scan_open(dev);
+	}
+
+	if (!dev->bdev) {
 		/* This is not often needed, perhaps only with lvmetad. */
+		dev->flags |= DEV_BCACHE_WRITE;
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
@@ -1210,8 +1263,19 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 		return false;
 	}
 
-	if (dev->bdev<= 0) {
+	if (!(dev->flags & DEV_BCACHE_WRITE)) {
+		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+		log_debug("Close and reopen to write %s", dev_name(dev));
+		bcache_invalidate_dev(scan_bcache, dev->bdev);
+		_scan_dev_close(dev);
+
+		dev->flags |= DEV_BCACHE_WRITE;
+		label_scan_open(dev);
+	}
+
+	if (!dev->bdev) {
 		/* This is not often needed, perhaps only with lvmetad. */
+		dev->flags |= DEV_BCACHE_WRITE;
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for writing at %llu length %u.",
 				  dev_name(dev), (unsigned long long)start, (uint32_t)len);
