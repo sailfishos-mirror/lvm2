@@ -56,7 +56,7 @@
 #define ALLOCATABLE_PV		UINT64_C(0x0000000000000008)	/* PV */
 #define ARCHIVED_VG		ALLOCATABLE_PV		/* VG, reuse same bit */
 
-//#define SPINDOWN_LV		UINT64_C(0x0000000000000010)	/* LV */
+#define CACHEDEV_PV		UINT64_C(0x0000000000000010)	/* PV */
 //#define BADBLOCK_ON		UINT64_C(0x0000000000000020)	/* LV */
 #define VISIBLE_LV		UINT64_C(0x0000000000000040)	/* LV */
 #define FIXED_MINOR		UINT64_C(0x0000000000000080)	/* LV */
@@ -608,6 +608,7 @@ struct pvcreate_params {
 	unsigned is_remove : 1;         /* is removing PVs, not creating */
 	unsigned preserve_existing : 1;
 	unsigned check_failed : 1;
+	unsigned cachedev : 1;
 };
 
 struct lvresize_params {
@@ -748,6 +749,7 @@ int vg_remove(struct volume_group *vg);
 int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
 	      const char *new_name);
 int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp);
+int vg_extend_each_cd(struct volume_group *vg, struct pvcreate_params *pp);
 
 int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
 			    struct physical_volume *pv, int commit);
@@ -1338,5 +1340,9 @@ int vg_is_shared(const struct volume_group *vg);
 int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
 
 int vg_strip_outdated_historical_lvs(struct volume_group *vg);
+
+int set_cachedev_type(struct physical_volume *pv);
+
+int set_cachevol_dev_type(struct logical_volume *lv);
 
 #endif

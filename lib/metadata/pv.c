@@ -237,6 +237,7 @@ char *pv_attr_dup(struct dm_pool *mem, const struct physical_volume *pv)
 	char *repstr;
 	int used = is_used_pv(pv);
 	int duplicate = lvmcache_dev_is_unchosen_duplicate(pv->dev);
+	int cachedev = lvmcache_cachedev_from_pvid(&pv->id) ? 1 : 0;
 
 	if (!(repstr = dm_pool_zalloc(mem, 4))) {
 		log_error("dm_pool_alloc failed");
@@ -248,6 +249,8 @@ char *pv_attr_dup(struct dm_pool *mem, const struct physical_volume *pv)
 	 */
 	if (duplicate)
 		repstr[0] = 'd';
+	else if (cachedev)
+		repstr[0] = 'c';
 	else if (pv->status & ALLOCATABLE_PV)
 		repstr[0] = 'a';
 	else if (used > 0)

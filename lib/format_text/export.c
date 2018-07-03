@@ -520,59 +520,69 @@ static const char *_get_pv_name(struct formatter *f, struct physical_volume *pv)
 	return _get_pv_name_from_uuid(f, uuid);
 }
 
+static int _print_pv(struct formatter *f, struct volume_group *vg, struct physical_volume *pv)
+{
+	char buffer[PATH_MAX * 2];
+	const char *name;
+
+	if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+		return_0;
+
+	if (!(name = _get_pv_name_from_uuid(f, buffer)))
+		return_0;
+
+	outnl(f);
+	outf(f, "%s {", name);
+	_inc_indent(f);
+
+	outf(f, "id = \"%s\"", buffer);
+
+	if (strlen(pv_dev_name(pv)) >= PATH_MAX) {
+		log_error("pv device name size is out of bounds.");
+		return 0;
+	}
+
+	outhint(f, "device = \"%s\"",
+		dm_escape_double_quotes(buffer, pv_dev_name(pv)));
+	outnl(f);
+
+	if (!_print_flag_config(f, pv->status, PV_FLAGS))
+		return_0;
+
+	if (!_out_list(f, &pv->tags, "tags"))
+		return_0;
+
+	outsize(f, pv->size, "dev_size = " FMTu64, pv->size);
+
+	outf(f, "pe_start = " FMTu64, pv->pe_start);
+	outsize(f, vg->extent_size * (uint64_t) pv->pe_count,
+		"pe_count = %u", pv->pe_count);
+
+	if (pv->ba_start && pv->ba_size) {
+		outf(f, "ba_start = " FMTu64, pv->ba_start);
+		outsize(f, pv->ba_size, "ba_size = " FMTu64, pv->ba_size);
+	}
+
+	_dec_indent(f);
+	outf(f, "}");
+	return 1;
+}
+
 static int _print_pvs(struct formatter *f, struct volume_group *vg)
 {
 	struct pv_list *pvl;
-	struct physical_volume *pv;
-	char buffer[PATH_MAX * 2];
-	const char *name;
 
 	outf(f, "physical_volumes {");
 	_inc_indent(f);
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
-		pv = pvl->pv;
-
-		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+		if (!_print_pv(f, vg, pvl->pv))
 			return_0;
+	}
 
-		if (!(name = _get_pv_name_from_uuid(f, buffer)))
+	dm_list_iterate_items(pvl, &vg->cds) {
+		if (!_print_pv(f, vg, pvl->pv))
 			return_0;
-
-		outnl(f);
-		outf(f, "%s {", name);
-		_inc_indent(f);
-
-		outf(f, "id = \"%s\"", buffer);
-
-		if (strlen(pv_dev_name(pv)) >= PATH_MAX) {
-			log_error("pv device name size is out of bounds.");
-			return 0;
-		}
-
-		outhint(f, "device = \"%s\"",
-			dm_escape_double_quotes(buffer, pv_dev_name(pv)));
-		outnl(f);
-
-		if (!_print_flag_config(f, pv->status, PV_FLAGS))
-			return_0;
-
-		if (!_out_list(f, &pv->tags, "tags"))
-			return_0;
-
-		outsize(f, pv->size, "dev_size = " FMTu64, pv->size);
-
-		outf(f, "pe_start = " FMTu64, pv->pe_start);
-		outsize(f, vg->extent_size * (uint64_t) pv->pe_count,
-			"pe_count = %u", pv->pe_count);
-
-		if (pv->ba_start && pv->ba_size) {
-			outf(f, "ba_start = " FMTu64, pv->ba_start);
-			outsize(f, pv->ba_size, "ba_size = " FMTu64, pv->ba_size);
-		}
-
-		_dec_indent(f);
-		outf(f, "}");
 	}
 
 	_dec_indent(f);
@@ -957,6 +967,23 @@ static int _build_pv_names(struct formatter *f, struct volume_group *vg)
 		pv = pvl->pv;
 
 		/* FIXME But skip if there's already an LV called pv%d ! */
+		if (dm_snprintf(buffer, sizeof(buffer), "pv%d", count++) < 0)
+			return_0;
+
+		if (!(name = dm_pool_strdup(f->mem, buffer)))
+			return_0;
+
+		if (!(uuid = dm_pool_zalloc(f->mem, 64)) ||
+		   !id_write_format(&pv->id, uuid, 64))
+			return_0;
+
+		if (!dm_hash_insert(f->pv_names, uuid, name))
+			return_0;
+	}
+
+	dm_list_iterate_items(pvl, &vg->cds) {
+		pv = pvl->pv;
+
 		if (dm_snprintf(buffer, sizeof(buffer), "pv%d", count++) < 0)
 			return_0;
 

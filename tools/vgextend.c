@@ -93,8 +93,13 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
 	if (!archive(vg))
 		return_ECMD_FAILED;
 
-	if (!vg_extend_each_pv(vg, pp))
-		goto_out;
+	if (pp->cachedev) {
+		if (!vg_extend_each_cd(vg, pp))
+			goto_out;
+	} else {
+		if (!vg_extend_each_pv(vg, pp))
+			goto_out;
+	}
 
 	if (arg_is_set(cmd, metadataignore_ARG)) {
 		mda_copies = vg_mda_copies(vg);
@@ -128,13 +133,8 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
 	struct pvcreate_params *pp = &vp.pp;
 	unsigned restoremissing = arg_is_set(cmd, restoremissing_ARG);
 	const char *vg_name;
+	int cachedev = (cmd->command->command_enum == vgextend_cachedev_CMD);
 	int ret;
-
-	if (!argc) {
-		log_error("Please enter volume group name and "
-			  "physical volume(s)");
-		return EINVALID_CMD_LINE;
-	}
 
 	vg_name = skip_dev_dir(cmd, argv[0], NULL);
 	argc--;
@@ -153,6 +153,8 @@ int vgextend(struct cmd_context *cmd, int argc, char **argv)
 
 	/* pvcreate within vgextend cannot be forced. */
 	pp->force = 0;
+
+	pp->cachedev = cachedev;
 
 	/* Check for old md signatures at the end of devices. */
 	cmd->use_full_md_check = 1;

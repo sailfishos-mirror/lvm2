@@ -376,13 +376,24 @@ static int _online_pv_found(struct cmd_context *cmd,
 			dev_args_in_vg = 1;
 	}
 
+	dm_list_iterate_items(pvl, &vg->cds) {
+		if (!_online_pvid_file_exists((const char *)&pvl->pv->id.uuid))
+			pvids_not_online++;
+
+		/* Check if one of the devs on the command line is in this VG. */
+		if (dev_args && dev_in_device_list(pvl->pv->dev, dev_args))
+			dev_args_in_vg = 1;
+	}
+
 	/*
 	 * Return if we did not find an online file for one of the PVIDs
 	 * in the VG, which means the VG is not yet complete.
 	 */
 
-	if (pvids_not_online)
+	if (pvids_not_online) {
+		log_debug("missing %d PVs in VG %s.", pvids_not_online, vg->name);
 		return 1;
+	}
 
 	/*
 	 * When all PVIDs from the VG are online, then add vgname to

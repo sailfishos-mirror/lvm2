@@ -597,6 +597,8 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	uint64_t new_wrap = 0, old_wrap = 0, new_end;
 	int found = 0;
 	int noprecommit = 0;
+	uint32_t meta_size;
+	char *meta_buf;
 	const char *old_vg_name = NULL;
 
 	/* Ignore any mda on a PV outside the VG. vgsplit relies on this */
@@ -615,11 +617,20 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	if (!(mdah = raw_read_mda_header(fid->fmt, &mdac->area, mda_is_primary(mda))))
 		goto_out;
 
-	if (!fidtc->raw_metadata_buf &&
-	    !(fidtc->raw_metadata_buf_size =
-			text_vg_export_raw(vg, "", &fidtc->raw_metadata_buf))) {
-		log_error("VG %s metadata writing failed", vg->name);
-		goto out;
+	/*
+	 * The first time through, for the first mda, we create a new export
+	 * buffer, and subsequent mdas use the same.
+	 */
+	if (!fidtc->raw_metadata_buf) {
+		meta_size = text_vg_export_raw(vg, "", &meta_buf);
+
+		if (!meta_size || !meta_buf) {
+			log_error("VG %s metadata writing failed", vg->name);
+			goto out;
+		}
+
+		fidtc->raw_metadata_buf = meta_buf;
+		fidtc->raw_metadata_buf_size = meta_size;
 	}
 
 	rlocn = _read_metadata_location_vg(&mdac->area, mdah, mda_is_primary(mda), old_vg_name ? : vg->name, &noprecommit);

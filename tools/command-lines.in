@@ -1646,6 +1646,10 @@ OO: --autobackup Bool,
 --reportformat ReportFmt, --restoremissing
 ID: vgextend_general
 
+vgextend --cachedev VG PV ...
+OO: --reportformat ReportFmt
+ID: vgextend_cachedev
+
 ---
 
 OO_VGIMPORT: --force, --reportformat ReportFmt

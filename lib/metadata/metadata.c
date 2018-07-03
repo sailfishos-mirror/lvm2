@@ -699,6 +699,76 @@ int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp)
 	return 1;
 }
 
+int vg_extend_each_cd(struct volume_group *vg, struct pvcreate_params *pp)
+{
+	struct pv_list *pvl_pp;
+	struct pv_list *pvl_vg;
+	struct physical_volume *pv;
+	const char *pv_name;
+	uint64_t pe_count;
+	int used;
+
+	dm_list_iterate_items(pvl_pp, &pp->pvs) {
+		log_debug_metadata("Adding CD %s to VG %s.", pv_dev_name(pvl_pp->pv), vg->name);
+
+		pv = pvl_pp->pv;
+		pv_name = pv_dev_name(pv);
+
+		if ((used = is_used_pv(pv)) < 0)
+			continue;
+		if (used) {
+			log_error("PV %s is used by a VG", pv_name);
+			continue;
+		}
+		if (pv_uses_vg(pv, vg)) {
+			log_error("PV %s might be constructed from same VG.", pv_name);
+			continue;
+		}
+		if (find_pv_in_vg(vg, pv_name)) {
+			log_error("PV %s already found in VG.", pv_name);
+			continue;
+		}
+		if (find_pv_in_vg_by_uuid(vg, &pv->id)) {
+			log_error("PV %s UUID already found in VG.", pv_name);
+			continue;
+		}
+
+		if (!(pvl_vg = dm_pool_zalloc(vg->vgmem, sizeof(*pvl_vg))))
+			return_0;
+
+		if (!(pv->vg_name = dm_pool_strdup(vg->vgmem, vg->name)))
+			return_0;
+
+		memcpy(&pv->vgid, &vg->id, sizeof(vg->id));
+
+		if (!set_cachedev_type(pv))
+			return_0;
+
+		pv->is_cachedev = 1;
+		pv->status |= CACHEDEV_PV;
+		pv->status |= ALLOCATABLE_PV;
+
+		pv->pe_size = vg->extent_size;
+		pv->pe_alloc_count = 0;
+
+		pv->pe_start = 2048; /* FIXME? */
+
+		pe_count = (pv->size - pv->pe_start) / vg->extent_size;
+		if (pe_count > UINT32_MAX)
+			return_0;
+
+		pv->pe_count = (uint32_t)pe_count;
+
+		if (!alloc_pv_segment_whole_pv(vg->vgmem, pv))
+			return_0;
+
+		pvl_vg->pv = pv;
+		dm_list_add(&vg->cds, &pvl_vg->list);
+	}
+
+	return 1;
+}
+
 int lv_change_tag(struct logical_volume *lv, const char *tag, int add_tag)
 {
 	char *tag_new;
@@ -3775,6 +3845,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
 		    (!use_precommitted &&
 		     !(vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg)) {
+			log_debug("inconsistent vg_read %s from text read", vgname);
 			inconsistent = 1;
 			vg_fmtdata = NULL;
 			continue;
@@ -3814,6 +3885,11 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	}
 	fid->ref_count--;
 
+	if (correct_vg && !dm_list_empty(&correct_vg->cds)) {
+		log_debug("vg_read %s updating cds in lvmcache", vgname);
+		lvmcache_update_vg_cachedevs(correct_vg);
+	}
+
 	/* Ensure every PV in the VG was in the cache */
 	if (correct_vg) {
 		/*
@@ -3829,6 +3905,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		 */
 		if (!inconsistent &&
 		    dm_list_size(&correct_vg->pvs) > dm_list_size(pvids)) {
+
+			log_debug("vg_read %s mismatch pvs %d infos %d",
+				  vgname, dm_list_size(&correct_vg->pvs), dm_list_size(pvids));
+
 			dm_list_iterate_items(pvl, &correct_vg->pvs) {
 				if (!pvl->pv->dev) {
 					inconsistent_pvs = 1;
@@ -3845,6 +3925,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 				 */
 				if (!(info = lvmcache_info_from_pvid(pvl->pv->dev->pvid, pvl->pv->dev, 1)) ||
 				    !lvmcache_is_orphan(info)) {
+					log_debug("inconsistent vg_read %s bad lvmcache info %p for %s",
+						  vgname, info, dev_name(pvl->pv->dev));
 					inconsistent_pvs = 1;
 					break;
 				}
@@ -4055,6 +4137,8 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	lvmcache_update_vg(correct_vg, (correct_vg->status & PRECOMMITTED));
 
 	if (inconsistent) {
+		log_debug("inconsistent vg_read %s", vgname);
+
 		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
 		if (use_precommitted) {
 			log_error("Inconsistent pre-commit metadata copies "
@@ -4163,8 +4247,10 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		}
 	}
 
-	if (inconsistent_pvs)
+	if (inconsistent_pvs) {
+		log_debug("inconsistent pvs in vg_read %s", vgname);
 		*mdas_consistent = 0;
+	}
 
 	return correct_vg;
 }
@@ -5547,3 +5633,47 @@ int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
 
 	return 1;
 }
+
+/*
+ * dev is pmem if /sys/dev/block/<major>:<minor>/queue/dax is 1
+ */
+
+int set_cachedev_type(struct physical_volume *pv)
+{
+	FILE *fp;
+	struct device *dev = pv->dev;
+	char path[PATH_MAX];
+	char buffer[64];
+	int is_pmem = 0;
+
+	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/queue/dax",
+			dm_sysfs_dir(),
+			(int) MAJOR(dev->dev),
+			(int) MINOR(dev->dev)) < 0) {
+		log_warn("Sysfs path for %s dax is too long.", dev_name(dev));
+		return 0;
+	}
+
+	if (!(fp = fopen(path, "r")))
+		return 0;
+
+	if (!fgets(buffer, sizeof(buffer), fp)) {
+		log_warn("Failed to read %s.", path);
+		fclose(fp);
+		return 0;
+	} else if (sscanf(buffer, "%d", &is_pmem) != 1) {
+		log_warn("Failed to parse %s '%s'.", path, buffer);
+		fclose(fp);
+		return 0;
+	}
+
+	fclose(fp);
+
+	if (is_pmem) {
+		log_debug("cachedev %s is pmem", dev_name(dev));
+		dev->is_pmem = 1;
+	}
+
+	return 1;
+}
+

@@ -70,6 +70,7 @@ struct device {
 	int read_ahead;
 	int bcache_fd;
 	uint32_t flags;
+	uint32_t is_pmem:1;
 	unsigned size_seqno;
 	uint64_t size;
 	uint64_t end;
@@ -108,6 +109,13 @@ struct device_area {
 	struct device *dev;
 	uint64_t start;		/* Bytes */
 	uint64_t size;		/* Bytes */
+};
+
+struct cachedev {
+	struct dm_list list;
+	struct device *dev;
+	uint64_t device_size;   /* Bytes */
+	const char *vg_name;
 };
 
 /*

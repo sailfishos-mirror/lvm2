@@ -194,6 +194,13 @@ int label_write(struct device *dev, struct label *label)
 	lh->sector_xl = xlate64(label->sector);
 	lh->offset_xl = xlate32(sizeof(*lh));
 
+	/*
+	 * Set pv_header and pv_header_extension fields before
+	 * calculating the crc of the block to set in lh crc.
+	 * The crc covers data from just after the crc field
+	 * to the end of the sector.
+	 */
+
 	if (!(label->labeller->ops->write)(label, buf))
 		return_0;
 

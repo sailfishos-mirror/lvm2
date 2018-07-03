@@ -209,4 +209,8 @@ void lvmcache_drop_saved_vgid(const char *vgid);
 
 int dev_in_device_list(struct device *dev, struct dm_list *head);
 
+struct cachedev *lvmcache_cachedev_from_pvid(const struct id *pvid);
+void lvmcache_update_vg_cachedevs(struct volume_group *vg);
+void lvmcache_del_cachedev(struct cachedev *cd);
+
 #endif

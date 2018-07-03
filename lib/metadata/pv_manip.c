@@ -115,7 +115,8 @@ static struct pv_segment *_pv_split_segment(struct dm_pool *mem,
 
 	if (peg->lvseg) {
 		peg->pv->pe_alloc_count -= peg_new->len;
-		peg->lvseg->lv->vg->free_count += peg_new->len;
+		if (!pv->is_cachedev)
+			peg->lvseg->lv->vg->free_count += peg_new->len;
 	}
 
 	return peg_new;
@@ -184,7 +185,9 @@ struct pv_segment *assign_peg_to_lvseg(struct physical_volume *pv,
 	peg->lv_area = area_num;
 
 	peg->pv->pe_alloc_count += area_len;
-	peg->lvseg->lv->vg->free_count -= area_len;
+
+	if (!pv->is_cachedev)
+		peg->lvseg->lv->vg->free_count -= area_len;
 
 	return peg;
 }
@@ -194,6 +197,10 @@ int discard_pv_segment(struct pv_segment *peg, uint32_t discard_area_reduction)
 	uint64_t discard_offset_sectors;
 	uint64_t pe_start = peg->pv->pe_start;
 	char uuid[64] __attribute__((aligned(8)));
+
+	/* FIXME: pass in cmd as arg */
+	if (peg->pv->is_cachedev)
+		return 1;
 
 	if (!peg->lvseg) {
 		log_error("discard_pv_segment with unallocated segment: "
@@ -310,7 +317,8 @@ int release_pv_segment(struct pv_segment *peg, uint32_t area_reduction)
 
 	if (peg->lvseg->area_len == area_reduction) {
 		peg->pv->pe_alloc_count -= area_reduction;
-		peg->lvseg->lv->vg->free_count += area_reduction;
+		if (!peg->pv->is_cachedev)
+			peg->lvseg->lv->vg->free_count += area_reduction;
 
 		peg->lvseg = NULL;
 		peg->lv_area = 0;
@@ -514,8 +522,10 @@ static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg,
 
 	pv->pe_count = new_pe_count;
 
-	vg->extent_count -= (old_pe_count - new_pe_count);
-	vg->free_count -= (old_pe_count - new_pe_count);
+	if (!pv->is_cachedev) {
+		vg->extent_count -= (old_pe_count - new_pe_count);
+		vg->free_count -= (old_pe_count - new_pe_count);
+	}
 
 	return 1;
 }
@@ -542,8 +552,10 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
 
 	pv->pe_count = new_pe_count;
 
-	vg->extent_count += (new_pe_count - old_pe_count);
-	vg->free_count += (new_pe_count - old_pe_count);
+	if (!pv->is_cachedev) {
+		vg->extent_count += (new_pe_count - old_pe_count);
+		vg->free_count += (new_pe_count - old_pe_count);
+	}
 
 	return 1;
 }

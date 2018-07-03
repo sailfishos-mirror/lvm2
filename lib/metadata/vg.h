@@ -75,6 +75,9 @@ struct volume_group {
 	uint32_t pv_count;
 	struct dm_list pvs;
 
+	/* cache devices */
+	struct dm_list cds;
+
 	/*
 	 * List of physical volumes that were used in vgextend but do not carry
 	 * a PV label yet. They need to be pvcreate'd at vg_write time.

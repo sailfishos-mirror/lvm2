@@ -231,6 +231,12 @@ static int _read_pv(struct format_instance *fid,
 		return 0;
 	}
 
+	if (pv->status & CACHEDEV_PV) {
+		pv->is_cachedev = 1;
+		if (pv->dev)
+			set_cachedev_type(pv);
+	}
+
 	if (!pv->dev)
 		pv->status |= MISSING_PV;
 
@@ -310,9 +316,13 @@ static int _read_pv(struct format_instance *fid,
 	if (!alloc_pv_segment_whole_pv(mem, pv))
 		return_0;
 
-	vg->extent_count += pv->pe_count;
-	vg->free_count += pv->pe_count;
-	add_pvl_to_vgs(vg, pvl);
+	if (!pv->is_cachedev) {
+		vg->extent_count += pv->pe_count;
+		vg->free_count += pv->pe_count;
+		add_pvl_to_vgs(vg, pvl);
+	} else {
+		dm_list_add(&vg->cds, &pvl->list);
+	}
 
 	return 1;
 }

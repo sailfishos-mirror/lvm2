@@ -57,8 +57,8 @@ struct physical_volume {
 	unsigned long pe_align;
 	unsigned long pe_align_offset;
 
-        /* This is true whenever the represented PV has a label associated. */
-        uint64_t is_labelled:1;
+	uint64_t is_labelled:1; /* This is true whenever the represented PV has a label associated. */
+	uint64_t is_cachedev:1;
 
         /* NB. label_sector is valid whenever is_labelled is true */
 	uint64_t label_sector;

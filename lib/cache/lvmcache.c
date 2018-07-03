@@ -64,6 +64,7 @@ static struct dm_hash_table *_pvid_hash = NULL;
 static struct dm_hash_table *_vgid_hash = NULL;
 static struct dm_hash_table *_vgname_hash = NULL;
 static DM_LIST_INIT(_vginfos);
+static DM_LIST_INIT(_cachedevs);
 static DM_LIST_INIT(_found_duplicate_devs);
 static DM_LIST_INIT(_unused_duplicate_devs);
 static int _scanning_in_progress = 0;
@@ -1075,10 +1076,14 @@ static struct device *_device_from_pvid(const struct id *pvid, uint64_t *label_s
 struct device *lvmcache_device_from_pvid(struct cmd_context *cmd, const struct id *pvid, uint64_t *label_sector)
 {
 	struct device *dev;
+	struct cachedev *cd;
 
 	dev = _device_from_pvid(pvid, label_sector);
 	if (dev)
 		return dev;
+
+	if ((cd = lvmcache_cachedev_from_pvid(pvid)))
+		return cd->dev;
 
 	log_debug_devs("No device with uuid %s.", (const char *)pvid);
 	return NULL;
@@ -1561,6 +1566,41 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
 	}
 
 	return 1;
+}
+
+/*
+ * The CDs have no metadata, so the scan put the info structs for
+ * them into the orphan vg.  Using the VG metadata, those CD info
+ * structs can now be identified and removed, and cachedev entries
+ * created.
+ */
+void lvmcache_update_vg_cachedevs(struct volume_group *vg)
+{
+	struct pv_list *pvl;
+	struct lvmcache_info *info;
+	struct cachedev *cd;
+
+	dm_list_iterate_items(pvl, &vg->cds) {
+		if (!(info = lvmcache_info_from_pvid((const char *)&pvl->pv->id, pvl->pv->dev, 0))) {
+			log_debug("lvmcache missing info for cachedev pv %s", dev_name(pvl->pv->dev));
+			continue;
+		}
+
+		if (!lvmcache_cachedev_from_pvid(&pvl->pv->id)) {
+			if (!(cd = zalloc(sizeof(*cd)))) {
+				stack;
+				return;
+			}
+
+			log_debug("lvmcache add cachedev %s %s", dev_name(pvl->pv->dev), pvl->pv->dev->pvid);
+			cd->dev = pvl->pv->dev;
+			cd->device_size = info->device_size;
+			cd->vg_name = strdup(vg->name);
+			dm_list_add(&_cachedevs, &cd->list);
+		}
+
+		lvmcache_del(info);
+	}
 }
 
 int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted)
@@ -2278,5 +2318,24 @@ int lvmcache_scan_mismatch(struct cmd_context *cmd, const char *vgname, const ch
 		return vginfo->scan_summary_mismatch;
 
 	return 1;
+}
+
+struct cachedev *lvmcache_cachedev_from_pvid(const struct id *pvid)
+{
+	struct cachedev *cd;
+
+	dm_list_iterate_items(cd, &_cachedevs) {
+		if (!memcmp(&cd->dev->pvid, pvid, sizeof(struct id))) {
+			log_debug("lvmcache_cachedev_from_pvid %s %s", dev_name(cd->dev), cd->dev->pvid);
+			return cd;
+		}
+	}
+	return NULL;
+}
+
+void lvmcache_del_cachedev(struct cachedev *cd)
+{
+	log_debug("lvmcache del cachedev %s", dev_name(cd->dev));
+	dm_list_del(&cd->list);
 }
 

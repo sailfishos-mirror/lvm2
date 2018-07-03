@@ -102,6 +102,9 @@ arg(cache_long_ARG, '\0', "cache", 0, 0, 0,
     "#lvscan\n"
     "This option is no longer used.\n")
 
+arg(cachedev_ARG, '\0', "cachedev", 0, 0, 0,
+    "The specified device is a cache device, not a normal PV.\n")
+
 arg(cachemetadataformat_ARG, '\0', "cachemetadataformat", cachemetadataformat_VAL, 0, 0,
     "Specifies the cache metadata format used by cache target.\n")
 

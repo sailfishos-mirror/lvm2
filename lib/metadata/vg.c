@@ -54,6 +54,7 @@ struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
 	}
 
 	dm_list_init(&vg->pvs);
+	dm_list_init(&vg->cds);
 	dm_list_init(&vg->pv_write_list);
 	dm_list_init(&vg->lvs);
 	dm_list_init(&vg->historical_lvs);
@@ -664,6 +665,43 @@ char *vg_attr_dup(struct dm_pool *mem, const struct volume_group *vg)
 	return repstr;
 }
 
+static int _vgreduce_cachedev(struct cmd_context *cmd, struct volume_group *vg, struct physical_volume *pv)
+{
+	const char *name = pv_dev_name(pv);
+	struct pv_list *pvl;
+	struct cachedev *cd;
+
+	log_debug("vgreduce_cachedev VG %s PV %s", vg->name, name);
+
+	if (pv_pe_alloc_count(pv)) {
+		log_error("Physical volume \"%s\" still in use", name);
+		return 0;
+	}
+
+	if ((pvl = find_cd_in_vg(vg, name))) {
+		/* delete pv entry from vg->cds */
+		dm_list_del(&pvl->list);
+	}
+
+	if (!vg_write(vg) || !vg_commit(vg)) {
+		log_error("Removal of physical volume \"%s\" from \"%s\" failed", name, vg->name);
+		return 0;
+	}
+
+	if ((cd = lvmcache_cachedev_from_pvid(&pvl->pv->id))) {
+		/* remove ondisk PV header */
+		label_remove(cd->dev);
+		/* delete cd entry from cachedevs */
+		lvmcache_del_cachedev(cd);
+	}
+
+	backup(vg);
+
+	log_print_unless_silent("Removed \"%s\" from volume group \"%s\"", name, vg->name);
+
+	return 1;
+}
+
 int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
 			    struct physical_volume *pv, int commit)
 {
@@ -676,6 +714,9 @@ int vgreduce_single(struct cmd_context *cmd, struct volume_group *vg,
 		log_error(INTERNAL_ERROR "VG is NULL.");
 		return r;
 	}
+
+	if (pv->is_cachedev)
+		return _vgreduce_cachedev(cmd, vg, pv);
 
 	log_debug("vgreduce_single VG %s PV %s", vg->name, pv_dev_name(pv));
 

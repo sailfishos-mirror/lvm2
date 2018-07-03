@@ -15,6 +15,9 @@
 
 #include "tools.h"
 #include "lib/format_text/format-text.h"
+#include "lib/format_text/layout.h"
+#include "lib/mm/xlate.h"
+#include "lib/misc/crc.h"
 
 #include <sys/stat.h>
 #include <signal.h>
@@ -4155,6 +4158,7 @@ static int _process_duplicate_pvs(struct cmd_context *cmd,
 
 static int _process_pvs_in_vg(struct cmd_context *cmd,
 			      struct volume_group *vg,
+			      struct dm_list *pv_list,
 			      struct dm_list *all_devices,
 			      struct dm_list *arg_devices,
 			      struct dm_list *arg_tags,
@@ -4197,7 +4201,7 @@ static int _process_pvs_in_vg(struct cmd_context *cmd,
 	if (!is_orphan_vg(vg->name))
 		log_set_report_object_group_and_group_id(vg->name, vg_uuid);
 
-	dm_list_iterate_items(pvl, &vg->pvs) {
+	dm_list_iterate_items(pvl, pv_list) {
 		pv = pvl->pv;
 		pv_name = pv_dev_name(pv);
 		pv_uuid[0]='\0';
@@ -4360,11 +4364,20 @@ static int _process_pvs_in_vgs(struct cmd_context *cmd, uint32_t read_flags,
 		 * vg->pvs entries from devices list.
 		 */
 		
-		ret = _process_pvs_in_vg(cmd, vg, all_devices, arg_devices, arg_tags,
+		ret = _process_pvs_in_vg(cmd, vg, &vg->pvs, all_devices, arg_devices, arg_tags,
 					 process_all_pvs, process_all_devices, skip,
 					 handle, process_single_pv);
 		if (ret != ECMD_PROCESSED)
 			stack;
+
+		if (cmd->cname->flags & ENABLE_CACHE_DEVS) {
+			ret = _process_pvs_in_vg(cmd, vg, &vg->cds, all_devices, arg_devices, arg_tags,
+						 process_all_pvs, process_all_devices, skip,
+						 handle, process_single_pv);
+			if (ret != ECMD_PROCESSED)
+				stack;
+		}
+
 		report_log_ret_code(ret);
 		if (ret > ret_max)
 			ret_max = ret;
@@ -5035,6 +5048,7 @@ static int _pvcreate_check_single(struct cmd_context *cmd,
 		log_debug("Found pvcreate arg %s: pv is used in %s.", pd->name, vg->name);
 		pd->is_vg_pv = 1;
 		pd->vg_name = dm_pool_strdup(cmd->mem, vg->name);
+
 	} else if (vg && is_orphan_vg(vg->name)) {
 		if (is_used_pv(pv)) {
 			/* Device is used in an unknown VG. */
@@ -5047,6 +5061,12 @@ static int _pvcreate_check_single(struct cmd_context *cmd,
 		}
 
 		pp->orphan_vg_name = FMT_TEXT_ORPHAN_VG_NAME;
+
+	} else if (lvmcache_cachedev_from_pvid((const struct id *)pv->dev->pvid)) {
+		log_error("Cannot use cache device %s.", pd->name);
+		dm_list_move(&pp->arg_fail, &pd->list);
+		return 1;
+
 	} else {
 		log_debug("Found pvcreate arg %s: device is not a PV.", pd->name);
 		/* Device is not a PV. */
@@ -5210,6 +5230,7 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 	struct pvcreate_params *pp = (struct pvcreate_params *) handle->custom_handle;
 	struct pvcreate_device *pd;
 	struct pvcreate_prompt *prompt;
+	struct cachedev *cd;
 	int found = 0;
 
 	if (!pv->dev)
@@ -5235,12 +5256,13 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 	log_debug("Checking device %s for pvremove %.32s.",
 		  pv_dev_name(pv), pv->dev->pvid[0] ? pv->dev->pvid : "");
 
+	cd = lvmcache_cachedev_from_pvid((const struct id *)pv->dev->pvid);
 
 	/*
 	 * Is there a pv here already?
 	 * If not, this is an error unless you used -f.
 	 */
-	if (!lvmcache_has_dev_info(pv->dev)) {
+	if (!lvmcache_has_dev_info(pv->dev) && !cd) {
 		if (pp->force) {
 			dm_list_move(&pp->arg_process, &pd->list);
 			return 1;
@@ -5257,6 +5279,16 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 	if (pd->is_not_pv) {
 		/* Device is not a PV. */
 		log_debug("Found pvremove arg %s: device is not a PV.", pd->name);
+
+	} else if (cd) {
+		/* Device is a cachedev PV used in a VG. */
+		log_debug("Found pvremove arg %s: pv is cache device.", pd->name);
+		if (cd->vg_name) {
+			pd->is_vg_pv = 1;
+			pd->vg_name = strdup(cd->vg_name);
+		} else {
+			pd->is_used_unknown_pv = 1;
+		}
 
 	} else if (vg && !is_orphan_vg(vg->name)) {
 		/* Device is a PV used in a VG. */
@@ -5276,6 +5308,7 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 		}
 
 		pp->orphan_vg_name = FMT_TEXT_ORPHAN_VG_NAME;
+
 	} else {
 		/* FIXME: is it possible to reach here? */
 		log_debug("Found pvremove arg %s: device is not a PV.", pd->name);
@@ -5315,7 +5348,7 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 	if (pd->is_used_unknown_pv)
 		prompt->vg_name_unknown = 1;
 	else
-		prompt->vg_name = dm_pool_strdup(cmd->mem, vg->name);
+		prompt->vg_name = dm_pool_strdup(cmd->mem, pd->vg_name);
 	prompt->type |= PROMPT_PVREMOVE_PV_IN_VG;
 	dm_list_add(&pp->prompts, &prompt->list);
 
@@ -5323,6 +5356,85 @@ static int _pvremove_check_single(struct cmd_context *cmd,
 	dm_list_move(&pp->arg_process, &pd->list);
 
 	return 1;
+}
+
+static struct physical_volume *_cachedev_pv_create(struct cmd_context *cmd, struct device *dev)
+{
+	char buf[LABEL_SIZE];
+	struct physical_volume *pv;
+	struct label_header *lh;
+	struct pv_header *pvhdr;
+	struct pv_header_extension *pvext;
+	uint32_t pvhdr_len;
+	uint32_t crc;
+
+	if (!(pv = dm_pool_zalloc(cmd->mem, sizeof(*pv))))
+		return_NULL;
+
+	pv->dev = dev;
+	dm_list_init(&pv->tags);
+	dm_list_init(&pv->segments);
+
+	if (!id_create(&pv->id))
+		return_NULL;
+
+	if (!dev_get_size(dev, &pv->size)) {
+		log_error("%s: Couldn't get size.", dev_name(dev));
+		return NULL;
+	}
+
+	memset(buf, 0, LABEL_SIZE);
+
+	/*
+	 * Set label_header fields (except crc).
+	 * Set pv_header fields.
+	 * Set pv_header_extension fields.
+	 * Calculate crc.
+	 * Set label_header crc field.
+	 *
+	 * The label_header crc is calculated on data from just after the lh
+	 * crc field (starting with lh.offset) to the end of the label sector,
+	 * which includes the pv_header and pv_header_extension.  So, the
+	 * pv_header and pv_header_extenstion fields need to be set before the
+	 * lh crc is calculated and set in the lh.
+	 *
+	 * The pv_header needs to be followed by two empty disk_locn structs,
+	 * the first terminates the non-existant data areas list, and the
+	 * second terminates the non-existant metadata areas list.
+	 */
+
+	lh = (struct label_header *)buf;
+	strncpy((char *)lh->id, LABEL_ID, sizeof(lh->id));
+	lh->sector_xl = xlate64(DEFAULT_LABELSECTOR);
+	lh->offset_xl = xlate32(sizeof(struct label_header));
+	strncpy((char *)lh->type, LVM2_LABEL, sizeof(lh->type));
+
+	pvhdr = (struct pv_header *) ((char *)buf + sizeof(struct label_header));
+	pvhdr->device_size_xl = xlate64(pv->size);
+	memcpy(pvhdr->pv_uuid, &pv->id, sizeof(struct id));
+
+	/* Two empty disk_locn structs follow the struct pv_header. */
+	pvhdr_len = sizeof(struct pv_header) + (2 * sizeof(struct disk_locn));
+
+	pvext = (struct pv_header_extension *) ((char *)pvhdr + pvhdr_len);
+	pvext->version = xlate32(PV_HEADER_EXTENSION_VSN);
+	pvext->flags = xlate32(PV_EXT_USED);
+
+	crc = calc_crc(INITIAL_CRC,
+		       (uint8_t *)&lh->offset_xl,
+		       LABEL_SIZE - ((uint8_t *) &lh->offset_xl - (uint8_t *) lh));
+
+	lh->crc_xl = xlate32(crc);
+
+	if (!dev_write_bytes(dev, DEFAULT_LABELSECTOR << SECTOR_SHIFT, LABEL_SIZE, buf)) {
+		log_debug_devs("Failed to write label to %s", dev_name(dev));
+		return_NULL;
+	}
+
+	/* Should we add an entry to the cachdevs list as would happen if
+	   this device was scanned? */
+
+	return pv;
 }
 
 /*
@@ -5428,7 +5540,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
 	 * If it's added to arg_process but needs a prompt or force option, then
 	 * a corresponding prompt entry is added to pp->prompts.
 	 */
-	process_each_pv(cmd, 0, NULL, NULL, 1, PROCESS_SKIP_SCAN | PROCESS_SKIP_ORPHAN_LOCK,
+	process_each_pv(cmd, 0, NULL, NULL, 1, PROCESS_SKIP_SCAN | PROCESS_SKIP_ORPHAN_LOCK | ENABLE_CACHE_DEVS,
 			handle, pp->is_remove ? _pvremove_check_single : _pvcreate_check_single);
 
 	/*
@@ -5576,7 +5688,7 @@ int pvcreate_each_device(struct cmd_context *cmd,
 	 */
 	dm_list_splice(&pp->arg_confirm, &pp->arg_process);
 
-	process_each_pv(cmd, 0, NULL, NULL, 1, PROCESS_SKIP_SCAN | PROCESS_SKIP_ORPHAN_LOCK,
+	process_each_pv(cmd, 0, NULL, NULL, 1, PROCESS_SKIP_SCAN | PROCESS_SKIP_ORPHAN_LOCK | ENABLE_CACHE_DEVS,
 			handle, _pv_confirm_single);
 
 	dm_list_iterate_items(pd, &pp->arg_confirm)
@@ -5708,6 +5820,23 @@ do_command:
 		pv_name = pd->name;
 
 		label_scan_open_excl(pd->dev);
+
+		if (pp->cachedev) {
+			/*
+			 * cache devs do not hold VG metadata, here we write
+			 * the cachedev PV, and later vgextend will update the
+			 * VG metadata on the other PVs.
+			 */
+			if (!(pv = _cachedev_pv_create(cmd, pd->dev))) {
+				log_error("Failed to create cache device \"%s\".", pv_name);
+				dm_list_move(&pp->arg_fail, &pd->list);
+				continue;
+			}
+			pvl->pv = pv;
+			dm_list_add(&pp->pvs, &pvl->list);
+			log_print_unless_silent("Cache device \"%s\" successfully created.", pv_name);
+			continue;
+		}
 
 		log_debug("Creating a new PV on %s.", pv_name);
 

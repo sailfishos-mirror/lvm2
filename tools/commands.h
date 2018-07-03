@@ -145,7 +145,7 @@ xx(pvremove,
 
 xx(pvs,
    "Display information about physical volumes",
-   PERMITTED_READ_ONLY | ALL_VGS_IS_DEFAULT | ENABLE_ALL_DEVS | ENABLE_DUPLICATE_DEVS | LOCKD_VG_SH | CAN_USE_ONE_SCAN)
+   PERMITTED_READ_ONLY | ALL_VGS_IS_DEFAULT | ENABLE_ALL_DEVS | ENABLE_CACHE_DEVS | ENABLE_DUPLICATE_DEVS | LOCKD_VG_SH | CAN_USE_ONE_SCAN)
 
 xx(pvscan,
    "List all physical volumes",
@@ -216,7 +216,7 @@ xx(vgmknodes,
 
 xx(vgreduce,
    "Remove physical volume(s) from a volume group",
-   0)
+   ENABLE_CACHE_DEVS)
 
 xx(vgremove,
    "Remove volume group(s)",
