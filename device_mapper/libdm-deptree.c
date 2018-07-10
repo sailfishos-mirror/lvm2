@@ -38,6 +38,7 @@ enum {
 	SEG_SNAPSHOT_MERGE,
 	SEG_STRIPED,
 	SEG_ZERO,
+	SEG_WRITECACHE,
 	SEG_THIN_POOL,
 	SEG_THIN,
 	SEG_VDO,
@@ -77,6 +78,7 @@ static const struct {
 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
 	{ SEG_STRIPED, "striped" },
 	{ SEG_ZERO, "zero"},
+	{ SEG_WRITECACHE, "writecache"},
 	{ SEG_THIN_POOL, "thin-pool"},
 	{ SEG_THIN, "thin"},
 	{ SEG_VDO, "vdo" },
@@ -208,6 +210,9 @@ struct load_segment {
 	struct dm_tree_node *vdo_data;  /* VDO */
 	struct dm_vdo_target_params vdo_params; /* VDO */
 	const char *vdo_name;           /* VDO - device name is ALSO passed as table arg */
+
+	struct dm_tree_node *cachevol;	/* writecache */
+	int cachevol_pmem;
 };
 
 /* Per-device properties */
@@ -2597,6 +2602,27 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 	return 1;
 }
 
+static int _writecache_emit_segment_line(struct dm_task *dmt,
+				    struct load_segment *seg,
+				    char *params, size_t paramsize)
+{
+	int pos = 0;
+	char origin_dev[DM_FORMAT_DEV_BUFSIZE];
+	char cache_dev[DM_FORMAT_DEV_BUFSIZE];
+
+	if (!_build_dev_string(origin_dev, sizeof(origin_dev), seg->origin))
+		return_0;
+
+	if (!_build_dev_string(cache_dev, sizeof(cache_dev), seg->cachevol))
+		return_0;
+
+	EMIT_PARAMS(pos, "%s %s %s 4096 0",
+		    seg->cachevol_pmem ? "p" : "s",
+		    origin_dev, cache_dev);
+
+	return 1;
+}
+
 static int _thin_pool_emit_segment_line(struct dm_task *dmt,
 					struct load_segment *seg,
 					char *params, size_t paramsize)
@@ -2776,6 +2802,10 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 		if (!_cache_emit_segment_line(dmt, seg, params, paramsize))
 			return_0;
 		break;
+	case SEG_WRITECACHE:
+		if (!_writecache_emit_segment_line(dmt, seg, params, paramsize))
+			return_0;
+		break;
 	}
 
 	switch(seg->type) {
@@ -2787,6 +2817,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 	case SEG_THIN_POOL:
 	case SEG_THIN:
 	case SEG_CACHE:
+	case SEG_WRITECACHE:
 		break;
 	case SEG_CRYPT:
 	case SEG_LINEAR:
@@ -3563,6 +3594,38 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
 			seg->policy_argc++;
 		}
 	}
+
+	return 1;
+}
+
+int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
+				  uint64_t size,
+				  const char *origin_uuid,
+				  const char *cache_uuid,
+				  int pmem)
+{
+	struct load_segment *seg;
+
+	if (!(seg = _add_segment(node, SEG_WRITECACHE, size)))
+		return_0;
+
+	seg->cachevol_pmem = pmem;
+
+	if (!(seg->cachevol = dm_tree_find_node_by_uuid(node->dtree,
+							cache_uuid))) {
+		log_error("Missing writecache's cachevol uuid %s.", cache_uuid);
+		return 0;
+	}
+	if (!_link_tree_nodes(node, seg->cachevol))
+		return_0;
+
+	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree,
+						      origin_uuid))) {
+		log_error("Missing writecache's origin uuid %s.", origin_uuid);
+		return 0;
+	}
+	if (!_link_tree_nodes(node, seg->origin))
+		return_0;
 
 	return 1;
 }

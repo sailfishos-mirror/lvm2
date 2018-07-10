@@ -732,6 +732,17 @@ DESC: Poll LV to continue conversion (also see --startpoll)
 DESC: or waits till conversion/mirror syncing is finished
 FLAGS: SECONDARY_SYNTAX
 
+----
+
+lvconvert --cachevolattach LV LV_linear_striped
+OO: --type writecache
+ID: lvconvert_cachevol_attach
+DESC: Attach a cache volume to an LV.
+
+lvconvert --cachevoldetach LV LV_writecache
+ID: lvconvert_cachevol_detach
+DESC: Detach a cache volume from an LV.
+
 ---
 
 # --extents is not specified; it's an automatic alternative for --size
@@ -1240,6 +1251,13 @@ DESC: When LV is not a cache pool, convert the specified LV
 DESC: to type cache after creating a new cache pool LV to use
 DESC: (use lvconvert).
 FLAGS: SECONDARY_SYNTAX
+
+lvcreate --cachevol --size SizeMB VG
+OO: --type linear, OO_LVCREATE
+OP: PV ...
+IO: --mirrors 0, --stripes 1
+ID: lvcreate_cachevol
+DESC: Create a cache volume on cache devices.
 
 ---
 

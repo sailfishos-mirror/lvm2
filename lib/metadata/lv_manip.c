@@ -1387,6 +1387,11 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 		data_copies = seg->data_copies;
 	}
 
+	if (lv_is_cachevol(lv) && !dm_list_empty(&lv->segs_using_this_lv)) {
+		log_error("Cachevol LV must be detached before being removed.");
+		return 0;
+	}
+
 	if (lv_is_merging_origin(lv)) {
 		log_debug_metadata("Dropping snapshot merge of %s to removed origin %s.",
 				   find_snapshot(lv)->lv->name, lv->name);
@@ -1571,6 +1576,11 @@ int lv_refresh_suspend_resume(const struct logical_volume *lv)
 int lv_reduce(struct logical_volume *lv, uint32_t extents)
 {
 	struct lv_segment *seg = first_seg(lv);
+
+	if (lv_is_writecache(lv)) {
+		log_error("Remove not yet allowed on LVs with an attached cachevol LV.");
+		return 0;
+	}
 
 	/* Ensure stripe boundary extents on RAID LVs */
 	if (lv_is_raid(lv) && extents != lv->le_count)
@@ -5560,6 +5570,15 @@ int lv_resize(struct logical_volume *lv,
 	int activated = 0;
 	int ret = 0;
 	int status;
+
+	if (lv_is_writecache(lv)) {
+		log_error("Resize not yet allowed on LVs with an attached cachevol LV.");
+		return 0;
+	}
+	if (lv_is_cachevol(lv)) {
+		log_error("Resize not yet allowed on cachevol LVs.");
+		return 0;
+	}
 
 	if (!_lvresize_check(lv, lp))
 		return_0;

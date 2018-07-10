@@ -1366,6 +1366,8 @@ static int _init_segtypes(struct cmd_context *cmd)
 	if (!init_vdo_segtypes(cmd, &seglib))
 		return_0;
 #endif
+	if (!init_writecache_segtypes(cmd, &seglib))
+		return 0;
 
 #ifdef HAVE_LIBDL
 	/* Load any formats in shared libs unless static */

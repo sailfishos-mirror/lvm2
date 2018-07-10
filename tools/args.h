@@ -105,6 +105,15 @@ arg(cache_long_ARG, '\0', "cache", 0, 0, 0,
 arg(cachedev_ARG, '\0', "cachedev", 0, 0, 0,
     "The specified device is a cache device, not a normal PV.\n")
 
+arg(cachevol_ARG, '\0', "cachevol", 0, 0, 0,
+    "Operate on cache volumes and cache devices.\n")
+
+arg(cachevolattach_ARG, '\0', "cachevolattach", lv_VAL, 0, 0,
+    "Attach a cache volume to an LV to perform caching of the LV.\n")
+
+arg(cachevoldetach_ARG, '\0', "cachevoldetach", lv_VAL, 0, 0,
+    "Detach a cache volume from an LV.\n")
+
 arg(cachemetadataformat_ARG, '\0', "cachemetadataformat", cachemetadataformat_VAL, 0, 0,
     "Specifies the cache metadata format used by cache target.\n")
 

@@ -213,6 +213,10 @@ static int _get_segment_status_from_target_params(const char *target_name,
 		if (!parse_vdo_pool_status(seg_status->mem, seg->lv, params, &seg_status->vdo_pool))
 			return_0;
 		seg_status->type = SEG_STATUS_VDO_POOL;
+	} else if (segtype_is_writecache(segtype)) {
+		if (!dm_get_status_writecache(seg_status->mem, params, &(seg_status->writecache)))
+			return_0;
+		seg_status->type = SEG_STATUS_WRITECACHE;
 	} else
 		/*
 		 * TODO: Add support for other segment types too!
@@ -2879,6 +2883,10 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
 	if (seg->metadata_lv &&
 	    !_add_new_lv_to_dtree(dm, dtree, seg->metadata_lv, laopts, NULL))
 		return_0;
+
+	if (seg->cachevol &&
+	    !_add_new_lv_to_dtree(dm, dtree, seg->cachevol, laopts, NULL))
+			return_0;
 
 	/* Add pool layer */
 	if (seg->pool_lv && !laopts->origin_only &&

@@ -378,6 +378,16 @@ struct dm_status_cache {
 int dm_get_status_cache(struct dm_pool *mem, const char *params,
 			struct dm_status_cache **status);
 
+struct dm_status_writecache {
+	uint32_t error;
+	uint64_t total_blocks;
+	uint64_t free_blocks;
+	uint64_t writeback_blocks;
+};
+
+int dm_get_status_writecache(struct dm_pool *mem, const char *params,
+                             struct dm_status_writecache **status);
+
 /*
  * Parse params from STATUS call for snapshot target
  *
@@ -913,6 +923,13 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
 				  const char *policy_name,
 				  const struct dm_config_node *policy_settings,
 				  uint32_t data_block_size);
+
+int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
+				uint64_t size,
+				const char *origin_uuid,
+				const char *cache_uuid,
+				int pmem);
+
 
 /*
  * VDO target

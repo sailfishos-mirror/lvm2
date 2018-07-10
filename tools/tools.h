@@ -269,6 +269,8 @@ int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_to_vdopool_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_to_vdopool_param_cmd(struct cmd_context *cmd, int argc, char **argv);
 
+int lvconvert_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv);
+
 int pvscan_display_cmd(struct cmd_context *cmd, int argc, char **argv);
 int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
 

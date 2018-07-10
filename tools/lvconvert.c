@@ -16,6 +16,7 @@
 
 #include "lib/lvmpolld/polldaemon.h"
 #include "lib/metadata/lv_alloc.h"
+#include "lib/metadata/metadata.h"
 #include "lvconvert_poll.h"
 
 #define MAX_PDATA_ARGS	10	/* Max number of accepted args for d-m-p-d tools */
@@ -4856,6 +4857,266 @@ int lvconvert_to_vdopool_param_cmd(struct cmd_context *cmd, int argc, char **arg
 
 	return process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
 			       NULL, NULL, &_lvconvert_to_vdopool_single);
+}
+
+static int _cachevol_zero(struct cmd_context *cmd,
+			 struct logical_volume *lv)
+{
+	struct device *dev;
+	char name[PATH_MAX];
+	int ret = 0;
+
+	if (!activate_lv(cmd, lv)) {
+		log_error("Failed to activate LV %s for zeroing.", lv->name);
+		return 0;
+	}
+
+	sync_local_dev_names(cmd);
+
+	if (dm_snprintf(name, sizeof(name), "%s%s/%s",
+			cmd->dev_dir, lv->vg->name, lv->name) < 0) {
+		log_error("Name too long - device not cleared (%s)", lv->name);
+		goto out;
+	}
+
+	if (!(dev = dev_cache_get(cmd, name, NULL))) {
+		log_error("%s: not found: device not zeroed", name);
+		goto out;
+	}
+
+	if (!label_scan_open(dev)) {
+		log_error("Failed to open %s/%s for zeroing.", lv->vg->name, lv->name);
+		goto out;
+	}
+
+	if (!dev_write_zeros(dev, UINT64_C(0), (size_t) 1 << SECTOR_SHIFT))
+		goto_out;
+
+	label_scan_invalidate(dev);
+
+	ret = 1;
+out:
+	if (!deactivate_lv(cmd, lv)) {
+		log_error("Failed to deactivate LV %s for zeroing.", lv->name);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
+					    struct logical_volume *lv,
+					    struct logical_volume *cv)
+{
+	const struct segment_type *segtype;
+	struct lv_segment *seg;
+
+	/* TODO: verify type/properties of cv */
+
+	if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_WRITECACHE)))
+		return_NULL;
+
+	if (!insert_layer_for_lv(cmd, lv, WRITECACHE, "_wcorig"))
+		return_NULL;
+
+	lv_set_hidden(cv);
+
+	seg = first_seg(lv);
+	seg->segtype = segtype;
+
+	seg->cachevol = cv;
+
+	add_seg_to_segs_using_this_lv(cv, seg);
+
+	return lv;
+}
+
+static int _lvconvert_cachevol_attach_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct logical_volume *new_lv;
+	struct logical_volume *cv;
+	const char *cvname;
+
+	cvname = arg_str_value(cmd, cachevolattach_ARG, "");
+
+	if (!(cv = find_lv(lv->vg, cvname))) {
+		log_error("Cache volume %s not found.", cvname);
+		goto bad;
+	}
+
+	if (!lv_is_cachevol(cv)) {
+		log_error("LV %s is not a cache volume.", cvname);
+		goto bad;
+	}
+
+	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
+		log_error("LV must be inactive to attach a cachevol.");
+		return 0;
+	}
+
+	/* CV shouldn't generally be active by itself, but just in case. */
+	if (lv_info(cmd, cv, 1, NULL, 0, 0)) {
+		log_error("cachevol must be inactive to attach.");
+		return 0;
+	}
+
+	if (!_cachevol_zero(cmd, cv)) {
+		log_error("cachevol %s could not be zeroed.", cv->name);
+		return 0;
+	}
+
+	/* If LV is inactive here, ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		goto_bad;
+
+	if (!archive(lv->vg))
+		goto_bad;
+
+	/* Changes the vg struct to match the desired state. */
+
+	if (!(new_lv = _lv_writecache_create(cmd, lv, cv)))
+		goto_bad;
+
+	/*
+	 * vg_write(), suspend_lv(), vg_commit(), resume_lv(),
+	 * where the old LV is suspended and the new LV is resumed.
+	 */
+
+	if (!lv_update_and_reload(new_lv))
+		goto_bad;
+
+	log_print_unless_silent("Logical volume %s now has write cache.",
+				display_lvname(new_lv));
+	return ECMD_PROCESSED;
+bad:
+	return ECMD_FAILED;
+
+}
+
+static int lv_cachevol_detach(struct cmd_context *cmd,
+			      struct logical_volume *lv)
+{
+	struct lv_segment *seg = first_seg(lv);
+	struct logical_volume *origin;
+
+	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
+		log_error("LV must be inactive to detach writecache.");
+		return 0;
+	}
+
+	/* LV is inactive */
+
+	if (!seg_is_writecache(seg)) {
+		log_error("LV %s segment is not writecache", lv->name);
+		return 0;
+	}
+
+	if (!seg->cachevol) {
+		log_error("LV %s writecache segment has no cachevol", lv->name);
+		return 0;
+	}
+
+	if (!(origin = seg_lv(seg, 0))) {
+		log_error("LV %s writecache segment has no origin", lv->name);
+		return 0;
+	}
+
+	if (!remove_seg_from_segs_using_this_lv(seg->cachevol, seg))
+		return_0;
+
+	lv_set_visible(seg->cachevol);
+
+	lv->status &= ~WRITECACHE;
+	seg->cachevol = NULL;
+
+	if (!remove_layer_from_lv(lv, origin))
+		return_0;
+
+	if (!lv_remove(origin))
+		return_0;
+
+	return 1;
+}
+
+static int _lvconvert_cachevol_detach_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct logical_volume *cv;
+	const char *cvname;
+
+	cvname = arg_str_value(cmd, cachevoldetach_ARG, "");
+
+	if (!lv_is_writecache(lv)) {
+		log_error("LV %s does not have an attached cachevol.", lv->name);
+		goto bad;
+	}
+
+	if (!(cv = find_lv(lv->vg, cvname))) {
+		log_error("Cache volume %s not found.", cvname);
+		goto bad;
+	}
+
+	if (!lv_is_cachevol(cv)) {
+		log_error("LV %s is not a cache volume.", cvname);
+		goto bad;
+	}
+
+	if (first_seg(lv)->cachevol != cv) {
+		log_error("LV %s cachevol does not match specified %s.", lv->name, cvname);
+		goto bad;
+	}
+
+	/* If LV is inactive here, ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		goto_bad;
+
+	if (!archive(lv->vg))
+		goto_bad;
+
+	if (!lv_cachevol_detach(cmd, lv))
+		return_0;
+
+	if (!vg_write(lv->vg) || !vg_commit(lv->vg))
+		return_0;
+
+	backup(lv->vg);
+
+	log_print_unless_silent("Logical volume %s write cache has been removed.",
+				display_lvname(lv));
+	return ECMD_PROCESSED;
+bad:
+	return ECMD_FAILED;
+
+}
+
+int lvconvert_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	struct lvconvert_result lr = { 0 };
+	int attach = 0;
+	int ret;
+
+	if (cmd->command->command_enum == lvconvert_cachevol_attach_CMD)
+		attach = 1;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lr;
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      attach ? &_lvconvert_cachevol_attach_single : &_lvconvert_cachevol_detach_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
 }
 
 /*

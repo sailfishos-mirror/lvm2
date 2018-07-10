@@ -93,7 +93,6 @@
 #define VIRTUAL_ORIGIN		UINT64_C(0x0000000008000000)	/* LV - internal use only */
 
 #define MERGING			UINT64_C(0x0000000010000000)	/* LV SEG */
-#define CACHEVOL		UINT64_C(0x0000000020000000)	/* LV */
 
 #define UNLABELLED_PV		UINT64_C(0x0000000080000000)	/* PV -this PV had no label written yet */
 
@@ -152,6 +151,8 @@
 #define LV_VDO_POOL		UINT64_C(0x0000000040000000)    /* LV - Internal user only */
 #define LV_VDO_POOL_DATA	UINT64_C(0x8000000000000000)    /* LV - Internal user only */
 
+#define CACHEVOL		UINT64_C(0x0000000000000010)	/* LV - same bit as CACHEDEV pv flag */
+#define WRITECACHE		UINT64_C(0x0000000080000000)    /* LV - same bit as UNLABELLED_PV pv flag */
 
 /* Format features flags */
 #define FMT_SEGMENTS		0x00000001U	/* Arbitrary segment params? */
@@ -256,6 +257,7 @@
 #define lv_is_pool_metadata(lv)		(((lv)->status & (CACHE_POOL_METADATA | THIN_POOL_METADATA)) ? 1 : 0)
 #define lv_is_pool_metadata_spare(lv)	(((lv)->status & POOL_METADATA_SPARE) ? 1 : 0)
 #define lv_is_lockd_sanlock_lv(lv)	(((lv)->status & LOCKD_SANLOCK_LV) ? 1 : 0)
+#define lv_is_writecache(lv)	(((lv)->status & WRITECACHE) ? 1 : 0)
 
 #define lv_is_vdo(lv)		(((lv)->status & LV_VDO) ? 1 : 0)
 #define lv_is_vdo_pool(lv)	(((lv)->status & LV_VDO_POOL) ? 1 : 0)
@@ -505,6 +507,8 @@ struct lv_segment {
 	struct dm_vdo_target_params vdo_params;	/* For VDO-pool */
 	uint32_t vdo_pool_header_size;		/* For VDO-pool */
 	uint32_t vdo_pool_virtual_extents;	/* For VDO-pool */
+
+	struct logical_volume *cachevol;	/* For writecache */
 };
 
 #define seg_type(seg, s)	(seg)->areas[(s)].type
