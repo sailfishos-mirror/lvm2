@@ -188,6 +188,7 @@ int pvcreate_each_device(struct cmd_context *cmd, struct processing_handle *hand
  */
 struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int argc,
 			    char **argv, int allocatable_only);
+struct dm_list *create_cd_list(struct dm_pool *mem, struct volume_group *vg, int argc, char **argv);
 
 struct dm_list *clone_pv_list(struct dm_pool *mem, struct dm_list *pvs);
 

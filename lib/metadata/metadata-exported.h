@@ -93,6 +93,7 @@
 #define VIRTUAL_ORIGIN		UINT64_C(0x0000000008000000)	/* LV - internal use only */
 
 #define MERGING			UINT64_C(0x0000000010000000)	/* LV SEG */
+#define CACHEVOL		UINT64_C(0x0000000020000000)	/* LV */
 
 #define UNLABELLED_PV		UINT64_C(0x0000000080000000)	/* PV -this PV had no label written yet */
 
@@ -262,6 +263,8 @@
 #define lv_is_vdo_type(lv)	(((lv)->status & (LV_VDO | LV_VDO_POOL | LV_VDO_POOL_DATA)) ? 1 : 0)
 
 #define lv_is_removed(lv)	(((lv)->status & LV_REMOVED) ? 1 : 0)
+
+#define lv_is_cachevol(lv)	(((lv)->status & CACHEVOL) ? 1 : 0)
 
 /* Recognize component LV (matching lib/misc/lvm-string.c _lvname_has_reserved_component_string()) */
 #define lv_is_component(lv) (lv_is_cache_origin(lv) || ((lv)->status & (\
@@ -924,6 +927,7 @@ struct lvcreate_params {
 	int thin_chunk_size_calc_policy;
 	unsigned suppress_zero_warn : 1;
 	unsigned needs_lockd_init : 1;
+	unsigned cachevol: 1;
 
 	const char *vg_name; /* only-used when VG is not yet opened (in /tools) */
 	const char *lv_name; /* all */
@@ -1020,6 +1024,8 @@ struct pv_list *find_pv_in_vg(const struct volume_group *vg,
 			      const char *pv_name);
 struct pv_list *find_pv_in_vg_by_uuid(const struct volume_group *vg,
 				      const struct id *id);
+struct pv_list *find_cd_in_vg(const struct volume_group *vg,
+                               const char *pv_name);
 
 /* Find an LV within a given VG */
 struct lv_list *find_lv_in_vg(const struct volume_group *vg,
@@ -1343,6 +1349,6 @@ int vg_strip_outdated_historical_lvs(struct volume_group *vg);
 
 int set_cachedev_type(struct physical_volume *pv);
 
-int set_cachevol_dev_type(struct logical_volume *lv);
+int set_cachevol_type(struct logical_volume *lv);
 
 #endif

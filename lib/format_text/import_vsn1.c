@@ -994,6 +994,7 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 	const char *str, *format_str, *system_id;
 	struct volume_group *vg;
 	struct dm_hash_table *pv_hash = NULL, *lv_hash = NULL;
+	struct lv_list *lvl;
 	uint64_t vgstatus;
 
 	/* skip any top-level values */
@@ -1186,6 +1187,11 @@ static struct volume_group *_read_vg(struct format_instance *fid,
 		log_error("Failed to fixup mirror pointers after import for "
 			  "volume group %s.", vg->name);
 		goto bad;
+	}
+
+	dm_list_iterate_items(lvl, &vg->lvs) {
+		if (lv_is_cachevol(lvl->lv))
+			set_cachevol_type(lvl->lv);
 	}
 
 	dm_hash_destroy(pv_hash);

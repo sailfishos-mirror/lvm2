@@ -632,15 +632,22 @@ static int _create_pv_entry(struct dm_pool *mem, struct pv_list *pvl,
 	return 1;
 }
 
-struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int argc,
-			    char **argv, int allocatable_only)
+static struct dm_list *_create_pv_list(struct dm_pool *mem, struct volume_group *vg,
+				       int argc, char **argv,
+				       int allocatable_only, int cachedev)
 {
 	struct dm_list *r;
+	struct dm_list *pvlist;
 	struct pv_list *pvl;
 	struct dm_list tagsl, arg_pvnames;
 	char *pvname = NULL;
 	char *colon, *at_sign, *tagname;
 	int i;
+
+	if (cachedev)
+		pvlist = &vg->cds;
+	else
+		pvlist = &vg->pvs;
 
 	/* Build up list of PVs */
 	if (!(r = dm_pool_alloc(mem, sizeof(*r)))) {
@@ -661,7 +668,7 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 				log_error("Skipping invalid tag %s.", tagname);
 				continue;
 			}
-			dm_list_iterate_items(pvl, &vg->pvs) {
+			dm_list_iterate_items(pvl, pvlist) {
 				if (str_list_match_item(&pvl->pv->tags,
 							tagname)) {
 					if (!_create_pv_entry(mem, pvl, NULL,
@@ -681,7 +688,12 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 			return NULL;
 		}
 
-		if (!(pvl = find_pv_in_vg(vg, pvname))) {
+		if (cachedev)
+			pvl = find_cd_in_vg(vg, pvname);
+		else
+			pvl = find_pv_in_vg(vg, pvname);
+
+		if (!pvl) {
 			log_error("Physical Volume \"%s\" not found in "
 				  "Volume Group \"%s\".", pvname, vg->name);
 			return NULL;
@@ -694,6 +706,17 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 		log_error("No specified PVs have space available.");
 
 	return dm_list_empty(r) ? NULL : r;
+}
+
+struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int argc,
+			    char **argv, int allocatable_only)
+{
+	return _create_pv_list(mem, vg, argc, argv, allocatable_only, 0);
+}
+
+struct dm_list *create_cd_list(struct dm_pool *mem, struct volume_group *vg, int argc, char **argv)
+{
+	return _create_pv_list(mem, vg, argc, argv, 0, 1);
 }
 
 struct dm_list *clone_pv_list(struct dm_pool *mem, struct dm_list *pvsl)

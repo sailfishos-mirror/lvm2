@@ -1770,3 +1770,119 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 	destroy_processing_handle(cmd, handle);
 	return ret;
 }
+
+static int _lvcreate_cachevol_single(struct cmd_context *cmd, const char *vg_name,
+				     struct volume_group *vg, struct processing_handle *handle)
+{
+	struct processing_params *pp = (struct processing_params *) handle->custom_handle;
+	struct lvcreate_params *lp = pp->lp;
+	struct lvcreate_cmdline_params *lcp = pp->lcp;
+	struct logical_volume *lv;
+	struct dm_list *use_pvh;
+	int ret = ECMD_FAILED;
+
+	if (arg_is_set(cmd, extents_ARG))
+		lp->extents = arg_uint_value(cmd, extents_ARG, 0);
+	else if (arg_is_set(cmd, size_ARG)) {
+		lcp->size = arg_uint64_value(cmd, size_ARG, UINT64_C(0));
+		lp->extents = extents_from_size(cmd, lcp->size, vg->extent_size);
+	}
+
+	if (!lp->extents) {
+		log_error("The size of the LV is zero extents.");
+		goto out;
+	}
+
+	lp->stripes = 1;
+
+	if (!_check_zero_parameters(cmd, lp))
+		return_0;
+
+	/*
+	 * cachevols can be allocated from PVs by specifying the PV device
+	 * name(s).  Otherwise, cachevols are only allocated from CDs.
+	 */
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional CDs. */
+		if (!(use_pvh = create_cd_list(cmd->mem, vg, cmd->position_argc - 1, cmd->position_argv + 1))) {
+			if (!(use_pvh = create_pv_list(cmd->mem, vg, cmd->position_argc - 1, cmd->position_argv + 1, 1)))
+				return_ECMD_FAILED;
+		}
+		lcp->pv_count = cmd->position_argc - 1;
+	} else
+		use_pvh = &vg->cds;
+
+	lp->pvh = use_pvh;
+
+	if (dm_list_empty(lp->pvh)) {
+		log_error("No cache devices found to create a cache volume.");
+		log_error("Use vgextend --cachedev VG <cache devices>.");
+		goto out;
+	}
+
+	lp->cachevol = 1; /* Tells lvcreate to set lv status flag CACHEVOL. */
+
+	if (!(lv = lv_create_single(vg, lp)))
+		goto_out;
+
+	if (!set_cachevol_type(lv))
+		goto_out;
+
+	ret = ECMD_PROCESSED;
+out:
+	return ret;
+}
+
+int lvcreate_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle = NULL;
+	struct processing_params pp;
+	struct lvcreate_params lp = {
+		.major = -1,
+		.minor = -1,
+	};
+	struct lvcreate_cmdline_params lcp = { 0 };
+	const char *vg_name;
+	int ret;
+
+	vg_name = skip_dev_dir(cmd, argv[0], NULL);
+	argc--;
+	argv++;
+
+	dm_list_init(&lp.tags);
+	lp.target_attr = ~0;
+	lp.yes = arg_count(cmd, yes_ARG);
+	lp.force = (force_t) arg_count(cmd, force_ARG);
+	lp.segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED);
+	lp.alloc = ALLOC_CONTIGUOUS;
+	lp.activate = CHANGE_AN;
+	lp.permission = LVM_READ | LVM_WRITE;
+
+	lp.lv_name = arg_str_value(cmd, name_ARG, NULL);
+	if (!validate_restricted_lvname_param(cmd, &lp.vg_name, &lp.lv_name))
+		return_0;
+
+	pp.lp = &lp;
+	pp.lcp = &lcp;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &pp;
+
+	/* eventually set this in commands.h when all lvcreates use it */
+	cmd->cname->flags |= GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_vg(cmd, 0, NULL, vg_name, NULL, READ_FOR_UPDATE, 0,
+			      handle, &_lvcreate_cachevol_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}

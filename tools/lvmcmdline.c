@@ -149,6 +149,8 @@ static const struct command_function _command_functions[CMD_COUNT] = {
 
 	{ pvscan_display_CMD, pvscan_display_cmd },
 	{ pvscan_cache_CMD, pvscan_cache_cmd },
+
+	{ lvcreate_cachevol_CMD, lvcreate_cachevol_cmd },
 };
 
 

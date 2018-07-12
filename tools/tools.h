@@ -272,4 +272,6 @@ int lvconvert_to_vdopool_param_cmd(struct cmd_context *cmd, int argc, char **arg
 int pvscan_display_cmd(struct cmd_context *cmd, int argc, char **argv);
 int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
 
+int lvcreate_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv);
+
 #endif

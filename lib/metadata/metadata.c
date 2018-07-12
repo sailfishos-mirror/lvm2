@@ -1589,6 +1589,22 @@ struct pv_list *find_pv_in_vg(const struct volume_group *vg,
 	return NULL;
 }
 
+struct pv_list *find_cd_in_vg(const struct volume_group *vg,
+			       const char *pv_name)
+{
+	struct pv_list *pvl;
+	struct device *dev = dev_cache_get(vg->cmd, pv_name, vg->cmd->filter);
+
+	if (!dev)
+		return NULL;
+
+	dm_list_iterate_items(pvl, &vg->cds)
+		if (pvl->pv->dev == dev)
+			return pvl;
+
+	return NULL;
+}
+
 struct pv_list *find_pv_in_pv_list(const struct dm_list *pl,
 				   const struct physical_volume *pv)
 {
@@ -2146,6 +2162,10 @@ static int _lv_validate_references_single(struct logical_volume *lv, void *data)
 	struct physical_volume *pv;
 	unsigned s;
 	int r = 1;
+
+	/* FIXME: check vg->cds */
+	if (lv_is_cachevol(lv))
+		return 1;
 
 	if (lv != dm_hash_lookup_binary(vhash->lvid, &lv->lvid.id[1],
 					sizeof(lv->lvid.id[1]))) {
@@ -5673,6 +5693,38 @@ int set_cachedev_type(struct physical_volume *pv)
 		log_debug("cachedev %s is pmem", dev_name(dev));
 		dev->is_pmem = 1;
 	}
+
+	return 1;
+}
+
+int set_cachevol_type(struct logical_volume *lv)
+{
+	struct lv_segment *seg;
+	struct physical_volume *pv;
+	uint32_t s;
+	int pmem_devs = 0, other_devs = 0;
+
+	dm_list_iterate_items(seg, &lv->segments) {
+		for (s = 0; s < seg->area_count; s++) {
+			pv = seg_pv(seg, s);
+
+			if (pv->dev->is_pmem) {
+				log_debug("cachevol %s dev %s is pmem.", lv->name, dev_name(pv->dev));
+				pmem_devs++;
+			} else {
+				log_debug("cachevol %s dev %s not pmem.", lv->name, dev_name(pv->dev));
+				other_devs++;
+			}
+		}
+	}
+
+	if (pmem_devs && other_devs) {
+		log_error("Invalid mix of cache device types.");
+		return 0;
+	}
+
+	if (pmem_devs)
+		lv->cachevol_pmem = 1;
 
 	return 1;
 }

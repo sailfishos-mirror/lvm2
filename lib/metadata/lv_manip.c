@@ -7760,6 +7760,9 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		log_debug_metadata("Setting read ahead sectors %u.", lv->read_ahead);
 	}
 
+	if (lp->cachevol)
+		lv->status |= CACHEVOL;
+
 	if (!segtype_is_pool(create_segtype) &&
 	    !segtype_is_vdo_pool(create_segtype) &&
 	    lp->minor >= 0) {
