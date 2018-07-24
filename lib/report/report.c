@@ -3765,6 +3765,37 @@ static int _lvhistorical_disp(struct dm_report *rh, struct dm_pool *mem,
 	return _binary_disp(rh, mem, field, lv_is_historical(lv), "historical", private);
 }
 
+static int _do_cachevol_disp(struct dm_report *rh, struct dm_pool *mem,
+			   struct dm_report_field *field,
+			   const void *data, void *private,
+			   int uuid)
+{
+	const struct logical_volume *lv = (const struct logical_volume *) data;
+	struct logical_volume *cachevol_lv = lv_cachevol_lv(lv);
+
+	if (!cachevol_lv)
+		return _field_set_value(field, "", NULL);
+
+	if (uuid)
+		return _uuid_disp(rh, mem, field, &cachevol_lv->lvid.id[1], private);
+
+	return _lvname_disp(rh, mem, field, cachevol_lv, private);
+}
+
+static int _cachevol_disp(struct dm_report *rh, struct dm_pool *mem,
+			    struct dm_report_field *field,
+			    const void *data, void *private)
+{
+	return _do_cachevol_disp(rh, mem, field, data, private, 0);
+}
+
+static int _cachevoluuid_disp(struct dm_report *rh, struct dm_pool *mem,
+			      struct dm_report_field *field,
+			      const void *data, void *private)
+{
+	return _do_cachevol_disp(rh, mem, field, data, private, 1);
+}
+
 /*
  * Macro to generate '_cache_<cache_status_field_name>_disp' reporting function.
  * The 'cache_status_field_name' is field name from struct dm_cache_status.

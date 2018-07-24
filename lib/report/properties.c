@@ -388,6 +388,10 @@ GET_LV_STR_PROPERTY_FN(lv_profile, lv_profile_dup(lv->vg->vgmem, lv))
 #define _lv_profile_set prop_not_implemented_set
 GET_LV_STR_PROPERTY_FN(lv_lockargs, lv_lock_args_dup(lv->vg->vgmem, lv))
 #define _lv_lockargs_set prop_not_implemented_set
+GET_LV_STR_PROPERTY_FN(cachevol, lv_cachevol_dup(lv->vg->vgmem, lv))
+#define _cachevol_set prop_not_implemented_set
+GET_LV_STR_PROPERTY_FN(cachevol_uuid, lv_cachevol_uuid_dup(lv->vg->vgmem, lv))
+#define _cachevol_uuid_set prop_not_implemented_set
 
 /* VG */
 GET_VG_STR_PROPERTY_FN(vg_fmt, vg_fmt_dup(vg))

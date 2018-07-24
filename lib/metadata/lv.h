@@ -117,6 +117,7 @@ struct logical_volume *lv_mirror_log(const struct logical_volume *lv);
 struct logical_volume *lv_data(const struct logical_volume *lv);
 struct logical_volume *lv_metadata_lv(const struct logical_volume *lv);
 struct logical_volume *lv_pool_lv(const struct logical_volume *lv);
+struct logical_volume *lv_cachevol_lv(const struct logical_volume *lv);
 
 /* LV properties */
 uint64_t lv_size(const struct logical_volume *lv);
@@ -194,6 +195,8 @@ char *lv_profile_dup(struct dm_pool *mem, const struct logical_volume *lv);
 char *lv_lock_args_dup(struct dm_pool *mem, const struct logical_volume *lv);
 char *lvseg_kernel_discards_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_with_info_and_seg_status *lvdm);
 char *lv_time_dup(struct dm_pool *mem, const struct logical_volume *lv, int iso_mode);
+char *lv_cachevol_dup(struct dm_pool *mem, const struct logical_volume *lv);
+char *lv_cachevol_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv);
 
 typedef enum {
 	PERCENT_GET_DATA = 0,

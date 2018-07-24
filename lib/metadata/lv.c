@@ -701,6 +701,37 @@ char *lv_mirror_log_uuid_dup(struct dm_pool *mem, const struct logical_volume *l
 	return _do_lv_mirror_log_dup(mem, lv, 1);
 }
 
+struct logical_volume *lv_cachevol_lv(const struct logical_volume *lv)
+{
+	if (lv_is_writecache(lv))
+		return first_seg(lv)->cachevol;
+	return NULL;
+}
+
+static char *_do_lv_cachevol_dup(struct dm_pool *mem, const struct logical_volume *lv,
+				    int uuid)
+{
+	struct logical_volume *cachevol_lv = lv_cachevol_lv(lv);
+
+	if (!cachevol_lv)
+		return NULL;
+
+	if (uuid)
+		return lv_uuid_dup(mem, cachevol_lv);
+
+	return lv_name_dup(mem, cachevol_lv);
+}
+
+char *lv_cachevol_dup(struct dm_pool *mem, const struct logical_volume *lv)
+{
+	return _do_lv_cachevol_dup(mem, lv, 0);
+}
+
+char *lv_cachevol_uuid_dup(struct dm_pool *mem, const struct logical_volume *lv)
+{
+	return _do_lv_cachevol_dup(mem, lv, 1);
+}
+
 struct logical_volume *lv_pool_lv(const struct logical_volume *lv)
 {
 	if (lv_is_thin_volume(lv) || lv_is_cache(lv))
