@@ -154,6 +154,18 @@ prepare_lvmlockd() {
 		echo "Failed to start lvmlockd"
 		exit 1
 	fi
+
+	for i in {200..0} ; do
+		test "$i" -eq 0 && die "Startup of lvmlockd is too slow."
+		test -e "/run/lvm/lvmlockd.socket" && break
+		echo -n .;
+		sleep .1;
+	done # wait for the socket
+
+	# NOTE: Found in lvmlockd(8) man page:
+	vgchange --lock-start
+
+	echo ok
 }
 
 prepare_clvmd() {
@@ -518,16 +530,6 @@ teardown() {
 
 	kill_tagged_processes
 
-	if test -n "$LVM_TEST_LVMLOCKD_TEST" ; then
-		echo ""
-		echo "## stopping lvmlockd in teardown"
-		killall lvmlockd
-		sleep 1
-		killall lvmlockd || true
-		sleep 1
-		killall -9 lvmlockd || true
-	fi
-
 	dm_table | not grep -E -q "$vg|$vg1|$vg2|$vg3|$vg4" || {
 		# Avoid activation of dmeventd if there is no pid
 		cfg=$(test -s LOCAL_DMEVENTD || echo "--config activation{monitoring=0}")
@@ -538,6 +540,26 @@ teardown() {
 			"$vg" "$vg1" "$vg2" "$vg3" "$vg4" &>/dev/null || rm -f debug.log strace.log
 		fi
 	}
+
+	# NOTE: Found in lvmlockd(8) man page:
+	vgchange --lock-stop
+
+	# NOTE: Should this come after vgremove?
+	if test -n "$LVM_TEST_LVMLOCKD_TEST" ; then
+		echo ""
+		echo "## stopping lvmlockd in teardown"
+		# NOTE: Found in zz-lvmlockd-dlm-remove.sh:
+		lvmlockctl --stop-lockspaces
+		killall lvmlockd
+		sleep 1
+		killall lvmlockd || true
+		sleep 1
+		killall -9 lvmlockd || true
+	fi
+
+	# NOTE: Found in zz-lvmlockd-dlm-remove.sh:
+	systemctl stop dlm
+	systemctl stop corosync
 
 	kill_sleep_kill_ LOCAL_LVMDBUSD 0
 
