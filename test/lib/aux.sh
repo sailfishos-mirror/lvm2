@@ -41,6 +41,8 @@ create_corosync_conf() {
 		else
 			mv "$COROSYNC_CONF" "$COROSYNC_CONF.prelvmtest"
 		fi
+	else
+		mkdir -p "$(dirname $COROSYNC_CONF)"
 	fi
 
 	sed -e "s/@LOCAL_NODE@/$COROSYNC_NODE/" lib/test-corosync-conf > "$COROSYNC_CONF"
@@ -55,6 +57,8 @@ create_dlm_conf() {
 		else
 			mv "$DLM_CONF" "$DLM_CONF.prelvmtest"
 		fi
+	else
+		mkdir -p "$(dirname $DLM_CONF)"
 	fi
 
 	cp lib/test-dlm-conf "$DLM_CONF"
