@@ -1990,19 +1990,9 @@ static int _lvconvert_snapshot(struct cmd_context *cmd,
 
 	if (!zero || !(lv->status & LVM_WRITE))
 		log_warn("WARNING: %s not zeroed.", snap_name);
-	else {
-		lv->status |= LV_TEMPORARY;
-		if (!activate_lv(cmd, lv) ||
-		    !wipe_lv(lv, (struct wipe_params) { .do_zero = 1 })) {
-			log_error("Aborting. Failed to wipe snapshot exception store.");
-			return 0;
-		}
-		lv->status &= ~LV_TEMPORARY;
-		/* Deactivates cleared metadata LV */
-		if (!deactivate_lv(lv->vg->cmd, lv)) {
-			log_error("Failed to deactivate zeroed snapshot exception store.");
-			return 0;
-		}
+	else if (!activate_and_wipe_lv(lv, 0)) {
+		log_error("Aborting. Failed to wipe snapshot exception store.");
+		return 0;
 	}
 
 	if (!archive(lv->vg))
