@@ -243,7 +243,7 @@ static void _check_raid_sublvs(struct lv_segment *seg, int *error_count)
 			raid_seg_error("no raid image SubLV");
 
 		if ((seg_lv(seg, s)->status & LVM_WRITE) &&
-		    !(seg->lv->status & LV_TEMPORARY) &&
+		    !(seg->lv->status & LV_ACTIVATION_SKIP) &&
 		    lv_is_visible(seg_lv(seg, s)))
 			raid_seg_error("visible raid image LV");
 
@@ -252,7 +252,7 @@ static void _check_raid_sublvs(struct lv_segment *seg, int *error_count)
 
 		if (seg_metatype(seg, s) != AREA_LV)
 			raid_seg_error("no raid meta SubLV");
-		else if (!(seg->lv->status & LV_TEMPORARY) &&
+		else if (!(seg->lv->status & LV_ACTIVATION_SKIP) &&
 			 lv_is_visible(seg_metalv(seg, s)))
 			raid_seg_error("visible raid meta LV");
 	}

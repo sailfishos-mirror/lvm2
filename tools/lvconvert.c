@@ -3143,12 +3143,12 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 			goto_bad;
 
 		if (zero_metadata) {
-			metadata_lv->status |= LV_TEMPORARY;
+			metadata_lv->status |= LV_ACTIVATION_SKIP;
 			if (!activate_lv(cmd, metadata_lv)) {
 				log_error("Aborting. Failed to activate metadata lv.");
 				goto bad;
 			}
-			metadata_lv->status &= ~LV_TEMPORARY;
+			metadata_lv->status &= ~LV_ACTIVATION_SKIP;
 
 			if (!wipe_lv(metadata_lv, (struct wipe_params) { .do_zero = 1 })) {
 				log_error("Aborting. Failed to wipe metadata lv.");

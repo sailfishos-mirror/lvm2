@@ -388,7 +388,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	 * Now we handle mirrors with log devices
 	 */
 	lv->status &= ~LV_NOTSYNCED;
-	lv->status |= LV_TEMPORARY;
+	lv->status |= LV_ACTIVATION_SKIP;
 
 	/* Separate mirror log or metadata devices so we can clear them */
 	if (!_detach_metadata_devices(seg, &device_list)) {
@@ -424,7 +424,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 		return 0;
 	}
 
-	lv->status &= ~LV_TEMPORARY;
+	lv->status &= ~LV_ACTIVATION_SKIP;
 
 	if (!_vg_write_commit(lv, NULL))
 		return 0;

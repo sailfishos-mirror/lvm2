@@ -4165,7 +4165,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 		 * we can avoid activating crashed, potentially partially
 		 * wiped RaidLVs.
 		 */
-		lv->status |= LV_TEMPORARY;
+		lv->status |= LV_ACTIVATION_SKIP;
 
 		if (test_mode()) {
 			/* FIXME VG is not in a fully-consistent state here and should not be committed! */
@@ -4196,7 +4196,7 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 		for (s = 0; s < seg->area_count; s++)
 			lv_set_hidden(seg_metalv(seg, s));
 
-		lv->status &= ~LV_TEMPORARY;
+		lv->status &= ~LV_ACTIVATION_SKIP;
 	}
 
 	return 1;
