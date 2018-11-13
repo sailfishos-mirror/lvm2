@@ -2422,6 +2422,107 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
 	struct logical_volume *mlv;
 
 	if (lv_is_cache(cache_lv) && lv_is_cache_single(first_seg(cache_lv)->pool_lv)) {
+		/*
+		 *
+		 * 0. The initial state of a main LV using a fast LV as a cache.
+		 *
+		 * $ lvs -a vg
+		 *   LV           VG Attr       Origin       Pool   Type
+		 *   [fast]       vg Cwi---C---                     linear
+		 *   main         vg Cwi---C--- [main_corig] [fast] cache
+		 *   [main_corig] vg owi---C---                     linear
+		 *
+		 *
+		 * 1. Put the LV in maintenance mode to prevent it from being
+		 * accidentally used while it's being repaired.
+		 *
+		 * $ lvchange --maintenance y LV_main
+		 *
+		 *
+		 * 2. Create a new LV to hold the repaired cache.  This should
+		 * be the same size as the existing fast LV.
+		 *
+		 * $ lvcreate -n LV_fast_fix -L <size of LV_fast>
+		 *
+		 *
+		 * 3. Activate the LV holding the current cache so that it
+		 * can be copied.  (Activating this hidden LV directly is allowed
+		 * in maintenance mode.)
+		 *
+		 * $ lvchange -ay LV_fast
+		 *
+		 *
+		 * 4. Create a repaired copy of the cache on the new LV.  This
+		 * reads the existing cache from LV_fast and writes a repaired
+		 * version to LV_fast_fix.  The dd step copies the cache metadata
+		 * and cache data, and the cache_repair step repairs the cache
+		 * metadata on LV_fast_fix.
+		 *
+		 * $ dd if=/dev/mapper/vg-fast of=/dev/mapper/vg-fast_fix iflag=direct oflag=direct
+		 * $ cache_repair -i /dev/mapper/vg-fast -o /dev/mapper/vg-fast_fix
+		 *
+		 *
+		 * 5. Deactivate the LV holding the current cache.
+		 *
+		 * $ lvchange -an LV_fast
+		 *
+		 *
+		 * 6. Deactivate the LV holding the repaired cache.
+		 *
+		 * $ lvchange -an LV_fast_fix
+		 *
+		 *
+		 * 7. If cache_repair fails:
+		 *
+		 *    a. option 1, get support
+		 *    send copy of LV_fast and LV_fast_fix to support
+		 *
+		 *    b. option 2, forcibly remove the cache
+		 *    lvconvert --splitcache --noflush LV_main
+		 *    Activate the main LV without the cache to check if it's usable.
+		 *    If so, delete the unused copies of the damaged cache,
+		 *    lvremove LV_fast_fix LV_fast, otherwise get support.
+		 *
+		 *
+		 * 8. If cache_repair works, replace the damaged cache LV with
+		 * the repaired copy.  This replace-cache command will detach
+		 * LV_fast from LV_main (renaming it LV_fast_old), and replace
+		 * it with LV_fast_fix.
+		 *
+		 * $ lvconvert --replace-cache LV_fast_fix LV_main
+		 *
+		 * $ lvs -a vg
+		 *   LV           VG Attr       Origin       Pool       Type
+		 *   [fast_fix]   vg Cwi---C---                         linear
+		 *   main         vg Cwi---C--- [main_corig] [fast_fix] cache
+		 *   [main_corig] vg owi---C---                         linear
+		 *   fast_old     vg -wi-------                         linear
+		 *
+		 *
+		 * 9. Activate the main LV with the repaired cache to check if
+		 * the repair worked.
+		 *
+		 * $ lvchange -ay LV_main
+		 *
+		 *
+		 * 10. If activation fails:
+		 *
+		 *     a. option 1, get support
+		 *     send copy of LV_fast and LV_fast_fix to support
+		 *
+		 *     b. option 2, forcibly remove the cache
+		 *     lvconvert --splitcache --noflush LV_main
+		 *     Activate the main LV without the cache to check if it's usable.
+		 *     If so, delete the unused copies of the damaged cache,
+		 *     lvremove LV_fast_fix LV_fast, otherwise get support.
+		 *
+		 * 11. If activation works, remove maintenance mode and optionally remove
+		 * the unused LV holding the damaged cache:
+		 * 
+		 * $ lvchange --maintenance n LV_main
+		 * $ lvremove LV_fast_old
+		 *
+		 */
 		log_error("Manual repair required.");
 		return 0;
 	}
