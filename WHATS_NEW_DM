@@ -1,5 +1,6 @@
 Version 1.02.157 - 
 =====================================
+  Fix compilation of vdo status parsing in dmeventd.
 
 Version 1.02.155 - 18th December 2018
 =====================================
