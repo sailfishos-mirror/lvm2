@@ -34,6 +34,12 @@
 #include "time.h"
 #include "lvmnotify.h"
 
+#include "format-text.h"
+#include "layout.h"
+#include "import-export.h"
+#include "xlate.h"
+#include "crc.h"
+
 #include <math.h>
 #include <sys/param.h>
 
@@ -107,6 +113,61 @@ out:
 			 dev_name(pv->dev), pv->pe_align);
 
 	return pv->pe_align;
+}
+
+static void _set_pv_device(struct format_instance *fid,
+			   struct volume_group *vg,
+			   struct physical_volume *pv)
+{
+	char buffer[64] __attribute__((aligned(8)));
+	uint64_t size;
+
+	if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, &pv->label_sector))) {
+		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
+			buffer[0] = '\0';
+
+		if (fid->fmt->cmd && !fid->fmt->cmd->pvscan_cache_single)
+			log_error_once("Couldn't find device with uuid %s.", buffer);
+		else
+			log_debug_metadata("Couldn't find device with uuid %s.", buffer);
+	}
+
+	if (!pv->dev && !lvmetad_used())
+		pv->status |= MISSING_PV;
+
+	if ((pv->status & MISSING_PV) && pv->dev && pv_mda_used_count(pv) == 0) {
+		pv->status &= ~MISSING_PV;
+		log_info("Found a previously MISSING PV %s with no MDAs.", pv_dev_name(pv));
+	}
+
+	/* Fix up pv size if missing or impossibly large */
+	if ((!pv->size || pv->size > (1ULL << 62)) && pv->dev) {
+		if (!dev_get_size(pv->dev, &pv->size)) {
+			log_error("%s: Couldn't get size.", pv_dev_name(pv));
+			return;
+		}
+		log_verbose("Fixing up missing size (%s) for PV %s", display_size(fid->fmt->cmd, pv->size),
+			    pv_dev_name(pv));
+		size = pv->pe_count * (uint64_t) vg->extent_size + pv->pe_start;
+		if (size > pv->size)
+			log_warn("WARNING: Physical Volume %s is too large "
+				 "for underlying device", pv_dev_name(pv));
+	}
+}
+
+/*
+ * Finds the 'struct device' that correponds to each PV in the metadata,
+ * and may make some adjustments to vg fields based on the dev properties.
+ */
+void set_pv_devices(struct format_instance *fid, struct volume_group *vg)
+{
+	struct pv_list *pvl;
+
+	dm_list_iterate_items(pvl, &vg->pvs)
+		_set_pv_device(fid, vg, pvl->pv);
+
+	dm_list_iterate_items(pvl, &vg->pvs_outdated)
+		_set_pv_device(fid, vg, pvl->pv);
 }
 
 unsigned long set_pe_align_offset(struct physical_volume *pv,
@@ -2927,6 +2988,7 @@ int vg_write(struct volume_group *vg)
 	struct pv_list *pvl, *pvl_safe;
 	struct metadata_area *mda;
 	struct lv_list *lvl;
+	struct device *mda_dev;
 	int revert = 0, wrote = 0;
 
 	dm_list_iterate_items(lvl, &vg->lvs) {
@@ -3006,8 +3068,23 @@ int vg_write(struct volume_group *vg)
 
 	/* Write to each copy of the metadata area */
 	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use) {
+		mda_dev = mda_get_device(mda);
+
 		if (mda->status & MDA_FAILED)
 			continue;
+
+		/*
+		 * When the scan and vg_read find old metadata in an mda, they
+		 * leave the info struct in lvmcache, and leave the mda in
+		 * info->mdas.  That means we use the mda here to write new
+		 * metadata into.  This means that a command writing a VG will
+		 * automatically update old metadata to the latest.
+		 */
+		if (lvmcache_has_old_metadata(vg->cmd, vg->name, (const char *)&vg->id, mda_dev)) {
+			log_warn("WARNING: updating old metadata to %u on %s for VG %s.",
+				 vg->seqno, dev_name(mda_dev), vg->name);
+		}
+
 		if (!mda->ops->vg_write) {
 			log_error("Format does not support writing volume"
 				  "group metadata areas");
@@ -3708,9 +3785,6 @@ static int _check_or_repair_pv_ext(struct cmd_context *cmd,
 
 	r = 1;
 out:
-	if ((pvs_fixed > 0) && !_repair_inconsistent_vg(vg, lockd_state))
-		return_0;
-
 	return r;
 }
 
@@ -3739,20 +3813,18 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	struct format_instance *fid = NULL;
 	struct format_instance_ctx fic;
 	const struct format_type *fmt;
-	struct volume_group *vg, *correct_vg = NULL;
+	struct volume_group *vg, *vg_ret = NULL;
 	struct metadata_area *mda;
-	struct lvmcache_info *info;
 	int inconsistent = 0;
 	int inconsistent_vgid = 0;
 	int inconsistent_pvs = 0;
 	int inconsistent_mdas = 0;
-	int inconsistent_mda_count = 0;
 	int strip_historical_lvs = *consistent;
 	int update_old_pv_ext = *consistent;
 	unsigned use_precommitted = precommitted;
 	struct dm_list *pvids;
 	struct pv_list *pvl;
-	struct dm_list all_pvs;
+	struct device *mda_dev, *dev_ret;
 	char uuid[64] __attribute__((aligned(8)));
 	int skipped_rescan = 0;
 
@@ -3778,29 +3850,29 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	log_very_verbose("Reading VG %s %s", vgname ?: "<no name>", vgid ? uuid : "<no vgid>");
 
 	if (lvmetad_used() && !use_precommitted) {
-		if ((correct_vg = lvmetad_vg_lookup(cmd, vgname, vgid))) {
-			dm_list_iterate_items(pvl, &correct_vg->pvs)
-				reappeared += _check_reappeared_pv(correct_vg, pvl->pv, *consistent);
+		if ((vg_ret = lvmetad_vg_lookup(cmd, vgname, vgid))) {
+			dm_list_iterate_items(pvl, &vg_ret->pvs)
+				reappeared += _check_reappeared_pv(vg_ret, pvl->pv, *consistent);
 			if (reappeared && *consistent)
-				*consistent = _repair_inconsistent_vg(correct_vg, lockd_state);
+				*consistent = _repair_inconsistent_vg(vg_ret, lockd_state);
 			else
 				*consistent = !reappeared;
-			if (_wipe_outdated_pvs(cmd, correct_vg, &correct_vg->pvs_outdated, lockd_state)) {
+			if (_wipe_outdated_pvs(cmd, vg_ret, &vg_ret->pvs_outdated, lockd_state)) {
 				/* clear the list */
-				dm_list_init(&correct_vg->pvs_outdated);
-				lvmetad_vg_clear_outdated_pvs(correct_vg);
+				dm_list_init(&vg_ret->pvs_outdated);
+				lvmetad_vg_clear_outdated_pvs(vg_ret);
                         }
 		}
 
 
-		if (correct_vg) {
-			if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
-				release_vg(correct_vg);
+		if (vg_ret) {
+			if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(vg_ret)) {
+				release_vg(vg_ret);
 				return_NULL;
 			}
 
-			if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
-				release_vg(correct_vg);
+			if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(vg_ret)) {
+				release_vg(vg_ret);
 				return_NULL;
 			}
 
@@ -3812,12 +3884,12 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		 	 * we should just read the vg from disk entirely
 		 	 * and skip reading it from lvmetad.
 		 	 */
-			dm_list_iterate_items(pvl, &correct_vg->pvs)
+			dm_list_iterate_items(pvl, &vg_ret->pvs)
 				label_scan_open(pvl->pv->dev);
 
 		}
 
-		return correct_vg;
+		return vg_ret;
 	}
 
 	/*
@@ -3930,19 +4002,16 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	 * label scan and then copied into fid by create_instance().
 	 */
 
-	/* create format instance with appropriate metadata area */
 	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
 	fic.context.vg_ref.vg_name = vgname;
 	fic.context.vg_ref.vg_id = vgid;
+
+	/*
+	 * Sets up the metadata areas that we need to read below.
+	 */
 	if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
 		log_error("Failed to create format instance");
 		return NULL;
-	}
-
-	/* Store pvids for later so we can check if any are missing */
-	if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid))) {
-		_destroy_fid(&fid);
-		return_NULL;
 	}
 
 	/*
@@ -3950,420 +4019,138 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	 * call to destroy the fid - we may want to reuse it!
 	 */
 	fid->ref_count++;
-	/* Ensure contents of all metadata areas match - else do recovery */
-	inconsistent_mda_count=0;
+
+
+	/*
+	 * label_scan found PVs for this VG and set up lvmcache to describe the
+	 * VG/PVs that we use here to read the VG.  It created 'vginfo' for the
+	 * VG, and created an 'info' attached to vginfo for each PV.  It also
+	 * added a metadata_area struct to info->mdas for each metadata area it
+	 * found on the PV.  The info->mdas structs are copied to
+	 * fid->metadata_areas_in_use by create_instance above, and here we
+	 * read VG metadata from each of those mdas.
+	 */
 	dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
-		struct device *mda_dev = mda_get_device(mda);
+		mda_dev = mda_get_device(mda);
+
+		/* I don't think this can happen */
+		if (!mda_dev) {
+			log_warn("Ignoring metadata for VG %s from missing dev.", vgname);
+			continue;
+		}
 
 		use_previous_vg = 0;
 
-		log_debug_metadata("Reading VG %s from %s", vgname, dev_name(mda_dev));
+		if (use_precommitted) {
+			log_warn("Reading VG %s precommit metadata from %s %llu",
+				 vgname, dev_name(mda_dev), (unsigned long long)mda->header_start);
 
-		if ((use_precommitted &&
-		     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
-		    (!use_precommitted &&
-		     !(vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg)) {
-			inconsistent = 1;
+			vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg);
+
+			if (!vg && !use_previous_vg) {
+				log_warn("WARNING: Reading VG %s precommit on %s failed.", vgname, dev_name(mda_dev));
+				vg_fmtdata = NULL;
+				continue;
+			}
+		} else {
+			log_warn("Reading VG %s metadata from %s %llu",
+				 vgname, dev_name(mda_dev), (unsigned long long)mda->header_start);
+
+			vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg);
+
+			if (!vg && !use_previous_vg) {
+				log_warn("WARNING: Reading VG %s on %s failed.", vgname, dev_name(mda_dev));
+				vg_fmtdata = NULL;
+				continue;
+			}
+		}
+
+		if (!vg)
+			continue;
+
+		if (vg && !vg_ret) {
+			vg_ret = vg;
+			dev_ret = mda_dev;
+			continue;
+		}
+
+		/* 
+		 * Use the newest copy of the metadata found on any mdas.
+		 * Above, We could check if the scan found an old metadata
+		 * seqno in this mda and just skip reading it again; then these
+		 * seqno checks would just be sanity checks.
+		 */
+
+		if (vg->seqno == vg_ret->seqno) {
+			release_vg(vg);
+			continue;
+		}
+
+		if (vg->seqno > vg_ret->seqno) {
+			log_warn("WARNING: ignore old metadata seqno %u on %s vs new metadata seqno %u on %s for VG %s.",
+				 vg_ret->seqno, dev_name(dev_ret),
+				 vg->seqno, dev_name(mda_dev), vg->name);
+			release_vg(vg_ret);
+			vg_ret = vg;
+			dev_ret = mda_dev;
 			vg_fmtdata = NULL;
 			continue;
 		}
 
-		/* Use previous VG because checksum matches */
-		if (!vg) {
-			vg = correct_vg;
-			continue;
-		}
-
-		if (!correct_vg) {
-			correct_vg = vg;
-			continue;
-		}
-
-		/* FIXME Also ensure contents same - checksum compare? */
-		if (correct_vg->seqno != vg->seqno) {
-			if (cmd->metadata_read_only || skipped_rescan)
-				log_warn("Not repairing metadata for VG %s.", vgname);
-			else
-				inconsistent = 1;
-
-			if (vg->seqno > correct_vg->seqno) {
-				release_vg(correct_vg);
-				correct_vg = vg;
-			} else {
-				mda->status |= MDA_INCONSISTENT;
-				++inconsistent_mda_count;
-			}
-		}
-
-		if (vg != correct_vg) {
+		if (vg_ret->seqno > vg->seqno) {
+			log_warn("WARNING: ignore old metadata seqno %u on %s vs new metadata seqno %u on %s for VG %s.",
+				 vg->seqno, dev_name(mda_dev),
+				 vg_ret->seqno, dev_name(dev_ret), vg->name);
 			release_vg(vg);
 			vg_fmtdata = NULL;
+			continue;
 		}
 	}
+
+	if (vg_ret)
+		set_pv_devices(fid, vg_ret);
+
 	fid->ref_count--;
 
-	/* Ensure every PV in the VG was in the cache */
-	if (correct_vg) {
-		/*
-		 * Update the seqno from the cache, for the benefit of
-		 * retro-style metadata formats like LVM1.
-		 */
-		// correct_vg->seqno = seqno > correct_vg->seqno ? seqno : correct_vg->seqno;
-
-		/*
-		 * If the VG has PVs without mdas, or ignored mdas, they may
-		 * still be orphans in the cache: update the cache state here,
-		 * and update the metadata lists in the vg.
-		 */
-		if (!inconsistent &&
-		    dm_list_size(&correct_vg->pvs) > dm_list_size(pvids)) {
-			dm_list_iterate_items(pvl, &correct_vg->pvs) {
-				if (!pvl->pv->dev) {
-					inconsistent_pvs = 1;
-					break;
-				}
-
-				if (str_list_match_item(pvids, pvl->pv->dev->pvid))
-					continue;
-
-				/*
-				 * PV not marked as belonging to this VG in cache.
-				 * Check it's an orphan without metadata area
-				 * not ignored.
-				 */
-				if (!(info = lvmcache_info_from_pvid(pvl->pv->dev->pvid, pvl->pv->dev, 1)) ||
-				    !lvmcache_is_orphan(info)) {
-					inconsistent_pvs = 1;
-					break;
-				}
-
-				if (lvmcache_mda_count(info)) {
-					if (!lvmcache_fid_add_mdas_pv(info, fid)) {
-						release_vg(correct_vg);
-						return_NULL;
-					}
-
-					log_debug_metadata("Empty mda found for VG %s on %s.",
-							   vgname, dev_name(pvl->pv->dev));
-
-#if 0
-					/*
-					 * If we are going to do any repair we have to be using 
-					 * the latest metadata on disk, so we have to rescan devs
-					 * if we skipped that at the start of the vg_read.  We'll
-					 * likely come back through here, but without having
-					 * skipped_rescan.
-					 *
-					 * FIXME: in some cases we don't want to do this.
-					 */
-					if (skipped_rescan && cmd->can_use_one_scan) {
-						log_debug_metadata("Restarting read to rescan devs.");
-						cmd->can_use_one_scan = 0;
-						release_vg(correct_vg);
-						correct_vg = NULL;
-						lvmcache_del(info);
-						label_read(pvl->pv->dev);
-						goto restart_scan;
-					}
-#endif
-
-					if (inconsistent_mdas)
-						continue;
-
-					/*
-					 * If any newly-added mdas are in-use then their
-					 * metadata needs updating.
-					 */
-					lvmcache_foreach_mda(info, _check_mda_in_use,
-							     &inconsistent_mdas);
-				}
-			}
-
-			/* If the check passed, let's update VG and recalculate pvids */
-			if (!inconsistent_pvs) {
-				log_debug_metadata("Updating cache for PVs without mdas "
-						   "in VG %s.", vgname);
-				/*
-				 * If there is no precommitted metadata, committed metadata
-				 * is read and stored in the cache even if use_precommitted is set
-				 */
-				lvmcache_update_vg(correct_vg, correct_vg->status & PRECOMMITTED);
-
-				if (!(pvids = lvmcache_get_pvids(cmd, vgname, vgid))) {
-					release_vg(correct_vg);
-					return_NULL;
-				}
-			}
-		}
-
-		fid->ref_count++;
-		if (dm_list_size(&correct_vg->pvs) !=
-		    dm_list_size(pvids) + vg_missing_pv_count(correct_vg)) {
-			log_debug_metadata("Cached VG %s had incorrect PV list",
-					   vgname);
-
-			if (prioritized_section())
-				inconsistent = 1;
-			else {
-				release_vg(correct_vg);
-				correct_vg = NULL;
-			}
-		} else dm_list_iterate_items(pvl, &correct_vg->pvs) {
-			if (is_missing_pv(pvl->pv))
-				continue;
-			if (!str_list_match_item(pvids, pvl->pv->dev->pvid)) {
-				log_debug_metadata("Cached VG %s had incorrect PV list",
-						   vgname);
-				release_vg(correct_vg);
-				correct_vg = NULL;
-				break;
-			}
-		}
-
-		if (correct_vg && inconsistent_mdas) {
-			release_vg(correct_vg);
-			correct_vg = NULL;
-		}
-		fid->ref_count--;
-	}
-
-	dm_list_init(&all_pvs);
-
-	/* Failed to find VG where we expected it - full scan and retry */
-	if (!correct_vg) {
-		/*
-		 * Free outstanding format instance that remained unassigned
-		 * from previous step where we tried to get the "correct_vg",
-		 * but we failed to do so (so there's a dangling fid now).
-		 */
-		_destroy_fid(&fid);
-		vg_fmtdata = NULL;
-
-		inconsistent = 0;
-
-		/* Independent MDAs aren't supported under low memory */
-		if (!cmd->independent_metadata_areas && prioritized_section())
-			return_NULL;
-		if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0)))
-			return_NULL;
-
-		if (precommitted && !(fmt->features & FMT_PRECOMMIT))
-			use_precommitted = 0;
-
-		/* create format instance with appropriate metadata area */
-		fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
-		fic.context.vg_ref.vg_name = vgname;
-		fic.context.vg_ref.vg_id = vgid;
-		if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
-			log_error("Failed to create format instance");
-			return NULL;
-		}
-
-		/*
-		 * We use the fid globally here so prevent the release_vg
-		 * call to destroy the fid - we may want to reuse it!
-		*/
-		fid->ref_count++;
-		/* Ensure contents of all metadata areas match - else recover */
-		inconsistent_mda_count=0;
-		dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
-			use_previous_vg = 0;
-
-			if ((use_precommitted &&
-			     !(vg = mda->ops->vg_read_precommit(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg) ||
-			    (!use_precommitted &&
-			     !(vg = mda->ops->vg_read(fid, vgname, mda, &vg_fmtdata, &use_previous_vg)) && !use_previous_vg)) {
-				inconsistent = 1;
-				vg_fmtdata = NULL;
-				continue;
-			}
-
-			/* Use previous VG because checksum matches */
-			if (!vg) {
-				vg = correct_vg;
-				continue;
-			}
-
-			if (!correct_vg) {
-				correct_vg = vg;
-				if (!_update_pv_list(cmd->mem, &all_pvs, correct_vg)) {
-					_free_pv_list(&all_pvs);
-					fid->ref_count--;
-					release_vg(vg);
-					return_NULL;
-				}
-				continue;
-			}
-
-			if (!id_equal(&vg->id, &correct_vg->id)) {
-				inconsistent = 1;
-				inconsistent_vgid = 1;
-			}
-
-			/* FIXME Also ensure contents same - checksums same? */
-			if (correct_vg->seqno != vg->seqno) {
-				/* Ignore inconsistent seqno if told to skip repair logic */
-				if (cmd->metadata_read_only || skipped_rescan)
-					log_warn("Not repairing metadata for VG %s.", vgname);
-				else
-					inconsistent = 1;
-
-				if (!_update_pv_list(cmd->mem, &all_pvs, vg)) {
-					_free_pv_list(&all_pvs);
-					fid->ref_count--;
-					release_vg(vg);
-					release_vg(correct_vg);
-					return_NULL;
-				}
-				if (vg->seqno > correct_vg->seqno) {
-					release_vg(correct_vg);
-					correct_vg = vg;
-				} else {
-					mda->status |= MDA_INCONSISTENT;
-					++inconsistent_mda_count;
-				}
-			}
-
-			if (vg != correct_vg) {
-				release_vg(vg);
-				vg_fmtdata = NULL;
-			}
-		}
-		fid->ref_count--;
-
-		/* Give up looking */
-		if (!correct_vg) {
-			_free_pv_list(&all_pvs);
-			_destroy_fid(&fid);
-			return_NULL;
-		}
-	}
+	if (!vg_ret)
+		return_NULL;
 
 	/*
-	 * If there is no precommitted metadata, committed metadata
-	 * is read and stored in the cache even if use_precommitted is set
+	 * In lvmcache, PVs with no mdas were not attached to the vginfo during
+	 * label_scan because label_scan didn't know where they should go.  Now
+	 * that we have the VG metadata we can tell, so use that to attach those
+	 * info's to the vginfo.
 	 */
-	lvmcache_update_vg(correct_vg, (correct_vg->status & PRECOMMITTED));
+	lvmcache_update_vg(vg_ret, vg_ret->status & PRECOMMITTED);
 
-	if (inconsistent) {
-		/* FIXME Test should be if we're *using* precommitted metadata not if we were searching for it */
-		if (use_precommitted) {
-			log_error("Inconsistent pre-commit metadata copies "
-				  "for volume group %s", vgname);
-
-			/*
-			 * Check whether all of the inconsistent MDAs were on
-			 * MISSING PVs -- in that case, we should be safe.
-			 */
-			dm_list_iterate_items(mda, &fid->metadata_areas_in_use) {
-				if (mda->status & MDA_INCONSISTENT) {
-					log_debug_metadata("Checking inconsistent MDA: %s", dev_name(mda_get_device(mda)));
-					dm_list_iterate_items(pvl, &correct_vg->pvs) {
-						if (mda_get_device(mda) == pvl->pv->dev &&
-						    (pvl->pv->status & MISSING_PV))
-							--inconsistent_mda_count;
-					}
-				}
-			}
-
-			if (inconsistent_mda_count < 0)
-				log_error(INTERNAL_ERROR "Too many inconsistent MDAs.");
-
-			if (!inconsistent_mda_count) {
-				*consistent = 0;
-				_free_pv_list(&all_pvs);
-				return correct_vg;
-			}
-			_free_pv_list(&all_pvs);
-			release_vg(correct_vg);
-			return NULL;
-		}
-
-		if (!*consistent) {
-			_free_pv_list(&all_pvs);
-			return correct_vg;
-		}
-
-		if (cmd->is_clvmd) {
-			_free_pv_list(&all_pvs);
-			return correct_vg;
-		}
-
-		if (skipped_rescan) {
-			log_warn("Not repairing metadata for VG %s.", vgname);
-			_free_pv_list(&all_pvs);
-			release_vg(correct_vg);
-			return_NULL;
-		}
-
-		/* Don't touch if vgids didn't match */
-		if (inconsistent_vgid) {
-			log_warn("WARNING: Inconsistent metadata UUIDs found for "
-				 "volume group %s.", vgname);
-			*consistent = 0;
-			_free_pv_list(&all_pvs);
-			return correct_vg;
-		}
-
-		/*
-		 * If PV is marked missing but we found it,
-		 * update metadata and remove MISSING flag
-		 */
-		dm_list_iterate_items(pvl, &all_pvs)
-			_check_reappeared_pv(correct_vg, pvl->pv, 1);
-
-		if (!_repair_inconsistent_vg(correct_vg, lockd_state)) {
-			_free_pv_list(&all_pvs);
-			release_vg(correct_vg);
-			return NULL;
-		}
-
-		if (!_wipe_outdated_pvs(cmd, correct_vg, &all_pvs, lockd_state)) {
-			_free_pv_list(&all_pvs);
-			release_vg(correct_vg);
-			return_NULL;
-		}
-	}
-
-	_free_pv_list(&all_pvs);
-
-	if (vg_missing_pv_count(correct_vg)) {
-		log_verbose("There are %d physical volumes missing.",
-			    vg_missing_pv_count(correct_vg));
-		vg_mark_partial_lvs(correct_vg, 1);
-	}
-
-	if ((correct_vg->status & PVMOVE) && !pvmove_mode()) {
-		log_error("Interrupted pvmove detected in volume group %s.",
-			  correct_vg->name);
-		log_print("Please restore the metadata by running vgcfgrestore.");
-		release_vg(correct_vg);
-		return NULL;
+	if (vg_missing_pv_count(vg_ret)) {
+		log_warn("WARNING: VG %s is missing %d PVs.", vgname, vg_missing_pv_count(vg_ret));
+		vg_mark_partial_lvs(vg_ret, 1);
 	}
 
 	/* We have the VG now finally, check if PV ext info is in sync with VG metadata. */
-	if (!cmd->is_clvmd && !_check_or_repair_pv_ext(cmd, correct_vg, lockd_state,
+	if (!cmd->is_clvmd && !_check_or_repair_pv_ext(cmd, vg_ret, lockd_state,
 				     skipped_rescan ? 0 : *consistent,
 				     &inconsistent_pvs)) {
-		release_vg(correct_vg);
+		release_vg(vg_ret);
 		return_NULL;
 	}
 
 	*consistent = !inconsistent_pvs;
 
-	if (!cmd->is_clvmd && correct_vg && *consistent && !skipped_rescan) {
-		if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(correct_vg)) {
-			release_vg(correct_vg);
+	if (!cmd->is_clvmd && vg_ret && *consistent && !skipped_rescan) {
+		if (update_old_pv_ext && !_vg_update_old_pv_ext_if_needed(vg_ret)) {
+			release_vg(vg_ret);
 			return_NULL;
 		}
 
-		if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(correct_vg)) {
-			release_vg(correct_vg);
+		if (strip_historical_lvs && !vg_strip_outdated_historical_lvs(vg_ret)) {
+			release_vg(vg_ret);
 			return_NULL;
 		}
 	}
 
-	return correct_vg;
+	return vg_ret;
 }
 
 #define DEV_LIST_DELIM ", "
@@ -6109,3 +5896,802 @@ int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
 
 	return 1;
 }
+
+static int _vg_repair_metadata_on_dev(struct cmd_context *cmd,
+				      const struct format_type *fmt,
+				      struct volume_group *vg,
+				      char *textbuf_src,
+				      uint32_t textlen_src,
+				      uint32_t textcrc_src,
+				      struct device *dev)
+{
+	char uuidstr[64] __attribute__((aligned(8)));
+	char *read_buf = NULL;
+	char *mh_buf = NULL;
+	struct metadata_area *mda1;
+	struct metadata_area *mda2;
+	struct mda_context *mdac1;
+	struct mda_context *mdac2;
+	struct label_header *lh;
+	struct pv_header *ph;
+	struct disk_locn *dl;
+	struct mda_header *mh;
+	struct raw_locn *rlocn_slot0;
+	uint64_t area_offset;        /* where metadata area begins (mda_header starts) */
+	uint64_t area_size;          /* size of metadata area (header + buffer) */
+	uint64_t new_offset;         /* where text begins in metadata area */
+	uint32_t lh_offset;          /* label_header offset from start of disk */
+	uint32_t ph_offset;          /* pv_header offset from start of label_header */
+	uint32_t mh_crc;             /* of mda header sector */
+	size_t mh_buf_size = MDA_HEADER_SIZE; /* size of mda header buffer */
+	int label_found = 0;
+	int mda1_found = 0;
+	int mda2_found = 0;
+	int i;
+
+	/* for reading the headers on the dev being repaired */
+	if (!(read_buf = dm_zalloc(4096)))
+		return_0;
+
+	/* for writing new mda_header on the dev being repaired */
+	if (!(mh_buf = dm_zalloc(mh_buf_size)))
+		return_0;
+
+	/* for tracking update to first mda on the dev being repaired */
+	if (!(mda1 = dm_zalloc(sizeof(struct metadata_area))))
+		return_0;
+
+	/* for tracking update to first mda on the dev being repaired */
+	if (!(mdac1 = dm_zalloc(sizeof(struct mda_context))))
+		return_0;
+
+	/* for tracking update to second mda on the dev being repaired */
+	if (!(mda2 = dm_zalloc(sizeof(struct metadata_area))))
+		return_0;
+
+	/* for tracking update to second mda on the dev being repaired */
+	if (!(mdac2 = dm_zalloc(sizeof(struct mda_context))))
+		return_0;
+
+	mda1->metadata_locn = mdac1;
+	mda2->metadata_locn = mdac2;
+
+	mda1->ops = dm_list_item(dm_list_first(&fmt->mda_ops), struct metadata_area_ops);
+	mda2->ops = dm_list_item(dm_list_first(&fmt->mda_ops), struct metadata_area_ops);
+
+	mda1->status = MDA_PRIMARY;
+
+	/*
+	 * Read the first 4K of the disk being repaired and get values from
+	 * - label_header
+	 * - pv_header
+	 * - disk_locn's
+	 *
+	 * Those three things cannot yet be repaired, we require
+	 * that they be intact and correct so they can be used
+	 * to repair the mda_header's and text metadata.
+	 */
+
+	if (!dev_read_bytes(dev, 0, 4096, read_buf)) {
+		log_error("Repair %s: cannot read device.", dev_name(dev));
+		return 0;
+	}
+
+	for (i = 0; i < LABEL_SCAN_SECTORS; i++) {
+		lh_offset = i * 512;
+
+		/* label_header ususally in the second sector */
+		lh = (struct label_header *)(read_buf + lh_offset);
+
+		if (strncmp((char *)lh->id, LABEL_ID, sizeof(lh->id)))
+			continue;
+
+		if (xlate64(lh->sector_xl) != i)
+			continue;
+
+		/* TODO: check label crc and if it's not valid allow repair */
+
+		label_found = 1;
+
+		ph_offset = xlate32(lh->offset_xl);
+
+		log_warn("Repair %s: label_header found at %u", dev_name(dev), lh_offset);
+		log_warn("Repair %s: label_header pv_header offset %llu", dev_name(dev), (unsigned long long)ph_offset);
+		break;
+	}
+
+	if (!label_found) {
+		/* TODO: allow writing correct label header here */
+		log_error("Repair %s: no label_header found.", dev_name(dev));
+		return 0;
+	}
+
+	ph = (struct pv_header *)(read_buf + lh_offset + ph_offset);
+
+	/*
+	 * TODO: allow an option that specifies a pv_uuid that we should use to
+	 * write a new pv_header here.
+	 */
+	if (!id_write_format((const struct id *)ph->pv_uuid, uuidstr, sizeof(uuidstr))) {
+		log_error("Repair %s: pv_header has invalid pv_uuid", dev_name(dev));
+		return 0;
+	}
+
+	log_warn("Repair %s: pv_header pv_uuid %s", dev_name(dev), uuidstr);
+	log_warn("Repair %s: pv_header device_size %llu", dev_name(dev),
+		  (unsigned long long)xlate64(ph->device_size_xl));
+
+	/* disk_locn's follow the pv_header, specifying locations of data and metadata */
+	dl = ph->disk_areas_xl;
+
+	/* one disk_locn for each data area, we don't do anything with these */
+	while (1) {
+		area_offset = xlate64(dl->offset);
+		if (!area_offset)
+			break;
+		area_size = xlate64(dl->size);
+
+		log_warn("Repair %s: disk_locn data area offset %llu size %llu",
+			 dev_name(dev),
+			 (unsigned long long)area_offset,
+			 (unsigned long long)area_size);
+
+		dl++;
+	}
+
+	/* one disk_locn is empty as separator */
+	dl++;
+
+	/* one disk_locn for each metadata area, we need these to repair metadata */
+	while (1) {
+		area_offset = xlate64(dl->offset);
+		if (!area_offset)
+			break;
+		area_size = xlate64(dl->size);
+
+		log_warn("Repair %s: disk_locn metadata area offset %llu size %llu",
+			 dev_name(dev),
+			 (unsigned long long)area_offset,
+			 (unsigned long long)area_size);
+
+		if (!mda1_found) {
+			mda1_found = 1;
+			mdac1->area.dev = dev;
+			mdac1->area.start = area_offset;
+			mdac1->area.size = area_size;
+		} else if (!mda2_found) {
+			mda2_found = 1;
+			mdac2->area.dev = dev;
+			mdac2->area.start = area_offset;
+			mdac2->area.size = area_size;
+		}
+
+		dl++;
+	}
+
+	if (!mda1_found && !mda2_found) {
+		/* TODO: allow writing new disk_locn's for existing mda_headers here? */
+		log_error("Repair %s: no metadata locations found.", dev_name(dev));
+		return 0;
+	}
+
+	/* Ignoring pv_header_extension and disk_locn's for boot areas. */
+
+	/*
+	 * Check that the PVID on this device matches a PVID in the VG metadata
+	 * we're going to write.  This is important in case the wrong
+	 * destination dev if specified which belongs to another VG.
+	 */
+	if (!find_pv_in_vg_by_uuid(vg, (struct id *)ph->pv_uuid)) {
+		log_error("Repair %s: pv_header uuid %s not found in source metadata.",
+			  dev_name(dev), uuidstr);
+		return 0;
+	}
+
+	/*
+	 * We cannot export 'vg' into a new buf to write because the export
+	 * adds new comment fields which produce a different metadata checksum
+	 * from the metadata on the other devices.  Instead we have to write
+	 * the exact copy of text metadata from the source device (in
+	 * textbuf_src) so that the existing and repaired devices match.
+	 */
+
+	/* TODO: syslog description of what we're doing */
+
+	/*
+	 * Write new text metadata and mda_header.  This ignores any existing
+	 * mda_header and text area, and writes the new metadata at the start
+	 * of the text area, and a new mda_header pointing to it.
+	 *
+	 * TODO: we could look for the largest start/size in slot0 or slot1
+	 * and put this new repaired metadata after that.  This would preserve
+	 * older metadata copies for analysis/debugging.
+	 *
+	 * Should we first read the current/invalid/bad mda_header to check
+	 * anything before rewriting it?
+	 * We could check for the RAW_LOCN_IGNORED flag set in the
+	 * mda_header/rlocn struct which indicates that we are ignoring
+	 * this metadata area.  But since we are repairing possibly corrupt
+	 * data should we trust that bit?
+	 *
+	 * There are two different checksums: meta_buf_crc and mh_crc.
+	 *
+	 * meta_buf_crc is the checksum of the text metadata buffer.
+	 * This is written in the mda_header/rlocn struct.
+	 *
+	 * mh_crc is the checksum of the sector containing the mda_header.
+	 * It begins after the mda_header.checksum_xl field, ending at 512.
+	 * It includes mda_header and rlocn structs (including meta_buf_crc.)
+	 * It is written in the mda_header.checksum_xl field.
+	 * It needs to be computed after xlate of the other fields.
+	 */
+
+	if (mda1_found) {
+		new_offset = MDA_HEADER_SIZE; /* maybe start after existing? */
+
+		memset(mh_buf, 0, mh_buf_size);
+		mh = (struct mda_header *)mh_buf;
+		strncpy((char *)mh->magic, FMTT_MAGIC, sizeof(mh->magic));
+		mh->version = FMTT_VERSION;
+		mh->start = mdac1->area.start;
+		mh->size = mdac1->area.size;
+		rlocn_slot0 = &mh->raw_locns[0];
+		rlocn_slot0->offset = new_offset;
+		rlocn_slot0->size = textlen_src;
+		rlocn_slot0->checksum = textcrc_src;
+		/* slot1 is zero like it would usually be for committed metadata */
+
+		xlate_mdah(mh); /* must happen before crc is calculated */
+
+		mh_crc = calc_crc(INITIAL_CRC,
+				  (uint8_t *)mh->magic, 
+				  (MDA_HEADER_SIZE - sizeof(mh->checksum_xl)));
+
+		mh->checksum_xl = xlate32(mh_crc);
+
+		/* TODO: write some unofficial data into the circular buffer
+		   indicating the repair */
+		
+		log_warn("Repair %s: writing new metadata at %llu", dev_name(dev),
+			 (unsigned long long)(mdac1->area.start + new_offset));
+
+		/* write text metadata into circular buffer */
+		if (!test_mode()) {
+			if (!dev_write_bytes(dev, mdac1->area.start + new_offset,
+					     (size_t)textlen_src, textbuf_src)) {
+				log_error("Repair %s: failed to write new mda_header", dev_name(dev));
+				return 0;
+			}
+		} else {
+			log_warn("Skip write for test mode.");
+		}
+
+		log_warn("Repair %s: writing new mda_header at %llu", dev_name(dev),
+			 (unsigned long long)mdac1->area.start);
+
+		/* write mda_header at start of metadata area */
+		if (!test_mode()) {
+			if (!dev_write_bytes(dev, mdac1->area.start,
+					     (size_t)mh_buf_size, mh_buf)) {
+				log_error("Repair %s: failed to write new metadata", dev_name(dev));
+				return 0;
+			}
+		} else {
+			log_warn("Skip write for test mode.");
+		}
+	}
+
+	/* catch typos below */
+	mda1 = NULL;
+	mdac1 = NULL;
+
+	/*
+	 * TODO: the existing rlocn struct may have RAW_LOCN_IGNORED set which
+	 * means this metadata area should not contain metadata.
+	 * For now, if there's a metadata area here we will write the new
+	 * repaired metadata into it even if it was previously ignored.
+	 */
+
+	if (mda2_found) {
+		new_offset = MDA_HEADER_SIZE; /* maybe start after existing? */
+
+		memset(mh_buf, 0, mh_buf_size);
+		mh = (struct mda_header *)mh_buf;
+		strncpy((char *)mh->magic, FMTT_MAGIC, sizeof(mh->magic));
+		mh->version = FMTT_VERSION;
+		mh->start = mdac2->area.start;
+		mh->size = mdac2->area.size;
+		rlocn_slot0 = &mh->raw_locns[0];
+		rlocn_slot0->offset = new_offset;
+		rlocn_slot0->size = textlen_src;
+		rlocn_slot0->checksum = textcrc_src;
+		/* slot1 is zero like it would usually be for committed metadata */
+
+		xlate_mdah(mh); /* must happen before crc is calculated */
+
+		mh_crc = calc_crc(INITIAL_CRC,
+				  (uint8_t *)mh->magic, 
+				  (MDA_HEADER_SIZE - sizeof(mh->checksum_xl)));
+
+		mh->checksum_xl = xlate32(mh_crc);
+
+		/* TODO: write some unofficial data into the circular buffer
+		   indicating the repair */
+		
+		log_warn("Repair %s: writing new metadata at %llu", dev_name(dev),
+			 (unsigned long long)(mdac2->area.start + new_offset));
+
+		/* write text metadata into circular buffer */
+		if (!test_mode()) {
+			if (!dev_write_bytes(dev, mdac2->area.start + new_offset,
+					     (size_t)textlen_src, textbuf_src)) {
+				log_error("Repair %s: failed to write new mda_header", dev_name(dev));
+				return 0;
+			}
+		} else {
+			log_warn("Skip write for test mode.");
+		}
+
+		log_warn("Repair %s: writing new mda_header at %llu", dev_name(dev),
+			 (unsigned long long)mdac2->area.start);
+
+		/* write mda_header at start of metadata area */
+		if (!test_mode()) {
+			if (!dev_write_bytes(dev, mdac2->area.start,
+					     (size_t)mh_buf_size, mh_buf)) {
+				log_error("Repair %s: failed to write new metadata", dev_name(dev));
+				return 0;
+			}
+		} else {
+			log_warn("Skip write for test mode.");
+		}
+	}
+
+	return 1;
+}
+
+static char *_read_metadata_text(struct cmd_context *cmd, struct device *dev,
+				 uint64_t area_start, uint64_t area_size,
+				 uint32_t *len, uint64_t *disk_offset)
+{
+	struct mda_header *mh;
+	struct raw_locn *rlocn_slot0;
+	uint64_t text_offset, text_size;
+	char *area_buf;
+	char *text_buf;
+
+	/*
+	 * Read the entire metadata area, including mda_header and entire
+	 * circular buffer.
+	 */
+	if (!(area_buf = dm_malloc(area_size)))
+		return NULL;
+
+	if (!dev_read_bytes(dev, area_start, area_size, area_buf)) {
+		return NULL;
+	}
+
+	mh = (struct mda_header *)area_buf;
+	xlate_mdah(mh);
+
+	rlocn_slot0 = &mh->raw_locns[0];
+	text_offset = rlocn_slot0->offset;
+	text_size = rlocn_slot0->size;
+
+	/*
+	 * Copy and return the current metadata text out of the metadata area.
+	 */
+
+	if (!(text_buf = dm_malloc(text_size))) {
+		return NULL;
+	}
+
+	memcpy(text_buf, area_buf + text_offset, text_size);
+
+	if (len)
+		*len = (uint32_t)text_size;
+	if (disk_offset)
+		*disk_offset = area_start + text_offset;
+
+	return text_buf;
+}
+
+int vg_repair_metadata(struct cmd_context *cmd, const char *vgname,
+		       const char *dev_src_name, const char *file_src_name,
+		       struct dm_list *dev_dst_list)
+{
+	struct device *dev_src = NULL;
+	char *textbuf_src;
+	const char *vgid;
+	const struct format_type *fmt;
+	struct format_instance *fid;
+	struct format_instance_ctx fic;
+	struct metadata_area *mda_src;
+	struct mda_context *mdac_src;
+	struct volume_group *vg;
+	struct pv_list *pvl;
+	struct device_list *devl;
+	unsigned use_previous_vg = 0;
+	uint32_t textlen_src = 0;
+	uint32_t textcrc_src = 0;
+	int use_mda_num = 0;
+	int ret = 0;
+
+	/*
+	 * The source metadata to use for repair comes from a specific PV,
+	 * a specific file, or when neither is specified, we look for a
+	 * good copy of metadata from any available PV in the named VG.
+	 */
+	if (dev_src_name && file_src_name) {
+		log_error("Cannot use both source device and source file.");
+		return 0;
+
+	} else if (dev_src_name) {
+		if (!(dev_src = dev_cache_get(dev_src_name, NULL))) {
+			log_error("No device found for repair source.");
+			return 0;
+		}
+
+	} else if (file_src_name) {
+		/* Will open and read the file below. */
+
+	} else {
+		if (!(dev_src = lvmcache_get_repair_src_dev(cmd, vgname))) {
+			log_error("No device found to use for repair.");
+			return 0;
+		}
+	}
+
+	/*
+	 * Set up overhead/abstractions for reading a given vgname
+	 * (fmt/fid/fic/vgid).
+	 *
+	 * This requires that the label scan (already done) has
+	 * found the vgname on at least one good PV and stuffed
+	 * vginfo about it into lvmcache.
+	 *
+	 * TODO: remove this limitation so we can repair things
+	 * even if label scan can't fully process any PVs?
+	 */
+	if (!(vgid = lvmcache_vgid_from_vgname(cmd, vgname))) {
+		log_error("No VG found for %s", vgname);
+		return 0;
+	}
+
+	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0))) {
+		log_error("No fmt found for %s", vgname);
+		return 0;
+	}
+
+	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+	fic.context.vg_ref.vg_name = vgname;
+	fic.context.vg_ref.vg_id = vgid;
+	if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
+		log_error("Failed to create format instance");
+		return 0;
+	}
+
+	/*
+	 * Read the source metadata from a single mda on a single PV,
+	 * or from a text file.  The source metadata is read into a
+	 * raw buffer of text, and also read+parsed into a struct vg.
+	 * The raw text is what needs to be written to the destination
+	 * PVs, but the parsed vg struct allows us to verify the raw
+	 * text metadata is parsable/vavlid, and to look up and verify
+	 * values like PVID's in it.
+	 *
+	 * For dev_src:
+	 * we require that the label_scan (already done) has found the
+	 * VG on the source dev and added info to lvmcache about it.
+	 * We get the source mda/mdac structs from lvmcache info->mdas.
+	 * This assumes there is one good PV that label_scan can process
+	 * correctly.
+	 *
+	 * TODO: if there was a :2 suffix on the dev src name, then
+	 * use the second mda from the device.
+	 *
+	 * TODO: even if the textbuf is not parsable, should we allow
+	 * using it with the force option?  There may be cases where
+	 * there's a problem with the parsing that shouldn't prevent
+	 * us from writing the new metadata if we know it's what we want.
+	 */
+	if (dev_src) {
+		if (!(mda_src = lvmcache_get_repair_src_mda(cmd, vgname, dev_src, use_mda_num))) {
+			log_error("No mda on source device %s", dev_name(dev_src));
+			goto out;
+		}
+		mdac_src = mda_src->metadata_locn;
+
+		/*
+		 * Read the VG metadata from the source device as a raw chunk of
+		 * original text.
+		 */
+		textbuf_src = _read_metadata_text(cmd, dev_src,
+				          mdac_src->area.start, mdac_src->area.size,
+				          &textlen_src, NULL);
+		if (!textbuf_src || !textlen_src) {
+			log_error("No metadata text on source device %s", dev_name(dev_src));
+			goto out;
+		}
+
+		/*
+		 * Read the same VG metadata, but imported/parsed into a vg struct
+		 * format so we know it's valid/parsable, and can look at values in it.
+		 * _vg_read_raw()
+		 */
+		if (!(vg = mda_src->ops->vg_read(fid, vgname, mda_src, NULL, &use_previous_vg))) {
+			log_error("No parsable metadata on source device %s", dev_name(dev_src));
+			goto out;
+		}
+		set_pv_devices(fid, vg);
+
+	} else if (file_src_name) {
+		char *desc = NULL;
+		time_t when;
+		struct stat sb;
+		int fd, rv;
+
+		if (!(fd = open(file_src_name, O_RDONLY))) {
+			log_error("Cannot open file use for repair: %s", file_src_name);
+			goto out;
+		}
+
+		rv = fstat(fd, &sb);
+		if (rv) {
+			log_error("Cannot access file use for repair: %s", file_src_name);
+			close(fd);
+			goto out;
+		}
+
+		if (!(textlen_src = (uint32_t)sb.st_size)) {
+			log_error("Empty file to use for repair: %s", file_src_name);
+			close(fd);
+			goto out;
+		}
+
+		if (!(textbuf_src = dm_zalloc(textlen_src + 1))) {
+			close(fd);
+			goto_out;
+		}
+
+		rv = read(fd, textbuf_src, textlen_src);
+		if (rv != textlen_src) {
+			log_error("Cannot read file to use for repair: %s", file_src_name);
+			close(fd);
+			goto out;
+		}
+
+		textlen_src += 1; /* null terminating byte */
+
+		close(fd);
+
+		/*
+		 * Read the VG metadata from the file, but imported/parsed
+		 * into a vg struct so we know it's valid/parsable, and can
+		 * look at values in it.
+		 *
+		 * TODO: error if a "backup" metadata file is specified instead
+		 * of raw output (or munge a backup file into a raw format.)
+		 */
+		if (!(vg = text_read_metadata(fid, file_src_name, NULL, &use_previous_vg,
+					NULL, 0, 0, 0, 0, 0, NULL, 0, &when, &desc))) {
+			log_error("No parsable metadata in source file %s", file_src_name);
+			goto out;
+		}
+		set_pv_devices(fid, vg);
+	}
+
+	textcrc_src = calc_crc(INITIAL_CRC, (uint8_t *)textbuf_src, textlen_src);
+
+	/*
+	 * If we haven't been told which devs to repair, then repair any related
+	 * to this VG that label_scan saw a problem with.
+	 *
+	 * FIXME: on a given device, there may be a problem with just mda1 or
+	 * just mda2.  Get that info from lvmcache and use it to repair just
+	 * one mda if only one of them has a problem.
+	 */
+	if (dm_list_empty(dev_dst_list)) {
+		dm_list_iterate_items(pvl, &vg->pvs) {
+			if (lvmcache_has_bad_metadata(pvl->pv->dev)) {
+				if (!(devl = malloc(sizeof(*devl))))
+					return_0;
+				devl->dev = pvl->pv->dev;
+				dm_list_add(dev_dst_list, &devl->list);
+				log_warn("Device %s has bad metadata.", dev_name(devl->dev));
+				continue;
+			}
+
+			if (lvmcache_has_old_metadata(cmd, vgname, vgid, pvl->pv->dev)) {
+				if (!(devl = malloc(sizeof(*devl))))
+					return_0;
+				devl->dev = pvl->pv->dev;
+				dm_list_add(dev_dst_list, &devl->list);
+				log_warn("Device %s has old metadata.", dev_name(devl->dev));
+				continue;
+			}
+		}
+	}
+
+	if (dm_list_empty(dev_dst_list)) {
+		log_warn("No devices found needing repair.");
+		ret = 1;
+		goto out_release;
+	}
+
+	log_print("Using metadata for %s from %s with seqno %u size %u checksum 0x%x.",
+		  vgname, dev_src ? dev_name(dev_src) : file_src_name,
+		  vg->seqno, textlen_src, textcrc_src);
+	dm_list_iterate_items(devl, dev_dst_list)
+		log_warn("Repair %s ?", dev_name(devl->dev));
+
+#if 0
+	if (!arg_count(cmd, yes_ARG) &&
+	    yes_no_prompt("Replace metadata on these devices? [y/n]: ") == 'n') {
+		log_error("Repair aborted.");
+		return 0;
+	}
+#endif
+
+	ret = 1;
+
+	dm_list_iterate_items(devl, dev_dst_list) {
+		if (!_vg_repair_metadata_on_dev(cmd, fmt, vg, textbuf_src, textlen_src, textcrc_src, devl->dev)) {
+			log_error("Repair failed on %s", dev_name(devl->dev));
+			ret = 0;
+		}
+	}
+
+out_release:
+	release_vg(vg);
+out:
+	fid->ref_count--;
+	return ret;
+}
+
+int vg_dump_metadata(struct cmd_context *cmd, const char *vgname,
+		       const char *dev_src_name, int force, const char *tofile)
+{
+	struct device *dev_src;
+	char *textbuf_src;
+	const char *vgid;
+	const struct format_type *fmt;
+	struct format_instance *fid;
+	struct format_instance_ctx fic;
+	struct metadata_area *mda_src;
+	struct mda_context *mdac_src;
+	struct volume_group *vg;
+	unsigned use_previous_vg = 0;
+	uint32_t textlen_src = 0;
+	uint32_t textcrc_src;
+	uint64_t text_disk_offset;
+	int use_mda_num = 0;
+	int ret = 0;
+
+	if (!dev_src_name) {
+		if (!(dev_src = lvmcache_get_repair_src_dev(cmd, vgname))) {
+			log_error("No device found to use for repair.");
+			return 0;
+		}
+	} else {
+		if (!(dev_src = dev_cache_get(dev_src_name, NULL))) {
+			log_error("No device found for repair source.");
+			return 0;
+		}
+	}
+
+	/*
+	 * Set up overhead/abstractions for reading a given vgname
+	 * (fmt/fid/fic/vgid).
+	 *
+	 * This requires that the label scan (already done) has
+	 * found the vgname on at least one good PV and stuffed
+	 * vginfo about it into lvmcache.
+	 *
+	 * TODO: remove this limitation so we can repair things
+	 * even if label scan can't fully process any PVs?
+	 */
+	if (!(vgid = lvmcache_vgid_from_vgname(cmd, vgname))) {
+		log_error("No VG found for %s", vgname);
+		return 0;
+	}
+
+	if (!(fmt = lvmcache_fmt_from_vgname(cmd, vgname, vgid, 0))) {
+		log_error("No fmt found for %s", vgname);
+		return 0;
+	}
+
+	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+	fic.context.vg_ref.vg_name = vgname;
+	fic.context.vg_ref.vg_id = vgid;
+	if (!(fid = fmt->ops->create_instance(fmt, &fic))) {
+		log_error("Failed to create format instance");
+		return 0;
+	}
+
+	/*
+	 * Read the source metadata from a single mda on a single device.
+	 * This metadata will be written to the devs needing repair.
+	 *
+	 * We require that the label_scan (already done) has found the
+	 * VG on the source dev and added info to lvmcache about it.
+	 * We get the source mda/mdac structs from lvmcache info->mdas.
+	 *
+	 * This assumes there is one good PV that label_scan can process
+	 * correctly.
+	 *
+	 * TODO: if there was a :2 suffix on the dev src name, then
+	 * use the second mda from the device.
+	 *
+	 * TODO: add an option to look at a specific offset in the
+	 * circular buffer instead of using the rlocn value.
+	 */
+	if (!(mda_src = lvmcache_get_repair_src_mda(cmd, vgname, dev_src, use_mda_num))) {
+		log_error("No mda on source device %s", dev_name(dev_src));
+		goto out;
+	}
+	mdac_src = mda_src->metadata_locn;
+
+	/*
+	 * Read the VG metadata from the source device as a raw chunk of
+	 * original text.
+	 */
+	textbuf_src = _read_metadata_text(cmd, dev_src,
+				          mdac_src->area.start, mdac_src->area.size,
+				          &textlen_src, &text_disk_offset);
+	if (!textbuf_src || !textlen_src) {
+		log_error("No metadata text on source device %s", dev_name(dev_src));
+		goto out;
+	}
+
+	textcrc_src = calc_crc(INITIAL_CRC, (uint8_t *)textbuf_src, textlen_src);
+
+	/*
+	 * Read the same VG metadata, but imported/parsed into a vg struct
+	 * format so we know it's valid/parsable, and can look at values in it.
+	 * _vg_read_raw()
+	 */
+	if (!(vg = mda_src->ops->vg_read(fid, vgname, mda_src, NULL, &use_previous_vg))) {
+		log_error("Parse error for metadata on source device %s.", dev_name(dev_src));
+		if (force)
+			goto print;
+		log_error("Use --force to dump unparsable metadata buffer.");
+		goto out;
+	}
+
+	set_pv_devices(fid, vg);
+
+print:
+	log_print("Printing metadata for %s from %s at %llu with seqno %u size %u checksum 0x%x.",
+		  vgname, dev_name(dev_src),
+		  (unsigned long long)text_disk_offset,
+		  vg->seqno, textlen_src, textcrc_src);
+
+	if (!tofile) {
+		log_print("---");
+		printf("%s\n", textbuf_src);
+		log_print("---");
+	} else {
+		FILE *fp;
+		if (!(fp = fopen(tofile, "wx"))) {
+			log_error("Failed to create file %s", tofile);
+			goto out;
+		}
+
+		fprintf(fp, "%s", textbuf_src);
+
+		if (fflush(fp))
+			stack;
+		if (fclose(fp))
+			stack;
+	}
+
+	if (vg)
+		release_vg(vg);
+
+	ret = 1;
+out:
+	fid->ref_count--;
+	return ret;
+}
+

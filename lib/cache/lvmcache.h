@@ -57,10 +57,12 @@ struct lvmcache_vgsummary {
 	char *creation_host;
 	const char *system_id;
 	const char *lock_type;
+	uint32_t seqno;
 	uint32_t mda_checksum;
 	size_t mda_size;
-	int zero_offset;
-	int seqno;
+	int mda_num; /* 1 = summary from mda1, 2 = summary from mda2 */
+	unsigned mda_ignored:1;
+	unsigned zero_offset:1;
 };
 
 int lvmcache_init(struct cmd_context *cmd);
@@ -144,7 +146,8 @@ void lvmcache_del_mdas(struct lvmcache_info *info);
 void lvmcache_del_das(struct lvmcache_info *info);
 void lvmcache_del_bas(struct lvmcache_info *info);
 int lvmcache_add_mda(struct lvmcache_info *info, struct device *dev,
-		     uint64_t start, uint64_t size, unsigned ignored);
+		     uint64_t start, uint64_t size, unsigned ignored,
+		     struct metadata_area **mda_new);
 int lvmcache_add_da(struct lvmcache_info *info, uint64_t start, uint64_t size);
 int lvmcache_add_ba(struct lvmcache_info *info, uint64_t start, uint64_t size);
 
@@ -225,4 +228,12 @@ struct volume_group *lvmcache_get_saved_vg(const char *vgid, int precommitted);
 struct volume_group *lvmcache_get_saved_vg_latest(const char *vgid);
 void lvmcache_drop_saved_vgid(const char *vgid);
 
+void lvmcache_set_bad_metadata(struct lvmcache_info *info, int mda1_bad, int mda2_bad);
+int lvmcache_has_bad_metadata(struct device *dev);
+int lvmcache_has_old_metadata(struct cmd_context *cmd, const char *vgname, const char *vgid, struct device *dev);
+struct device *lvmcache_get_repair_src_dev(struct cmd_context *cmd,
+                                           const char *vgname);
+struct metadata_area *lvmcache_get_repair_src_mda(struct cmd_context *cmd,
+                                                  const char *vgname,
+                                                  struct device *dev, int use_mda_num);
 #endif

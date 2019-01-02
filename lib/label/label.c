@@ -426,8 +426,18 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 		label->dev = dev;
 		label->sector = sector;
 	} else {
-		/* FIXME: handle errors */
-		lvmcache_del_dev(dev);
+		/*
+		 * Leave the info in lvmcache because the device is present and can
+		 * still be used even if it has metadata that we can't use (we can
+		 * use metadata from another PV/mda.)
+		 * _text_read only saves mdas with good metadata in lvmcache, and
+		 * if a PV has no mdas with good metadata, then the info for the PV
+		 * will be in lvmcache with empty info->mdas, and it will behave
+		 * like a PV with no mdas (a common configuration.)
+		 */
+		label->dev = dev;
+		label->sector = sector;
+		log_warn("WARNING: failed to read metadata summary from %s PVID %s", dev_name(dev), dev->pvid);
 	}
  out:
 	return ret;
@@ -690,7 +700,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 				scan_failed = 1;
 				scan_process_errors++;
 				scan_failed_count++;
-				lvmcache_del_dev(devl->dev);
 			}
 		}
 

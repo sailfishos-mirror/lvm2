@@ -1545,6 +1545,18 @@ vgck
 OO: --reportformat ReportFmt
 OP: VG|Tag ...
 ID: vgck_general
+DESC: Read VG and display information
+
+vgck --repairmetadata VG
+OO: --sourcedevice PV, --file String
+OP: PV ...
+ID: vgck_repair_metadata
+DESC: Repair metadata on PVs
+
+vgck --dumpmetadata VG
+OO: --sourcedevice PV, --file String, --force
+ID: vgck_dump_metadata
+DESC: Read and print raw metadata from a PV
 
 ---
 

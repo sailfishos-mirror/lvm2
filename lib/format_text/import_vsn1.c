@@ -213,21 +213,6 @@ static int _read_pv(struct format_instance *fid,
 
         pv->is_labelled = 1; /* All format_text PVs are labelled. */
 
-	/*
-	 * Convert the uuid into a device.
-	 */
-	if (!(pv->dev = lvmcache_device_from_pvid(fid->fmt->cmd, &pv->id, &pv->label_sector))) {
-		char buffer[64] __attribute__((aligned(8)));
-
-		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
-			buffer[0] = '\0';
-
-		if (fid->fmt->cmd && !fid->fmt->cmd->pvscan_cache_single)
-			log_error_once("Couldn't find device with uuid %s.", buffer);
-		else
-			log_debug_metadata("Couldn't find device with uuid %s.", buffer);
-	}
-
 	if (!(pv->vg_name = dm_pool_strdup(mem, vg->name)))
 		return_0;
 
@@ -236,16 +221,6 @@ static int _read_pv(struct format_instance *fid,
 	if (!outdated && !_read_flag_config(pvn, &pv->status, PV_FLAGS)) {
 		log_error("Couldn't read status flags for physical volume.");
 		return 0;
-	}
-
-	/* TODO is the !lvmetad_used() too coarse here? */
-	if (!pv->dev && !lvmetad_used())
-		pv->status |= MISSING_PV;
-
-	if ((pv->status & MISSING_PV) && pv->dev && pv_mda_used_count(pv) == 0) {
-		pv->status &= ~MISSING_PV;
-		log_info("Recovering a previously MISSING PV %s with no MDAs.",
-			 pv_dev_name(pv));
 	}
 
 	/* Late addition */
@@ -299,21 +274,6 @@ static int _read_pv(struct format_instance *fid,
 	pv->pe_alloc_count = 0;
 	pv->pe_align = 0;
 	pv->fmt = fid->fmt;
-
-	/* Fix up pv size if missing or impossibly large */
-	if ((!pv->size || pv->size > (1ULL << 62)) && pv->dev) {
-		if (!dev_get_size(pv->dev, &pv->size)) {
-			log_error("%s: Couldn't get size.", pv_dev_name(pv));
-			return 0;
-		}
-		log_verbose("Fixing up missing size (%s) "
-			    "for PV %s", display_size(fid->fmt->cmd, pv->size),
-			    pv_dev_name(pv));
-		size = pv->pe_count * (uint64_t) vg->extent_size + pv->pe_start;
-		if (size > pv->size)
-			log_warn("WARNING: Physical Volume %s is too large "
-				 "for underlying device", pv_dev_name(pv));
-	}
 
 	if (!alloc_pv_segment_whole_pv(mem, pv))
 		return_0;

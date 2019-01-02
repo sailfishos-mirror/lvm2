@@ -61,13 +61,13 @@ int text_read_metadata_summary(const struct format_type *fmt,
 					 offset2, size2, checksum_fn,
 					 vgsummary->mda_checksum,
 					 checksum_only, 1)) {
-			/* FIXME: handle errors */
-			log_error("Couldn't read volume group metadata from %s.", dev_name(dev));
+			log_warn("WARNING: invalid metadata text from %s at %llu.",
+				 dev_name(dev), (unsigned long long)offset);
 			goto out;
 		}
 	} else {
 		if (!config_file_read(cft)) {
-			log_error("Couldn't read volume group metadata from file.");
+			log_warn("WARNING: invalid metadata text from file.");
 			goto out;
 		}
 	}
@@ -229,9 +229,11 @@ static struct volume_group *_import_vg_from_config_tree(const struct dm_config_t
 		 */
 		if (!(vg = (*vsn)->read_vg(fid, cft, allow_lvmetad_extensions)))
 			stack;
-		else if ((vg_missing = vg_missing_pv_count(vg))) {
-			log_verbose("There are %d physical volumes missing.",
-				    vg_missing);
+		else {
+			set_pv_devices(fid, vg);
+
+			if ((vg_missing = vg_missing_pv_count(vg)))
+				log_verbose("There are %d physical volumes missing.", vg_missing);
 			vg_mark_partial_lvs(vg, 1);
 			/* FIXME: move this code inside read_vg() */
 		}

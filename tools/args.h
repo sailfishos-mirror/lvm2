@@ -529,6 +529,15 @@ arg(repair_ARG, '\0', "repair", 0, 0, 0,
     "utility on a thin pool. See \\fBlvmraid\\fP(7) and \\fBlvmthin\\fP(7)\n"
     "for more information.\n")
 
+arg(repairmetadata_ARG, '\0', "repairmetadata", 0, 0, 0,
+    "Repair metadata on PVs in a VG.\n")
+
+arg(dumpmetadata_ARG, '\0', "dumpmetadata", 0, 0, 0,
+    "Print raw metadata for the VG.\n")
+
+arg(sourcedevice_ARG, '\0', "sourcedevice", pv_VAL, 0, 0,
+    "Use metadata from this device.\n")
+
 arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
     "Replace a specific PV in a raid LV with another PV.\n"
     "The new PV to use can be optionally specified after the LV.\n"

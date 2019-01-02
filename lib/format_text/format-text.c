@@ -308,7 +308,7 @@ static int _text_lv_setup(struct format_instance *fid __attribute__((unused)),
 	return 1;
 }
 
-static void _xlate_mdah(struct mda_header *mdah)
+void xlate_mdah(struct mda_header *mdah)
 {
 	struct raw_locn *rl;
 
@@ -344,7 +344,7 @@ static int _raw_read_mda_header(struct mda_header *mdah, struct device_area *dev
 		return 0;
 	}
 
-	_xlate_mdah(mdah);
+	xlate_mdah(mdah);
 
 	if (strncmp((char *)mdah->magic, FMTT_MAGIC, sizeof(mdah->magic))) {
 		log_error("Wrong magic number in metadata area header on %s at %llu",
@@ -395,7 +395,7 @@ static int _raw_write_mda_header(const struct format_type *fmt,
 	mdah->version = FMTT_VERSION;
 	mdah->start = start_byte;
 
-	_xlate_mdah(mdah);
+	xlate_mdah(mdah);
 	mdah->checksum_xl = xlate32(calc_crc(INITIAL_CRC, (uint8_t *)mdah->magic,
 					     MDA_HEADER_SIZE -
 					     sizeof(mdah->checksum_xl)));
@@ -1239,7 +1239,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 
 	/* Ignore this entry if the characters aren't permissible */
 	if (!validate_name(buf)) {
-		log_error("Metadata location on %s at %llu begins with invalid VG name.",
+		log_warn("WARNING: metadata on %s at %llu begins with invalid VG name.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1250,7 +1250,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
 
 	if (wrap > rlocn->offset) {
-		log_error("Metadata location on %s at %llu is too large for circular buffer.",
+		log_warn("WARNING: metadata on %s at %llu is too large for circular buffer.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1302,7 +1302,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
 				vgsummary)) {
-		log_error("Metadata location on %s at %llu has invalid summary for VG.",
+		log_warn("WARNING: metadata on %s at %llu has invalid summary for VG.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1310,7 +1310,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 
 	/* Ignore this entry if the characters aren't permissible */
 	if (!validate_name(vgsummary->vgname)) {
-		log_error("Metadata location on %s at %llu has invalid VG name.",
+		log_warn("WARNING: metadata on %s at %llu has invalid VG name.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1472,7 +1472,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume 
 		// if fmt is not the same as info->fmt we are in trouble
 		if (!lvmcache_add_mda(info, mdac->area.dev,
 				      mdac->area.start, mdac->area.size,
-				      mda_is_ignored(mda)))
+				      mda_is_ignored(mda), NULL))
 			return_0;
 	}
 
@@ -1842,7 +1842,7 @@ static int _mda_import_text_raw(struct lvmcache_info *info, const struct dm_conf
 	offset = dm_config_find_int64(cn, "start", 0);
 	ignore = dm_config_find_int(cn, "ignore", 0);
 
-	lvmcache_add_mda(info, device, offset, size, ignore);
+	lvmcache_add_mda(info, device, offset, size, ignore, NULL);
 
 	return 1;
 }

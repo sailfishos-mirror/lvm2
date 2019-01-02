@@ -173,6 +173,7 @@ struct metadata_area {
 	struct metadata_area_ops *ops;
 	void *metadata_locn;
 	uint32_t status;
+	uint64_t header_start; /* mda_header.start */
 };
 struct metadata_area *mda_copy(struct dm_pool *mem,
 			       struct metadata_area *mda);
@@ -508,5 +509,7 @@ struct id pv_vgid(const struct physical_volume *pv);
 
 uint64_t find_min_mda_size(struct dm_list *mdas);
 char *tags_format_and_copy(struct dm_pool *mem, const struct dm_list *tagsl);
+
+void set_pv_devices(struct format_instance *fid, struct volume_group *vg);
 
 #endif

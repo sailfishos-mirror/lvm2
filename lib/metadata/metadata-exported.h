@@ -1320,4 +1320,12 @@ int is_system_id_allowed(struct cmd_context *cmd, const char *system_id);
 
 int vg_strip_outdated_historical_lvs(struct volume_group *vg);
 
+int vg_repair_metadata(struct cmd_context *cmd, const char *vgname,
+                       const char *dev_src_name,
+                       const char *file_src_name,
+		       struct dm_list *dev_dst_list);
+
+int vg_dump_metadata(struct cmd_context *cmd, const char *vgname,
+                       const char *dev_src_name, int force, const char *tofile);
+
 #endif

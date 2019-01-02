@@ -43,6 +43,12 @@ struct lvmcache_info {
 	uint32_t ext_version;   /* Extension version */
 	uint32_t ext_flags;	/* Extension flags */
 	uint32_t status;
+	int summary_seqno;	/* vg seqno found on this dev during scan */
+	int mda1_seqno;
+	int mda2_seqno;
+	unsigned summary_seqno_mismatch:1; /* two mdas on this dev has mismatching metadata */
+	unsigned mda1_bad:1;	/* label scan found bad metadata in mda1 */
+	unsigned mda2_bad:1;	/* label scan found bad metadata in mda2 */
 };
 
 /* One per VG */
@@ -711,6 +717,33 @@ static void _destroy_duplicate_device_list(struct dm_list *head)
 		dm_free(devl);
 	}
 	dm_list_init(head);
+}
+
+int lvmcache_has_bad_metadata(struct device *dev)
+{
+	struct lvmcache_info *info;
+
+	if (!(info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
+		/* shouldn't happen */
+		log_error("No lvmcache info for checking bad metadata on %s", dev_name(dev));
+		return 0;
+	}
+
+	if (info->mda1_bad || info->mda2_bad)
+		return 1;
+	return 0;
+}
+
+/*
+ * "bad" metadata cannot be used/processed by lvm, e.g.
+ * it has a bad checksum, invalid/unrecognizable content.
+ */
+void lvmcache_set_bad_metadata(struct lvmcache_info *info, int mda1_bad, int mda2_bad)
+{
+	if (mda1_bad)
+		info->mda1_bad = 1;
+	if (mda2_bad)
+		info->mda2_bad = 1;
 }
 
 static void _vginfo_attach_info(struct lvmcache_vginfo *vginfo,
@@ -2073,8 +2106,9 @@ static int _lvmcache_update_vgname(struct lvmcache_info *info,
 			sprintf(mdabuf, " with %u mda(s)", dm_list_size(&info->mdas));
 		else
 			mdabuf[0] = '\0';
-		log_debug_cache("lvmcache %s: now in VG %s%s%s%s%s.",
+		log_debug_cache("lvmcache %s %s: now in VG %s%s%s%s%s.",
 				dev_name(info->dev),
+				info->dev->pvid,
 				vgname, vginfo->vgid[0] ? " (" : "",
 				vginfo->vgid[0] ? vginfo->vgid : "",
 				vginfo->vgid[0] ? ")" : "", mdabuf);
@@ -2162,12 +2196,9 @@ int lvmcache_add_orphan_vginfo(const char *vgname, struct format_type *fmt)
 }
 
 /*
- * FIXME: get rid of other callers of this function which call it
- * in odd cases to "fix up" some bit of lvmcache state.  Make those
- * callers fix up what they need to directly, and leave this function
- * with one purpose and caller.
+ * Returning 0 causes the caller to remove the info struct for this
+ * device from lvmcache, which will make it look like a missing device.
  */
-
 int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vgsummary *vgsummary)
 {
 	const char *vgname = vgsummary->vgname;
@@ -2193,6 +2224,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
 	 * Puts the vginfo into the vgname hash table.
 	 */
 	if (!_lvmcache_update_vgname(info, vgname, vgid, vgsummary->vgstatus, vgsummary->creation_host, info->fmt)) {
+		/* shouldn't happen, internal error */
 		log_error("Failed to update VG %s info in lvmcache.", vgname);
 		return 0;
 	}
@@ -2201,6 +2233,7 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
 	 * Puts the vginfo into the vgid hash table.
 	 */
 	if (!_lvmcache_update_vgid(info, info->vginfo, vgid)) {
+		/* shouldn't happen, internal error */
 		log_error("Failed to update VG %s info in lvmcache.", vgname);
 		return 0;
 	}
@@ -2216,50 +2249,111 @@ int lvmcache_update_vgname_and_id(struct lvmcache_info *info, struct lvmcache_vg
 	if (!vgsummary->seqno && !vgsummary->mda_size && !vgsummary->mda_checksum)
 		return 1;
 
+	/*
+	 * Keep track of which devs/mdas have old versions of the metadata.
+	 * The values we keep in vginfo are from the metadata with the largest
+	 * seqno.  One dev may have more recent metadata than another dev, and
+	 * one mda may have more recent metadata than the other mda on the same
+	 * device.
+	 *
+	 * When a device holds old metadata, the info struct for the device
+	 * remains in lvmcache, so the device is not treated as missing.
+	 * Also the mda struct containing the old metadata is kept on
+	 * info->mdas.  This means that vg_read will read metadata from
+	 * the mda again (and probably see the same old metadata).  It
+	 * also means that vg_write will use the mda to write new metadata
+	 * into the mda that currently has the old metadata.
+	 */
+	if (vgsummary->mda_num == 1)
+		info->mda1_seqno = vgsummary->seqno;
+	else if (vgsummary->mda_num == 2)
+		info->mda2_seqno = vgsummary->seqno;
+
+	if (!info->summary_seqno)
+		info->summary_seqno = vgsummary->seqno;
+	else {
+		if (info->summary_seqno == vgsummary->seqno) {
+			/* This mda has the same metadata as the prev mda on this dev. */
+			return 1;
+
+		} else if (info->summary_seqno > vgsummary->seqno) {
+			/* This mda has older metadata than the prev mda on this dev. */
+			info->summary_seqno_mismatch = 1;
+
+		} else if (info->summary_seqno < vgsummary->seqno) {
+			/* This mda has newer metadata than the prev mda on this dev. */
+			info->summary_seqno_mismatch = 1;
+			info->summary_seqno = vgsummary->seqno;
+		}
+	}
+
+	/* this shouldn't happen */
 	if (!(vginfo = info->vginfo))
 		return 1;
 
 	if (!vginfo->seqno) {
 		vginfo->seqno = vgsummary->seqno;
-
-		log_debug_cache("lvmcache %s: VG %s: set seqno to %d",
-				dev_name(info->dev), vginfo->vgname, vginfo->seqno);
-
-	} else if (vgsummary->seqno != vginfo->seqno) {
-		log_warn("Scan of VG %s from %s found metadata seqno %d vs previous %d.",
-			 vgname, dev_name(info->dev), vgsummary->seqno, vginfo->seqno);
-		vginfo->scan_summary_mismatch = 1;
-		/* If we don't return success, this dev info will be removed from lvmcache,
-		   and then we won't be able to rescan it or repair it. */
-		return 1;
-	}
-
-	if (!vginfo->mda_size) {
 		vginfo->mda_checksum = vgsummary->mda_checksum;
 		vginfo->mda_size = vgsummary->mda_size;
 
-		log_debug_cache("lvmcache %s: VG %s: set mda_checksum to %x mda_size to %zu",
-				dev_name(info->dev), vginfo->vgname,
-				vginfo->mda_checksum, vginfo->mda_size);
+		log_debug_cache("lvmcache %s mda%d VG %s set seqno %u checksum %x mda_size %zu",
+				dev_name(info->dev), vgsummary->mda_num, vgname,
+				vgsummary->seqno, vgsummary->mda_checksum, vgsummary->mda_size);
+		goto update_vginfo;
 
-	} else if ((vginfo->mda_size != vgsummary->mda_size) || (vginfo->mda_checksum != vgsummary->mda_checksum)) {
-		log_warn("Scan of VG %s from %s found mda_checksum %x mda_size %zu vs previous %x %zu",
-			 vgname, dev_name(info->dev), vgsummary->mda_checksum, vgsummary->mda_size,
-			 vginfo->mda_checksum, vginfo->mda_size);
+	} else if (vgsummary->seqno < vginfo->seqno) {
 		vginfo->scan_summary_mismatch = 1;
-		/* If we don't return success, this dev info will be removed from lvmcache,
-		   and then we won't be able to rescan it or repair it. */
+
+		log_debug_cache("lvmcache %s mda%d VG %s older seqno %u checksum %x mda_size %zu",
+				dev_name(info->dev), vgsummary->mda_num, vgname,
+				vgsummary->seqno, vgsummary->mda_checksum, vgsummary->mda_size);
+		return 1;
+
+	} else if (vgsummary->seqno > vginfo->seqno) {
+		vginfo->scan_summary_mismatch = 1;
+
+		/* Replace vginfo values with values from newer metadata. */
+		vginfo->seqno = vgsummary->seqno;
+		vginfo->mda_checksum = vgsummary->mda_checksum;
+		vginfo->mda_size = vgsummary->mda_size;
+
+		log_debug_cache("lvmcache %s mda%d VG %s newer seqno %u checksum %x mda_size %zu",
+				dev_name(info->dev), vgsummary->mda_num, vgname,
+				vgsummary->seqno, vgsummary->mda_checksum, vgsummary->mda_size);
+
+		goto update_vginfo;
+	} else {
+		/*
+		 * Same seqno as previous metadata we saw for this VG.
+		 * If the metadata somehow has a different checksum or size,
+		 * even though it has the same seqno, something has gone wrong.
+		 * FIXME: figure out if this can happen, how, and what to do with it.
+		 */
+
+		if ((vginfo->mda_size != vgsummary->mda_size) || (vginfo->mda_checksum != vgsummary->mda_checksum)) {
+			log_warn("WARNING: scan of VG %s from %s mda%d found mda_checksum %x mda_size %zu vs %x %zu",
+				 vgname, dev_name(info->dev), vgsummary->mda_num,
+				 vgsummary->mda_checksum, vgsummary->mda_size,
+				 vginfo->mda_checksum, vginfo->mda_size);
+			vginfo->scan_summary_mismatch = 1;
+			return 0;
+		}
+
+		/*
+		 * The seqno and checksum matches what was previously seen;
+		 * the summary values have already been saved in vginfo.
+		 */
 		return 1;
 	}
 
-	/*
-	 * If a dev has an unmatching checksum, ignore the other
-	 * info from it, keeping the info we already saved.
-	 */
+ update_vginfo:
 	if (!_lvmcache_update_vgstatus(info, vgsummary->vgstatus, vgsummary->creation_host,
 				       vgsummary->lock_type, vgsummary->system_id)) {
+		/*
+		 * This shouldn't happen, it's an internal errror, and we can leave
+		 * the info in place without saving the summary values in vginfo.
+		 */
 		log_error("Failed to update VG %s info in lvmcache.", vgname);
-		return 0;
 	}
 
 	return 1;
@@ -2280,10 +2374,26 @@ int lvmcache_update_vg(struct volume_group *vg, unsigned precommitted)
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		(void) dm_strncpy(pvid_s, (char *) &pvl->pv->id, sizeof(pvid_s));
-		/* FIXME Could pvl->pv->dev->pvid ever be different? */
-		if ((info = lvmcache_info_from_pvid(pvid_s, pvl->pv->dev, 0)) &&
-		    !lvmcache_update_vgname_and_id(info, &vgsummary))
-			return_0;
+
+		if (!(info = lvmcache_info_from_pvid(pvid_s, pvl->pv->dev, 0))) {
+			log_debug_cache("lvmcache_update_vg %s no info for %s %s",
+					vg->name,
+					(char *) &pvl->pv->id,
+					pvl->pv->dev ? dev_name(pvl->pv->dev) : "missing");
+			continue;
+		}
+
+		log_debug_cache("lvmcache_update_vg %s for info %s",
+				vg->name, dev_name(info->dev));
+
+		/*
+		 * FIXME: use a different function that just attaches info's that
+		 * had no metadata onto the correct vginfo.
+		 */
+		if (!lvmcache_update_vgname_and_id(info, &vgsummary)) {
+			log_debug_cache("lvmcache_update_vg %s failed to update info for %s",
+					vg->name, dev_name(info->dev));
+		}
 	}
 
 	return 1;
@@ -2703,9 +2813,10 @@ void lvmcache_del_bas(struct lvmcache_info *info)
 }
 
 int lvmcache_add_mda(struct lvmcache_info *info, struct device *dev,
-		     uint64_t start, uint64_t size, unsigned ignored)
+		     uint64_t start, uint64_t size, unsigned ignored,
+		     struct metadata_area **mda_new)
 {
-	return add_mda(info->fmt, NULL, &info->mdas, dev, start, size, ignored);
+	return add_mda(info->fmt, NULL, &info->mdas, dev, start, size, ignored, mda_new);
 }
 
 int lvmcache_add_da(struct lvmcache_info *info, uint64_t start, uint64_t size)
@@ -3042,5 +3153,105 @@ int lvmcache_scan_mismatch(struct cmd_context *cmd, const char *vgname, const ch
 		return vginfo->scan_summary_mismatch;
 
 	return 1;
+}
+
+/*
+ * This is used by the metadata repair command to check if
+ * the metadata on a dev needs repair because it's old.
+ */
+int lvmcache_has_old_metadata(struct cmd_context *cmd, const char *vgname, const char *vgid, struct device *dev)
+{
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+
+	/* shouldn't happen */
+	if (!vgname || !vgid)
+		return 0;
+
+	/* shouldn't happen */
+	if (!(vginfo = lvmcache_vginfo_from_vgid(vgid)))
+		return 0;
+
+	/* shouldn't happen */
+	if (!(info = lvmcache_info_from_pvid(dev->pvid, NULL, 0)))
+		return 0;
+
+	/* on same dev, one mda has newer metadata than the other */
+	if (info->summary_seqno_mismatch)
+		return 1;
+
+	/* one or both mdas on this dev has older metadata than another dev */
+	if (vginfo->seqno > info->summary_seqno)
+		return 1;
+
+	return 0;
+}
+
+/*
+ * Return a dev that has a copy of the metadata with the latest seqno.
+ */
+struct device *lvmcache_get_repair_src_dev(struct cmd_context *cmd,
+					   const char *vgname)
+{
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, NULL))) {
+		log_error("No info found for VG %s", vgname);
+		return NULL;
+	}
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		log_debug("get_repair_src_dev %s vg %u dev %u",
+			  dev_name(info->dev), vginfo->seqno, info->summary_seqno);
+
+		if (info->summary_seqno == vginfo->seqno)
+			return info->dev;
+	}
+	return NULL;
+}
+
+struct metadata_area *lvmcache_get_repair_src_mda(struct cmd_context *cmd,
+						  const char *vgname,
+						  struct device *dev,
+						  int use_mda_num)
+{
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+	struct metadata_area *mda;
+	int use_mda1 = 0;
+	int use_mda2 = 0;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, NULL)))
+		return NULL;
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		if (info->dev != dev)
+			continue;
+
+		if (use_mda_num == 1)
+			use_mda1 = 1;
+		else if (use_mda_num == 2)
+			use_mda2 = 1;
+		else if (!info->summary_seqno_mismatch)
+			use_mda1 = 1;
+		else if (info->mda1_seqno > info->mda2_seqno)
+			use_mda1 = 1;
+		else if (info->mda2_seqno > info->mda1_seqno)
+			use_mda2 = 1;
+
+		dm_list_iterate_items(mda, &info->mdas) {
+			if (use_mda1 && (mda->status & MDA_PRIMARY)) {
+				log_warn("get_repair_src_mda use mda1");
+				return mda;
+			}
+			if (use_mda2 && !(mda->status & MDA_PRIMARY)) {
+				log_warn("get_repair_src_mda use mda2");
+				return mda;
+			}
+		}
+		return NULL;
+	}
+	return NULL;
 }
 

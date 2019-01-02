@@ -26,6 +26,8 @@
 @top_srcdir@/lib/format_pool/format_pool.h
 @top_srcdir@/lib/format_text/archiver.h
 @top_srcdir@/lib/format_text/format-text.h
+@top_srcdir@/lib/format_text/layout.h
+@top_srcdir@/lib/format_text/import-export.h
 @top_srcdir@/lib/format_text/text_export.h
 @top_srcdir@/lib/format_text/text_import.h
 @top_srcdir@/lib/label/label.h
