@@ -116,8 +116,9 @@ devices {
 	#
 	# Example
 	# preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
-	#
-	# This configuration option does not have a default value defined.
+	# 
+	# This configuration option has an automatic default value.
+	# preferred_names = [ "^/dev/mpath/", "^/dev/mapper/mpath", "^/dev/[hs]d" ]
 
 	# Configuration option devices/use_devicesfile.
 	# Enable or disable the use of a devices file.
