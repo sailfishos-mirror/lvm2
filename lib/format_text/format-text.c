@@ -1494,7 +1494,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 	 * valid vg name.
 	 */
 	if (!validate_name(namebuf)) {
-		log_error("Metadata location on %s at %llu begins with invalid VG name.",
+		log_warn("WARNING: Metadata location on %s at %llu begins with invalid VG name.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1556,7 +1556,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
 				vgsummary)) {
-		log_error("Metadata location on %s at %llu has invalid summary for VG.",
+		log_warn("WARNING: metadata on %s at %llu has invalid summary for VG.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1564,7 +1564,7 @@ int read_metadata_location_summary(const struct format_type *fmt,
 
 	/* Ignore this entry if the characters aren't permissible */
 	if (!validate_name(vgsummary->vgname)) {
-		log_error("Metadata location on %s at %llu has invalid VG name.",
+		log_warn("WARNING: metadata on %s at %llu has invalid VG name.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));
 		return 0;
@@ -1646,13 +1646,12 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume 
 
 	/* Add a new cache entry with PV info or update existing one. */
 	if (!(info = lvmcache_add(fmt->labeller, (const char *) &pv->id,
-				  pv->dev, pv->vg_name,
-				  is_orphan_vg(pv->vg_name) ? pv->vg_name : pv->vg ? (const char *) &pv->vg->id : NULL, 0)))
+				  pv->dev,  pv->label_sector, pv->vg_name,
+				  is_orphan_vg(pv->vg_name) ? pv->vg_name : pv->vg ? (const char *) &pv->vg->id : NULL, 0, NULL)))
 		return_0;
 
+	/* lvmcache_add() creates info and info->label structs for the dev, get info->label. */
 	label = lvmcache_get_label(info);
-	label->sector = pv->label_sector;
-	label->dev = pv->dev;
 
 	lvmcache_update_pv(info, pv, fmt);
 
@@ -1680,7 +1679,7 @@ static int _text_pv_write(const struct format_type *fmt, struct physical_volume 
 		// if fmt is not the same as info->fmt we are in trouble
 		if (!lvmcache_add_mda(info, mdac->area.dev,
 				      mdac->area.start, mdac->area.size,
-				      mda_is_ignored(mda)))
+				      mda_is_ignored(mda), NULL))
 			return_0;
 	}
 
@@ -1734,10 +1733,14 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
 {
 	struct lvmcache_info *info;
 	uint32_t ext_vsn;
+	uint32_t ext_flags;
 
 	*needs_rewrite = 0;
 
 	if (!pv->is_labelled)
+		return 1;
+
+	if (!pv->dev)
 		return 1;
 
 	if (!(info = lvmcache_info_from_pvid((const char *)&pv->id, pv->dev, 0))) {
@@ -1747,8 +1750,16 @@ static int _text_pv_needs_rewrite(const struct format_type *fmt, struct physical
 
 	ext_vsn = lvmcache_ext_version(info);
 
-	if (ext_vsn < PV_HEADER_EXTENSION_VSN)
+	if (ext_vsn < PV_HEADER_EXTENSION_VSN) {
+		log_debug("PV %s header needs rewrite for new ext version", dev_name(pv->dev));
 		*needs_rewrite = 1;
+	}
+
+	ext_flags = lvmcache_ext_flags(info);
+	if (!(ext_flags & PV_EXT_USED)) {
+		log_debug("PV %s header needs rewrite to set ext used", dev_name(pv->dev));
+		*needs_rewrite = 1;
+	}
 
 	return 1;
 }
@@ -2598,3 +2609,36 @@ bad:
 
 	return NULL;
 }
+
+int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
+			      struct metadata_area *mda)
+{
+	struct mda_context *mdac = mda->metadata_locn;
+	uint64_t start_byte = mdac->area.start;
+	struct mda_header *mdab;
+	struct raw_locn *rlocn_slot0;
+	struct raw_locn *rlocn_slot1;
+
+	if (!(mdab = raw_read_mda_header(cmd->fmt, &mdac->area, mda_is_primary(mda)))) {
+		log_error("Failed to read outdated pv mda header on %s", dev_name(dev));
+		return 0;
+	}
+
+	rlocn_slot0 = &mdab->raw_locns[0];
+	rlocn_slot1 = &mdab->raw_locns[1];
+
+	rlocn_slot0->offset = 0;
+	rlocn_slot0->size = 0;
+	rlocn_slot0->checksum = 0;
+	rlocn_slot1->offset = 0;
+	rlocn_slot1->size = 0;
+	rlocn_slot1->checksum = 0;
+         
+	if (!_raw_write_mda_header(cmd->fmt, dev, mda_is_primary(mda), start_byte, mdab)) {
+		log_error("Failed to write outdated pv mda header on %s", dev_name(dev));
+		return 0;
+	}
+
+	return 1;
+}
+
