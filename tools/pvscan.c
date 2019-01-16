@@ -513,6 +513,8 @@ static int _online_pvscan_one(struct cmd_context *cmd, struct device *dev,
 		if (pvid_without_metadata)
 			*pvid_without_metadata = dm_pool_strdup(cmd->mem, dev->pvid);
 		fmt->ops->destroy_instance(baton.fid);
+	} else {
+		set_pv_devices(baton.fid, baton.vg);
 	}
 
 	ret = _online_pv_found(cmd, dev, dev_args, baton.vg, found_vgnames);
