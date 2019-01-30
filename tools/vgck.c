@@ -15,6 +15,49 @@
 
 #include "tools.h"
 
+/*
+ * Simply calling vg_write can correct or clean up various things:
+ * . some mda's have old versions of metdadata 
+ * . wipe outdated PVs
+ * . fix pv_header used flag and version
+ * . strip historical lvs
+ * . clear missing pv flag on unused PV
+ */
+static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused)),
+		       const char *vg_name,
+		       struct volume_group *vg,
+		       struct processing_handle *handle __attribute__((unused)))
+{
+	/*
+	 * TODO: when bad mda's are seen, remove them from info->mdas
+	 * as we do already, but then save the mda in a new info->bad_mdas
+	 * list.  Then when we get here we can check if the mdas on the
+	 * bad_mdas list look sensible enough to write to.
+	 */
+
+	if (!vg_write(vg)) {
+		log_error("Failed to write VG.");
+		return 0;
+	}
+
+	if (!vg_commit(vg)) {
+		log_error("Failed to commit VG.");
+		return 0;
+	}
+
+	return 1;
+}
+
+static int _update_metadata(struct cmd_context *cmd, int argc, char **argv)
+{
+	cmd->handles_missing_pvs = 1;
+	cmd->wipe_outdated_pvs = 1;
+	cmd->handles_unknown_segments = 1;
+
+	return process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, 0, NULL,
+			       &_update_metadata_single);
+}
+
 static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
 		       const char *vg_name,
 		       struct volume_group *vg,
@@ -37,6 +80,9 @@ static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
 
 int vgck(struct cmd_context *cmd, int argc, char **argv)
 {
+	if (arg_is_set(cmd, updatemetadata_ARG))
+		return _update_metadata(cmd, argc, argv);
+
 	return process_each_vg(cmd, argc, argv, NULL, NULL, 0, 0, NULL,
 			       &vgck_single);
 }
