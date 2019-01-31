@@ -73,7 +73,7 @@ vgreduce --removemissing $vg1
 
 # now, enable $dev1 and clear the old metadata from it
 aux enable_dev "$dev1"
-pvcreate -ff "$dev1"
+vgck --updatemetadata $vg1
 
 vgck $vg1
 
@@ -131,7 +131,7 @@ vgreduce --removemissing $vg1
 
 # now, enable $dev1 and clear the old metadata from it
 aux enable_dev "$dev1"
-pvcreate -ff "$dev1"
+vgck --updatemetadata $vg1
 
 vgck $vg1
 

@@ -28,7 +28,7 @@ vgscan 2>&1 | tee vgscan.out
 grep "Inconsistent metadata found for VG $vg" vgscan.out
 
 # erase outdated dev1
-pvcreate -f "$dev1"
+vgck --updatemetadata $vg
 
 vgscan 2>&1 | tee vgscan.out
 not grep "Inconsistent metadata found for VG $vg" vgscan.out
@@ -48,7 +48,7 @@ vgscan 2>&1 | tee vgscan.out
 grep "Inconsistent metadata found for VG $vg" vgscan.out
 
 # write the vg to update the metadata on dev1
-lvremove $vg/boo
+vgck --updatemetadata $vg
 
 vgscan 2>&1 | tee vgscan.out
 not grep "Inconsistent metadata found for VG $vg" vgscan.out
@@ -65,7 +65,7 @@ vgscan 2>&1 | tee vgscan.out
 grep "Inconsistent metadata found for VG $vg" vgscan.out
 
 # erase outdated dev1
-pvcreate -f "$dev1"
+vgck --updatemetadata $vg
 
 vgscan 2>&1 | tee vgscan.out
 not grep "Inconsistent metadata found for VG $vg" vgscan.out
