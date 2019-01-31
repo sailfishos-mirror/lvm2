@@ -28,13 +28,6 @@ static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused
 		       struct volume_group *vg,
 		       struct processing_handle *handle __attribute__((unused)))
 {
-	/*
-	 * TODO: when bad mda's are seen, remove them from info->mdas
-	 * as we do already, but then save the mda in a new info->bad_mdas
-	 * list.  Then when we get here we can check if the mdas on the
-	 * bad_mdas list look sensible enough to write to.
-	 */
-
 	if (!vg_write(vg)) {
 		log_error("Failed to write VG.");
 		return 0;
@@ -44,6 +37,10 @@ static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused
 		log_error("Failed to commit VG.");
 		return 0;
 	}
+
+	/* bad mdas are not in fid->metadata_areas_in_use, this
+	   function gets them from lvmcache and tries to write this metadata to them */
+	update_bad_mdas(cmd, vg);
 
 	return 1;
 }

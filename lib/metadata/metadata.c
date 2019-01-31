@@ -5148,3 +5148,38 @@ struct volume_group *vg_read_for_update(struct cmd_context *cmd, const char *vg_
 	return vg;
 }
 
+void update_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
+{
+	struct dm_list bad_mdas;
+	struct metadata_area *mda;
+	struct device *dev;
+
+	dm_list_init(&bad_mdas);
+
+	lvmcache_get_bad_mdas(cmd, vg->name, (const char *)&vg->id, &bad_mdas);
+
+	/* FIXME: validate that mda locations are sane before trying to write them */
+
+	dm_list_iterate_items(mda, &bad_mdas) {
+		dev = mda_get_device(mda);
+
+		if (!mda->ops->vg_write(vg->fid, vg, mda)) {
+			log_warn("WARNING: failed to write VG %s metadata to bad mda at %llu on %s.",
+				 vg->name, (unsigned long long)mda->header_start, dev_name(dev));
+			continue;
+		}
+
+		if (!mda->ops->vg_precommit(vg->fid, vg, mda)) {
+			log_warn("WARNING: failed to precommit VG %s metadata to bad mda at %llu on %s.",
+				 vg->name, (unsigned long long)mda->header_start, dev_name(dev));
+			continue;
+		}
+
+		if (!mda->ops->vg_commit(vg->fid, vg, mda)) {
+			log_warn("WARNING: failed to commit VG %s metadata to bad mda at %llu on %s.",
+				 vg->name, (unsigned long long)mda->header_start, dev_name(dev));
+			continue;
+		}
+	}
+}
+

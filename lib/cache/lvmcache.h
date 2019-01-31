@@ -235,4 +235,8 @@ int lvmcache_is_outdated_dev(struct cmd_context *cmd,
 void lvmcache_del_outdated_devs(struct cmd_context *cmd,
                                 const char *vgname, const char *vgid);
 
+void lvmcache_get_bad_mdas(struct cmd_context *cmd,
+			const char *vgname, const char *vgid,
+			struct dm_list *bad_mdas);
+
 #endif

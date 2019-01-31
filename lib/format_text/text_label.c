@@ -492,7 +492,8 @@ static int _text_read(struct labeller *labeller, struct device *dev, void *label
 			if (!lvmcache_update_vgname_and_id(info, &vgsummary)) {
 				/* I believe this is only an internal error. */
 				log_warn("Scanning %s mda1 failed to save summary.", dev_name(dev));
-				_del_mda(mda1);
+				dm_list_del(&mda1->list);
+				lvmcache_save_bad_mda(info, mda1);
 				mda1 = NULL;
 				mda1_bad = 1;
 				bad_mda_count++;
@@ -505,8 +506,10 @@ static int _text_read(struct labeller *labeller, struct device *dev, void *label
 		if (!rv1) {
 			/* Remove the bad mda so vg_read won't try to read it. */
 			log_warn("WARNING: scanning %s mda1 failed to read metadata summary.", dev_name(dev));
-			log_warn("WARNING: repair VG metadata on %s with vgck --repairmetadata.", dev_name(dev));
-			_del_mda(mda1);
+			log_warn("WARNING: repair VG metadata on %s with vgck --updatemetadata.", dev_name(dev));
+			/* save it so we can find it to repair it later if needed */
+			dm_list_del(&mda1->list);
+			lvmcache_save_bad_mda(info, mda1);
 			mda1 = NULL;
 			mda1_bad = 1;
 			bad_mda_count++;
@@ -524,7 +527,8 @@ static int _text_read(struct labeller *labeller, struct device *dev, void *label
 			if (!lvmcache_update_vgname_and_id(info, &vgsummary)) {
 				/* I believe this is only an internal error. */
 				log_warn("Scanning %s mda2 failed to save summary.", dev_name(dev));
-				_del_mda(mda2);
+				dm_list_del(&mda2->list);
+				lvmcache_save_bad_mda(info, mda2);
 				mda2 = NULL;
 				mda2_bad = 1;
 				bad_mda_count++;
@@ -537,8 +541,10 @@ static int _text_read(struct labeller *labeller, struct device *dev, void *label
 		if (!rv2) {
 			/* Remove the bad mda so vg_read won't try to read it. */
 			log_warn("WARNING: scanning %s mda2 failed to read metadata summary.", dev_name(dev));
-			log_warn("WARNING: repair VG metadata on %s with vgck --repairmetadata.", dev_name(dev));
-			_del_mda(mda2);
+			log_warn("WARNING: repair VG metadata on %s with vgck --updatemetadata.", dev_name(dev));
+			/* save it so we can find it to repair it later if needed */
+			dm_list_del(&mda2->list);
+			lvmcache_save_bad_mda(info, mda2);
 			mda2 = NULL;
 			mda2_bad = 1;
 			bad_mda_count++;
