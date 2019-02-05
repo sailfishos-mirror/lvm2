@@ -57,10 +57,12 @@ struct lvmcache_vgsummary {
 	char *creation_host;
 	const char *system_id;
 	const char *lock_type;
+	uint32_t seqno;
 	uint32_t mda_checksum;
 	size_t mda_size;
-	int zero_offset;
-	int seqno;
+	int mda_num; /* 1 = summary from mda1, 2 = summary from mda2 */
+	unsigned mda_ignored:1;
+	unsigned zero_offset:1;
 };
 
 int lvmcache_init(struct cmd_context *cmd);
@@ -216,6 +218,8 @@ void lvmcache_save_metadata_size(uint64_t val);
 int dev_in_device_list(struct device *dev, struct dm_list *head);
 
 int lvmcache_has_bad_metadata(struct device *dev);
+
+int lvmcache_has_old_metadata(struct cmd_context *cmd, const char *vgname, const char *vgid, struct device *dev);
 
 void lvmcache_get_outdated_devs(struct cmd_context *cmd,
                                 const char *vgname, const char *vgid,
