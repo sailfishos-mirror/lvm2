@@ -91,4 +91,7 @@ int dump_metadata_area(struct cmd_context *cmd,
                        struct metadata_area *mda,
                        const char *tofile);
 
+int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
+                              struct metadata_area *mda);
+
 #endif
