@@ -46,11 +46,12 @@ aux disable_dev "$dev3"
 lvconvert --yes --repair $vg2/$lv1
 aux enable_dev "$dev3"
 
-# here it should fix any reappeared devices
-lvs
+# put back the dev that was missing during repair
+# the vg was written by repair with dev3 having the missing flag
+vgextend --restoremissing $vg2 "$dev3"
 
 lvs -a $vg2 -o+devices 2>&1 | tee out
-not grep reappeared out
+not grep missing out
 
 # This removes the first "vg1" using its uuid
 vgremove -ff -S vg_uuid=$UUID1

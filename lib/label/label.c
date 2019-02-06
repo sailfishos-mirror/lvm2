@@ -429,9 +429,6 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 	ret = labeller->ops->read(labeller, dev, label_buf, sector, &is_duplicate);
 
 	if (!ret) {
-		/* FIXME: handle errors */
-		lvmcache_del_dev(dev);
-
 		if (is_duplicate) {
 			/*
 			 * _text_read() called lvmcache_add() which found an
@@ -717,7 +714,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 				scan_failed = 1;
 				scan_process_errors++;
 				scan_failed_count++;
-				lvmcache_del_dev(devl->dev);
 			}
 		}
 
