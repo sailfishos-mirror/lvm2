@@ -152,10 +152,11 @@ int lvmetad_pvscan_single(struct cmd_context *cmd, struct device *dev,
 			  struct dm_list *changed_vgnames);
 
 int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait);
+int lvmetad_pvscan_all_devs_init(struct cmd_context *cmd, int do_wait, int init_for_none);
 
 int lvmetad_vg_clear_outdated_pvs(struct volume_group *vg);
 void lvmetad_validate_global_cache(struct cmd_context *cmd, int force);
-int lvmetad_token_matches(struct cmd_context *cmd);
+int lvmetad_token_matches(struct cmd_context *cmd, int *init_none);
 
 int lvmetad_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid);
 
@@ -200,7 +201,7 @@ static inline int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait) 
 
 static inline int lvmetad_vg_clear_outdated_pvs(struct volume_group *vg) {return 0;}
 static inline void lvmetad_validate_global_cache(struct cmd_context *cmd, int force) {}
-static inline int lvmetad_token_matches(struct cmd_context *cmd) {return 1;}
+static inline int lvmetad_token_matches(struct cmd_context *cmd, int *init_none) {return 1;}
 
 static inline int lvmetad_vg_is_foreign(struct cmd_context *cmd, const char *vgname, const char *vgid) {return 0;}
 

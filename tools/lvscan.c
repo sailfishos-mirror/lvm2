@@ -102,7 +102,7 @@ int lvscan(struct cmd_context *cmd, int argc, char **argv)
 		log_verbose("Ignoring lvscan --cache because lvmetad is not in use.");
 
 	/* Needed because this command has NO_LVMETAD_AUTOSCAN. */
-	if (lvmetad_used() && (!lvmetad_token_matches(cmd) || lvmetad_is_disabled(cmd, &reason))) {
+	if (lvmetad_used() && (!lvmetad_token_matches(cmd, NULL) || lvmetad_is_disabled(cmd, &reason))) {
 		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, 0)) {
 			log_warn("WARNING: Not using lvmetad because cache update failed.");
 			lvmetad_make_unused(cmd);

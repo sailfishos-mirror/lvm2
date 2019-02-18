@@ -316,6 +316,7 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
 	int all_vgs = 0;
 	int remove_errors = 0;
 	int add_errors = 0;
+	int init_for_none = 0;
 	int ret = ECMD_PROCESSED;
 
 	dm_list_init(&found_vgnames);
@@ -389,8 +390,8 @@ static int _pvscan_cache(struct cmd_context *cmd, int argc, char **argv)
 	 * the need for this case so that 'pvscan --cache dev' is guaranteed to
 	 * never scan any devices other than those specified.
 	 */
-	if (!lvmetad_token_matches(cmd)) {
-		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, 0)) {
+	if (!lvmetad_token_matches(cmd, &init_for_none)) {
+		if (lvmetad_used() && !lvmetad_pvscan_all_devs_init(cmd, 0, init_for_none)) {
 			log_warn("WARNING: Not updating lvmetad because cache update failed.");
 			ret = ECMD_FAILED;
 			goto out;
@@ -708,7 +709,7 @@ int pvscan(struct cmd_context *cmd, int argc, char **argv)
 			  "of exported volume group(s)" : "in no volume group");
 
 	/* Needed because this command has NO_LVMETAD_AUTOSCAN. */
-	if (lvmetad_used() && (!lvmetad_token_matches(cmd) || lvmetad_is_disabled(cmd, &reason))) {
+	if (lvmetad_used() && (!lvmetad_token_matches(cmd, NULL) || lvmetad_is_disabled(cmd, &reason))) {
 		if (lvmetad_used() && !lvmetad_pvscan_all_devs(cmd, 0)) {
 			log_warn("WARNING: Not using lvmetad because cache update failed.");
 			lvmetad_make_unused(cmd);

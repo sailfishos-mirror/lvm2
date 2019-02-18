@@ -2666,6 +2666,7 @@ static response handler(daemon_state s, client_handle h, request r)
 	const char *cmd;
 	int prev_in_progress, this_in_progress;
 	int update_timeout;
+	int init_none;
 	int pid;
 	int cache_lock = 0;
 	int info_lock = 0;
@@ -2675,6 +2676,7 @@ static response handler(daemon_state s, client_handle h, request r)
 	pid = (int)daemon_request_int(r, "pid", 0);
 	cmd = daemon_request_str(r, "cmd", "NONE");
 	update_timeout = (int)daemon_request_int(r, "update_timeout", 0);
+	init_none = (int)daemon_request_int(r, "init_none", 0);
 
 	pthread_mutex_lock(&state->token_lock);
 
@@ -2694,7 +2696,24 @@ static response handler(daemon_state s, client_handle h, request r)
 		prev_in_progress = !strcmp(state->token, LVMETAD_TOKEN_UPDATE_IN_PROGRESS);
 		this_in_progress = !strcmp(token, LVMETAD_TOKEN_UPDATE_IN_PROGRESS);
 
-		if (!prev_in_progress && this_in_progress) {
+		if (init_none && state->token[0]) {
+			/*
+			 * token has been set to something (not "none" / empty), and
+			 * init_none means we expected it to be empty
+			 */
+			pthread_mutex_unlock(&state->token_lock);
+
+			DEBUGLOG(state, "token_mismatch current \"%s\" got init_none from pid %d cmd %s",
+				 state->token, pid, cmd ?: "none");
+
+			return daemon_reply_simple("token_init_race",
+					   "expected = %s", state->token,
+					   "received = %s", token,
+					   "update_pid = " FMTd64, (int64_t)state->update_pid,
+					   "reason = %s", "another command is doing init",
+					   NULL);
+
+		} else if (!prev_in_progress && this_in_progress) {
 			/* New update is starting (filter token is replaced by update token) */
 
 			(void) dm_strncpy(prev_token, state->token, sizeof(prev_token));

@@ -37,6 +37,7 @@ static char *_lvmetad_token = NULL;
 static const char *_lvmetad_socket = NULL;
 static struct cmd_context *_lvmetad_cmd = NULL;
 static int64_t _lvmetad_update_timeout;
+static int _send_init_for_none;
 
 static struct volume_group *_lvmetad_pvscan_vg(struct cmd_context *cmd, struct volume_group *vg, const char *vgid, struct format_type *fmt);
 
@@ -242,7 +243,7 @@ void lvmetad_release_token(void)
  * command's use of lvmetad and return 0.
  */
 
-int lvmetad_token_matches(struct cmd_context *cmd)
+int lvmetad_token_matches(struct cmd_context *cmd, int *init_none)
 {
 	daemon_reply reply;
 	const char *daemon_token;
@@ -314,6 +315,8 @@ retry:
 	 */
 	if (!strcmp(daemon_token, "none")) {
 		log_debug_lvmetad("lvmetad initialization needed.");
+		if (init_none)
+			*init_none = 1;
 		ret = 0;
 		goto out;
 	}
@@ -433,6 +436,7 @@ retry:
 	if (!daemon_request_extend(req,
 				   "token = %s", _lvmetad_token ?: "none",
 				   "update_timeout = " FMTd64, (int64_t)wait_sec,
+				   "init_none = " FMTd64, _send_init_for_none,
 				   "pid = " FMTd64, (int64_t)getpid(),
 				   "cmd = %s", get_cmd_name(),
 				   NULL)) {
@@ -554,7 +558,7 @@ out:
  * some failure cases.
  */
 
-static int _token_update(int *replaced_update)
+static int _token_update(int *replaced_update, int init_for_none)
 {
 	daemon_reply reply;
 	const char *token_expected;
@@ -563,8 +567,15 @@ static int _token_update(int *replaced_update)
 	int update_pid;
 	int ending_our_update;
 
-	log_debug_lvmetad("Sending lvmetad token_update %s", _lvmetad_token);
+	log_debug_lvmetad("Sending lvmetad token_update %s init_for_none %d",
+			  _lvmetad_token, init_for_none);
+
+	if (init_for_none)
+		_send_init_for_none = 1;
+
 	reply = _lvmetad_send(NULL, "token_update", NULL);
+
+	_send_init_for_none = 0;
 
 	if (replaced_update)
 		*replaced_update = 0;
@@ -577,6 +588,17 @@ static int _token_update(int *replaced_update)
 
 	update_pid = (int)daemon_reply_int(reply, "update_pid", 0);
 	reply_str = daemon_reply_str(reply, "response", "");
+
+	/*
+	 * Two pvscans saw that lvmetad had token "none" and each decided to
+	 * initialize the state.  When we tried to set the token to updating,
+	 * lvmetad had already left the "none" state.
+	 */
+	if (!strcmp(reply_str, "token_init_race")) {
+		log_warn("WARNING: lvmetad is being initialized by another command (pid %d).", update_pid);
+		daemon_reply_destroy(reply);
+		return 0;
+	}
 
 	/*
 	 * A mismatch can only happen when this command attempts to set the
@@ -2330,7 +2352,7 @@ bad:
  * generally revert disk scanning and not use lvmetad.
  */
 
-int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+static int _lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait, int init_for_none)
 {
 	struct device_list *devl, *devl2;
 	struct dm_list scan_devs;
@@ -2363,7 +2385,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 	future_token = _lvmetad_token;
 	_lvmetad_token = (char *) LVMETAD_TOKEN_UPDATE_IN_PROGRESS;
 
-	if (!_token_update(&replaced_update)) {
+	if (!_token_update(&replaced_update, init_for_none)) {
 		log_error("Failed to start lvmetad update.");
 		_lvmetad_token = future_token;
 		return 0;
@@ -2438,7 +2460,7 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 	if (!ret)
 		return 0;
 
-	if (!_token_update(NULL)) {
+	if (!_token_update(NULL, 0)) {
 		log_error("Failed to update lvmetad token after device scan.");
 		return 0;
 	}
@@ -2459,6 +2481,16 @@ int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
 	}
 
 	return ret;
+}
+
+int lvmetad_pvscan_all_devs(struct cmd_context *cmd, int do_wait)
+{
+	return _lvmetad_pvscan_all_devs(cmd, do_wait, 0);
+}
+
+int lvmetad_pvscan_all_devs_init(struct cmd_context *cmd, int do_wait, int init_for_none)
+{
+	return _lvmetad_pvscan_all_devs(cmd, do_wait, init_for_none);
 }
 
 int lvmetad_vg_clear_outdated_pvs(struct volume_group *vg)
