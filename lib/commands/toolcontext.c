@@ -526,6 +526,8 @@ static int _init_system_id(struct cmd_context *cmd)
 	const char *source, *system_id;
 	int local_set = 0;
 
+	cmd->use_vg_without_system_id = find_config_tree_bool(cmd, global_use_vg_without_system_id_CFG, NULL);
+
 	cmd->system_id = NULL;
 	cmd->unknown_system_id = 0;
 

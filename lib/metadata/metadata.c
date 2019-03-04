@@ -3491,6 +3491,9 @@ static int _check_reappeared_pv(struct volume_group *correct_vg,
 
 static int _is_foreign_vg(struct volume_group *vg)
 {
+	if (!vg->cmd->use_vg_without_system_id && !vg->system_id[0])
+		return 1;
+
 	return vg->cmd->system_id && strcmp(vg->system_id, vg->cmd->system_id);
 }
 
@@ -4882,8 +4885,11 @@ int is_system_id_allowed(struct cmd_context *cmd, const char *system_id)
 	/*
 	 * A VG without a system_id can be accessed by anyone.
 	 */
-	if (!system_id || !system_id[0])
-		return 1;
+	if (!system_id || !system_id[0]) {
+		if (cmd->use_vg_without_system_id)
+			return 1;
+		return 0;
+	}
 
 	/*
 	 * Allowed if the host and VG system_id's match.

@@ -1200,6 +1200,13 @@ cfg(global_system_id_file_CFG, "system_id_file", global_CFG_SECTION, CFG_DEFAULT
 	"This is used when system_id_source is set to 'file'.\n"
 	"Comments starting with the character # are ignored.\n")
 
+cfg(global_use_vg_without_system_id_CFG, "use_vg_without_system_id", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 1, vsn(2, 3, 2), 0, 0, NULL,
+	"Allow a VG without a system ID to be used by the local machine.\n"
+	"The default is to allow unrestricted access to a VG that does not\n"
+	"have a system ID set. Before disabling this (turning off access\n"
+	"to VGs without a system ID), ensure that any VG needed by the local\n"
+	"machine has a system ID set, matching the local machine.\n")
+
 cfg(activation_checks_CFG, "checks", activation_CFG_SECTION, 0, CFG_TYPE_BOOL, DEFAULT_ACTIVATION_CHECKS, vsn(2, 2, 86), NULL, 0, NULL,
 	"Perform internal checks of libdevmapper operations.\n"
 	"Useful for debugging problems with activation. Some of the checks may\n"
