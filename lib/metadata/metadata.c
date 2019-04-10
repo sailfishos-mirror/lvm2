@@ -3440,6 +3440,15 @@ bad:
  * FIXME: we only want to print the warnings when this is called from
  * vg_read, not from import_vg_from_metadata, so do the warnings elsewhere
  * or avoid calling this from import_vg_from.
+ *
+ * FIXME: the handling of the MISSING_PV flag should be improved because
+ * it's not clear when MISSING_PV is set because it is set in the ondisk
+ * metadata, or if MISSING_PV set because there's no dev found on the
+ * system while it's not written on disk, or if the dev is missing and
+ * the flag is written on disk.  In this function those cases are
+ * distinguishable, but not outside.  This could easily lead to bugs
+ * in cases where the code should be distinguishing between these
+ * variations.
  */
 static void _set_pv_device(struct format_instance *fid,
 			   struct volume_group *vg,
@@ -3452,8 +3461,13 @@ static void _set_pv_device(struct format_instance *fid,
 		if (!id_write_format(&pv->id, buffer, sizeof(buffer)))
 			buffer[0] = '\0';
 
+		/*
+		 * FIXME: include the device name hint in the VG metadata
+		 * in the message so the user has a better idea which
+		 * device is missing.
+		 */
 		if (fid->fmt->cmd && !fid->fmt->cmd->pvscan_cache_single)
-			log_error_once("Couldn't find device with uuid %s.", buffer);
+			log_warn("WARNING: Couldn't find device with uuid %s.", buffer);
 		else
 			log_debug_metadata("Couldn't find device with uuid %s.", buffer);
 	}
