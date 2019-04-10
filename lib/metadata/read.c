@@ -609,7 +609,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		}
 
 		if (vg->seqno > vg_ret->seqno) {
-			log_warn("WARNING: ignoring old metadata seqno %u on %s vs new metadata seqno %u on %s for VG %s.",
+			log_warn("WARNING: ignoring metadata seqno %u on %s for seqno %u on %s for VG %s.",
 				 vg_ret->seqno, dev_name(dev_ret),
 				 vg->seqno, dev_name(mda_dev), vg->name);
 			found_old_metadata = 1;
@@ -621,7 +621,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		}
 
 		if (vg_ret->seqno > vg->seqno) {
-			log_warn("WARNING: ignoring old metadata seqno %u on %s vs new metadata seqno %u on %s for VG %s.",
+			log_warn("WARNING: ignoring metadata seqno %u on %s for seqno %u on %s for VG %s.",
 				 vg->seqno, dev_name(mda_dev),
 				 vg_ret->seqno, dev_name(dev_ret), vg->name);
 			found_old_metadata = 1;
@@ -685,6 +685,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
 			     uint32_t read_flags, uint32_t lockd_state,
 			     uint32_t *error_flags, struct volume_group **error_vg)
 {
+	char uuidstr[64] __attribute__((aligned(8)));
 	struct volume_group *vg = NULL;
 	struct lv_list *lvl;
 	struct pv_list *pvl;
@@ -753,22 +754,25 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
 	 * --removemissing.
 	 */
 	dm_list_iterate_items(pvl, &vg->pvs) {
+		if (!id_write_format(&pvl->pv->id, uuidstr, sizeof(uuidstr)))
+			uuidstr[0] = '\0';
+
 		if (!pvl->pv->dev) {
 			/* The obvious and common case of a missing device. */
 
-			log_warn("WARNING: VG %s is missing PVID %s.", vg_name, (const char *)&pvl->pv->id);
+			log_warn("WARNING: VG %s is missing PV %s.", vg_name, uuidstr);
 			missing_pv_dev++;
 
 		} else if (pvl->pv->status & MISSING_PV) {
 			/* A device that was missing but has reappeared. */
 
 			if (pvl->pv->pe_alloc_count == 0) {
-				log_warn("WARNING: VG %s has unused reappeared PV %s.", vg_name, dev_name(pvl->pv->dev));
+				log_warn("WARNING: VG %s has unused reappeared PV %s %s.", vg_name, dev_name(pvl->pv->dev), uuidstr);
 				pvl->pv->status &= ~MISSING_PV;
 				/* tell vgextend restoremissing that MISSING flag was cleared here */
 				pvl->pv->unused_missing_cleared = 1;
 			} else {
-				log_warn("WARNING: VG %s was missing PV %s.", vg_name, dev_name(pvl->pv->dev));
+				log_warn("WARNING: VG %s was missing PV %s %s.", vg_name, dev_name(pvl->pv->dev), uuidstr);
 				missing_pv_flag++;
 			}
 		}
