@@ -2676,3 +2676,64 @@ int lvmcache_is_outdated_dev(struct cmd_context *cmd,
 
 	return 0;
 }
+
+/*
+ * Return a dev that has a copy of the metadata with the latest seqno.
+ */
+struct device *lvmcache_get_dump_src_dev(struct cmd_context *cmd, const char *vgname)
+{
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, NULL))) {
+		log_error("No info found for VG %s", vgname);
+		return NULL;
+	}
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		if (info->summary_seqno == vginfo->seqno)
+			return info->dev;
+	}
+	return NULL;
+}
+
+struct metadata_area *lvmcache_get_mda(struct cmd_context *cmd,
+				       const char *vgname,
+				       struct device *dev,
+				       int use_mda_num)
+{
+	struct lvmcache_vginfo *vginfo;
+	struct lvmcache_info *info;
+	struct metadata_area *mda;
+	int use_mda1 = 0;
+	int use_mda2 = 0;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, NULL)))
+		return NULL;
+
+	dm_list_iterate_items(info, &vginfo->infos) {
+		if (info->dev != dev)
+			continue;
+
+		if (use_mda_num == 1)
+			use_mda1 = 1;
+		else if (use_mda_num == 2)
+			use_mda2 = 1;
+		else if (!info->summary_seqno_mismatch)
+			use_mda1 = 1;
+		else if (info->mda1_seqno > info->mda2_seqno)
+			use_mda1 = 1;
+		else if (info->mda2_seqno > info->mda1_seqno)
+			use_mda2 = 1;
+
+		dm_list_iterate_items(mda, &info->mdas) {
+			if (use_mda1 && (mda->status & MDA_PRIMARY))
+				return mda;
+			if (use_mda2 && !(mda->status & MDA_PRIMARY))
+				return mda;
+		}
+		return NULL;
+	}
+	return NULL;
+}
+

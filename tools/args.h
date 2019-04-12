@@ -1389,6 +1389,12 @@ arg(thin_ARG, 'T', "thin", 0, 0, 0,
 arg(updatemetadata_ARG, '\0', "updatemetadata", 0, 0, 0,
     "Update VG metadata to correct problems.\n")
 
+arg(dumpmetadata_ARG, '\0', "dumpmetadata", 0, 0, 0,
+    "Print raw metadata for the VG.\n")
+
+arg(sourcedevice_ARG, '\0', "sourcedevice", pv_VAL, 0, 0,
+    "A source device.\n")
+
 arg(uuid_ARG, 'u', "uuid", 0, 0, 0,
     "#pvchange\n"
     "Generate new random UUID for specified PVs.\n"

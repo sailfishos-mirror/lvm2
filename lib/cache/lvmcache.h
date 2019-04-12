@@ -244,5 +244,11 @@ void lvmcache_get_bad_mdas(struct cmd_context *cmd,
 			   const char *vgname, const char *vgid,
 			   struct dm_list *bad_mdas);
 
+struct device *lvmcache_get_dump_src_dev(struct cmd_context *cmd, const char *vgname);
+
+struct metadata_area *lvmcache_get_mda(struct cmd_context *cmd,
+                                       const char *vgname,
+                                       struct device *dev,
+                                       int use_mda_num);
 
 #endif

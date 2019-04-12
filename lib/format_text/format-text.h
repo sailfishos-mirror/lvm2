@@ -80,4 +80,7 @@ struct data_area_list {
 int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
                               struct metadata_area *mda);
 
+int dump_text_metadata(struct cmd_context *cmd, const char *vgname,
+                       const char *dev_src_name, int force, const char *tofile);
+
 #endif

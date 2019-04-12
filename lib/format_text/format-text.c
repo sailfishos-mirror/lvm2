@@ -2678,3 +2678,188 @@ int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
 	return 1;
 }
 
+static char *_read_metadata_text(struct cmd_context *cmd, struct device *dev,
+				 uint64_t area_start, uint64_t area_size,
+				 uint32_t *len, uint64_t *disk_offset)
+{
+	struct mda_header *mh;
+	struct raw_locn *rlocn_slot0;
+	uint64_t text_offset, text_size;
+	char *area_buf;
+	char *text_buf;
+
+	/*
+	 * Read the entire metadata area, including mda_header and entire
+	 * circular buffer.
+	 */
+	if (!(area_buf = malloc(area_size)))
+		return NULL;
+
+	if (!dev_read_bytes(dev, area_start, area_size, area_buf)) {
+		return NULL;
+	}
+
+	mh = (struct mda_header *)area_buf;
+	_xlate_mdah(mh);
+
+	rlocn_slot0 = &mh->raw_locns[0];
+	text_offset = rlocn_slot0->offset;
+	text_size = rlocn_slot0->size;
+
+	/*
+	 * Copy and return the current metadata text out of the metadata area.
+	 */
+
+	if (!(text_buf = malloc(text_size))) {
+		return NULL;
+	}
+
+	memcpy(text_buf, area_buf + text_offset, text_size);
+
+	if (len)
+		*len = (uint32_t)text_size;
+	if (disk_offset)
+		*disk_offset = area_start + text_offset;
+
+	return text_buf;
+}
+
+int dump_text_metadata(struct cmd_context *cmd, const char *vgname,
+		       const char *dev_src_name, int force, const char *tofile)
+{
+	struct device *dev_src;
+	char *textbuf_src;
+	const char *vgid;
+	const struct format_type *fmt = cmd->fmt;
+	struct format_instance *fid;
+	struct format_instance_ctx fic;
+	struct metadata_area *mda_src;
+	struct mda_context *mdac_src;
+	struct volume_group *vg;
+	unsigned use_previous_vg = 0;
+	uint32_t textlen_src = 0;
+	uint32_t textcrc_src;
+	uint64_t text_disk_offset;
+	int use_mda_num = 0;
+	int ret = 0;
+
+	if (!dev_src_name) {
+		if (!(dev_src = lvmcache_get_dump_src_dev(cmd, vgname))) {
+			log_error("No device found to use for repair.");
+			return 0;
+		}
+	} else {
+		if (!(dev_src = dev_cache_get(cmd, dev_src_name, NULL))) {
+			log_error("No device found for repair source.");
+			return 0;
+		}
+	}
+
+	/*
+	 * Set up overhead/abstractions for reading a given vgname
+	 * (fmt/fid/fic/vgid).
+	 *
+	 * This requires that the label scan (already done) has
+	 * found the vgname on at least one good PV and stuffed
+	 * vginfo about it into lvmcache.
+	 *
+	 * TODO: remove this limitation so we can repair things
+	 * even if label scan can't fully process any PVs?
+	 */
+	if (!(vgid = lvmcache_vgid_from_vgname(cmd, vgname))) {
+		log_error("No VG found for %s", vgname);
+		return 0;
+	}
+
+	fic.type = FMT_INSTANCE_MDAS | FMT_INSTANCE_AUX_MDAS;
+	fic.context.vg_ref.vg_name = vgname;
+	fic.context.vg_ref.vg_id = vgid;
+
+	if (!(fid = _text_create_text_instance(fmt, &fic))) {
+		log_error("Failed to create format instance");
+		return 0;
+	}
+
+	/*
+	 * Read the source metadata from a single mda on a single device.
+	 * This metadata will be written to the devs needing repair.
+	 *
+	 * We require that the label_scan (already done) has found the
+	 * VG on the source dev and added info to lvmcache about it.
+	 * We get the source mda/mdac structs from lvmcache info->mdas.
+	 *
+	 * This assumes there is one good PV that label_scan can process
+	 * correctly.
+	 *
+	 * TODO: if there was a :2 suffix on the dev src name, then
+	 * use the second mda from the device.
+	 *
+	 * TODO: add an option to look at a specific offset in the
+	 * circular buffer instead of using the rlocn value.
+	 */
+	if (!(mda_src = lvmcache_get_mda(cmd, vgname, dev_src, use_mda_num))) {
+		log_error("No mda on source device %s", dev_name(dev_src));
+		goto out;
+	}
+	mdac_src = mda_src->metadata_locn;
+
+	/*
+	 * Read the VG metadata from the source device as a raw chunk of
+	 * original text.
+	 */
+	textbuf_src = _read_metadata_text(cmd, dev_src,
+				          mdac_src->area.start, mdac_src->area.size,
+				          &textlen_src, &text_disk_offset);
+	if (!textbuf_src || !textlen_src) {
+		log_error("No metadata text on source device %s", dev_name(dev_src));
+		goto out;
+	}
+
+	textcrc_src = calc_crc(INITIAL_CRC, (uint8_t *)textbuf_src, textlen_src);
+
+	/*
+	 * Read the same VG metadata, but imported/parsed into a vg struct
+	 * format so we know it's valid/parsable, and can look at values in it.
+	 */
+	if (!(vg = _vg_read_raw(fid, vgname, mda_src, NULL, &use_previous_vg))) {
+		log_error("Parse error for metadata on source device %s.", dev_name(dev_src));
+		if (force)
+			goto print;
+		log_error("Use --force to dump unparsable metadata buffer.");
+		goto out;
+	}
+
+print:
+	log_print("Printing metadata for %s from %s at %llu with seqno %u size %u checksum 0x%x.",
+		  vgname, dev_name(dev_src),
+		  (unsigned long long)text_disk_offset,
+		  vg->seqno, textlen_src, textcrc_src);
+
+	if (!tofile) {
+		log_print("---");
+		printf("%s\n", textbuf_src);
+		log_print("---");
+	} else {
+		FILE *fp;
+		if (!(fp = fopen(tofile, "wx"))) {
+			log_error("Failed to create file %s", tofile);
+			goto out;
+		}
+
+		fprintf(fp, "%s", textbuf_src);
+
+		if (fflush(fp))
+			stack;
+		if (fclose(fp))
+			stack;
+	}
+
+	if (vg)
+		release_vg(vg);
+
+	ret = 1;
+out:
+	fid->ref_count--;
+	return ret;
+}
+

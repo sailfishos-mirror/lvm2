@@ -14,6 +14,41 @@
  */
 
 #include "tools.h"
+#include "lib/format_text/format-text.h"
+
+static int _dump_metadata(struct cmd_context *cmd, int argc, char **argv)
+{
+	const char *dev_src_name = NULL;
+	const char *vgname;
+	const char *tofile = NULL;
+	int ret = 1;
+
+	/* TODO: verify valid vgname */
+	vgname = cmd->position_argv[0];
+
+	if (!lock_vol(cmd, vgname, LCK_VG_READ, NULL))
+		return ECMD_FAILED;
+
+	lvmcache_label_scan(cmd);
+
+	if (arg_is_set(cmd, sourcedevice_ARG)) {
+		if (!(dev_src_name = arg_str_value(cmd, sourcedevice_ARG, NULL)))
+			return ECMD_FAILED;
+	}
+
+	if (arg_is_set(cmd, file_ARG)) {
+		if (!(tofile = arg_str_value(cmd, file_ARG, NULL)))
+			return ECMD_FAILED;
+	}
+
+	ret = dump_text_metadata(cmd, vgname, dev_src_name, arg_is_set(cmd, force_ARG), tofile);
+
+	unlock_vg(cmd, NULL, vgname);
+
+	if (!ret)
+		return ECMD_FAILED;
+	return ECMD_PROCESSED;
+}
 
 /*
  * TODO: we cannot yet repair corruption in label_header, pv_header/locations,
@@ -88,6 +123,9 @@ static int vgck_single(struct cmd_context *cmd __attribute__((unused)),
 
 int vgck(struct cmd_context *cmd, int argc, char **argv)
 {
+	if (arg_is_set(cmd, dumpmetadata_ARG))
+		return _dump_metadata(cmd, argc, argv);
+
 	if (arg_is_set(cmd, updatemetadata_ARG))
 		return _update_metadata(cmd, argc, argv);
 
