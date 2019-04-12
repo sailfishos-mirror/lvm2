@@ -1624,6 +1624,11 @@ vgck --updatemetadata VG
 ID: vgck_update_metadata
 DESC: Rewrite VG metadata to correct problems.
 
+vgck --dumpmetadata VG
+OO: --sourcedevice PV, --file String, --force
+ID: vgck_dump_metadata
+DESC: Read and print raw metadata from a PV
+
 ---
 
 vgcreate VG_new PV ...
