@@ -590,7 +590,7 @@ FLAGS: SECONDARY_SYNTAX
 ---
 
 lvconvert --splitcache LV_cachepool_cache_thinpool_vdopool_writecache
-OO: OO_LVCONVERT
+OO: OO_LVCONVERT, --noflush
 ID: lvconvert_split_and_keep_cache
 DESC: Detach a cache from an LV.
 

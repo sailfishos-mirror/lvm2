@@ -1848,7 +1848,7 @@ static int _lvconvert_split_and_keep_cache(struct cmd_context *cmd,
 		return_0;
 
 	if (lv_is_cache_vol(cache_seg->pool_lv)) {
-		if (!lv_detach_cache_vol(lv))
+		if (!lv_detach_cache_vol(lv, arg_is_set(cmd, noflush_ARG)))
 			return_0;
 	} else {
 		if (!lv_cache_remove(lv))
