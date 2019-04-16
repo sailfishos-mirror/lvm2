@@ -5643,6 +5643,119 @@ int lvconvert_to_cache_with_cachevol_cmd(struct cmd_context *cmd, int argc, char
 	return ret;
 }
 
+static int _lvconvert_cachevol_replace_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *lv_fast_old = first_seg(lv)->pool_lv;
+	struct logical_volume *lv_fast_new;
+	struct lv_segment *cache_seg = first_seg(lv);
+	const char *fast_new_name;
+
+	if (!lv_is_cache(lv)) {
+		log_error("LV %s is not being cached.", display_lvname(lv));
+		return 0;
+	}
+
+	if (!lv_fast_old) {
+		log_error("LV %s has no cachevol.", display_lvname(lv));
+		return 0;
+	}
+
+	if (!lv_is_cache_vol(lv_fast_old)) {
+		log_error("LV %s is not a cachevol.", display_lvname(lv_fast_old));
+		return 0;
+	}
+
+	if (lv_is_active(lv)) {
+		log_error("LV %s must be inactive.", display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_active(lv_fast_old)) {
+		log_error("LV %s must be inactive.", display_lvname(lv_fast_old));
+		return 0;
+	}
+
+	fast_new_name = arg_str_value(cmd, replacecachevol_ARG, "");
+
+	if (!(lv_fast_new = find_lv(vg, fast_new_name))) {
+		log_error("LV %s not found.", fast_new_name);
+		return 0;
+	}
+
+	if (lv_is_active(lv_fast_new)) {
+		log_error("LV %s must be inactive.", display_lvname(lv_fast_new));
+		return 0;
+	}
+
+	if (!dm_list_empty(&lv_fast_new->segs_using_this_lv)) {
+		log_error("LV %s is already in use.", display_lvname(lv_fast_new));
+		return 0;
+	}
+
+	if (!arg_is_set(cmd, yes_ARG) &&
+	    yes_no_prompt("Replace current cachevol %s with %s for caching %s? [y/n]: ",
+		    	  lv_fast_old->name,
+			  lv_fast_new->name,
+			  display_lvname(lv)) == 'n') {
+		return 0;
+	}
+
+	if (!archive(vg))
+		return_0;
+
+
+	/* remove lv_fast_old from the cachevol role */
+	remove_seg_from_segs_using_this_lv(lv_fast_old, cache_seg);
+	lv_fast_old->status &= ~LV_CACHE_VOL;
+	lv_set_visible(lv_fast_old);
+
+	/* put lv_fast_new into the cachevol role */
+	lv_fast_new->status |= LV_CACHE_VOL;
+	cache_seg->pool_lv = lv_fast_new;
+	add_seg_to_segs_using_this_lv(lv_fast_new, cache_seg);
+	lv_set_hidden(lv_fast_new);
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
+
+	log_print("LV %s is now using cachevol %s for caching.",
+		  display_lvname(lv), display_lvname(lv_fast_new));
+	log_print("The previous cachevol %s is now unused.", display_lvname(lv_fast_old));
+
+	backup(vg);
+	return 1;
+}
+
+int lvconvert_cachevol_replace_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+
+	struct processing_handle *handle;
+	struct lvconvert_result lr = { 0 };
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lr;
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      &_lvconvert_cachevol_replace_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	if (!ret)
+		log_error("Cache volume not replaced.");
+
+	return ret;
+}
+
 /*
  * All lvconvert command defs have their own function,
  * so the generic function name is unused.

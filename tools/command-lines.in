@@ -612,6 +612,13 @@ FLAGS: SECONDARY_SYNTAX
 
 ---
 
+lvconvert --replacecachevol LV LV_cache
+OO: OO_LVCONVERT
+ID: lvconvert_replace_cachevol
+DESC: Replace the current cachevol with the named LV.
+
+---
+
 # lvconvert --merge is an extremely ambiguous command.
 # It can do very different operations, but which one depends
 # on knowing the LV type.  So, the command doesn't know what
