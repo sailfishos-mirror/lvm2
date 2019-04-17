@@ -420,6 +420,121 @@ and the existing main LV is being converted to type cache.)
 
 \&
 
+.SS dm-cache cachevol repair
+
+\&
+
+If the cache metadata is damaged in a cachevol, follow these steps to
+attempt recovery.
+
+.P
+Ensure that the main LV and the attached cachevol are inactive.
+
+.HP 4
+.nf
+$ lvs -a vg -o+segtype
+  LV           VG Attr       LSize  Pool   Origin        Type
+  [fast]       vg Cwi---C--- 32.00m                      linear
+  main         vg Cwi---C---  1.00g [fast] [main_corig]  cache
+  [main_corig] vg owi---C---  1.00g                      linear
+.fi
+
+
+.P
+Create a new LV that will hold a repaired copy of the cache.  It must be
+the same size as the existing cachevol it will replace.
+
+.HP 4
+.nf
+$ lvcreate -n fast2 -L 32m vg
+.fi
+
+
+.P
+Activate the cachevol LV by itself so that it can be copied.  This is a
+special case of activation that requires confirmation, since a cachevol LV
+usually cannot be activated directly.
+
+.HP 4
+.nf
+$ lvchange -ay vg/fast
+Do you want to activate component LV in read-only mode? [y/n]: y
+  Allowing activation of component LV.
+.fi
+
+
+.P
+Create a repaired copy of the cache on the replacement LV.  If
+cache_repair fails, then deactivate the old and new cachevols and either
+contact support, or forcibly detach the unrepairable cache from the main
+LV.
+
+.HP 4
+.nf
+(Copy the entire cachevol, until the cache_repair step does this.)
+$ dd if=/dev/vg/fast of=/dev/vg/fast2 bs=1M iflag=direct oflag=direct
+.fi
+
+.nf
+$ cache_repair -i /dev/vg/fast -o /dev/vg/fast2
+.fi
+
+
+.P
+Deactivate both old and new cachevols (fast and fast2).
+
+.HP 4
+.nf
+$ lvchange -an vg/fast vg/fast2
+.fi
+
+
+.P
+Replace the current cachevol (fast) with the repaired copy (fast2) that
+the main LV will use for caching.
+
+.HP 4
+.nf
+$ lvconvert --replace-cachevol fast2 vg/main
+.fi
+
+
+.P
+Verify that the repaired copy is now attached to the main LV, and the
+original damaged cachevol is detached.
+
+.HP 4
+.nf
+$ lvs -a vg -o+segtype
+  LV           VG  Attr       LSize  Pool    Origin        Type
+  fast         vg -wi------- 32.00m                       linear
+  [fast2]      vg Cwi---C--- 32.00m                       linear
+  main         vg Cwi---C---  1.00g [fast2] [main_corig]  cache
+  [main_corig] vg owi---C---  1.00g                       linear
+.fi
+
+
+.P
+Try to activate the main LV with the repaired cache.
+
+.HP 4
+.nf
+$ lvchange -ay vg/main
+.fi
+
+
+.P
+Try using the main LV.  If bad data is seen, then the metadata was not
+successfully repaired on the new cachevol.  In this case, contact support
+for further help, or forcibly detach the unrepairable cache from the main
+LV.
+
+.HP 4
+.nf
+$ lvconvert --splitcache --noflush vg/main
+.fi
+
+
 .SH SEE ALSO
 .BR lvm.conf (5),
 .BR lvchange (8),
