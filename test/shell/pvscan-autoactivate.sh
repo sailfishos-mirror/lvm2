@@ -132,6 +132,8 @@ ls "$RUNDIR/lvm/pvs_online"
 not ls "$RUNDIR/lvm/pvs_online/$PVID3"
 
 
+# TODO: check this works on Lenny:
+if [[ -f /etc/machine-id ]]; then
 # pvscan cache ignores pv in a foreign vg
 
 aux lvmconf "global/system_id_source = machineid"
@@ -167,7 +169,7 @@ lvs --foreign $vg2 > tmp
 cat tmp
 grep $lv2 tmp
 check lv_field $vg2/$lv2 lv_active "" --foreign
-
+fi
 
 # Test the case where pvscan --cache -aay (with no devs)
 # gets the final PV to complete the VG, where that final PV
