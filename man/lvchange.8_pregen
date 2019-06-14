@@ -17,27 +17,7 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
-    \fB--addtag\fP \fITag\fP
-.ad b
-.br
-.ad l
-    \fB--alloc\fP \fBcontiguous\fP|\fBcling\fP|\fBcling_by_tags\fP|\fBnormal\fP|\fBanywhere\fP|\fBinherit\fP
-.ad b
-.br
-.ad l
  \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
-    \fB--cachemode\fP \fBwritethrough\fP|\fBwriteback\fP|\fBpassthrough\fP
-.ad b
-.br
-.ad l
-    \fB--cachepolicy\fP \fIString\fP
-.ad b
-.br
-.ad l
-    \fB--cachesettings\fP \fIString\fP
 .ad b
 .br
 .ad l
@@ -45,15 +25,7 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
-    \fB--compression\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
     \fB--config\fP \fIString\fP
-.ad b
-.br
-.ad l
- \fB-C\fP|\fB--contiguous\fP \fBy\fP|\fBn\fP
 .ad b
 .br
 .ad l
@@ -61,27 +33,7 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
-    \fB--deduplication\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
-    \fB--deltag\fP \fITag\fP
-.ad b
-.br
-.ad l
-    \fB--detachprofile\fP
-.ad b
-.br
-.ad l
-    \fB--discards\fP \fBpassdown\fP|\fBnopassdown\fP|\fBignore\fP
-.ad b
-.br
-.ad l
     \fB--driverloaded\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
-    \fB--errorwhenfull\fP \fBy\fP|\fBn\fP
 .ad b
 .br
 .ad l
@@ -117,19 +69,7 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
-    \fB--[raid]maxrecoveryrate\fP \fISize\fP[k|UNIT]
-.ad b
-.br
-.ad l
-    \fB--metadataprofile\fP \fIString\fP
-.ad b
-.br
-.ad l
     \fB--minor\fP \fINumber\fP
-.ad b
-.br
-.ad l
-    \fB--[raid]minrecoveryrate\fP \fISize\fP[k|UNIT]
 .ad b
 .br
 .ad l
@@ -149,10 +89,6 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
- \fB-p\fP|\fB--permission\fP \fBrw\fP|\fBr\fP
-.ad b
-.br
-.ad l
  \fB-M\fP|\fB--persistent\fP \fBy\fP|\fBn\fP
 .ad b
 .br
@@ -166,10 +102,6 @@ lvchange - Change the attributes of logical volume(s)
 .br
 .ad l
  \fB-q\fP|\fB--quiet\fP
-.ad b
-.br
-.ad l
- \fB-r\fP|\fB--readahead\fP \fBauto\fP|\fBnone\fP|\fINumber\fP
 .ad b
 .br
 .ad l
@@ -197,10 +129,6 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
- \fB-k\fP|\fB--setactivationskip\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
     \fB--[raid]syncaction\fP \fBcheck\fP|\fBrepair\fP
 .ad b
 .br
@@ -221,19 +149,7 @@ lvchange - Change the attributes of logical volume(s)
 .ad b
 .br
 .ad l
-    \fB--[raid]writebehind\fP \fINumber\fP
-.ad b
-.br
-.ad l
-    \fB--[raid]writemostly\fP \fIPV\fP[\fB:t\fP|\fBn\fP|\fBy\fP]
-.ad b
-.br
-.ad l
  \fB-y\fP|\fB--yes\fP
-.ad b
-.br
-.ad l
- \fB-Z\fP|\fB--zero\fP \fBy\fP|\fBn\fP
 .ad b
 .SH DESCRIPTION
 lvchange changes LV attributes in the VG, changes LV activation in the
@@ -649,34 +565,6 @@ See \fBlvmraid\fP(7) for more information.
 .ad b
 .HP
 .ad l
-\fB--addtag\fP \fITag\fP
-.br
-Adds a tag to a PV, VG or LV. This option can be repeated to add
-multiple tags at once. See \fBlvm\fP(8) for information about tags.
-.ad b
-.HP
-.ad l
-\fB--alloc\fP \fBcontiguous\fP|\fBcling\fP|\fBcling_by_tags\fP|\fBnormal\fP|\fBanywhere\fP|\fBinherit\fP
-.br
-Determines the allocation policy when a command needs to allocate
-Physical Extents (PEs) from the VG. Each VG and LV has an allocation policy
-which can be changed with vgchange/lvchange, or overriden on the
-command line.
-\fBnormal\fP applies common sense rules such as not placing parallel stripes
-on the same PV.
-\fBinherit\fP applies the VG policy to an LV.
-\fBcontiguous\fP requires new PEs be placed adjacent to existing PEs.
-\fBcling\fP places new PEs on the same PV as existing PEs in the same
-stripe of the LV.
-If there are sufficient PEs for an allocation, but normal does not
-use them, \fBanywhere\fP will use them even if it reduces performance,
-e.g. by placing two stripes on the same PV.
-Optional positional PV args on the command line can also be used to limit
-which PVs the command will use for allocation.
-See \fBlvm\fP(8) for more information about allocation.
-.ad b
-.HP
-.ad l
 \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
 .br
 Specifies if metadata should be backed up automatically after a change.
@@ -684,52 +572,10 @@ Enabling this is strongly advised! See \fBvgcfgbackup\fP(8) for more information
 .ad b
 .HP
 .ad l
-\fB--cachemode\fP \fBwritethrough\fP|\fBwriteback\fP|\fBpassthrough\fP
-.br
-Specifies when writes to a cache LV should be considered complete.
-\fBwriteback\fP considers a write complete as soon as it is
-stored in the cache pool.
-\fBwritethough\fP considers a write complete only when it has
-been stored in both the cache pool and on the origin LV.
-While writethrough may be slower for writes, it is more
-resilient if something should happen to a device associated with the
-cache pool LV. With \fBpassthrough\fP, all reads are served
-from the origin LV (all reads miss the cache) and all writes are
-forwarded to the origin LV; additionally, write hits cause cache
-block invalidates. See \fBlvmcache\fP(7) for more information.
-.ad b
-.HP
-.ad l
-\fB--cachepolicy\fP \fIString\fP
-.br
-Specifies the cache policy for a cache LV.
-See \fBlvmcache\fP(7) for more information.
-.ad b
-.HP
-.ad l
-\fB--cachesettings\fP \fIString\fP
-.br
-Specifies tunable values for a cache LV in "Key = Value" form.
-Repeat this option to specify multiple values.
-(The default values should usually be adequate.)
-The special string value \fBdefault\fP switches
-settings back to their default kernel values and removes
-them from the list of settings stored in LVM metadata.
-See \fBlvmcache\fP(7) for more information.
-.ad b
-.HP
-.ad l
 \fB--commandprofile\fP \fIString\fP
 .br
 The command profile to use for command configuration.
 See \fBlvm.conf\fP(5) for more information about profiles.
-.ad b
-.HP
-.ad l
-\fB--compression\fP \fBy\fP|\fBn\fP
-.br
-Controls whether compression is enabled or disable for VDO volume.
-See \fBlvmvdo\fP(7) for more information about VDO usage.
 .ad b
 .HP
 .ad l
@@ -742,16 +588,6 @@ See \fBlvm.conf\fP(5) for more information about config.
 .ad b
 .HP
 .ad l
-\fB-C\fP|\fB--contiguous\fP \fBy\fP|\fBn\fP
-.br
-Sets or resets the contiguous allocation policy for LVs.
-Default is no contiguous allocation based on a next free principle.
-It is only possible to change a non-contiguous allocation policy
-to contiguous if all of the allocated physical extents in the LV
-are already contiguous.
-.ad b
-.HP
-.ad l
 \fB-d\fP|\fB--debug\fP ...
 .br
 Set debug level. Repeat from 1 to 6 times to increase the detail of
@@ -759,57 +595,10 @@ messages sent to the log file and/or syslog (if configured).
 .ad b
 .HP
 .ad l
-\fB--deduplication\fP \fBy\fP|\fBn\fP
-.br
-Controls whether deduplication is enabled or disable for VDO volume.
-See \fBlvmvdo\fP(7) for more information about VDO usage.
-.ad b
-.HP
-.ad l
-\fB--deltag\fP \fITag\fP
-.br
-Deletes a tag from a PV, VG or LV. This option can be repeated to delete
-multiple tags at once. See \fBlvm\fP(8) for information about tags.
-.ad b
-.HP
-.ad l
-\fB--detachprofile\fP
-.br
-Detaches a metadata profile from a VG or LV.
-See \fBlvm.conf\fP(5) for more information about profiles.
-.ad b
-.HP
-.ad l
-\fB--discards\fP \fBpassdown\fP|\fBnopassdown\fP|\fBignore\fP
-.br
-Specifies how the device-mapper thin pool layer in the kernel should
-handle discards.
-\fBignore\fP causes the thin pool to ignore discards.
-\fBnopassdown\fP causes the thin pool to process discards itself to
-allow reuse of unneeded extents in the thin pool.
-\fBpassdown\fP causes the thin pool to process discards itself
-(like nopassdown) and pass the discards to the underlying device.
-See \fBlvmthin\fP(7) for more information.
-.ad b
-.HP
-.ad l
 \fB--driverloaded\fP \fBy\fP|\fBn\fP
 .br
 If set to no, the command will not attempt to use device-mapper.
 For testing and debugging.
-.ad b
-.HP
-.ad l
-\fB--errorwhenfull\fP \fBy\fP|\fBn\fP
-.br
-Specifies thin pool behavior when data space is exhausted.
-When yes, device-mapper will immediately return an error
-when a thin pool is full and an I/O request requires space.
-When no, device-mapper will queue these I/O requests for a
-period of time to allow the thin pool to be extended.
-Errors are returned if no space is available after the timeout.
-(Also see dm-thin-pool kernel module option no_space_timeout.)
-See \fBlvmthin\fP(7) for more information.
 .ad b
 .HP
 .ad l
@@ -866,34 +655,9 @@ Sets the major number of an LV block device.
 .ad b
 .HP
 .ad l
-\fB--[raid]maxrecoveryrate\fP \fISize\fP[k|UNIT]
-.br
-Sets the maximum recovery rate for a RAID LV.  The rate value
-is an amount of data per second for each device in the array.
-Setting the rate to 0 means it will be unbounded.
-See \fBlvmraid\fP(7) for more information.
-.ad b
-.HP
-.ad l
-\fB--metadataprofile\fP \fIString\fP
-.br
-The metadata profile to use for command configuration.
-See \fBlvm.conf\fP(5) for more information about profiles.
-.ad b
-.HP
-.ad l
 \fB--minor\fP \fINumber\fP
 .br
 Sets the minor number of an LV block device.
-.ad b
-.HP
-.ad l
-\fB--[raid]minrecoveryrate\fP \fISize\fP[k|UNIT]
-.br
-Sets the minimum recovery rate for a RAID LV.  The rate value
-is an amount of data per second for each device in the array.
-Setting the rate to 0 means it will be unbounded.
-See \fBlvmraid\fP(7) for more information.
 .ad b
 .HP
 .ad l
@@ -930,12 +694,6 @@ Metadata may not be changed with this option.
 .ad b
 .HP
 .ad l
-\fB-p\fP|\fB--permission\fP \fBrw\fP|\fBr\fP
-.br
-Set access permission to read only \fBr\fP or read and write \fBrw\fP.
-.ad b
-.HP
-.ad l
 \fB-M\fP|\fB--persistent\fP \fBy\fP|\fBn\fP
 .br
 When yes, makes the specified minor number persistent.
@@ -965,15 +723,6 @@ on the command.
 .br
 Suppress output and log messages. Overrides --debug and --verbose.
 Repeat once to also suppress any prompts with answer 'no'.
-.ad b
-.HP
-.ad l
-\fB-r\fP|\fB--readahead\fP \fBauto\fP|\fBnone\fP|\fINumber\fP
-.br
-Sets read ahead sector count of an LV.
-\fBauto\fP is the default which allows the kernel to choose
-a suitable value automatically.
-\fBnone\fP is equivalent to zero.
 .ad b
 .HP
 .ad l
@@ -1044,17 +793,6 @@ used to choose items to process.
 .ad b
 .HP
 .ad l
-\fB-k\fP|\fB--setactivationskip\fP \fBy\fP|\fBn\fP
-.br
-Persistently sets (yes) or clears (no) the "activation skip" flag on an LV.
-An LV with this flag set is not activated unless the
---ignoreactivationskip option is used by the activation command.
-This flag is set by default on new thin snapshot LVs.
-The flag is not applied to deactivation.
-The current value of the flag is indicated in the lvs lv_attr bits.
-.ad b
-.HP
-.ad l
 \fB--[raid]syncaction\fP \fBcheck\fP|\fBrepair\fP
 .br
 Initiate different types of RAID synchronization.
@@ -1102,42 +840,11 @@ Display version information.
 .ad b
 .HP
 .ad l
-\fB--[raid]writebehind\fP \fINumber\fP
-.br
-The maximum number of outstanding writes that are allowed to
-devices in a RAID1 LV that is marked write-mostly.
-Once this value is exceeded, writes become synchronous (i.e. all writes
-to the constituent devices must complete before the array signals the
-write has completed). Setting the value to zero clears the preference
-and allows the system to choose the value arbitrarily.
-.ad b
-.HP
-.ad l
-\fB--[raid]writemostly\fP \fIPV\fP[\fB:t\fP|\fBn\fP|\fBy\fP]
-.br
-Mark a device in a RAID1 LV as write-mostly.  All reads
-to these drives will be avoided unless absolutely necessary. This keeps
-the number of I/Os to the drive to a minimum. The default behavior is to
-set the write-mostly attribute for the specified PV.
-It is also possible to remove the write-mostly flag by adding the
-suffix \fB:n\fP at the end of the PV name, or to toggle the value with
-the suffix \fB:t\fP. Repeat this option to change the attribute on
-multiple PVs.
-.ad b
-.HP
-.ad l
 \fB-y\fP|\fB--yes\fP
 .br
 Do not prompt for confirmation interactively but always assume the
 answer yes. Use with extreme caution.
 (For automatic no, see -qq.)
-.ad b
-.HP
-.ad l
-\fB-Z\fP|\fB--zero\fP \fBy\fP|\fBn\fP
-.br
-Set zeroing mode for thin pool. Note: already provisioned blocks from pool
-in non-zero mode are not cleared in unwritten parts when setting --zero y.
 .ad b
 .SH VARIABLES
 .HP

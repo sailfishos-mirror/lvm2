@@ -19,14 +19,6 @@ vgchange - Change volume group attributes
 .ad b
 .br
 .ad l
-    \fB--addtag\fP \fITag\fP
-.ad b
-.br
-.ad l
-    \fB--alloc\fP \fBcontiguous\fP|\fBcling\fP|\fBcling_by_tags\fP|\fBnormal\fP|\fBanywhere\fP|\fBinherit\fP
-.ad b
-.br
-.ad l
  \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
 .ad b
 .br
@@ -40,14 +32,6 @@ vgchange - Change volume group attributes
 .br
 .ad l
  \fB-d\fP|\fB--debug\fP
-.ad b
-.br
-.ad l
-    \fB--deltag\fP \fITag\fP
-.ad b
-.br
-.ad l
-    \fB--detachprofile\fP
 .ad b
 .br
 .ad l
@@ -91,19 +75,7 @@ vgchange - Change volume group attributes
 .ad b
 .br
 .ad l
- \fB-l\fP|\fB--logicalvolume\fP \fINumber\fP
-.ad b
-.br
-.ad l
     \fB--longhelp\fP
-.ad b
-.br
-.ad l
- \fB-p\fP|\fB--maxphysicalvolumes\fP \fINumber\fP
-.ad b
-.br
-.ad l
-    \fB--metadataprofile\fP \fIString\fP
 .ad b
 .br
 .ad l
@@ -123,19 +95,11 @@ vgchange - Change volume group attributes
 .ad b
 .br
 .ad l
- \fB-s\fP|\fB--physicalextentsize\fP \fISize\fP[m|UNIT]
-.ad b
-.br
-.ad l
     \fB--poll\fP \fBy\fP|\fBn\fP
 .ad b
 .br
 .ad l
     \fB--profile\fP \fIString\fP
-.ad b
-.br
-.ad l
-    \fB--pvmetadatacopies\fP \fB0\fP|\fB1\fP|\fB2\fP
 .ad b
 .br
 .ad l
@@ -155,10 +119,6 @@ vgchange - Change volume group attributes
 .ad b
 .br
 .ad l
- \fB-x\fP|\fB--resizeable\fP \fBy\fP|\fBn\fP
-.ad b
-.br
-.ad l
  \fB-S\fP|\fB--select\fP \fIString\fP
 .ad b
 .br
@@ -175,19 +135,11 @@ vgchange - Change volume group attributes
 .ad b
 .br
 .ad l
- \fB-u\fP|\fB--uuid\fP
-.ad b
-.br
-.ad l
  \fB-v\fP|\fB--verbose\fP
 .ad b
 .br
 .ad l
     \fB--version\fP
-.ad b
-.br
-.ad l
-    \fB--[vg]metadatacopies\fP \fBall\fP|\fBunmanaged\fP|\fINumber\fP
 .ad b
 .br
 .ad l
@@ -670,34 +622,6 @@ See \fBlvmraid\fP(7) for more information.
 .ad b
 .HP
 .ad l
-\fB--addtag\fP \fITag\fP
-.br
-Adds a tag to a PV, VG or LV. This option can be repeated to add
-multiple tags at once. See \fBlvm\fP(8) for information about tags.
-.ad b
-.HP
-.ad l
-\fB--alloc\fP \fBcontiguous\fP|\fBcling\fP|\fBcling_by_tags\fP|\fBnormal\fP|\fBanywhere\fP|\fBinherit\fP
-.br
-Determines the allocation policy when a command needs to allocate
-Physical Extents (PEs) from the VG. Each VG and LV has an allocation policy
-which can be changed with vgchange/lvchange, or overriden on the
-command line.
-\fBnormal\fP applies common sense rules such as not placing parallel stripes
-on the same PV.
-\fBinherit\fP applies the VG policy to an LV.
-\fBcontiguous\fP requires new PEs be placed adjacent to existing PEs.
-\fBcling\fP places new PEs on the same PV as existing PEs in the same
-stripe of the LV.
-If there are sufficient PEs for an allocation, but normal does not
-use them, \fBanywhere\fP will use them even if it reduces performance,
-e.g. by placing two stripes on the same PV.
-Optional positional PV args on the command line can also be used to limit
-which PVs the command will use for allocation.
-See \fBlvm\fP(8) for more information about allocation.
-.ad b
-.HP
-.ad l
 \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
 .br
 Specifies if metadata should be backed up automatically after a change.
@@ -725,20 +649,6 @@ See \fBlvm.conf\fP(5) for more information about config.
 .br
 Set debug level. Repeat from 1 to 6 times to increase the detail of
 messages sent to the log file and/or syslog (if configured).
-.ad b
-.HP
-.ad l
-\fB--deltag\fP \fITag\fP
-.br
-Deletes a tag from a PV, VG or LV. This option can be repeated to delete
-multiple tags at once. See \fBlvm\fP(8) for information about tags.
-.ad b
-.HP
-.ad l
-\fB--detachprofile\fP
-.br
-Detaches a metadata profile from a VG or LV.
-See \fBlvm.conf\fP(5) for more information about profiles.
 .ad b
 .HP
 .ad l
@@ -813,31 +723,9 @@ See \fBlvmlockd\fP(8) for more information.
 .ad b
 .HP
 .ad l
-\fB-l\fP|\fB--logicalvolume\fP \fINumber\fP
-.br
-Sets the maximum number of LVs allowed in a VG.
-.ad b
-.HP
-.ad l
 \fB--longhelp\fP
 .br
 Display long help text.
-.ad b
-.HP
-.ad l
-\fB-p\fP|\fB--maxphysicalvolumes\fP \fINumber\fP
-.br
-Sets the maximum number of PVs that can belong to the VG.
-The value 0 removes any limitation.
-For large numbers of PVs, also see options --pvmetadatacopies,
-and --vgmetadatacopies for improving performance.
-.ad b
-.HP
-.ad l
-\fB--metadataprofile\fP \fIString\fP
-.br
-The metadata profile to use for command configuration.
-See \fBlvm.conf\fP(5) for more information about profiles.
 .ad b
 .HP
 .ad l
@@ -874,20 +762,6 @@ Metadata may not be changed with this option.
 .ad b
 .HP
 .ad l
-\fB-s\fP|\fB--physicalextentsize\fP \fISize\fP[m|UNIT]
-.br
-Sets the physical extent size of PVs in the VG.
-The value must be either a power of 2 of at least 1 sector
-(where the sector size is the largest sector size of the PVs
-currently used in the VG), or at least 128KiB.
-Once this value has been set, it is difficult to change
-without recreating the VG, unless no extents need moving.
-Before increasing the physical extent size, you might need to use lvresize,
-pvresize and/or pvmove so that everything fits. For example, every
-contiguous range of extents used in a LV must start and end on an extent boundary.
-.ad b
-.HP
-.ad l
 \fB--poll\fP \fBy\fP|\fBn\fP
 .br
 When yes, start the background transformation of an LV.
@@ -904,18 +778,6 @@ polling until a later --poll y command.
 .br
 An alias for --commandprofile or --metadataprofile, depending
 on the command.
-.ad b
-.HP
-.ad l
-\fB--pvmetadatacopies\fP \fB0\fP|\fB1\fP|\fB2\fP
-.br
-The number of metadata areas to set aside on a PV for storing VG metadata.
-When 2, one copy of the VG metadata is stored at the front of the PV
-and a second copy is stored at the end.
-When 1, one copy of the VG metadata is stored at the front of the PV.
-When 0, no copies of the VG metadata are stored on the given PV.
-This may be useful in VGs containing many PVs (this places limitations
-on the ability to use vgsplit later.)
 .ad b
 .HP
 .ad l
@@ -954,13 +816,6 @@ the report/output_format setting in lvm.conf.
 If there is more than one report per command, each report is prefixed
 with the report name for identification. \fBjson\fP produces report
 output in JSON format. See \fBlvmreport\fP(7) for more information.
-.ad b
-.HP
-.ad l
-\fB-x\fP|\fB--resizeable\fP \fBy\fP|\fBn\fP
-.br
-Enables or disables the addition or removal of PVs to/from a VG
-(by vgextend/vgreduce).
 .ad b
 .HP
 .ad l
@@ -1008,12 +863,6 @@ back metadata it believes has changed but hasn't.
 .ad b
 .HP
 .ad l
-\fB-u\fP|\fB--uuid\fP
-.br
-Generate new random UUID for specified VGs.
-.ad b
-.HP
-.ad l
 \fB-v\fP|\fB--verbose\fP ...
 .br
 Set verbose level. Repeat from 1 to 4 times to increase the detail
@@ -1024,24 +873,6 @@ of messages sent to stdout and stderr.
 \fB--version\fP
 .br
 Display version information.
-.ad b
-.HP
-.ad l
-\fB--[vg]metadatacopies\fP \fBall\fP|\fBunmanaged\fP|\fINumber\fP
-.br
-Number of copies of the VG metadata that are kept.
-VG metadata is kept in VG metadata areas on PVs in the VG,
-i.e. reserved space at the start and/or end of the PVs.
-Keeping a copy of the VG metadata on every PV can reduce performance
-in VGs containing a large number of PVs.
-When this number is set to a non-zero value, LVM will automatically
-choose PVs on which to store metadata, using the metadataignore flags
-on PVs to achieve the specified number.
-The number can also be replaced with special string values:
-\fBunmanaged\fP causes LVM to not automatically manage the PV
-metadataignore flags.
-\fBall\fP causes LVM to first clear the metadataignore flags on
-all PVs, and then to become unmanaged.
 .ad b
 .HP
 .ad l
