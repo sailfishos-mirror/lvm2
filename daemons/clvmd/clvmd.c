@@ -69,6 +69,8 @@ static unsigned max_csid_len;
 static unsigned max_cluster_message;
 static unsigned max_cluster_member_name_len;
 
+int clvmd_debug_lvm;
+
 static void _add_client(struct local_client *new_client, struct local_client *existing_client)
 {
 	_local_client_count++;
@@ -411,7 +413,7 @@ int main(int argc, char *argv[])
 	/* Deal with command-line arguments */
 	opterr = 0;
 	optind = 0;
-	while ((opt = getopt_long(argc, argv, "Vhfd:t:RST:CI:E:",
+	while ((opt = getopt_long(argc, argv, "Vhfd:t:RST:CLI:E:",
 				  longopts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
@@ -430,6 +432,10 @@ int main(int argc, char *argv[])
 
 		case 'C':
 			clusterwide_opt = 1;
+			break;
+
+		case 'L':
+			clvmd_debug_lvm = 1;
 			break;
 
 		case 'd':

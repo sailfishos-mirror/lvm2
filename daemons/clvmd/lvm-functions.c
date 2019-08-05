@@ -38,6 +38,8 @@ static pthread_mutex_t lv_hash_lock;
 static pthread_mutex_t lvm_lock;
 static char last_error[1024];
 
+extern int clvmd_debug_lvm;
+
 struct lv_info {
 	int lock_id;
 	int lock_mode;
@@ -656,6 +658,11 @@ int do_refresh_cache(void)
 	label_scan_destroy(cmd); /* destroys bcache (to close devs), keeps lvmcache */
 	dm_pool_empty(cmd->mem);
 
+	if (clvmd_debug_lvm) {
+		init_verbose(11);
+		init_debug(11);
+	}
+
 	pthread_mutex_unlock(&lvm_lock);
 
 	return 0;
@@ -908,6 +915,11 @@ int init_clvm(struct dm_hash_table *excl_uuid)
 	/* Check lvm.conf is setup for cluster-LVM */
 	check_config();
 	init_ignore_suspended_devices(1);
+
+	if (clvmd_debug_lvm) {
+		init_verbose(11);
+		init_debug(11);
+	}
 
 	/* Trap log messages so we can pass them back to the user */
 	init_log_fn(lvm2_log_fn);
