@@ -269,6 +269,46 @@ const char *dev_subsystem_name(struct dev_types *dt, struct device *dev)
 	return "";
 }
 
+#define WWID_BUF_SIZE 512
+
+int dev_read_wwid(struct device *dev, char *outbuf, int outsize)
+{
+	FILE *fp;
+	char path[PATH_MAX];
+	char buf[WWID_BUF_SIZE];
+	int len;
+
+	if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/device/wwid",
+			dm_sysfs_dir(),
+			(int) MAJOR(dev->dev),
+			(int) MINOR(dev->dev)) < 0) {
+		log_warn("Sysfs path for wwid is too long.");
+		return 0;
+	}
+
+	if (!(fp = fopen(path, "r")))
+		return 0;
+
+	if (!fgets(buf, sizeof(buf), fp))
+		log_debug("Empty wwid for %s", dev_name(dev));
+	else {
+		len = strlen(buf);
+
+		if (len > outsize - 1) {
+			log_debug("sysfs wwid len %d too large for buffer %d for %s",
+				  len, outsize, dev_name(dev));
+			len = outsize - 1;
+		}
+
+		strncpy(outbuf, buf, outsize);
+	}
+
+	if (fclose(fp))
+		log_sys_debug("fclose", path);
+
+	return 1;
+}
+
 int major_max_partitions(struct dev_types *dt, int major)
 {
 	if (major >= NUMBER_OF_MAJORS)

@@ -93,4 +93,7 @@ unsigned long dev_discard_granularity(struct dev_types *dt, struct device *dev);
 
 int dev_is_rotational(struct dev_types *dt, struct device *dev);
 
+#define WWID_BUF_SIZE 512
+int dev_read_wwid(struct device *dev, char *outbuf, int outsize);
+
 #endif

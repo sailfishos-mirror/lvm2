@@ -82,6 +82,7 @@ struct device {
 
 	const char *vgid; /* if device is an LV */
 	const char *lvid; /* if device is an LV */
+	const char *wwid;
 
 	char pvid[ID_LEN + 1]; /* if device is a PV */
 	char _padding[7];

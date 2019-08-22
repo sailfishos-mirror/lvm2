@@ -15,6 +15,7 @@
 #include "lib.h"
 #include "filter.h"
 #include "activate.h"
+#include "str_list.h"
 #ifdef UDEV_SYNC_SUPPORT
 #include <libudev.h>
 #include "dev-ext-udev-constants.h"
@@ -23,6 +24,11 @@
 #ifdef __linux__
 
 #include <dirent.h>
+
+/* FIXME: use config setting to change or disable this wwids file. */
+static const char *_wwids_file = "/etc/multipath/wwids";
+static struct dm_list *_wwids_list; /* struct dm_str_list */ 
+static struct dm_pool *_wwids_mem;
 
 #define MPATH_PREFIX "mpath-"
 
@@ -146,7 +152,7 @@ static int _get_parent_mpath(const char *dir, char *name, int max_size)
 }
 
 #ifdef UDEV_SYNC_SUPPORT
-static int _udev_dev_is_mpath(struct device *dev)
+static int _udev_dev_is_mpath_component(struct device *dev)
 {
 	const char *value;
 	struct dev_ext *ext;
@@ -165,13 +171,80 @@ static int _udev_dev_is_mpath(struct device *dev)
 	return 0;
 }
 #else
-static int _udev_dev_is_mpath(struct device *dev)
+static int _udev_dev_is_mpath_component(struct device *dev)
 {
 	return 0;
 }
 #endif
 
-static int _native_dev_is_mpath(struct dev_filter *f, struct device *dev)
+#define MAX_WWID_LINE 512
+
+/*
+ * N.B. this doesn't account for the multipath.conf blacklist.
+ */
+
+static int _read_wwids_file(void)
+{
+	FILE *fp;
+	char line[MAX_WWID_LINE];
+	char *wwid, *p;
+
+	if (!(fp = fopen(_wwids_file, "r"))) {
+		return_0;
+	}
+
+	if (!(_wwids_mem = dm_pool_create("filter mpath", 1024))) {
+		fclose(fp);
+		fp = NULL;
+		return_0;
+	}
+
+	if (!(_wwids_list = str_list_create(_wwids_mem))) {
+		fclose(fp);
+		fp = NULL;
+		dm_pool_destroy(_wwids_mem);
+		_wwids_mem = NULL;
+		return_0;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		if (line[0] == '#')
+			continue;
+
+		wwid = line;
+
+		if (line[0] == '/')
+			wwid++;
+
+		if ((p = strchr(wwid, '/')))
+			*p = '\0';
+
+		if (!str_list_add_no_dup_check(_wwids_mem, _wwids_list,
+				dm_pool_strdup(_wwids_mem, wwid)))
+			stack;
+	}
+
+	if (fclose(fp))
+		stack;
+
+	return 1;
+}
+
+static int _wwid_dev_is_mpath_component(struct device *dev)
+{
+	if (!_wwids_list)
+		return 0;
+
+	if (!dev->wwid)
+		return 0;
+
+	if (str_list_match_item(_wwids_list, dev->wwid))
+		return 1;
+
+	return 0;
+}
+
+static int _native_dev_is_mpath_component(struct dev_filter *f, struct device *dev)
 {
 	struct dev_types *dt = (struct dev_types *) f->private;
 	const char *part_name, *name;
@@ -185,6 +258,11 @@ static int _native_dev_is_mpath(struct dev_filter *f, struct device *dev)
 	/* Limit this filter only to SCSI devices */
 	if (!major_is_scsi_device(dt, MAJOR(dev->dev)))
 		return 0;
+
+	if (_wwid_dev_is_mpath_component(dev)) {
+		log_debug_devs("%s: wwid is mpath component %s", dev_name(dev), dev->wwid);
+		return 1;
+	}
 
 	switch (dev_get_primary_dev(dt, dev, &primary_dev)) {
 	case 2: /* The dev is partition. */
@@ -230,13 +308,13 @@ static int _native_dev_is_mpath(struct dev_filter *f, struct device *dev)
 	return lvm_dm_prefix_check(major, minor, MPATH_PREFIX);
 }
 
-static int _dev_is_mpath(struct dev_filter *f, struct device *dev)
+static int _dev_is_mpath_component(struct dev_filter *f, struct device *dev)
 {
 	if (dev->ext.src == DEV_EXT_NONE)
-		return _native_dev_is_mpath(f, dev);
+		return _native_dev_is_mpath_component(f, dev);
 
 	if (dev->ext.src == DEV_EXT_UDEV)
-		return _udev_dev_is_mpath(dev);
+		return _udev_dev_is_mpath_component(dev);
 
 	log_error(INTERNAL_ERROR "Missing hook for mpath recognition "
 		  "using external device info source %s", dev_ext_name(dev));
@@ -248,7 +326,7 @@ static int _dev_is_mpath(struct dev_filter *f, struct device *dev)
 
 static int _ignore_mpath(struct dev_filter *f, struct device *dev)
 {
-	if (_dev_is_mpath(f, dev) == 1) {
+	if (_dev_is_mpath_component(f, dev) == 1) {
 		if (dev->ext.src == DEV_EXT_NONE)
 			log_debug_devs(MSG_SKIPPING, dev_name(dev));
 		else
@@ -264,6 +342,10 @@ static void _destroy(struct dev_filter *f)
 {
 	if (f->use_count)
 		log_error(INTERNAL_ERROR "Destroying mpath filter while in use %u times.", f->use_count);
+
+	dm_pool_destroy(_wwids_mem);
+	_wwids_mem = NULL;
+	_wwids_list = NULL;
 
 	dm_free(f);
 }
@@ -282,6 +364,8 @@ struct dev_filter *mpath_filter_create(struct dev_types *dt)
 		log_error("mpath filter allocation failed");
 		return NULL;
 	}
+
+	_read_wwids_file();
 
 	f->passes_filter = _ignore_mpath;
 	f->destroy = _destroy;

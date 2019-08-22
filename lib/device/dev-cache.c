@@ -163,6 +163,50 @@ void dev_set_preferred_name(struct dm_str_list *sl, struct device *dev)
 	dm_list_add_h(&dev->aliases, &sl->list);
 }
 
+static void _dev_cache_set_wwids(void)
+{
+	struct btree_iter *iter;
+	struct device *dev;
+	char buf[WWID_BUF_SIZE];
+	int already = 0;
+	int found = 0;
+	int notfound = 0;
+
+	if (!_cache.devices)
+		return;
+
+	log_debug("Reading wwid for all devices.");
+
+	iter = btree_first(_cache.devices);
+
+	while (iter) {
+		dev = btree_get_data(iter);
+
+		if (dev->wwid) {
+			already++;
+			goto next;
+		}
+
+		memset(buf, 0, sizeof(buf));
+
+		if (dev_read_wwid(dev, buf, sizeof(buf))) {
+			if (buf[0]) {
+				dev->wwid = dm_pool_strdup(_cache.mem, buf);
+				found++;
+			} else
+				notfound++;
+		} else {
+			notfound++;
+		}
+
+ next:
+		iter = btree_next(iter);
+	}
+
+	log_debug("Found wwid for %d devs not found for %d already set for %d.",
+		  found, notfound, already);
+}
+
 /*
  * Check whether path0 or path1 contains the subpath. The path that
  * *does not* contain the subpath wins (return 0 or 1). If both paths
@@ -1218,6 +1262,8 @@ void dev_cache_scan(void)
 
 	dm_list_iterate_items(dl, &_cache.files)
 		_insert_file(dl->dir);
+
+	_dev_cache_set_wwids();
 }
 
 int dev_cache_has_scanned(void)
