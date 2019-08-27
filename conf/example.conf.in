@@ -716,17 +716,29 @@ global {
 	activation = 1
 
 	# Configuration option global/fallback_to_lvm1.
-	# This setting is no longer used.
+	# Try running LVM1 tools if LVM cannot communicate with DM.
+	# This option only applies to 2.4 kernels and is provided to help
+	# switch between device-mapper kernels and LVM1 kernels. The LVM1
+	# tools need to be installed with .lvm1 suffices, e.g. vgscan.lvm1.
+	# They will stop working once the lvm2 on-disk metadata format is used.
 	# This configuration option has an automatic default value.
-	# fallback_to_lvm1 = 0
+	# fallback_to_lvm1 = @DEFAULT_FALLBACK_TO_LVM1@
 
 	# Configuration option global/format.
-	# This setting is no longer used.
+	# The default metadata format that commands should use.
+	# The -M 1|2 option overrides this setting.
+	# 
+	# Accepted values:
+	#   lvm1
+	#   lvm2
+	# 
 	# This configuration option has an automatic default value.
 	# format = "lvm2"
 
 	# Configuration option global/format_libraries.
-	# This setting is no longer used.
+	# Shared libraries that process different metadata formats.
+	# If support for LVM1 metadata was compiled as a shared library use
+	# format_libraries = "liblvm2format1.so"
 	# This configuration option does not have a default value defined.
 
 	# Configuration option global/segment_libraries.
