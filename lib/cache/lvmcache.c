@@ -913,7 +913,8 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	 * an info struct already exists in lvmcache for
 	 * the device.
 	 */
-	label_scan(cmd);
+	if (!label_scan(cmd))
+		return_0;
 
 	/*
 	 * _choose_duplicates() returns:

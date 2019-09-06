@@ -134,7 +134,7 @@ static int _native_dev_is_md_component(struct device *dev, uint64_t *offset_foun
 	uint64_t size, sb_offset;
 	int ret;
 
-	if (!scan_bcache)
+	if (!io_data_ready)
 		return -EAGAIN;
 
 	if (!dev_get_size(dev, &size)) {

@@ -27,7 +27,7 @@ static int _ignore_signature(struct cmd_context *cmd, struct dev_filter *f __att
 	char buf[BUFSIZE];
 	int ret = 0;
 
-	if (!scan_bcache) {
+	if (!io_data_ready) {
 		/* let pass, call again after scan */
 		log_debug_devs("filter signature deferred %s", dev_name(dev));
 		dev->flags |= DEV_FILTER_AFTER_SCAN;

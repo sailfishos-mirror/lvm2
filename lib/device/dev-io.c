@@ -58,13 +58,6 @@ static int _dev_get_size_file(struct device *dev, uint64_t *size)
 	const char *name = dev_name(dev);
 	struct stat info;
 
-	if (dev->size_seqno == _dev_size_seqno) {
-		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
-				 name, dev->size);
-		*size = dev->size;
-		return 1;
-	}
-
 	if (stat(name, &info)) {
 		log_sys_error("stat", name);
 		return 0;
@@ -73,48 +66,8 @@ static int _dev_get_size_file(struct device *dev, uint64_t *size)
 	*size = info.st_size;
 	*size >>= SECTOR_SHIFT;	/* Convert to sectors */
 	dev->size = *size;
-	dev->size_seqno = _dev_size_seqno;
 
 	log_very_verbose("%s: size is %" PRIu64 " sectors", name, *size);
-
-	return 1;
-}
-
-static int _dev_get_size_dev(struct device *dev, uint64_t *size)
-{
-	const char *name = dev_name(dev);
-	int fd = dev->bcache_fd;
-	int do_close = 0;
-
-	if (dev->size_seqno == _dev_size_seqno) {
-		log_very_verbose("%s: using cached size %" PRIu64 " sectors",
-				 name, dev->size);
-		*size = dev->size;
-		return 1;
-	}
-
-	if (fd <= 0) {
-		if (!dev_open_readonly(dev))
-			return_0;
-		fd = dev_fd(dev);
-		do_close = 1;
-	}
-
-	if (ioctl(fd, BLKGETSIZE64, size) < 0) {
-		log_sys_error("ioctl BLKGETSIZE64", name);
-		if (do_close && !dev_close_immediate(dev))
-			log_sys_error("close", name);
-		return 0;
-	}
-
-	*size >>= BLKSIZE_SHIFT;	/* Convert to sectors */
-	dev->size = *size;
-	dev->size_seqno = _dev_size_seqno;
-
-	log_very_verbose("%s: size is %" PRIu64 " sectors", name, *size);
-
-	if (do_close && !dev_close_immediate(dev))
-		log_sys_error("close", name);
 
 	return 1;
 }
@@ -182,55 +135,24 @@ static int _dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64
 int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_size,
 				unsigned int *logical_block_size)
 {
-	int fd = dev->bcache_fd;
-	int do_close = 0;
-	unsigned int pbs = 0;
-	unsigned int lbs = 0;
+	int put = !dev->iodev;
+	int ret = 1;
 
-	if (dev->physical_block_size || dev->logical_block_size) {
-		*physical_block_size = dev->physical_block_size;
-		*logical_block_size = dev->logical_block_size;
+	if (!dev->iodev)
+		dev->iodev = io_get_dev(lvm_iom, dev_name(dev), EF_READ_ONLY);
+
+	if (!dev->iodev)
 		return 1;
+
+	if (!io_dev_block_sizes(dev->iodev, physical_block_size, logical_block_size))
+		ret = 0;
+
+	if (put) {
+		io_put_dev(dev->iodev);
+		dev->iodev = NULL;
 	}
 
-	if (fd <= 0) {
-		if (!dev_open_readonly(dev))
-			return 0;
-		fd = dev_fd(dev);
-		do_close = 1;
-	}
-
-#ifdef BLKPBSZGET /* not defined before kernel version 2.6.32 (e.g. rhel5) */
-	/*
-	 * BLKPBSZGET from kernel comment for blk_queue_physical_block_size:
-	 * "the lowest possible sector size that the hardware can operate on
-	 * without reverting to read-modify-write operations"
-	 */
-	if (ioctl(fd, BLKPBSZGET, &pbs)) {
-		stack;
-		pbs = 0;
-	}
-#endif
-
-	/*
-	 * BLKSSZGET from kernel comment for blk_queue_logical_block_size:
-	 * "the lowest possible block size that the storage device can address."
-	 */
-	if (ioctl(fd, BLKSSZGET, &lbs)) {
-		stack;
-		lbs = 0;
-	}
-
-	dev->physical_block_size = pbs;
-	dev->logical_block_size = lbs;
-
-	*physical_block_size = pbs;
-	*logical_block_size = lbs;
-
-	if (do_close && !dev_close_immediate(dev))
-		stack;
-
-	return 1;
+	return ret;
 }
 
 /*-----------------------------------------------------------------
@@ -243,13 +165,32 @@ void dev_size_seqno_inc(void)
 
 int dev_get_size(struct device *dev, uint64_t *size)
 {
+	int put = !dev->iodev;
+	int ret = 1;
+
 	if (!dev)
 		return 0;
 
 	if ((dev->flags & DEV_REGULAR))
 		return _dev_get_size_file(dev, size);
 
-	return _dev_get_size_dev(dev, size);
+	if (!dev->iodev)
+		dev->iodev = io_get_dev(lvm_iom, dev_name(dev), EF_READ_ONLY);
+
+	if (!dev->iodev)
+		return 0;
+
+	if (!io_dev_size(dev->iodev, size))
+		ret = 0;
+	else
+		dev->size = *size;
+
+	if (put) {
+		io_put_dev(dev->iodev);
+		dev->iodev = NULL;
+	}
+
+	return ret;
 }
 
 int dev_get_read_ahead(struct device *dev, uint32_t *read_ahead)

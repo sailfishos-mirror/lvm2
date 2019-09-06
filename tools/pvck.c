@@ -1126,7 +1126,7 @@ static int _dump_headers(struct cmd_context *cmd,
 		return ECMD_FAILED;
 	}
 
-	label_scan_setup_bcache();
+	label_scan_setup_io_manager();
 
 	if (!_dump_label_and_pv_header(cmd, 1, dev, NULL,
 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size))
@@ -1199,7 +1199,7 @@ static int _dump_metadata(struct cmd_context *cmd,
 		return ECMD_FAILED;
 	}
 
-	label_scan_setup_bcache();
+	label_scan_setup_io_manager();
 
 	if (!_dump_label_and_pv_header(cmd, 0, dev, NULL,
 			&mda1_offset, &mda1_size, &mda2_offset, &mda2_size))
@@ -1324,7 +1324,7 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
 	if (arg_is_set(cmd, labelsector_ARG))
 		labelsector = arg_uint64_value(cmd, labelsector_ARG, UINT64_C(0));
 
-	label_scan_setup_bcache();
+	label_scan_setup_io_manager();
 
 	for (i = 0; i < argc; i++) {
 		pv_name = argv[i];

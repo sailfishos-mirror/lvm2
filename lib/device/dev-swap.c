@@ -42,7 +42,7 @@ int dev_is_swap(struct device *dev, uint64_t *offset_found, int full)
 	unsigned page;
 	int ret = 0;
 
-	if (!scan_bcache)
+	if (!io_data_ready)
 		return -EAGAIN;
 
 	if (!dev_get_size(dev, &size)) {

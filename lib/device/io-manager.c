@@ -246,6 +246,18 @@ static bool _fallback_issue(struct async_engine *ae, enum dir d, int fd,
 		return false;
 	}
 
+#if 1
+        if (d == DIR_READ) {
+                log_debug("io R off %llu bytes %llu",
+                          (unsigned long long)where,
+                          (unsigned long long)len);
+        } else {
+                log_debug("io W off %llu bytes %llu",
+                          (unsigned long long)where,
+                          (unsigned long long)len);
+        }
+#endif
+
 	while (len) {
 		do {
 			if (d == DIR_READ)
@@ -256,7 +268,8 @@ static bool _fallback_issue(struct async_engine *ae, enum dir d, int fd,
 		} while ((r < 0) && ((r == EINTR) || (r == EAGAIN)));
 
 		if (r < 0) {
-			log_warn("io failed %d", r);
+			log_warn("%s failed fd %d %d errno %d",
+				 (d == DIR_READ) ? "read" : "write", fd, r, errno);
 			return false;
 		}
 
@@ -295,6 +308,18 @@ static bool _async_issue_(struct async_engine *e, enum dir d, int fd,
 	cb->cb.u.c.offset = sb << SECTOR_SHIFT;
 	cb->cb.u.c.nbytes = (se - sb) << SECTOR_SHIFT;
 	cb->cb.aio_lio_opcode = (d == DIR_READ) ? IO_CMD_PREAD : IO_CMD_PWRITE;
+
+#if 1
+        if (d == DIR_READ) {
+                log_debug("io RA off %llu bytes %llu",
+                          (unsigned long long)cb->cb.u.c.offset,
+                          (unsigned long long)cb->cb.u.c.nbytes);
+        } else {
+                log_debug("io WA off %llu bytes %llu",
+                          (unsigned long long)cb->cb.u.c.offset,
+                          (unsigned long long)cb->cb.u.c.nbytes);
+        }
+#endif
 
 	cb_array[0] = &cb->cb;
 	do {

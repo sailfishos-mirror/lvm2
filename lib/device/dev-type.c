@@ -19,7 +19,6 @@
 #include "lib/mm/xlate.h"
 #include "lib/config/config.h"
 #include "lib/metadata/metadata.h"
-#include "lib/device/bcache.h"
 #include "lib/label/label.h"
 
 #ifdef BLKID_WIPING_SUPPORT
@@ -512,7 +511,7 @@ static int _native_dev_is_partitioned(struct dev_types *dt, struct device *dev)
 {
 	int r;
 
-	if (!scan_bcache)
+	if (!io_data_ready)
 		return -EAGAIN;
 
 	if (!_is_partitionable(dt, dev))

@@ -24,7 +24,7 @@ CLEAN_TARGETS += \
  .symlinks_created \
  activate.h \
  archiver.h \
- bcache.h \
+ io-manager.h \
  btree.h \
  clvm.h \
  config-util.h \

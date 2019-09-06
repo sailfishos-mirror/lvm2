@@ -18,7 +18,7 @@
 
 #include "lib/uuid/uuid.h"
 #include "lib/device/device.h"
-#include "lib/device/bcache.h"
+#include "lib/device/io-manager.h"
 
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
@@ -100,7 +100,8 @@ int label_write(struct device *dev, struct label *label);
 struct label *label_create(struct labeller *labeller);
 void label_destroy(struct label *label);
 
-extern struct bcache *scan_bcache;
+extern struct io_manager *lvm_iom;
+extern int io_data_ready; /* set once io manager is populated with device blocks */
 
 int label_scan(struct cmd_context *cmd);
 int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs);
@@ -113,20 +114,17 @@ void label_scan_destroy(struct cmd_context *cmd);
 int label_read(struct device *dev);
 int label_read_sector(struct device *dev, uint64_t scan_sector);
 void label_scan_confirm(struct device *dev);
-int label_scan_setup_bcache(void);
+int label_scan_setup_io_manager(void);
 int label_scan_open(struct device *dev);
 int label_scan_open_excl(struct device *dev);
 int label_scan_open_rw(struct device *dev);
 
 /*
- * Wrappers around bcache equivalents.
- * (these make it easier to disable bcache and revert to direct rw if needed)
+ * Wrappers around io-manager equivalents.
  */
 bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data);
 bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data);
 bool dev_write_zeros(struct device *dev, uint64_t start, size_t len);
 bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val);
-void dev_set_last_byte(struct device *dev, uint64_t offset);
-void dev_unset_last_byte(struct device *dev);
 
 #endif
