@@ -813,7 +813,7 @@ out:
 
 static int _setup_bcache(void)
 {
-	struct io_engine *ioe = NULL;
+	struct io_engine_ *ioe = NULL;
 	int iomem_kb = io_memory_size();
 	int block_size_kb = (BCACHE_BLOCK_SIZE_IN_SECTORS * 512) / 1024;
 	int cache_blocks;
@@ -829,14 +829,14 @@ static int _setup_bcache(void)
 	_current_bcache_size_bytes = cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
 
 	if (use_aio()) {
-		if (!(ioe = create_async_io_engine())) {
+		if (!(ioe = create_async_io_engine_())) {
 			log_warn("Failed to set up async io, using sync io.");
 			init_use_aio(0);
 		}
 	}
 
 	if (!ioe) {
-		if (!(ioe = create_sync_io_engine())) {
+		if (!(ioe = create_sync_io_engine_())) {
 			log_error("Failed to set up sync io.");
 			return 0;
 		}

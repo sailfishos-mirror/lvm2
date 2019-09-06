@@ -36,6 +36,9 @@ SOURCES =\
 	device/dev-luks.c \
 	device/dev-dasd.c \
 	device/dev-lvm1-pool.c \
+	device/io-manager.c \
+	device/io-manager-utils.c \
+	device/io-processor.c \
 	display/display.c \
 	error/errseg.c \
 	unknown/unknown.c \

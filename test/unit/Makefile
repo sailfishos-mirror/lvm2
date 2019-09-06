@@ -17,14 +17,14 @@ UNIT_SOURCE=\
 	device_mapper/vdo/status.c \
 	\
 	test/unit/activation-generator_t.c \
-	test/unit/bcache_t.c \
-	test/unit/bcache_utils_t.c \
 	test/unit/bitset_t.c \
 	test/unit/config_t.c \
 	test/unit/dmlist_t.c \
 	test/unit/dmstatus_t.c \
 	test/unit/framework.c \
-	test/unit/io_engine_t.c \
+	test/unit/io-manager_t.c \
+	test/unit/io-manager-utils_t.c \
+	test/unit/io-processor_t.c \
 	test/unit/matcher_t.c \
 	test/unit/percent_t.c \
 	test/unit/radix_tree_t.c \

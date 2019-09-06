@@ -129,18 +129,18 @@ static struct control_block *_iocb_to_cb(struct iocb *icb)
 //----------------------------------------------------------------
 
 struct async_engine {
-	struct io_engine e;
+	struct io_engine_ e;
 	io_context_t aio_context;
 	struct cb_set *cbs;
 	unsigned page_mask;
 };
 
-static struct async_engine *_to_async(struct io_engine *e)
+static struct async_engine *_to_async(struct io_engine_ *e)
 {
 	return container_of(e, struct async_engine, e);
 }
 
-static void _async_destroy(struct io_engine *ioe)
+static void _async_destroy(struct io_engine_ *ioe)
 {
 	int r;
 	struct async_engine *e = _to_async(ioe);
@@ -159,7 +159,7 @@ static int _last_byte_fd;
 static uint64_t _last_byte_offset;
 static int _last_byte_sector_size;
 
-static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
+static bool _async_issue(struct io_engine_ *ioe, enum dir d, int fd,
 			 sector_t sb, sector_t se, void *data, void *context)
 {
 	int r;
@@ -310,7 +310,7 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
 #define MAX_IO 256
 #define MAX_EVENT 64
 
-static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
+static bool _async_wait(struct io_engine_ *ioe, io_complete_fn fn)
 {
 	int i, r;
 	struct io_event event[MAX_EVENT];
@@ -353,12 +353,12 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 	return true;
 }
 
-static unsigned _async_max_io(struct io_engine *e)
+static unsigned _async_max_io(struct io_engine_ *e)
 {
 	return MAX_IO;
 }
 
-struct io_engine *create_async_io_engine(void)
+struct io_engine_ *create_async_io_engine_(void)
 {
 	int r;
 	struct async_engine *e = malloc(sizeof(*e));
@@ -399,22 +399,22 @@ struct sync_io {
 };
 
 struct sync_engine {
-	struct io_engine e;
+	struct io_engine_ e;
 	struct dm_list complete;
 };
 
-static struct sync_engine *_to_sync(struct io_engine *e)
+static struct sync_engine *_to_sync(struct io_engine_ *e)
 {
         return container_of(e, struct sync_engine, e);
 }
 
-static void _sync_destroy(struct io_engine *ioe)
+static void _sync_destroy(struct io_engine_ *ioe)
 {
         struct sync_engine *e = _to_sync(ioe);
         free(e);
 }
 
-static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
+static bool _sync_issue(struct io_engine_ *ioe, enum dir d, int fd,
                         sector_t sb, sector_t se, void *data, void *context)
 {
 	int rv;
@@ -570,7 +570,7 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int fd,
 	return true;
 }
 
-static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
+static bool _sync_wait(struct io_engine_ *ioe, io_complete_fn fn)
 {
         struct sync_io *io, *tmp;
 	struct sync_engine *e = _to_sync(ioe);
@@ -584,12 +584,12 @@ static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
 	return true;
 }
 
-static unsigned _sync_max_io(struct io_engine *e)
+static unsigned _sync_max_io(struct io_engine_ *e)
 {
         return 1;
 }
 
-struct io_engine *create_sync_io_engine(void)
+struct io_engine_ *create_sync_io_engine_(void)
 {
 	struct sync_engine *e = malloc(sizeof(*e));
 
@@ -653,7 +653,7 @@ struct bcache {
 	uint64_t nr_cache_blocks;
 	unsigned max_io;
 
-	struct io_engine *engine;
+	struct io_engine_ *engine;
 
 	void *raw_data;
 	struct block *raw_blocks;
@@ -1081,7 +1081,7 @@ static void _preemptive_writeback(struct bcache *cache)
  * Public interface
  *--------------------------------------------------------------*/
 struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
-			     struct io_engine *engine)
+			     struct io_engine_ *engine)
 {
 	struct bcache *cache;
 	unsigned max_io = engine->max_io(engine);

@@ -39,16 +39,16 @@ typedef uint64_t sector_t;
 
 typedef void io_complete_fn(void *context, int io_error);
 
-struct io_engine {
-	void (*destroy)(struct io_engine *e);
-	bool (*issue)(struct io_engine *e, enum dir d, int fd,
+struct io_engine_ {
+	void (*destroy)(struct io_engine_ *e);
+	bool (*issue)(struct io_engine_ *e, enum dir d, int fd,
 		      sector_t sb, sector_t se, void *data, void *context);
-	bool (*wait)(struct io_engine *e, io_complete_fn fn);
-	unsigned (*max_io)(struct io_engine *e);
+	bool (*wait)(struct io_engine_ *e, io_complete_fn fn);
+	unsigned (*max_io)(struct io_engine_ *e);
 };
 
-struct io_engine *create_async_io_engine(void);
-struct io_engine *create_sync_io_engine(void);
+struct io_engine_ *create_async_io_engine_(void);
+struct io_engine_ *create_sync_io_engine_(void);
 
 /*----------------------------------------------------------------*/
 
@@ -72,7 +72,7 @@ struct block {
  * Ownership of engine passes.  Engine will be destroyed even if this fails.
  */
 struct bcache *bcache_create(sector_t block_size, unsigned nr_cache_blocks,
-			     struct io_engine *engine);
+			     struct io_engine_ *engine);
 void bcache_destroy(struct bcache *cache);
 
 enum bcache_get_flags {

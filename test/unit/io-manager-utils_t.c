@@ -12,8 +12,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "lib/device/io-manager.h"
+#include "framework.h"
 #include "units.h"
-#include "lib/device/bcache.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -31,9 +32,9 @@
 #define INIT_PATTERN 123
 
 struct fixture {
-	int fd;
 	char fname[32];
-	struct bcache *cache;
+	struct io_manager *iom;
+	struct io_dev *dev;
 };
 
 static inline uint8_t _pattern_at(uint8_t pat, uint8_t byte)
@@ -46,57 +47,73 @@ static uint64_t byte(block_address b, uint64_t offset)
 	return b * T_BLOCK_SIZE + offset;
 }
 
+// With testing in tmpfs directory O_DIRECT cannot be used
+// tmpfs has  f_fsid == 0  (unsure if this is best guess)
+static bool _use_o_direct_internal(void)
+{
+	struct statvfs fsdata;
+
+	if (statvfs(".", &fsdata))
+		// assume we can
+		return true;
+
+	return fsdata.f_fsid;
+}
+
+static bool _use_o_direct(void)
+{
+	static bool latch = false;
+	static bool result;
+
+	if (!latch) {
+		latch = true;
+		result = _use_o_direct_internal();
+		if (!result)
+			printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
+	}
+
+	return result;
+}
+
 static void *_fix_init(struct io_engine *engine)
 {
+	int fd;
         uint8_t buffer[T_BLOCK_SIZE];
         struct fixture *f = malloc(sizeof(*f));
         unsigned b, i;
-	struct statvfs fsdata;
-	static int _runs_is_tmpfs = -1;
-
-	if (_runs_is_tmpfs == -1) {
-		// With testing in tmpfs directory O_DIRECT cannot be used
-		// tmpfs has  f_fsid == 0  (unsure if this is best guess)
-		_runs_is_tmpfs = (statvfs(".", &fsdata) == 0 && !fsdata.f_fsid) ? 1 : 0;
-		if (_runs_is_tmpfs)
-			printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
-	}
 
         T_ASSERT(f);
 
         snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
-	f->fd = mkstemp(f->fname);
-	T_ASSERT(f->fd >= 0);
+	fd = mkstemp(f->fname);
+	T_ASSERT(fd >= 0);
 
 	for (b = 0; b < NR_BLOCKS; b++) {
         	for (i = 0; i < sizeof(buffer); i++)
                 	buffer[i] = _pattern_at(INIT_PATTERN, byte(b, i));
-		T_ASSERT(write(f->fd, buffer, T_BLOCK_SIZE) > 0);
+		T_ASSERT(write(fd, buffer, T_BLOCK_SIZE) > 0);
 	}
+	close(fd);
 
-	if (!_runs_is_tmpfs) {
-		close(f->fd);
-		// reopen with O_DIRECT
-		f->fd = open(f->fname, O_RDWR | O_DIRECT);
-		T_ASSERT(f->fd >= 0);
-	}
+	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine);
+	T_ASSERT(f->iom);
 
-	f->cache = bcache_create(T_BLOCK_SIZE / 512, NR_BLOCKS, engine);
-	T_ASSERT(f->cache);
+	f->dev = io_get_dev(f->iom, f->fname, 0);
+	T_ASSERT(f->dev);
 
         return f;
 }
 
 static void *_async_init(void)
 {
-	struct io_engine *e = create_async_io_engine();
+	struct io_engine *e = create_async_io_engine(_use_o_direct());
 	T_ASSERT(e);
 	return _fix_init(e);
 }
 
 static void *_sync_init(void)
 {
-	struct io_engine *e = create_sync_io_engine();
+	struct io_engine *e = create_sync_io_engine(_use_o_direct());
 	T_ASSERT(e);
 	return _fix_init(e);
 }
@@ -105,8 +122,8 @@ static void _fix_exit(void *fixture)
 {
         struct fixture *f = fixture;
 
-	bcache_destroy(f->cache);
-	close(f->fd);
+	io_put_dev(f->dev);
+	io_manager_destroy(f->iom);
 	unlink(f->fname);
         free(f);
 }
@@ -135,20 +152,20 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 	uint64_t offset = byte_b % T_BLOCK_SIZE;
 	uint64_t blen, len = byte_e - byte_b;
 
-	// Verify via bcache_read_bytes
+	// Verify via io_read_bytes
 	{
         	unsigned i;
         	size_t len2 = byte_e - byte_b;
 		uint8_t *buffer = malloc(len2);
-		T_ASSERT(bcache_read_bytes(f->cache, f->fd, byte_b, len2, buffer));
+		T_ASSERT(io_read_bytes(f->iom, f->dev, byte_b, len2, buffer));
 		for (i = 0; i < len; i++)
         		T_ASSERT_EQUAL(buffer[i], _pattern_at(pat, byte_b + i));
         	free(buffer);
 	}
 
-	// Verify again, driving bcache directly
+	// Verify again, driving io directly
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->fd, bb, 0, &b));
+        	T_ASSERT(io_get_block(f->iom, f->dev, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
         	_verify_bytes(b, bb * T_BLOCK_SIZE, offset, blen, pat);
@@ -156,7 +173,7 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
         	offset = 0;
         	len -= blen;
 
-        	bcache_put(b);
+        	io_put_block(b);
 	}
 }
 
@@ -170,7 +187,7 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
 	uint64_t blen, len = byte_e - byte_b;
 
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->fd, bb, 0, &b));
+        	T_ASSERT(io_get_block(f->iom, f->dev, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
 		for (i = 0; i < blen; i++)
@@ -179,7 +196,7 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
         	offset = 0;
         	len -= blen;
 
-        	bcache_put(b);
+        	io_put_block(b);
 	}
 }
 
@@ -198,30 +215,35 @@ static void _do_write(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8
         for (i = 0; i < len; i++)
 		buffer[i] = _pattern_at(pat, byte_b + i);
 
-        T_ASSERT(bcache_write_bytes(f->cache, f->fd, byte_b, byte_e - byte_b, buffer));
+        T_ASSERT(io_write_bytes(f->iom, f->dev, byte_b, byte_e - byte_b, buffer));
 	free(buffer);
 }
 
 static void _do_zero(struct fixture *f, uint64_t byte_b, uint64_t byte_e)
 {
-	T_ASSERT(bcache_zero_bytes(f->cache, f->fd, byte_b, byte_e - byte_b));
+	T_ASSERT(io_zero_bytes(f->iom, f->dev, byte_b, byte_e - byte_b));
 }
 
 static void _do_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t val)
 {
-	T_ASSERT(bcache_set_bytes(f->cache, f->fd, byte_b, byte_e - byte_b, val));
+	T_ASSERT(io_set_bytes(f->iom, f->dev, byte_b, byte_e - byte_b, val));
 }
 
 static void _reopen(struct fixture *f)
 {
         struct io_engine *engine;
 
-	bcache_destroy(f->cache);
-	engine = create_async_io_engine();
+	io_put_dev(f->dev);
+	io_manager_destroy(f->iom);
+
+	engine = create_async_io_engine(_use_o_direct());
 	T_ASSERT(engine);
 
-	f->cache = bcache_create(T_BLOCK_SIZE / 512, NR_BLOCKS, engine);
-	T_ASSERT(f->cache);
+	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine);
+	T_ASSERT(f->iom);
+
+	f->dev = io_get_dev(f->iom, f->fname, 0);
+	T_ASSERT(f->iom);
 }
 
 //----------------------------------------------------------------
@@ -370,8 +392,6 @@ static void _test_set_many_boundaries(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
-
 static struct test_suite *_async_tests(void)
 {
         struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
@@ -380,7 +400,7 @@ static struct test_suite *_async_tests(void)
                 exit(1);
         }
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/io-manager/utils/async/" path, desc, fn)
         T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
         T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
         T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -415,7 +435,7 @@ static struct test_suite *_sync_tests(void)
                 exit(1);
         }
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/sync/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/io-manager/utils/sync/" path, desc, fn)
         T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
         T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
         T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -441,7 +461,7 @@ static struct test_suite *_sync_tests(void)
         return ts;
 }
 
-void bcache_utils_tests(struct dm_list *all_tests)
+void io_manager_utils_tests(struct dm_list *all_tests)
 {
 	dm_list_add(all_tests, &_async_tests()->list);
 	dm_list_add(all_tests, &_sync_tests()->list);
