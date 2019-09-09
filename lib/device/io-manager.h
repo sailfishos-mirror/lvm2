@@ -61,7 +61,7 @@ struct io_engine {
 	// The path is there purely for logging.
 	bool (*get_size)(struct io_engine *e, const char *path, int fd, sector_t *size);
 	bool (*get_block_sizes)(struct io_engine *e, const char *path, int fd,
-                                unsigned *physical, unsigned *logical);
+                                unsigned *physical_block_size, unsigned *logical_block_size);
 };
 
 struct io_engine *create_async_io_engine(void);
@@ -198,7 +198,7 @@ bool io_invalidate_dev(struct io_manager *iom, struct io_dev *dev);
 bool io_invalidate_all(struct io_manager *iom);
 
 bool io_dev_size(struct io_dev *dev, uint64_t *sectors);
-bool io_dev_block_sizes(struct io_dev *dev, unsigned *physical, unsigned *block_size);
+bool io_dev_block_sizes(struct io_dev *dev, unsigned *physical_block_size, unsigned *logical_block_size);
 
 // For testing and debug only
 void *io_get_dev_context(struct io_dev *dev);
