@@ -137,7 +137,6 @@ struct async_engine {
 	struct cb_set *cbs;
 	unsigned page_mask;
 	unsigned page_sector_mask;
-	bool use_o_direct;
 	struct dm_list completed_fallbacks;
 };
 
@@ -186,12 +185,11 @@ static int _open_common(const char *path, int os_flags)
 	return fd;
 }
 
-static int _async_open(struct io_engine *ioe, const char *path, unsigned flags)
+static int _async_open(struct io_engine *ioe, const char *path, unsigned flags, bool o_direct)
 {
-	struct async_engine *e = _to_async(ioe);
 	int os_flags = 0;
 
-	if (e->use_o_direct)
+	if (o_direct)
 		os_flags |= O_DIRECT;
 
 	if (flags & EF_READ_ONLY)
@@ -474,7 +472,7 @@ static bool _common_get_block_sizes(struct io_engine *e, const char *path, int f
 	return true;
 }
 
-struct io_engine *create_async_io_engine(bool use_o_direct)
+struct io_engine *create_async_io_engine(void)
 {
 	int r;
 	struct async_engine *e = malloc(sizeof(*e));
@@ -508,15 +506,14 @@ struct io_engine *create_async_io_engine(bool use_o_direct)
 
 	e->page_mask = sysconf(_SC_PAGESIZE) - 1;
 	e->page_sector_mask = (sysconf(_SC_PAGESIZE) / 512) - 1;
-	e->use_o_direct = use_o_direct;
 	dm_list_init(&e->completed_fallbacks);
 
 	return &e->e;
 }
 
-struct io_engine *create_test_io_engine(bool use_o_direct)
+struct io_engine *create_test_io_engine(void)
 {
-	struct io_engine *ioe = create_async_io_engine(use_o_direct);
+	struct io_engine *ioe = create_async_io_engine();
 
 	if (ioe) {
 		struct async_engine *e = _to_async(ioe);
@@ -536,7 +533,6 @@ struct sync_io {
 struct sync_engine {
 	struct io_engine e;
 	struct dm_list complete;
-	bool use_o_direct;
 };
 
 static struct sync_engine *_to_sync(struct io_engine *e)
@@ -550,12 +546,11 @@ static void _sync_destroy(struct io_engine *ioe)
 	free(e);
 }
 
-static int _sync_open(struct io_engine *ioe, const char *path, unsigned flags)
+static int _sync_open(struct io_engine *ioe, const char *path, unsigned flags, bool o_direct)
 {
-	struct sync_engine *e = _to_sync(ioe);
 	int os_flags = 0;
 
-	if (e->use_o_direct)
+	if (o_direct)
 		os_flags |= O_DIRECT;
 
 	if (flags & EF_READ_ONLY)
@@ -637,7 +632,7 @@ static unsigned _sync_max_io(struct io_engine *e)
 	return 1;
 }
 
-struct io_engine *create_sync_io_engine(bool use_o_direct)
+struct io_engine *create_sync_io_engine(void)
 {
 	struct sync_engine *e = malloc(sizeof(*e));
 
@@ -652,7 +647,6 @@ struct io_engine *create_sync_io_engine(bool use_o_direct)
 	e->e.max_io = _sync_max_io;
 	e->e.get_size = _common_get_size;
 	e->e.get_block_sizes = _common_get_block_sizes;
-	e->use_o_direct = use_o_direct;
 
 	dm_list_init(&e->complete);
 	return &e->e;
@@ -719,6 +713,7 @@ struct io_dev_internal {
 
 	// These are the flags that actually used to open the dev.
 	unsigned flags;
+	bool opened_o_direct;
 
 	// Reopen uses this to check it's reopened the same device.
 	bool is_device;
@@ -740,6 +735,7 @@ struct io_dev_internal {
 struct io_manager {
 	sector_t block_sectors;
 	uint64_t block_mask;
+	uint64_t page_sector_mask;
 
 	// 1 bit set for every sector in a block.
 	uint64_t sectors_mask;
@@ -748,6 +744,7 @@ struct io_manager {
 	uint64_t nr_cache_blocks;
 	unsigned max_io;
 	unsigned max_cache_devs;
+	bool use_o_direct;
 
 	struct io_engine *engine;
 
@@ -916,7 +913,7 @@ static struct io_dev_internal *_new_dev(struct io_manager *iom,
 		}
 	}
 
-	dev->fd = iom->engine->open(iom->engine, path, flags);
+	dev->fd = iom->engine->open(iom->engine, path, flags, iom->use_o_direct);
 	if (dev->fd < 0) {
 		log_error("couldn't open io_dev(%s)", path);
 		free(dev);
@@ -937,6 +934,7 @@ static struct io_dev_internal *_new_dev(struct io_manager *iom,
 	dev->iom = iom;
 	dev->holders = 1;
 	dev->blocks = 0;
+	dev->opened_o_direct = iom->use_o_direct;
 
 	v.ptr = dev;
 	if (!radix_tree_insert(iom->dev_tree, (uint8_t *) path, (uint8_t *) (path + strlen(path)), v)) {
@@ -1012,7 +1010,7 @@ static struct io_dev_internal *_upgrade_dev(struct io_manager *iom, const char *
 		// Fast path
 		int fd;
 
-		fd = iom->engine->open(iom->engine, path, flags);
+		fd = iom->engine->open(iom->engine, path, flags, iom->use_o_direct);
 		if ((fd < 0) || !_check_same_device(dev, fd, path)) {
 			log_error("couldn't reopen io_dev(%s)", path);
 			_dec_holders(dev);
@@ -1023,6 +1021,7 @@ static struct io_dev_internal *_upgrade_dev(struct io_manager *iom, const char *
 
 		dev->fd = fd;
 		dev->flags = flags;
+		dev->opened_o_direct = iom->use_o_direct;
 	}
 
 	return dev;
@@ -1243,6 +1242,29 @@ static void _complete_io(void *context, int err)
 	}
 }
 
+static void _wait_all(struct io_manager *iom);
+static bool _reopen_without_o_direct(struct io_manager *iom, struct io_dev_internal *dev)
+{
+	int fd;
+
+	_wait_all(iom);
+
+	fd = iom->engine->open(iom->engine, dev->path, dev->flags, false);
+	if (fd < 0)
+		return false;
+
+	if (!_check_same_device(dev, fd, dev->path)) {
+		iom->engine->close(iom->engine, fd);
+		return false;
+	}
+
+	iom->engine->close(iom->engine, dev->fd);
+	dev->fd = fd;
+	dev->opened_o_direct = false;
+
+	return true;
+}
+
 static void _issue_sectors(struct block *b, sector_t sb, sector_t se)
 {
 	struct io_manager *iom = b->iom;
@@ -1287,10 +1309,16 @@ static void _issue_whole_block(struct block *b, enum dir d)
 	_issue_sectors(b, 0, b->iom->block_sectors);
 }
 
+static bool _is_partial_write(struct io_manager *iom, struct block *b)
+{
+	return (b->io_dir == DIR_WRITE) && (b->dirty_bits != iom->block_mask);
+}
+
 // |b->list| should be valid (either pointing to itself, on one of the other
 // lists.
 static void _issue(struct block *b, enum dir d)
 {
+	bool fail = false;
 	struct io_manager *iom = b->iom;
 
 	if (_test_flags(b, BF_IO_PENDING))
@@ -1300,12 +1328,21 @@ static void _issue(struct block *b, enum dir d)
 	assert(!b->io_count);
 
 	b->io_dir = d;
+	if (_is_partial_write(iom, b) && b->dev->opened_o_direct) {
+		if (!_reopen_without_o_direct(iom, b->dev))
+			fail = true;
+	}
+
 	_set_flags(b, BF_IO_PENDING);
 	iom->nr_io_pending++;
 	dm_list_move(&iom->io_pending, &b->list);
 
-	if ((d == DIR_WRITE) && (b->dirty_bits != iom->block_mask))
+	if (fail)
+		_complete_io(b, -EIO);
+
+	else if (_is_partial_write(iom, b))
 		_issue_partial_write(b);
+
 	else
 		_issue_whole_block(b, d);
 }
@@ -1584,7 +1621,8 @@ static uint64_t _calc_block_mask(sector_t nr_sectors)
 }
 
 struct io_manager *io_manager_create(sector_t block_sectors, unsigned nr_cache_blocks,
-                                     unsigned max_cache_devs, struct io_engine *engine)
+                                     unsigned max_cache_devs, struct io_engine *engine,
+                                     bool use_o_direct)
 {
 	struct io_manager *iom;
 	unsigned max_io = engine->max_io(engine);
@@ -1607,6 +1645,7 @@ struct io_manager *io_manager_create(sector_t block_sectors, unsigned nr_cache_b
 	iom->nr_cache_blocks = nr_cache_blocks;
 	iom->max_io = nr_cache_blocks < max_io ? nr_cache_blocks : max_io;
 	iom->max_cache_devs = max_cache_devs;
+	iom->use_o_direct = use_o_direct;
 	iom->engine = engine;
 	iom->dev_index = 0;
 	iom->nr_open = 0;
@@ -1650,6 +1689,8 @@ struct io_manager *io_manager_create(sector_t block_sectors, unsigned nr_cache_b
 		return NULL;
 	}
 	dm_list_init(&iom->dev_lru);
+
+	iom->page_sector_mask = (sysconf(_SC_PAGESIZE) / 512) - 1;
 
 	return iom;
 }
@@ -1989,9 +2030,15 @@ bool io_invalidate_all(struct io_manager *iom)
 	return it.success;
 }
 
-int io_get_fd(struct io_dev *dev)
+void *io_get_dev_context(struct io_dev *dev)
 {
-	return dev->idev->fd;
+	return dev->idev;
+}
+
+int io_get_fd(void *dev_context)
+{
+	struct io_dev_internal *idev = dev_context;
+	return idev->fd;
 }
 
 bool io_is_well_formed(struct io_manager *iom)

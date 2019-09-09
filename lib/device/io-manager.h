@@ -50,7 +50,7 @@ enum {
 struct io_engine {
 	void (*destroy)(struct io_engine *e);
 
-	int (*open)(struct io_engine *e, const char *path, unsigned flags);
+	int (*open)(struct io_engine *e, const char *path, unsigned flags, bool o_direct);
 	void (*close)(struct io_engine *e, int fd);
 
 	unsigned (*max_io)(struct io_engine *e);
@@ -64,12 +64,12 @@ struct io_engine {
                                 unsigned *physical, unsigned *logical);
 };
 
-struct io_engine *create_async_io_engine(bool use_o_direct);
-struct io_engine *create_sync_io_engine(bool use_o_direct);
+struct io_engine *create_async_io_engine(void);
+struct io_engine *create_sync_io_engine(void);
 
 // Same as create_async_io_engine(), except writes are not acted upon.
 // Used when running with --test.
-struct io_engine *create_test_io_engine(bool use_o_direct);
+struct io_engine *create_test_io_engine(void);
 
 /*----------------------------------------------------------------*/
 
@@ -104,7 +104,8 @@ struct block {
  * dev will be closed, and all its data invalidated.
  */
 struct io_manager *io_manager_create(sector_t block_size, unsigned nr_cache_blocks,
-			     	     unsigned max_cache_devs, struct io_engine *engine);
+			     	     unsigned max_cache_devs, struct io_engine *engine,
+                                     bool use_o_direct);
 void io_manager_destroy(struct io_manager *iom);
 
 // IMPORTANT: It is up to the caller to normalise the device path.  io does
@@ -200,7 +201,8 @@ bool io_dev_size(struct io_dev *dev, uint64_t *sectors);
 bool io_dev_block_sizes(struct io_dev *dev, unsigned *physical, unsigned *block_size);
 
 // For testing and debug only
-int io_get_fd(struct io_dev *dev);
+void *io_get_dev_context(struct io_dev *dev);
+int io_get_fd(void *dev_context);
 bool io_is_well_formed(struct io_manager *iom);
 
 //----------------------------------------------------------------

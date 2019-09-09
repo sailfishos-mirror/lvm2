@@ -57,7 +57,7 @@ struct mock_call {
 	enum dir d;
 	// We can't store the dev here because we want to track writebacks
 	// and the dev may have been put by then.
-	int fd;
+	void *fd_context;
 	sector_t sb;
 	sector_t se;
 	bool issue_r;
@@ -119,7 +119,7 @@ static void _expect_read(struct mock_engine *e, struct io_dev *dev, block_addres
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	_set_block(e, mc, b);
 	mc->issue_r = true;
 	mc->wait_r = true;
@@ -142,7 +142,7 @@ static void _expect_write(struct mock_engine *e, struct io_dev *dev, block_addre
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	mc->sb = b * e->block_size;
 	mc->se = mc->sb + e->block_size;
 	mc->issue_r = true;
@@ -158,7 +158,11 @@ static void _expect_partial_write(struct mock_engine *e,
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+
+ 	// FIXME: this can be reopened to remove a partial write, so we
+ 	// shouldn't call the io_get_fd(dev) until the validation step, but
+ 	// the dev object will not be held/exist at that point ...
+ 	mc->fd_context = io_get_dev_context(dev);
 	mc->sb = sb;
 	mc->se = se;
 	mc->issue_r = true;
@@ -174,7 +178,7 @@ static void _expect_partial_write_bad_issue(struct mock_engine *e,
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	mc->sb = sb;
 	mc->se = se;
 	mc->issue_r = false;
@@ -190,7 +194,7 @@ static void _expect_partial_write_bad_wait(struct mock_engine *e,
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	mc->sb = sb;
 	mc->se = se;
 	mc->issue_r = true;
@@ -204,7 +208,7 @@ static void _expect_read_bad_issue(struct mock_engine *e, struct io_dev *dev, bl
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	_set_block(e, mc, b);
 	mc->issue_r = false;
 	mc->wait_r = true;
@@ -217,7 +221,7 @@ static void _expect_write_bad_issue(struct mock_engine *e, struct io_dev *dev, b
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	_set_block(e, mc, b);
 	mc->issue_r = false;
 	mc->wait_r = true;
@@ -230,7 +234,7 @@ static void _expect_read_bad_wait(struct mock_engine *e, struct io_dev *dev, blo
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_READ;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	_set_block(e, mc, b);
 	mc->issue_r = true;
 	mc->wait_r = false;
@@ -243,7 +247,7 @@ static void _expect_write_bad_wait(struct mock_engine *e, struct io_dev *dev, bl
 	mc->m = E_ISSUE;
 	mc->match_args = true;
 	mc->d = DIR_WRITE;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	_set_block(e, mc, b);
 	mc->issue_r = true;
 	mc->wait_r = false;
@@ -265,7 +269,7 @@ static void _expect_get_size(struct mock_engine *e, struct io_dev *dev, uint64_t
 	mc->m = E_GET_SIZE;
 	mc->match_args = true;
 	mc->fail = true;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	mc->size = s;
 	dm_list_add(&e->expected_calls, &mc->list);
 }
@@ -276,7 +280,7 @@ static void _expect_get_size_fail(struct mock_engine *e, struct io_dev *dev)
 	mc->m = E_GET_SIZE;
 	mc->match_args = true;
 	mc->fail = false;
-	mc->fd = io_get_fd(dev);
+	mc->fd_context = io_get_dev_context(dev);
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
@@ -333,7 +337,7 @@ static void _mock_destroy(struct io_engine *e)
 	free(_to_mock(e));
 }
 
-static int _mock_open(struct io_engine *e, const char *path, unsigned flags)
+static int _mock_open(struct io_engine *e, const char *path, unsigned flags, bool o_direct)
 {
 	struct mock_engine *me = _to_mock(e);
 	struct mock_call *mc;
@@ -365,7 +369,7 @@ static bool _mock_issue(struct io_engine *e, enum dir d, int fd,
 	mc = _match_pop(me, E_ISSUE);
 	if (mc->match_args) {
 		T_ASSERT(d == mc->d);
-		T_ASSERT_EQUAL(fd, mc->fd);
+		T_ASSERT_EQUAL(fd, io_get_fd(mc->fd_context));
 		T_ASSERT(sb == mc->sb);
 		T_ASSERT(se == mc->se);
 	}
@@ -421,7 +425,7 @@ static bool _mock_get_size(struct io_engine *e, const char *path, int fd, uint64
 	struct mock_engine *me = _to_mock(e);
 	struct mock_call *mc = _match_pop(me, E_GET_SIZE);
 	if (mc->match_args && !mc->fail)
-		T_ASSERT_EQUAL(fd, mc->fd);
+		T_ASSERT_EQUAL(fd, io_get_fd(mc->fd_context));
 
 	*s = mc->size;
 	r = mc->fail;
@@ -459,7 +463,8 @@ struct fixture {
 };
 
 static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_blocks,
-                                     unsigned max_cache_devs)
+                                     unsigned max_cache_devs,
+                                     bool use_o_direct)
 {
 	struct fixture *f = malloc(sizeof(*f));
 
@@ -467,7 +472,8 @@ static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_bloc
 	T_ASSERT(f->me);
 
 	_expect(f->me, E_MAX_IO);
-	f->iom = io_manager_create(block_size, nr_cache_blocks, max_cache_devs, &f->me->e);
+	f->iom = io_manager_create(block_size, nr_cache_blocks, max_cache_devs,
+                                   &f->me->e, use_o_direct);
 	T_ASSERT(f->iom);
 
 	return f;
@@ -483,7 +489,7 @@ static void _fixture_exit(struct fixture *f)
 
 static void *_small_fixture_init(void)
 {
-	return _fixture_init(T_BLOCK_SIZE >> SECTOR_SHIFT, 16, SMALL_MAX_CACHE_DEVS);
+	return _fixture_init(T_BLOCK_SIZE >> SECTOR_SHIFT, 16, SMALL_MAX_CACHE_DEVS, true);
 }
 
 static void _small_fixture_exit(void *context)
@@ -491,9 +497,19 @@ static void _small_fixture_exit(void *context)
 	_fixture_exit(context);
 }
 
+static void *_no_o_direct_fixture_init(void)
+{
+	return _fixture_init(T_BLOCK_SIZE >> SECTOR_SHIFT, 16, SMALL_MAX_CACHE_DEVS, false);
+}
+
+static void _no_o_direct_fixture_exit(void *context)
+{
+	_fixture_exit(context);
+}
+
 static void *_large_fixture_init(void)
 {
-	return _fixture_init(T_BLOCK_SIZE >> SECTOR_SHIFT, 1024, 256);
+	return _fixture_init(T_BLOCK_SIZE >> SECTOR_SHIFT, 1024, 256, true);
 }
 
 static void _large_fixture_exit(void *context)
@@ -510,7 +526,7 @@ static void good_create(sector_t block_size, unsigned nr_cache_blocks)
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
-	iom = io_manager_create(block_size, nr_cache_blocks, 256, &me->e);
+	iom = io_manager_create(block_size, nr_cache_blocks, 256, &me->e, true);
 	T_ASSERT(iom);
 
 	_expect(me, E_DESTROY);
@@ -523,7 +539,7 @@ static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
-	iom = io_manager_create(block_size, nr_cache_blocks, 256, &me->e);
+	iom = io_manager_create(block_size, nr_cache_blocks, 256, &me->e, true);
 	T_ASSERT(!iom);
 
 	_expect(me, E_DESTROY);
@@ -1391,11 +1407,32 @@ static void test_concurrent_reads_after_invalidate(void *context)
  * Partial block tests
  *--------------------------------------------------------------*/
 
-// rather than having a single dirty flag we should rely on the dirty_bits field.
-// after a write we should clear the dirty_bits
- 
-// different partial writes should aggregate in dirty_bits
-// nothing outside dirty_bits should be written
+static void test_reopen_without_direct(void *context)
+{
+	struct fixture *f = context;
+	const char *path = "/foo/bar/dev";
+	struct io_dev *dev;
+	struct mock_engine *me = f->me;
+	struct io_manager *iom = f->iom;
+
+	struct block *b;
+
+	_expect(f->me, E_OPEN);
+	dev = io_get_dev(f->iom, path, 0);
+
+	T_ASSERT(io_get_block_mask(iom, dev, 0, GF_ZERO, 0x1, &b));
+	io_put_block(b);
+
+	_expect(f->me, E_OPEN);   // FIXME: check use_o_direct isn't set
+	_expect(f->me, E_CLOSE);
+
+	// Expect the write
+	_expect_partial_write(me, dev, 0, 1);
+	_expect(me, E_WAIT);
+
+	_expect(f->me, E_CLOSE);
+	io_put_dev(dev);
+}
 
 static void _single_partial_write(struct fixture *f, uint64_t mask, sector_t sb, sector_t se)
 {
@@ -2014,6 +2051,23 @@ static struct test_suite *_small_tests(void)
 #undef T
 
 #define T(path, desc, fn) register_test(ts, "/base/device/io-manager/core/partial-write/" path, desc, fn)
+	T("reopen-without-o-direct", "Partial writes prevent O_DIRECT being used", test_reopen_without_direct);
+#undef T
+
+	return ts;
+}
+
+
+static struct test_suite *_partial_tests(void)
+{
+	struct test_suite *ts = test_suite_create(_no_o_direct_fixture_init,
+                                                  _no_o_direct_fixture_exit);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+#define T(path, desc, fn) register_test(ts, "/base/device/io-manager/core/partial-write/" path, desc, fn)
 	T("single-start", "Writes a single sector at the start of a block", test_partial_write_at_start);
 	T("single-end", "Writes a single sector at the end of a block", test_partial_write_at_end);
 	T("multi-start", "Writes multiple sectors at the start of a block", test_partial_write_multiple_sectors_start);
@@ -2069,5 +2123,6 @@ void io_manager_tests(struct dm_list *all_tests)
 {
         dm_list_add(all_tests, &_tiny_tests()->list);
 	dm_list_add(all_tests, &_small_tests()->list);
+	dm_list_add(all_tests, &_partial_tests()->list);
 	dm_list_add(all_tests, &_large_tests()->list);
 }

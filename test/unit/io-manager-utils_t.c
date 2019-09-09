@@ -95,7 +95,7 @@ static void *_fix_init(struct io_engine *engine)
 	}
 	close(fd);
 
-	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine);
+	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine, true);
 	T_ASSERT(f->iom);
 
 	f->dev = io_get_dev(f->iom, f->fname, 0);
@@ -106,14 +106,14 @@ static void *_fix_init(struct io_engine *engine)
 
 static void *_async_init(void)
 {
-	struct io_engine *e = create_async_io_engine(_use_o_direct());
+	struct io_engine *e = create_async_io_engine();
 	T_ASSERT(e);
 	return _fix_init(e);
 }
 
 static void *_sync_init(void)
 {
-	struct io_engine *e = create_sync_io_engine(_use_o_direct());
+	struct io_engine *e = create_sync_io_engine();
 	T_ASSERT(e);
 	return _fix_init(e);
 }
@@ -236,10 +236,10 @@ static void _reopen(struct fixture *f)
 	io_put_dev(f->dev);
 	io_manager_destroy(f->iom);
 
-	engine = create_async_io_engine(_use_o_direct());
+	engine = create_async_io_engine();
 	T_ASSERT(engine);
 
-	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine);
+	f->iom = io_manager_create(T_BLOCK_SIZE / 512, NR_BLOCKS, 256, engine, _use_o_direct());
 	T_ASSERT(f->iom);
 
 	f->dev = io_get_dev(f->iom, f->fname, 0);
