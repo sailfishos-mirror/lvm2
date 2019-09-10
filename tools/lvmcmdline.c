@@ -132,6 +132,7 @@ static const struct command_function _command_functions[CMD_COUNT] = {
 	{ lvconvert_merge_thin_CMD,			lvconvert_merge_thin_cmd },
 	{ lvconvert_split_and_keep_cache_CMD,		lvconvert_split_cache_cmd },
 	{ lvconvert_split_and_remove_cache_CMD,		lvconvert_split_cache_cmd },
+	{ lvconvert_repair_cachevol_CMD,		lvconvert_repair_cachevol_cmd },
 
 	/* lvconvert raid-related type conversions */
 	{ lvconvert_raid_types_CMD,			lvconvert_raid_types_cmd },
