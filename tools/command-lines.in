@@ -728,6 +728,14 @@ DESC: Repair a cache pool.
 RULE: all not lv_is_locked lv_is_pvmove
 RULE: --poolmetadataspare and LV_cache LV_cachepool LV_thinpool
 
+lvconvert --repaircachevol LV LV
+OO: OO_LVCONVERT
+ID: lvconvert_repair_cachevol
+DESC: Read damaged cache metadata from the specified cachevol,
+DESC: write repaired metadata to the destination LV (in first
+DESC: position arg), and copy cache data from the cachevol to
+DESC: the destination LV.
+
 lvconvert --replace PV LV_raid
 OO: OO_LVCONVERT
 OP: PV ...

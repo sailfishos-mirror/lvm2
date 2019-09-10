@@ -544,6 +544,12 @@ arg(repair_ARG, '\0', "repair", 0, 0, 0,
     "utility on a thin pool. See \\fBlvmraid\\fP(7) and \\fBlvmthin\\fP(7)\n"
     "for more information.\n")
 
+arg(repaircachevol_ARG, '\0', "repaircachevol", lv_VAL, 0, 0,
+    "Using the cache_repair utility, read damaged cache metadata\n"
+    "from the specified cachevol LV and write repaired metadata to\n"
+    "a destination LV.  Then copy cache data, unchanged, from the\n"
+    "cachevol LV to the destination LV.\n")
+    
 arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
     "Replace a specific PV in a raid LV with another PV.\n"
     "The new PV to use can be optionally specified after the LV.\n"

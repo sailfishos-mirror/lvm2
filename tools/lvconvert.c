@@ -3828,6 +3828,490 @@ int lvconvert_repair_cmd(struct cmd_context *cmd, int argc, char **argv)
 	return ret;
 }
 
+#define ONEGB_IN_BYTES 1073741824
+#define MAX_COPY_BYTES 33554432 /* 32MB */
+
+static int _do_cache_copy(struct cmd_context *cmd,
+			  struct lv_segment *cache_seg,
+			  struct logical_volume *lv_in,
+			  struct logical_volume *lv_out)
+{
+	char path_in[PATH_MAX];
+	char path_out[PATH_MAX];
+	const char *dmdir = dm_dir();
+	char *dm_name_in;
+	char *dm_name_out;
+	char *buf, **p_buf;
+	off_t data_off;
+	uint64_t data_len_bytes;
+	uint64_t copied = 0;
+	int bufsize, len, pos, rs, ws;
+	int fd_in, fd_out;
+	int ret;
+
+	if (!(dm_name_in = dm_build_dm_name(cmd->mem, lv_in->vg->name, lv_in->name, NULL)) ||
+	    (dm_snprintf(path_in, sizeof(path_in), "%s/%s", dmdir, dm_name_in) < 0)) {
+		log_error("Failed to create path for %s.", display_lvname(lv_in));
+		return 0;
+	}
+
+	if (!(dm_name_out = dm_build_dm_name(cmd->mem, lv_out->vg->name, lv_out->name, NULL)) ||
+	    (dm_snprintf(path_out, sizeof(path_out), "%s/%s", dmdir, dm_name_out) < 0)) {
+		log_error("Failed to create path for %s.", display_lvname(lv_out));
+		return 0;
+	}
+
+	if (!(fd_in = open(path_in, O_RDONLY | O_DIRECT | O_CLOEXEC))) {
+		log_error("Failed to open %s for cache copy.", path_in);
+		return 0;
+	}
+
+	if (!(fd_out = open(path_out, O_RDWR | O_DIRECT | O_CLOEXEC))) {
+		log_error("Failed to open %s for cache copy.", path_in);
+		close(fd_in);
+		return 0;
+	}
+
+	/* data starts after metadata, metadata_len/data_len in sectors */
+	data_off = cache_seg->metadata_len * 512;
+	data_len_bytes = cache_seg->data_len * 512;
+
+	/* bufsize, pos, len, rs, ws, data_off, data_len_bytes, copied are in bytes */
+
+	/*
+	 * FIXME: use optimal_io_size?  These values for copy sizes are fairly random.
+	 */
+	bufsize = (cache_seg->chunk_size * 512) * 8;
+	if (bufsize > MAX_COPY_BYTES)
+		bufsize = MAX_COPY_BYTES;
+
+	p_buf = &buf;
+	if (posix_memalign((void *)p_buf, getpagesize(), bufsize)) {
+		log_error("No memory");
+		ret = 0;
+		goto out;
+	}
+
+	log_print("copying %llu GiB of cache data to %s...",
+		  (unsigned long long)(data_len_bytes / ONEGB_IN_BYTES),
+		  display_lvname(lv_out));
+
+	while (1) {
+		len = bufsize;
+		pos = 0;
+ retry_read:
+		rs = pread(fd_in, buf + pos, len, data_off + pos);
+		if (rs == -1 && errno == EINTR) {
+			log_error("Cancel cache data copy.");
+			ret = 0;
+			goto out;
+		}
+		if (rs == -1) {
+			log_error("cache copy read error %d at offset %llu pos %d",
+				  errno, (unsigned long long)data_off, pos);
+			ret = 0;
+			goto out;
+		}
+		if (!rs) {
+			log_error("cache data copy incomplete %llu of %llu",
+				  (unsigned long long)copied,
+				  (unsigned long long)data_len_bytes);
+			ret = 0;
+			goto out;
+		}
+		if (rs < len) {
+			len -= rs;
+			pos += rs;
+			goto retry_read;
+		}
+
+		len = bufsize;
+		pos = 0;
+ retry_write:
+		ws = pwrite(fd_out, buf + pos, len, data_off + pos);
+		if (ws == -1 && errno == EINTR) {
+			log_error("Cancel cache data copy.");
+			ret = 0;
+			goto out;
+		}
+		if (ws == -1) {
+			log_error("cache copy write error %d at offset %llu pos %d",
+				  errno, (unsigned long long)data_off, pos);
+			ret = 0;
+			goto out;
+		}
+		if (!ws) {
+			log_error("cache data copy incomplete %llu of %llu",
+				  (unsigned long long)copied,
+				  (unsigned long long)data_len_bytes);
+			ret = 0;
+			goto out;
+		}
+		if (ws < len) {
+			len -= ws;
+			pos += ws;
+			goto retry_write;
+		}
+
+		data_off += bufsize;
+		copied += bufsize;
+
+		/* show progress */
+		if ((data_len_bytes > ONEGB_IN_BYTES) && !(copied % ONEGB_IN_BYTES))
+			log_print("copied %llu GiB of %llu GiB of cache data...",
+				  (unsigned long long)(copied / ONEGB_IN_BYTES),
+				  (unsigned long long)(data_len_bytes / ONEGB_IN_BYTES));
+
+		if (copied >= data_len_bytes)
+			break;
+	}
+
+	/* O_DIRECT used in write does not strictly imply O_SYNC */
+	if (fsync(fd_out)) {
+		log_error("cache data copy not synced");
+		ret = 0;
+		goto out;
+	}
+
+	ret = 1;
+
+	log_print("copied %llu bytes of cache data from %s to %s.",
+		  (unsigned long long)copied,
+		  display_lvname(lv_in),
+		  display_lvname(lv_out));
+ out:
+	close(fd_in);
+	close(fd_out);
+	return ret;
+}
+
+static int _run_cache_repair(struct cmd_context *cmd,
+			     struct logical_volume *lv_in,
+			     struct logical_volume *lv_out)
+{
+	char path_in[PATH_MAX];
+	char path_out[PATH_MAX];
+	const char *dmdir = dm_dir();
+	const char *cache_repair = find_config_tree_str_allow_empty(cmd, global_cache_repair_executable_CFG, NULL);
+	const struct dm_config_node *cn;
+	const struct dm_config_value *cv;
+	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
+	char *dm_name_in;
+	char *dm_name_out;
+	int args = 0;
+	int status;
+
+	if (!cache_repair || !cache_repair[0]) {
+		log_error("No cache_repair command set in lvm.conf. Repair is disabled.");
+		return 0;
+	}
+
+	if (!(dm_name_in = dm_build_dm_name(cmd->mem, lv_in->vg->name, lv_in->name, NULL)) ||
+	    (dm_snprintf(path_in, sizeof(path_in), "%s/%s", dmdir, dm_name_in) < 0)) {
+		log_error("Failed to create path for %s.", display_lvname(lv_in));
+		return 0;
+	}
+
+	if (!(dm_name_out = dm_build_dm_name(cmd->mem, lv_out->vg->name, lv_out->name, NULL)) ||
+	    (dm_snprintf(path_out, sizeof(path_out), "%s/%s", dmdir, dm_name_out) < 0)) {
+		log_error("Failed to create path for %s.", display_lvname(lv_out));
+		return 0;
+	}
+
+	if (!(cn = find_config_tree_array(cmd, global_cache_repair_options_CFG, NULL))) {
+		log_error(INTERNAL_ERROR "Unable to find configuration for global/cache_repair_options");
+		return 0;
+	}
+
+	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
+		if (cv->type != DM_CFG_STRING) {
+			log_error("Invalid string in config file: "
+				  "global/cache_repair_options");
+			return 0;
+		}
+		argv[++args] = cv->v.str;
+	}
+
+	if (args >= MAX_PDATA_ARGS) {
+		log_error("Too many cache_repair_options set in lvm.conf.");
+		return 0;
+	}
+
+	argv[0] = cache_repair;
+	argv[++args] = "-i";
+	argv[++args] = path_in;
+	argv[++args] = "-o";
+	argv[++args] = path_out;
+	argv[++args] = NULL;
+
+	if (!exec_cmd(cmd, (const char * const *)argv, &status, 1)) {
+		log_error("The cache_repair command failed (status %d) from %s to %s.",
+			   status, path_in, path_out);
+		return 0;
+	}
+
+	log_print("cache_repair wrote repaired metadata to %s.", display_lvname(lv_out));
+
+	return 1;
+}
+
+static int _lvconvert_repair_cachevol_single(struct cmd_context *cmd, struct logical_volume *lv,
+			struct processing_handle *handle)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *cachevol_lv, *dest_lv, *cache_lv = NULL;
+	struct lv_segment *cache_seg, *cachevol_seg, *dest_seg;
+	struct lv_list *lvl;
+	const char *cachevol_name;
+	uint64_t metadata_len_sectors, orig_cachevol_seglen, orig_dest_seglen;
+	int ret;
+
+	dest_lv = lv;
+	lv = NULL;
+
+	/* command def should prevent this */
+	if (!(cachevol_name = arg_str_value(cmd, repaircachevol_ARG, NULL)))
+		return_ECMD_FAILED;
+
+	if (!validate_lvname_param(cmd, &vg->name, &cachevol_name)) {
+		log_error("Invalid cachevol LV name %s.", cachevol_name);
+		return ECMD_FAILED;
+	}
+
+	if (!(cachevol_lv = find_lv(vg, cachevol_name))) {
+		log_error("Failed to find cachevol LV %s.", cachevol_name);
+		return_ECMD_FAILED;
+	}
+
+	if (!lv_is_cache_vol(cachevol_lv)) {
+		log_error("LV must be a cachevol %s", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	/*
+	 * Find the cache LV using the cachevol.
+	 */
+	dm_list_iterate_items(lvl, &vg->lvs) {
+		if (!lv_is_cache(lvl->lv))
+			continue;
+
+		if (!(cache_seg = first_seg(lvl->lv)))
+			continue;
+
+		if (!lv_is_cache_vol(cache_seg->pool_lv))
+			continue;
+
+		if (cache_seg->pool_lv != cachevol_lv)
+			continue;
+
+		cache_lv = lvl->lv;
+		break;
+	}
+
+	if (!cache_lv) {
+		log_error("Failed to find LV using cachevol %s.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	metadata_len_sectors = cache_seg->metadata_len; /* units are sectors */
+
+	if (cache_seg->metadata_start) {
+		/* metadata is always at 0, but check in case it changes in future */
+		log_error("Cannot handle non-zero metadata start locations.");
+		return ECMD_FAILED;
+	}
+
+	/* destination LV cannot be smaller */
+	if (dest_lv->size < cachevol_lv->size) {
+		log_error("Destination LV must not be smaller than cachevol size.");
+		return ECMD_FAILED;
+	}
+
+	/* cache LV using the cachevol cannot be active */
+	if (lv_is_active(cache_lv)) {
+		log_error("LV %s must not be active.", display_lvname(cache_lv));
+		return ECMD_FAILED;
+	}
+
+	/* source LV cannot be active */
+	if (lv_is_active(cachevol_lv)) {
+		log_error("LV %s must not be active.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	/* destination LV cannot be active */
+	if (lv_is_active(dest_lv)) {
+		log_error("LV %s must not be active.", display_lvname(dest_lv));
+		return ECMD_FAILED;
+	}
+
+	if (!dm_list_empty(&dest_lv->segs_using_this_lv)) {
+		log_error("LV %s is being used.", display_lvname(dest_lv));
+		return ECMD_FAILED;
+	}
+
+	if (vg_is_shared(vg)) {
+		/* cache LV using the cachevol cannot be active elsewhere */
+		if (!lockd_lv(cmd, cache_lv, "ex", 0))
+			return_ECMD_FAILED;
+
+		/* source LV cannot be active elsewhere. */
+		if (!lockd_lv(cmd, cachevol_lv, "ex", 0))
+			return_ECMD_FAILED;
+
+		/* destination LV cannot be elsewhere. */
+		if (!lockd_lv(cmd, dest_lv, "ex", 0))
+			return_ECMD_FAILED;
+	}
+
+	if (!arg_is_set(cmd, yes_ARG) &&
+	    yes_no_prompt("Erase all existing data on %s? [y/n]: ", display_lvname(dest_lv)) == 'n') {
+		log_error("Repair aborted.");
+		return ECMD_FAILED;
+	}
+
+	/*
+	 * Activate source and destination LVs.
+	 *
+	 * LV_TEMPORARY should prevent the active LV from being exposed and
+	 * used outside of lvm.
+	 */
+
+	cachevol_lv->status |= LV_TEMPORARY;
+	dest_lv->status |= LV_TEMPORARY;
+
+	/*
+	 * Set temporary sizes for source and destination LVs that is
+	 * only the metadata size, so the active LVs will only allow
+	 * reading/writing of the metadata portions while running
+	 * cache_repair.
+	 */
+
+	cachevol_seg = first_seg(cachevol_lv);
+	dest_seg = first_seg(dest_lv);
+
+	orig_cachevol_seglen = cachevol_seg->len;
+	orig_dest_seglen = dest_seg->len;
+
+	/* seg->len units are extents */
+	cachevol_seg->len = metadata_len_sectors / vg->extent_size;
+	dest_seg->len = metadata_len_sectors / vg->extent_size;
+
+	if (!activate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to activate LV %s for cache_repair.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	if (!activate_lv(cmd, dest_lv)) {
+		log_error("Failed to activate LV %s for cache_repair.", display_lvname(dest_lv));
+
+		if (!deactivate_lv(cmd, cachevol_lv))
+			log_error("Failed to deactivate LV %s", display_lvname(cachevol_lv));
+
+		return ECMD_FAILED;
+	}
+
+	if (!sync_local_dev_names(cmd)) {
+		log_error("Failed to sync local devices before cache_repair.");
+		return ECMD_FAILED;
+	}
+
+	/*
+	 * unlock the vg to avoid blocking other commands during long repair
+	 * and copy.
+	 *
+	 * FIXME: we should have an LV maintenance mode that we set on this LV
+	 * while it's being repaired to prevent other usage.
+	 *
+	 * FIXME: make it an error to activate the cache LV while its cachevol is active.
+	 */
+	unlock_vg(cmd, vg, vg->name);
+
+	/* Run cache_repair from source LV to destination LV. */
+
+	if (!_run_cache_repair(cmd, cachevol_lv, dest_lv))
+		ret = ECMD_FAILED;
+
+	/* Deactivate source and destination */
+
+	if (!deactivate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to deactivate LV %s after cache_repair.", display_lvname(cachevol_lv));
+		ret = ECMD_FAILED;
+	}
+
+	if (!deactivate_lv(cmd, dest_lv)) {
+		log_error("Failed to deactivate LV %s after cache_repair.", display_lvname(dest_lv));
+		ret = ECMD_FAILED;
+	}
+
+	if (ret == ECMD_FAILED)
+		return ret;
+
+	/* Activate source and destination LVs with original sizes. */
+
+	cachevol_seg->len = orig_cachevol_seglen;
+	dest_seg->len = orig_dest_seglen;
+
+	if (!activate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to activate LV %s for cache data copy.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	if (!activate_lv(cmd, dest_lv)) {
+		log_error("Failed to activate LV %s for cache data copy.", display_lvname(dest_lv));
+
+		if (!deactivate_lv(cmd, cachevol_lv))
+			log_error("Failed to deactivate LV %s", display_lvname(cachevol_lv));
+
+		return ECMD_FAILED;
+	}
+
+	if (!sync_local_dev_names(cmd)) {
+		log_error("Failed to sync local devices before cache copy.");
+		return ECMD_FAILED;
+	}
+
+	/* Copy the cache data from source to destination */
+
+	if (!_do_cache_copy(cmd, cache_seg, cachevol_lv, dest_lv))
+		ret = ECMD_FAILED;
+
+	/* Deactivate source and destination */
+
+	if (!deactivate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to deactivate LV %s after cache copy.", display_lvname(cachevol_lv));
+		ret = ECMD_FAILED;
+	}
+
+	if (!deactivate_lv(cmd, dest_lv)) {
+		log_error("Failed to deactivate LV %s after cache copy.", display_lvname(dest_lv));
+		ret = ECMD_FAILED;
+	}
+
+	if (ret == ECMD_FAILED)
+		return ret;
+
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_repair_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_ACTIVATE,
+			      handle, NULL, &_lvconvert_repair_cachevol_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
 static int _lvconvert_replace_pv_single(struct cmd_context *cmd, struct logical_volume *lv,
 			struct processing_handle *handle)
 {
