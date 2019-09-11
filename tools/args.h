@@ -556,6 +556,14 @@ arg(replace_ARG, '\0', "replace", pv_VAL, ARG_GROUPABLE, 0,
     "Multiple PVs can be replaced by repeating this option.\n"
     "See \\fBlvmraid\\fP(7) for more information.\n")
 
+arg(replacecachevol_ARG, '\0', "replacecachevol", lv_VAL, 0, 0,
+    "Replace the specified cachevol LV with the LV named in the\n"
+    "command's position arg. The replacement LV should hold a\n"
+    "repaired copy of the cache. The current cachevol LV will be\n"
+    "detached from the main LV, and will become visible and unused.\n"
+    "The replacement LV will be attached to the main LV, becoming\n"
+    "a hidden cachevol, and used by the main LV for caching.\n")
+
 arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, 0, 0,
     "Overrides current output format for reports which is defined globally by\n"
     "the report/output_format setting in lvm.conf.\n"

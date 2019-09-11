@@ -4333,6 +4333,159 @@ int lvconvert_repair_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv
 	return ret;
 }
 
+static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *cache_lv = NULL, *cachevol_lv, *lv_fast_old, *lv_fast_new;
+	struct lv_segment *cache_seg = first_seg(lv);
+	struct lv_list *lvl;
+	const char *cachevol_name;
+
+	lv_fast_new = lv;
+	lv = NULL;
+
+	/* command def should prevent this */
+	if (!(cachevol_name = arg_str_value(cmd, replacecachevol_ARG, "")))
+		return_ECMD_FAILED;
+
+	if (!validate_lvname_param(cmd, &vg->name, &cachevol_name)) {
+		log_error("Invalid cachevol LV name %s.", cachevol_name);
+		return ECMD_FAILED;
+	}
+
+	if (!(cachevol_lv = find_lv(vg, cachevol_name))) {
+		log_error("Failed to find cachevol LV %s.", cachevol_name);
+		return ECMD_FAILED;
+	}
+
+	if (!lv_is_cache_vol(cachevol_lv)) {
+		log_error("LV %s is not a cachevol.", display_lvname(cachevol_lv));
+		return 0;
+	}
+
+	/*
+	 * Find the cache LV using the cachevol.
+	 */
+	dm_list_iterate_items(lvl, &vg->lvs) {
+		if (!lv_is_cache(lvl->lv))
+			continue;
+
+		if (!(cache_seg = first_seg(lvl->lv)))
+			continue;
+
+		if (!lv_is_cache_vol(cache_seg->pool_lv))
+			continue;
+
+		if (cache_seg->pool_lv != cachevol_lv)
+			continue;
+
+		cache_lv = lvl->lv;
+		break;
+	}
+
+	if (!cache_lv) {
+		log_error("Failed to find LV using cachevol %s.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	if (lv_is_active(cache_lv)) {
+		log_error("LV %s must be inactive.", display_lvname(cache_lv));
+		return ECMD_FAILED;
+	}
+
+	if (lv_is_active(cachevol_lv)) {
+		log_error("LV %s must be inactive.", display_lvname(cachevol_lv));
+		return ECMD_FAILED;
+	}
+
+	if (lv_is_active(lv_fast_new)) {
+		log_error("LV %s must be inactive.", display_lvname(lv_fast_new));
+		return ECMD_FAILED;
+	}
+
+	if (!dm_list_empty(&lv_fast_new->segs_using_this_lv)) {
+		log_error("LV %s is already in use.", display_lvname(lv_fast_new));
+		return ECMD_FAILED;
+	}
+
+	if (vg_is_shared(vg)) {
+		/* cache LV using the cachevol cannot be active elsewhere */
+		if (!lockd_lv(cmd, cache_lv, "ex", 0))
+			return_ECMD_FAILED;
+
+		/* current cachevol LV cannot be active elsewhere. */
+		if (!lockd_lv(cmd, cachevol_lv, "ex", 0))
+			return_ECMD_FAILED;
+
+		/* replacement LV cannot be elsewhere. */
+		if (!lockd_lv(cmd, lv_fast_new, "ex", 0))
+			return_ECMD_FAILED;
+	}
+
+	if (!arg_is_set(cmd, yes_ARG) &&
+	    yes_no_prompt("Replace current cachevol %s with %s for caching %s? [y/n]: ",
+		    	  cachevol_lv->name,
+			  lv_fast_new->name,
+			  display_lvname(cache_lv)) == 'n') {
+		return ECMD_FAILED;
+	}
+
+	if (!archive(vg))
+		return_0;
+
+	/* remove cachevol_lv from the cachevol role */
+	remove_seg_from_segs_using_this_lv(cachevol_lv, cache_seg);
+	cachevol_lv->status &= ~LV_CACHE_VOL;
+	lv_set_visible(cachevol_lv);
+	lv_fast_old = cachevol_lv;
+	cachevol_lv = NULL;
+
+	/* put lv_fast_new into the cachevol role */
+	lv_fast_new->status |= LV_CACHE_VOL;
+	cache_seg->pool_lv = lv_fast_new;
+	add_seg_to_segs_using_this_lv(lv_fast_new, cache_seg);
+	lv_set_hidden(lv_fast_new);
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
+
+	log_print("LV %s is now using cachevol %s for caching.",
+		  display_lvname(cache_lv), display_lvname(lv_fast_new));
+	log_print("The previous cachevol %s is now unused.", display_lvname(lv_fast_old));
+
+	backup(vg);
+	return 1;
+}
+
+int lvconvert_replace_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+
+	struct processing_handle *handle;
+	struct lvconvert_result lr = { 0 };
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lr;
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      &_lvconvert_replace_cachevol_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	if (!ret)
+		log_error("Cache volume not replaced.");
+
+	return ret;
+}
+
 static int _lvconvert_replace_pv_single(struct cmd_context *cmd, struct logical_volume *lv,
 			struct processing_handle *handle)
 {

@@ -261,6 +261,7 @@ int lvconvert_to_pool_or_swap_metadata_cmd(struct cmd_context *cmd, int argc, ch
 int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_split_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_repair_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_replace_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv);
 int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv);
