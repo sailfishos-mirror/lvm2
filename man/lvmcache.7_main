@@ -420,6 +420,102 @@ and the existing main LV is being converted to type cache.)
 
 \&
 
+.SS dm-cache cachevol repair
+
+\&
+
+If dm-cache metadata is damaged in a cachevol using writethrough, the
+cachevol can be detatched using lvconvert --splitcache; no repair is
+necessary.  If a writeback cache is damaged, the following steps can be
+used to attempt recovery.
+
+.P
+Ensure that the main LV and the attached cachevol are inactive.
+
+.HP 4
+.nf
+$ lvs -a vg -o+segtype
+  LV           VG Attr       LSize  Pool   Origin        Type
+  [fast]       vg Cwi---C---  8.00g                      linear
+  main         vg Cwi---C--- 32.00g [fast] [main_corig]  cache
+  [main_corig] vg owi---C--- 32.00g                      linear
+.fi
+
+.P
+Create a new LV that will hold a repaired copy of the cache.  It must be
+the same size as the existing cachevol it will replace.
+
+.HP 4
+.nf
+$ lvcreate -n fast2 -L 32g -an vg
+.fi
+
+.P
+Run the following lvconvert command to create a repaired copy of the
+cachevol on the replacement LV.  It will use the cache_repair utility to
+write repaired metadata on the destination LV, and then copy all the cache
+data from the damaged cachevol to the destination LV.  All the cache data
+can take a while to copy.  The main LV, cachevol LV and replacement LV
+must all be inactive before running this command.  If the cache repair
+fails, the damage may be unrepairable, or may require manual inspection
+and repair.
+
+.HP 4
+.nf
+$ lvconvert --repaircachevol fast vg/fast2
+Erase all existing data on vg/fast2? [y/n]: y
+      cache_repair wrote repaired metadata to vg/fast2.
+      copying 7 GiB of cache data to vg/fast2...
+      copied 1 GiB of 7 GiB of cache data...
+      copied 2 GiB of 7 GiB of cache data...
+      copied 3 GiB of 7 GiB of cache data...
+      copied 4 GiB of 7 GiB of cache data...
+      copied 5 GiB of 7 GiB of cache data...
+      copied 6 GiB of 7 GiB of cache data...
+      copied 7 GiB of 7 GiB of cache data...
+      copied 8522825728 bytes of cache data from vg/fast to vg/fast2.
+.fi
+
+.P
+If the repair was successful, replace the current cachevol (fast) with the
+repaired copy (fast2).
+
+.HP 4
+.nf
+$ lvconvert --replacecachevol fast vg/fast2
+Replace current cachevol fast with fast2 for caching vg/main? [y/n]:
+  LV vg/main is now using cachevol vg/fast2 for caching.
+  The previous cachevol vg/fast is now unused.
+.fi
+
+.P
+Verify that the repaired copy is now attached to the main LV, and the
+original damaged cachevol is detached.
+
+.HP 4
+.nf
+$ lvs -a vg -o+segtype
+  LV           VG  Attr       LSize  Pool    Origin        Type
+  fast         vg -wi-------  8.00g                       linear
+  [fast2]      vg Cwi---C---  8.00g                       linear
+  main         vg Cwi---C--- 32.00g [fast2] [main_corig]  cache
+  [main_corig] vg owi---C--- 32.00g                       linear
+.fi
+
+.P
+Try to activate the main LV with the repaired cache.
+
+.HP 4
+.nf
+$ lvchange -ay vg/main
+.fi
+
+.P
+Try using the main LV.  If bad data is seen, then the metadata was not
+successfully repaired on the new cachevol.  In this case, the damage
+may be unrepairable, or may require manual inspection and repair.
+
+
 .SH SEE ALSO
 .BR lvm.conf (5),
 .BR lvchange (8),
