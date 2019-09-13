@@ -2484,7 +2484,7 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
 	struct logical_volume *mlv;
 
 	if (lv_is_cache(cache_lv) && lv_is_cache_vol(first_seg(cache_lv)->pool_lv)) {
-		log_error("Manual repair required.");
+		log_error("Repair cachevol with lvconvert --repaircachevol");
 		return 0;
 	}
 
@@ -3475,14 +3475,6 @@ static int _cache_vol_attach(struct cmd_context *cmd,
 	if (!cache_vol_set_params(cmd, cache_lv, lv_fast, poolmetadatasize, chunk_size, cache_metadata_format, cache_mode, policy_name, policy_settings))
 		goto_out;
 
-	if (cache_mode == CACHE_MODE_WRITEBACK) {
-		log_warn("WARNING: repairing a damaged cachevol is not yet possible.");
-		log_warn("WARNING: cache mode writethrough is suggested for safe operation.");
-		if (!arg_count(cmd, yes_ARG) &&
-		    yes_no_prompt("Continue using writeback without repair?") == 'n')
-			goto_out;
-	}
-
 	/*
 	 * lv/cache_lv keeps the same lockd lock it had before, the lock for
 	 * lv_fast is freed, and lv_corig has no lock.
@@ -4222,8 +4214,6 @@ static int _lvconvert_repair_cachevol_single(struct cmd_context *cmd, struct log
 	 *
 	 * FIXME: we should have an LV maintenance mode that we set on this LV
 	 * while it's being repaired to prevent other usage.
-	 *
-	 * FIXME: make it an error to activate the cache LV while its cachevol is active.
 	 */
 	unlock_vg(cmd, vg, vg->name);
 
