@@ -140,13 +140,13 @@ static int _read_flag_config(const struct dm_config_node *n, uint64_t *status, i
 
 	/* For backward compatible metadata accept both type of flags */
 	if (!(read_flags(status, type, STATUS_FLAG | SEGTYPE_FLAG, cv))) {
-		log_error("Could not read status flags.");
+		log_debug("Could not read status flags %llx.", (unsigned long long)*status);
 		return 0;
 	}
 
 	if (dm_config_get_list(n, "flags", &cv)) {
 		if (!(read_flags(status, type, COMPATIBLE_FLAG, cv))) {
-			log_error("Could not read flags.");
+			log_debug("Could not read flags %llx.", (unsigned long long)*status);
 			return 0;
 		}
 	}
@@ -610,15 +610,17 @@ static int _read_lvnames(struct cmd_context *cmd,
 	log_debug_metadata("Importing logical volume %s.", display_lvname(lv));
 
 	if (!(lvn = lvn->child)) {
-		log_error("Empty logical volume section for %s.",
-			  display_lvname(lv));
-		return 0;
+		log_warn("Empty logical volume section for %s.",
+			 display_lvname(lv));
+		lvstatus |= LV_UNUSABLE;
+		lvstatus &= ~VISIBLE_LV;
 	}
 
 	if (!_read_flag_config(lvn, &lvstatus, LV_FLAGS)) {
-		log_error("Couldn't read status flags for logical volume %s.",
-			  display_lvname(lv));
-		return 0;
+		log_warn("Couldn't read status flags for logical volume %s.",
+			 display_lvname(lv));
+		lvstatus |= LV_UNUSABLE;
+		lvstatus &= ~VISIBLE_LV;
 	}
 
 	if (lvstatus & LVM_WRITE_LOCKED) {
@@ -629,19 +631,22 @@ static int _read_lvnames(struct cmd_context *cmd,
 
 	if (dm_config_has_node(lvn, "creation_time")) {
 		if (!_read_uint64(lvn, "creation_time", &timestamp)) {
-			log_error("Invalid creation_time for logical volume %s.",
-				  display_lvname(lv));
-			return 0;
+			log_warn("Invalid creation_time for logical volume %s.",
+				 display_lvname(lv));
+			lvstatus |= LV_UNUSABLE;
+			lvstatus &= ~VISIBLE_LV;
 		}
 		if (!dm_config_get_str(lvn, "creation_host", &hostname)) {
-			log_error("Couldn't read creation_host for logical volume %s.",
-				  display_lvname(lv));
-			return 0;
+			log_warn("Couldn't read creation_host for logical volume %s.",
+				 display_lvname(lv));
+			lvstatus |= LV_UNUSABLE;
+			lvstatus &= ~VISIBLE_LV;
 		}
 	} else if (dm_config_has_node(lvn, "creation_host")) {
-		log_error("Missing creation_time for logical volume %s.",
-			  display_lvname(lv));
-		return 0;
+		log_warn("Missing creation_time for logical volume %s.",
+			 display_lvname(lv));
+		lvstatus |= LV_UNUSABLE;
+		lvstatus &= ~VISIBLE_LV;
 	}
 
 	/*
@@ -664,8 +669,12 @@ static int _read_lvnames(struct cmd_context *cmd,
 	 * the lock_args before using it to access the lock manager.
 	 */
 	if (dm_config_get_str(lvn, "lock_args", &str)) {
-		if (!(lv->lock_args = dm_pool_strdup(mem, str)))
-			return_0;
+		if (!(lv->lock_args = dm_pool_strdup(mem, str))) {
+			log_warn("No memory for lock_args for logical volume %s.",
+				 display_lvname(lv));
+			lvstatus |= LV_UNUSABLE;
+			lvstatus &= ~VISIBLE_LV;
+		}
 	}
 
 	if (dm_config_get_str(lvn, "allocation_policy", &str)) {
@@ -682,9 +691,10 @@ static int _read_lvnames(struct cmd_context *cmd,
 		log_debug_metadata("Adding profile configuration %s for LV %s.",
 				   str, display_lvname(lv));
 		if (!(lv->profile = add_profile(cmd, str, CONFIG_PROFILE_METADATA))) {
-			log_error("Failed to add configuration profile %s for LV %s.",
-				  str, display_lvname(lv));
-			return 0;
+			log_warn("Failed to add configuration profile %s for LV %s.",
+				 str, display_lvname(lv));
+			lvstatus |= LV_UNUSABLE;
+			lvstatus &= ~VISIBLE_LV;
 		}
 	}
 
@@ -707,27 +717,34 @@ static int _read_lvnames(struct cmd_context *cmd,
 	/* Optional tags */
 	if (dm_config_get_list(lvn, "tags", &cv) &&
 	    !(_read_str_list(mem, &lv->tags, cv))) {
-		log_error("Couldn't read tags for logical volume %s.",
-			  display_lvname(lv));
-		return 0;
+		log_warn("Couldn't read tags for logical volume %s.",
+			 display_lvname(lv));
+		lvstatus |= LV_UNUSABLE;
+		lvstatus &= ~VISIBLE_LV;
 	}
 
 	if (!dm_hash_insert(lv_hash, lv->name, lv))
 		return_0;
 
-	if (timestamp && !lv_set_creation(lv, hostname, timestamp))
-		return_0;
+	if (timestamp && !lv_set_creation(lv, hostname, timestamp)) {
+		log_warn("Failed to set creation timestamp for logical volume %s.",
+			 display_lvname(lv));
+		lvstatus |= LV_UNUSABLE;
+		lvstatus &= ~VISIBLE_LV;
+	}
 
 	if (!lv_is_visible(lv) && strstr(lv->name, "_pmspare")) {
 		if (vg->pool_metadata_spare_lv) {
-			log_error("Couldn't use another pool metadata spare "
-				  "logical volume %s.", display_lvname(lv));
-			return 0;
+			log_warn("Couldn't use another pool metadata spare "
+				 "logical volume %s.", display_lvname(lv));
+			lvstatus |= LV_UNUSABLE;
+			lvstatus &= ~VISIBLE_LV;
+		} else {
+			log_debug_metadata("Logical volume %s is pool metadata spare.",
+					   display_lvname(lv));
+			lv->status |= POOL_METADATA_SPARE;
+			vg->pool_metadata_spare_lv = lv;
 		}
-		log_debug_metadata("Logical volume %s is pool metadata spare.",
-				   display_lvname(lv));
-		lv->status |= POOL_METADATA_SPARE;
-		vg->pool_metadata_spare_lv = lv;
 	}
 
 	if (!lv_is_visible(lv) && !strcmp(lv->name, LOCKD_SANLOCK_LV_NAME)) {
