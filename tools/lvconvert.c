@@ -4105,17 +4105,28 @@ static int _lvconvert_repair_cachevol_single(struct cmd_context *cmd, struct log
 	 * Find the cache LV using the cachevol.
 	 */
 	dm_list_iterate_items(lvl, &vg->lvs) {
-		if (!lv_is_cache(lvl->lv))
+		if (!lv_is_cache(lvl->lv)) {
+			log_print("find cache main check %s not cache", lvl->lv->name);
 			continue;
+		}
 
-		if (!(cache_seg = first_seg(lvl->lv)))
+		if (!(cache_seg = first_seg(lvl->lv))) {
+			log_print("find cache main check %s no seg", lvl->lv->name);
 			continue;
+		}
 
-		if (!lv_is_cache_vol(cache_seg->pool_lv))
+		if (!lv_is_cache_vol(cache_seg->pool_lv)) {
+			log_print("find cache main check %s no cachevol %s",
+				lvl->lv->name, cache_seg->pool_lv ? cache_seg->pool_lv->name : "");
 			continue;
+		}
 
-		if (cache_seg->pool_lv != cachevol_lv)
+		if (cache_seg->pool_lv != cachevol_lv) {
+			log_print("find cache main check %s other cachevol %s vs %s",
+				lvl->lv->name, cache_seg->pool_lv ? cache_seg->pool_lv->name : "",
+				cachevol_lv->name);
 			continue;
+		}
 
 		cache_lv = lvl->lv;
 		break;
@@ -4323,18 +4334,57 @@ int lvconvert_repair_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv
 	return ret;
 }
 
+static int _replace_cachevol_prepare_names(struct volume_group *vg,
+					   struct logical_volume *lv_fast_new,
+					   struct logical_volume *lv_fast_old,
+					   char *lv_fast_new_rename,
+					   char *lv_fast_old_rename)
+{
+	char *suffix;
+
+	/* add the _cvol suffix to the new cachevol */
+
+	if (dm_snprintf(lv_fast_new_rename, NAME_LEN, "%s_cvol", lv_fast_new->name) < 0) {
+		log_error("Failed to create new cvol name for %s", display_lvname(lv_fast_new));
+		return 0;
+	}
+
+	if (lv_name_is_used_in_vg(vg, lv_fast_new_rename, NULL)) {
+		log_error("Existing LV conflicts with new cvol name for %s", display_lvname(lv_fast_new));
+		return 0;
+	}
+
+	/* remove the _cvol suffix from the old cachevol */
+
+	if (!dm_strncpy(lv_fast_old_rename, lv_fast_old->name, NAME_LEN)) {
+		log_error("Failed to remove cvol suffix from %s", display_lvname(lv_fast_old));
+		return 0;
+	}
+
+	if (!(suffix = strstr(lv_fast_old_rename, "_cvol")))
+		return 1;
+
+	*suffix = 0;
+
+	if (lv_name_is_used_in_vg(vg, lv_fast_old_rename, NULL)) {
+		log_error("Existing LV conflicts with new name for %s", display_lvname(lv_fast_old));
+		return 0;
+	}
+
+	return 1;
+}
+
 static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 					struct logical_volume *lv,
 					struct processing_handle *handle)
 {
+	char lv_fast_old_rename[NAME_LEN];
+	char lv_fast_new_rename[NAME_LEN];
 	struct volume_group *vg = lv->vg;
 	struct logical_volume *cache_lv = NULL, *cachevol_lv, *lv_fast_old, *lv_fast_new;
 	struct lv_segment *cache_seg = first_seg(lv);
 	struct lv_list *lvl;
 	const char *cachevol_name;
-
-	lv_fast_new = lv;
-	lv = NULL;
 
 	/* command def should prevent this */
 	if (!(cachevol_name = arg_str_value(cmd, replacecachevol_ARG, "")))
@@ -4352,8 +4402,13 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 
 	if (!lv_is_cache_vol(cachevol_lv)) {
 		log_error("LV %s is not a cachevol.", display_lvname(cachevol_lv));
-		return 0;
+		return ECMD_FAILED;
 	}
+
+	lv_fast_old = cachevol_lv;
+	lv_fast_new = lv;
+	cachevol_lv = NULL;
+	lv = NULL;
 
 	/*
 	 * Find the cache LV using the cachevol.
@@ -4368,7 +4423,7 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 		if (!lv_is_cache_vol(cache_seg->pool_lv))
 			continue;
 
-		if (cache_seg->pool_lv != cachevol_lv)
+		if (cache_seg->pool_lv != lv_fast_old)
 			continue;
 
 		cache_lv = lvl->lv;
@@ -4376,7 +4431,7 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 	}
 
 	if (!cache_lv) {
-		log_error("Failed to find LV using cachevol %s.", display_lvname(cachevol_lv));
+		log_error("Failed to find LV using cachevol %s.", display_lvname(lv_fast_old));
 		return ECMD_FAILED;
 	}
 
@@ -4385,8 +4440,8 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 		return ECMD_FAILED;
 	}
 
-	if (lv_is_active(cachevol_lv)) {
-		log_error("LV %s must be inactive.", display_lvname(cachevol_lv));
+	if (lv_is_active(lv_fast_old)) {
+		log_error("LV %s must be inactive.", display_lvname(lv_fast_old));
 		return ECMD_FAILED;
 	}
 
@@ -4406,7 +4461,7 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 			return_ECMD_FAILED;
 
 		/* current cachevol LV cannot be active elsewhere. */
-		if (!lockd_lv(cmd, cachevol_lv, "ex", 0))
+		if (!lockd_lv(cmd, lv_fast_old, "ex", 0))
 			return_ECMD_FAILED;
 
 		/* replacement LV cannot be elsewhere. */
@@ -4416,21 +4471,32 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 
 	if (!arg_is_set(cmd, yes_ARG) &&
 	    yes_no_prompt("Replace current cachevol %s with %s for caching %s? [y/n]: ",
-		    	  cachevol_lv->name,
+		    	  lv_fast_old->name,
 			  lv_fast_new->name,
 			  display_lvname(cache_lv)) == 'n') {
 		return ECMD_FAILED;
 	}
 
 	if (!archive(vg))
-		return_0;
+		return_ECMD_FAILED;
 
-	/* remove cachevol_lv from the cachevol role */
-	remove_seg_from_segs_using_this_lv(cachevol_lv, cache_seg);
-	cachevol_lv->status &= ~LV_CACHE_VOL;
-	lv_set_visible(cachevol_lv);
-	lv_fast_old = cachevol_lv;
-	cachevol_lv = NULL;
+
+	/*
+	 * Remove cvol suffix from lv_fast_old and add cvol suffix to lv_fast_new.
+	 */
+	if (!_replace_cachevol_prepare_names(vg, lv_fast_new, lv_fast_old, lv_fast_new_rename, lv_fast_old_rename))
+		return_ECMD_FAILED;
+
+	/* remove lv_fast_old from the cachevol role */
+	remove_seg_from_segs_using_this_lv(lv_fast_old, cache_seg);
+	lv_fast_old->status &= ~LV_CACHE_VOL;
+	lv_set_visible(lv_fast_old);
+
+	if (!lv_rename_update(cmd, lv_fast_old, lv_fast_old_rename, 0))
+		return_ECMD_FAILED;
+
+	if (!lv_rename_update(cmd, lv_fast_new, lv_fast_new_rename, 0))
+		return_ECMD_FAILED;
 
 	/* put lv_fast_new into the cachevol role */
 	lv_fast_new->status |= LV_CACHE_VOL;
@@ -4439,14 +4505,14 @@ static int _lvconvert_replace_cachevol_single(struct cmd_context *cmd,
 	lv_set_hidden(lv_fast_new);
 
 	if (!vg_write(vg) || !vg_commit(vg))
-		return_0;
+		return_ECMD_FAILED;
 
 	log_print("LV %s is now using cachevol %s for caching.",
 		  display_lvname(cache_lv), display_lvname(lv_fast_new));
 	log_print("The previous cachevol %s is now unused.", display_lvname(lv_fast_old));
 
 	backup(vg);
-	return 1;
+	return ECMD_PROCESSED;
 }
 
 int lvconvert_replace_cachevol_cmd(struct cmd_context *cmd, int argc, char **argv)
