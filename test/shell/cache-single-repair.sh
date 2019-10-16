@@ -71,7 +71,7 @@ lvconvert -y --type cache --cachevol $lv2 --cachemode writethrough $vg/$lv1
 
 mkfs_mount_umount $lv1
 
-lvconvert -y --repaircachevol $lv2 $vg/$lv3
+lvconvert -y --repaircachevol ${lv2}_cvol $vg/$lv3
 
 # new cache is valid since it was just copied from existing
 lvchange -ay $vg/$lv3
@@ -79,7 +79,7 @@ cache_check "$DM_DEV_DIR/$vg/$lv3"
 lvchange -an $vg/$lv3
 
 # use new cache for main lv
-lvconvert -y --replacecachevol $lv2 $vg/$lv3
+lvconvert -y --replacecachevol ${lv2}_cvol $vg/$lv3
 
 # old cache is valid since it was never damaged
 lvchange -ay $vg/$lv2
@@ -104,7 +104,7 @@ lvconvert -y --type cache --cachevol $lv2 --cachemode writeback $vg/$lv1
 
 mkfs_mount_umount $lv1
 
-lvconvert -y --repaircachevol $lv2 $vg/$lv3
+lvconvert -y --repaircachevol ${lv2}_cvol $vg/$lv3
 
 # new cache is valid since it was just copied from existing
 lvchange -ay $vg/$lv3
@@ -112,7 +112,7 @@ cache_check "$DM_DEV_DIR/$vg/$lv3"
 lvchange -an $vg/$lv3
 
 # use new cache for main lv
-lvconvert -y --replacecachevol $lv2 $vg/$lv3
+lvconvert -y --replacecachevol ${lv2}_cvol $vg/$lv3
 
 # old cache is valid since it was never damaged
 lvchange -ay $vg/$lv2
@@ -142,14 +142,14 @@ mkfs_mount_umount $lv1
 dd if=/dev/zero of="$dev3" bs=1M count=1 seek=1 oflag=direct
 # verify it's not repairable
 lvs -a $vg
-lvchange -y -ay $vg/$lv2
+lvchange -y -ay $vg/${lv2}_cvol
 lvs -a $vg
-ls "$DM_DEV_DIR/mapper/$vg-$lv2"
-not cache_check "$DM_DEV_DIR/mapper/$vg-$lv2"
-lvchange -an $vg/$lv2
+ls "$DM_DEV_DIR/mapper/$vg-${lv2}_cvol"
+not cache_check "$DM_DEV_DIR/mapper/$vg-${lv2}_cvol"
+lvchange -an $vg/${lv2}_cvol
 
 # cache_repair fails
-not lvconvert -y --repaircachevol $lv2 $vg/$lv3
+not lvconvert -y --repaircachevol ${lv2}_cvol $vg/$lv3
 
 # drop the cache
 lvconvert --splitcache $vg/$lv1
@@ -177,11 +177,11 @@ mkfs_mount_umount $lv1
 dd if=/dev/zero of="$dev3" bs=1M count=1 seek=1 oflag=direct
 # verify it's not repairable
 lvs -a $vg
-lvchange -y -ay $vg/$lv2
+lvchange -y -ay $vg/${lv2}_cvol
 lvs -a $vg
-ls "$DM_DEV_DIR/mapper/$vg-$lv2"
-not cache_check "$DM_DEV_DIR/mapper/$vg-$lv2"
-lvchange -an $vg/$lv2
+ls "$DM_DEV_DIR/mapper/$vg-${lv2}_cvol"
+not cache_check "$DM_DEV_DIR/mapper/$vg-${lv2}_cvol"
+lvchange -an $vg/${lv2}_cvol
 
 # cache_repair fails
 not lvconvert -y --repaircachevol $lv2 $vg/$lv3
