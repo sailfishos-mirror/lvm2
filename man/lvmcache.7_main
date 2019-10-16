@@ -44,10 +44,10 @@ cache.
 .nf
   $ lvcreate -n fast -L Size vg /dev/fast
 
-  $ lvs vg -o+devices
-  LV   VG  Attr       LSize   Devices
-  fast vg -wi-------  xx.00m /dev/fast(0)
-  main vg -wi------- yyy.00m /dev/slow(0)
+  $ lvs -a
+  LV   Attr       Type   Devices
+  fast -wi------- linear /dev/fast
+  main -wi------- linear /dev/slow
 .fi
 
 .B 3. Start caching the main LV
@@ -64,35 +64,45 @@ using dm-writecache:
 
   $ lvconvert --type writecache --cachevol fast vg/main
 
-using dm-cache with a cache pool:
+using dm-cache (with cachepool):
 
-  $ lvconvert --type cache --cachepool fastpool vg/main
+  $ lvconvert --type cache --cachepool pool vg/main
 .fi
 
 .B 4. Display LVs
 
 Once the fast LV has been attached to the main LV, lvm reports the main LV
 type as either \fBcache\fP or \fBwritecache\fP depending on the type used.
-While attached, the fast LV is hidden, and only displayed when lvs is
+While attached, the fast LV is hidden, and is only displayed when lvs is
 given -a.  The _corig or _wcorig LV represents the original LV without the
 cache.
 
 .nf
 using dm-cache:
 
-  $ lvs -a -o name,vgname,lvattr,origin,segtype,devices vg
-  LV           VG Attr       Origin       Type   Devices       
-  [fast]       vg Cwi-aoC---                     linear /dev/fast(xx)
-  main         vg Cwi-a-C--- [main_corig] cache  main_corig(0) 
-  [main_corig] vg owi-aoC---                     linear /dev/slow(0) 
+  $ lvs -a
+  LV           Attr       Pool        Type   Devices       
+  main         Cwi---C--- [fast_cvol] cache  main_corig(0) 
+  [fast_cvol]  Cwi---C---             linear /dev/fast
+  [main_corig] owi---C---             linear /dev/slow
 
 using dm-writecache:
 
-  $ lvs -a -o name,vgname,lvattr,origin,segtype,devices vg
-  LV            VG Attr       Origin        Type       Devices       
-  [fast]        vg -wi-ao----               linear     /dev/fast(xx)
-  main          vg Cwi-a----- [main_wcorig] writecache main_wcorig(0)
-  [main_wcorig] vg -wi-ao----               linear     /dev/slow(0)   
+  $ lvs -a
+  LV            Attr       Pool        Type       Devices       
+  main          Cwi---C--- [fast_cvol] writecache main_wcorig(0)
+  [fast_cvol]   Cwi---C---             linear     /dev/fast
+  [main_wcorig] owi---C---             linear     /dev/slow
+
+using dm-cache (with cachepool):
+
+  $ lvs -a
+  LV            Attr       Pool   Type       Devices        
+  main          Cwi---C--- [pool] cache      main_corig(0)  
+  [pool]        Cwi---C---        cache-pool pool_cdata(0)  
+  [pool_cdata]  Cwi-------        linear     /dev/fast
+  [pool_cmeta]  ewi-------        linear     /dev/fast
+  [main_corig]  owi---C---        linear     /dev/slow
 .fi
 
 .B 5. Use the main LV
@@ -106,7 +116,12 @@ changes the type of the main LV back to what it was before the cache was
 attached.
 
 .nf
-   $ lvconvert --splitcache vg/main
+  $ lvconvert --splitcache vg/main
+
+  $ lvs -a
+  LV   VG Attr       Type   Devices    
+  fast vg -wi------- linear /dev/fast
+  main vg -wi------- linear /dev/slow
 .fi
 
 
@@ -122,7 +137,7 @@ attached.
 .I LV
 .br
 
-Pass this option a standard LV.  With a cache vol, cache data and metadata
+Pass this option a standard LV.  With a cachevol, cache data and metadata
 are contained within the single LV.  This is used with dm-writecache or
 dm-cache.
 
@@ -252,15 +267,15 @@ LV that references two sub LVs, one for data and one for metadata.
 To create a cache pool from two separate LVs:
 
 .nf
-$ lvcreate -n fastpool -L DataSize vg /dev/fast1
-$ lvcreate -n fastpoolmeta -L MetadataSize vg /dev/fast2
-$ lvconvert --type cache-pool --poolmetadata fastpoolmeta vg/fastpool
+$ lvcreate -n pool -L DataSize vg /dev/fast1
+$ lvcreate -n poolmeta -L MetadataSize vg /dev/fast2
+$ lvconvert --type cache-pool --poolmetadata poolmeta vg/pool
 .fi
 
 Then use the cache pool LV to start caching the main LV:
 
 .nf
-$ lvconvert --type cache --cachepool fastpool vg/main
+$ lvconvert --type cache --cachepool pool vg/main
 .fi
 
 A variation of the same procedure automatically creates a cache pool when
@@ -271,10 +286,9 @@ cache pool LV from the two specified LVs, and use the cache pool to start
 caching the main LV.
 
 .nf
-$ lvcreate -n fastpool -L DataSize vg /dev/fast1
-$ lvcreate -n fastpoolmeta -L MetadataSize vg /dev/fast2
-$ lvconvert --type cache --cachepool fastpool \\
-	--poolmetadata fastpoolmeta vg/main
+$ lvcreate -n pool -L DataSize vg /dev/fast1
+$ lvcreate -n poolmeta -L MetadataSize vg /dev/fast2
+$ lvconvert --type cache --cachepool pool --poolmetadata poolmeta vg/main
 .fi
 
 .SS dm-cache cache modes
@@ -449,11 +463,11 @@ Ensure that the main LV and the attached cachevol are inactive.
 
 .HP 4
 .nf
-$ lvs -a vg -o+segtype
-  LV           VG Attr       LSize  Pool   Origin        Type
-  [fast]       vg Cwi---C---  8.00g                      linear
-  main         vg Cwi---C--- 32.00g [fast] [main_corig]  cache
-  [main_corig] vg owi---C--- 32.00g                      linear
+$ lvs -a
+  LV           Attr       LSize  Pool        Origin        Type
+  main         Cwi---C--- 32.00g [fast_cvol] [main_corig]  cache
+  [fast_cvol]  Cwi---C---  8.00g                           linear
+  [main_corig] owi---C--- 32.00g                           linear
 .fi
 
 .P
@@ -462,7 +476,7 @@ the same size as the existing cachevol it will replace.
 
 .HP 4
 .nf
-$ lvcreate -n fast2 -L 32g -an vg
+$ lvcreate -n fast2 -L 8g -an vg
 .fi
 
 .P
@@ -477,7 +491,7 @@ and repair.
 
 .HP 4
 .nf
-$ lvconvert --repaircachevol fast vg/fast2
+$ lvconvert --repaircachevol fast_cvol vg/fast2
 Erase all existing data on vg/fast2? [y/n]: y
       cache_repair wrote repaired metadata to vg/fast2.
       copying 7 GiB of cache data to vg/fast2...
@@ -488,18 +502,18 @@ Erase all existing data on vg/fast2? [y/n]: y
       copied 5 GiB of 7 GiB of cache data...
       copied 6 GiB of 7 GiB of cache data...
       copied 7 GiB of 7 GiB of cache data...
-      copied 8522825728 bytes of cache data from vg/fast to vg/fast2.
+      copied 8522825728 bytes of cache data from vg/fast_cvol to vg/fast2.
 .fi
 
 .P
-If the repair was successful, replace the current cachevol (fast) with the
+If the repair was successful, replace the current cachevol (fast_cvol) with the
 repaired copy (fast2).
 
 .HP 4
 .nf
-$ lvconvert --replacecachevol fast vg/fast2
-Replace current cachevol fast with fast2 for caching vg/main? [y/n]:
-  LV vg/main is now using cachevol vg/fast2 for caching.
+$ lvconvert --replacecachevol fast_cvol vg/fast2
+Replace current cachevol fast_cvol with fast2 for caching vg/main? [y/n]: y
+  LV vg/main is now using cachevol vg/fast2_cvol for caching.
   The previous cachevol vg/fast is now unused.
 .fi
 
@@ -509,12 +523,12 @@ original damaged cachevol is detached.
 
 .HP 4
 .nf
-$ lvs -a vg -o+segtype
-  LV           VG  Attr       LSize  Pool    Origin        Type
-  fast         vg -wi-------  8.00g                       linear
-  [fast2]      vg Cwi---C---  8.00g                       linear
-  main         vg Cwi---C--- 32.00g [fast2] [main_corig]  cache
-  [main_corig] vg owi---C--- 32.00g                       linear
+$ lvs -a
+  LV           Attr       Pool         Type   Devices
+  main         Cwi---C--- [fast2_cvol] cache  main_corig(0)
+  fast         -wi-------              linear /dev/fast
+  [fast2_cvol] Cwi---C---              linear /dev/fast
+  [main_corig] owi---C---              linear /dev/slow
 .fi
 
 .P
