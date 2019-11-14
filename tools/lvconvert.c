@@ -2480,10 +2480,339 @@ deactivate_pmslv:
 	return 1;
 }
 
-/* TODO: lots of similar code with  thinpool repair
- *       investigate possible better code sharing...
+/*
+ * Use cache_repair to read metadata from cachevol_lv and
+ * write repaired metadata to new file.
  */
-static int _lvconvert_cache_repair(struct cmd_context *cmd,
+
+static int _run_cache_repair_from_cachevol(struct cmd_context *cmd,
+			     struct logical_volume *cachevol_lv,
+			     const char *meta_file)
+{
+	char cachevol_lv_path[PATH_MAX];
+	char *cachevol_lv_name;
+	const char *dmdir = dm_dir();
+	const char *cache_repair = find_config_tree_str_allow_empty(cmd, global_cache_repair_executable_CFG, NULL);
+	const struct dm_config_node *cn;
+	const struct dm_config_value *cv;
+	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
+	int args = 0;
+	int status;
+
+	if (!cache_repair || !cache_repair[0]) {
+		log_error("No cache_repair command set in lvm.conf. Repair is disabled.");
+		return 0;
+	}
+
+	if (!(cachevol_lv_name = dm_build_dm_name(cmd->mem, cachevol_lv->vg->name, cachevol_lv->name, NULL))) {
+		log_error("Failed to create dm name for %s.", display_lvname(cachevol_lv));
+		return 0;
+	}
+
+	if (dm_snprintf(cachevol_lv_path, sizeof(cachevol_lv_path), "%s/%s", dmdir, cachevol_lv_name) < 0) {
+		log_error("Failed to create path for %s.", display_lvname(cachevol_lv));
+		return 0;
+	}
+
+	if (!(cn = find_config_tree_array(cmd, global_cache_repair_options_CFG, NULL))) {
+		log_error(INTERNAL_ERROR "Unable to find configuration for global/cache_repair_options");
+		return 0;
+	}
+
+	for (cv = cn->v; cv && args < MAX_PDATA_ARGS; cv = cv->next) {
+		if (cv->type != DM_CFG_STRING) {
+			log_error("Invalid string in config file: "
+				  "global/cache_repair_options");
+			return 0;
+		}
+		argv[++args] = cv->v.str;
+	}
+
+	if (args >= MAX_PDATA_ARGS) {
+		log_error("Too many cache_repair_options set in lvm.conf.");
+		return 0;
+	}
+
+	argv[0] = cache_repair;
+	argv[++args] = "-i";
+	argv[++args] = cachevol_lv_path;
+	argv[++args] = "-o";
+	argv[++args] = meta_file;
+	argv[++args] = NULL;
+
+	if (!exec_cmd(cmd, (const char * const *)argv, &status, 1)) {
+		log_error("The cache_repair command failed (status %d).", status);
+		return 0;
+	}
+
+	log_print("cache_repair of metadata completed from %s to %s", display_lvname(cachevol_lv), meta_file);
+
+	return 1;
+}
+
+static int _run_cache_writeback_from_cachevol(struct cmd_context *cmd,
+			        struct logical_volume *cache_lv,
+			        struct logical_volume *cachevol_lv,
+			        const char *meta_file,
+				uint64_t data_offset_bytes)
+{
+	char orig_path[PATH_MAX];
+	char data_path[PATH_MAX];
+	char *orig_name;
+	char *data_name;
+	const char *dmdir = dm_dir();
+	const char *cache_writeback = "cache_writeback";
+	const char *argv[MAX_PDATA_ARGS + 7]; /* Max supported args */
+	char offset_str[16];
+	int args = 0;
+	int status;
+
+	if (!(orig_name = dm_build_dm_name(cmd->mem, cache_lv->vg->name, cache_lv->name, NULL))) {
+		log_error("Failed to create dm name for %s.", display_lvname(cache_lv));
+	}
+
+	if (!(data_name = dm_build_dm_name(cmd->mem, cachevol_lv->vg->name, cachevol_lv->name, NULL))) {
+		log_error("Failed to create dm name for %s.", display_lvname(cachevol_lv));
+	}
+
+	if (dm_snprintf(orig_path, sizeof(orig_path), "%s/%s", dmdir, orig_name) < 0) {
+		log_error("Failed to create path for %s.", display_lvname(cache_lv));
+		return 0;
+	}
+
+	/* _off suffix is temp hack to allow manual offset */
+	if (dm_snprintf(data_path, sizeof(data_path), "%s/%s_off", dmdir, data_name) < 0) {
+		log_error("Failed to create path for %s.", display_lvname(cachevol_lv));
+		return 0;
+	}
+
+	if (dm_snprintf(offset_str, sizeof(offset_str), "%llu",
+			(unsigned long long)data_offset_bytes) < 0)
+		return_0;
+
+	/* let the user set up an _off dm wrapper */
+	if (yes_no_prompt("Done creating wrapper %s with offset %u sectors? [y/n]: ",
+			  data_path, (uint32_t)data_offset_bytes/512) == 'n')
+		return_0;
+
+	argv[0] = cache_writeback;
+	argv[++args] = "--metadata-device";
+	argv[++args] = meta_file;
+	argv[++args] = "--origin-device";
+	argv[++args] = orig_path;
+	argv[++args] = "--fast-device";
+	argv[++args] = data_path;
+	/*
+	argv[++args] = "--fast-device-offset";
+	argv[++args] = offset_str;
+	*/
+	argv[++args] = "--no-metadata-update";
+	argv[++args] = NULL;
+
+	if (!exec_cmd(cmd, (const char * const *)argv, &status, 1)) {
+		log_error("The cache_writeback command failed (status %d).", status);
+		return 0;
+	}
+
+	log_print("cache_writeback of data completed from %s to %s",
+		  display_lvname(cachevol_lv), display_lvname(cache_lv));
+
+	return 1;
+}
+
+static int _lvconvert_cache_repair_cachevol(struct cmd_context *cmd,
+				   struct logical_volume *cache_lv,
+				   struct dm_list *pvh)
+{
+	char filepath[PATH_MAX];
+	char zero_sector_buf[512];
+	struct volume_group *vg = cache_lv->vg;
+	struct logical_volume *cachevol_lv;
+	struct lv_segment *cache_seg, *cachevol_seg;
+	uint64_t metadata_len_sectors, data_offset_bytes;
+	uint64_t orig_cachevol_seglen;
+	const char *meta_file = NULL;
+	FILE *fp;
+	uint32_t prealloc_sectors_written = 0;
+	int cache_mode;
+	int ret = 0;
+
+	memset(zero_sector_buf, 0, 512);
+
+	if (!(cache_seg = first_seg(cache_lv)))
+		return_0;
+
+	if (!(cachevol_lv = cache_seg->pool_lv))
+		return_0;
+
+	if (!lv_is_cache_vol(cachevol_lv))
+		return_0;
+
+	if (cache_seg->metadata_start) {
+		/* metadata is always at 0, but check in case it changes in future */
+		log_error("Cannot handle non-zero metadata start locations.");
+		return 0;
+	}
+
+	if (lv_is_active(cache_lv)) {
+		log_error("LV %s must not be active.", display_lvname(cache_lv));
+		return 0;
+	}
+
+	if (lv_is_active(cachevol_lv)) {
+		log_error("LV %s must not be active.", display_lvname(cachevol_lv));
+		return 0;
+	}
+
+	if (vg_is_shared(vg)) {
+		/* cache LV using the cachevol cannot be active elsewhere */
+		if (!lockd_lv(cmd, cache_lv, "ex", 0))
+			return_0;
+
+		/* cachevol cannot be active elsewhere. */
+		if (!lockd_lv(cmd, cachevol_lv, "ex", 0))
+			return_0;
+	}
+
+	metadata_len_sectors = cache_seg->metadata_len;
+	cache_mode = cache_seg->cache_mode;
+
+	/* Disable syncing the cache during split */
+	if (cache_mode != CACHE_MODE_WRITETHROUGH)
+		cache_seg->cache_mode = CACHE_MODE_WRITETHROUGH;
+
+	if (!_lvconvert_split_and_keep_cachevol(cmd, cache_lv, cachevol_lv)) {
+		log_error("Failed to detach cachevol, not repairing.");
+		return_0;
+	}
+
+	/*
+	 * Note: following the spilt, cache_lv is no longer technically a cache
+	 * and cachevol_lv is no longer technically a cachevol.  The variable
+	 * names represent their previous types.
+	 */
+
+	if (cache_mode == CACHE_MODE_WRITETHROUGH) {
+		log_print("No repair or writeback required for writethrough cache mode.");
+		return 1;
+	}
+
+	/*
+	 * Prevent the active LVs from being exposed and used outside of lvm.
+	 */
+	cachevol_lv->status |= LV_TEMPORARY;
+	cache_lv->status |= LV_TEMPORARY;
+
+	/*
+	 * Temporarily change the cachevol LV size to be only the
+	 * metadata size, so cache_repair will only look at the
+	 * metadata portion.
+	 * seg->len and seg->metadata_len units are sectors
+	 */
+	cachevol_seg = first_seg(cachevol_lv);
+	orig_cachevol_seglen = cachevol_seg->len;
+	cachevol_seg->len = metadata_len_sectors / vg->extent_size;
+
+	if (!activate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to activate LV %s for cache repair and writeback.", display_lvname(cachevol_lv));
+		goto out;
+	}
+
+	if (!sync_local_dev_names(cmd)) {
+		log_error("Failed to sync local devices before cache_repair.");
+		goto out;
+	}
+
+	/*
+	 * cache_repair wants the destination file to be preallocated.
+	 * FIXME: what's the relationship between the metadata size and
+	 * the file size?
+	 */
+
+	if (arg_is_set(cmd, file_long_ARG))
+		meta_file = arg_str_value(cmd, file_long_ARG, NULL);
+	else {
+		snprintf(filepath, PATH_MAX, "/tmp/lvconvert-cache-repair-metadata-%d", getpid());
+		meta_file = filepath;
+	}
+
+	log_print("Allocating %u MB for metadata in %s",
+		  (uint32_t)(metadata_len_sectors * 512 / 1048576), meta_file);
+
+	if (!(fp = fopen(meta_file, "w+"))) {
+		log_error("Failed to open file for metadata %s", meta_file);
+		meta_file = NULL;
+		goto out;
+	}
+	while (prealloc_sectors_written < metadata_len_sectors) {
+		if (!fwrite(zero_sector_buf, 512, 1, fp)) {
+			fclose(fp);
+			log_error("Failed to allocate space for metadata in %s", meta_file);
+			goto out;
+		}
+		prealloc_sectors_written++;
+	}
+	fflush(fp);
+	fclose(fp);
+
+	if (!_run_cache_repair_from_cachevol(cmd, cachevol_lv, meta_file)) {
+		log_error("cache_repair failed, cache data not written back to original volume.");
+		goto out;
+	}
+
+	/*
+	 * Deactivate cachevol LV, and reactivate with correct size.
+	 * Activate cache LV.
+	 */
+
+	if (!deactivate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to deactivate LV %s", cachevol_lv->name);
+		goto out;
+	}
+
+	cachevol_seg->len = orig_cachevol_seglen;
+
+	if (!activate_lv(cmd, cachevol_lv)) {
+		log_error("Failed to activate LV %s for cache repair and writeback.", display_lvname(cachevol_lv));
+		goto out;
+	}
+
+	if (!activate_lv(cmd, cache_lv)) {
+		log_error("Failed to activate LV %s for cache repair and writeback.", display_lvname(cache_lv));
+		goto out;
+	}
+
+	if (!sync_local_dev_names(cmd)) {
+		log_error("Failed to sync local devices before cache_writeback.");
+		goto out;
+	}
+
+	data_offset_bytes = metadata_len_sectors * 512;
+
+	if (!_run_cache_writeback_from_cachevol(cmd, cache_lv, cachevol_lv, meta_file, data_offset_bytes)) {
+		log_error("cache_writeback failed");
+		goto_out;
+	}
+
+	log_print("cachevol writeback complete, %s now unused.", cachevol_lv->name);
+	ret = 1;
+out:
+	if (!deactivate_lv(cmd, cache_lv))
+		log_error("Failed to deactivate LV %s", cache_lv->name);
+
+	if (!deactivate_lv(cmd, cachevol_lv))
+		log_error("Failed to deactivate LV %s", cachevol_lv->name);
+
+	if (meta_file)
+		unlink(meta_file);
+
+	if (!ret)
+		log_error("Cache data on %s not written back to original LV %s.",
+			  display_lvname(cachevol_lv), display_lvname(cache_lv));
+	return ret;
+}
+
+static int _lvconvert_cache_repair_cachepool(struct cmd_context *cmd,
 				   struct logical_volume *cache_lv,
 				   struct dm_list *pvh, int poolmetadataspare)
 {
@@ -2501,11 +2830,6 @@ static int _lvconvert_cache_repair(struct cmd_context *cmd,
 	struct logical_volume *pool_lv;
 	struct logical_volume *pmslv;
 	struct logical_volume *mlv;
-
-	if (lv_is_cache(cache_lv) && lv_is_cache_vol(first_seg(cache_lv)->pool_lv)) {
-		log_error("Manual repair required.");
-		return 0;
-	}
 
 	pool_lv = lv_is_cache_pool(cache_lv) ? cache_lv : first_seg(cache_lv)->pool_lv;
 	mlv = first_seg(pool_lv)->metadata_lv;
@@ -3769,7 +4093,7 @@ static int _lvconvert_repair_pvs(struct cmd_context *cmd, struct logical_volume 
 	return ret ? ECMD_PROCESSED : ECMD_FAILED;
 }
 
-static int _lvconvert_repair_cachepool_thinpool(struct cmd_context *cmd, struct logical_volume *lv,
+static int _lvconvert_repair_cache_or_thin(struct cmd_context *cmd, struct logical_volume *lv,
 			struct processing_handle *handle)
 {
 	int poolmetadataspare = arg_int_value(cmd, poolmetadataspare_ARG, DEFAULT_POOL_METADATA_SPARE);
@@ -3790,8 +4114,13 @@ static int _lvconvert_repair_cachepool_thinpool(struct cmd_context *cmd, struct 
 		if (!_lvconvert_thin_pool_repair(cmd, lv, use_pvh, poolmetadataspare))
 			return_ECMD_FAILED;
 	} else /* cache */ {
-		if (!_lvconvert_cache_repair(cmd, lv, use_pvh, poolmetadataspare))
-			return_ECMD_FAILED;
+		if (lv_is_cache(lv) && lv_is_cache_vol(first_seg(lv)->pool_lv)) {
+			if (!_lvconvert_cache_repair_cachevol(cmd, lv, use_pvh))
+				return_ECMD_FAILED;
+		} else {
+			if (!_lvconvert_cache_repair_cachepool(cmd, lv, use_pvh, poolmetadataspare))
+				return_ECMD_FAILED;
+		}
 	}
 
 	return ECMD_PROCESSED;
@@ -3803,7 +4132,7 @@ static int _lvconvert_repair_single(struct cmd_context *cmd, struct logical_volu
 	if (lv_is_thin_pool(lv) ||
 	    lv_is_cache(lv) ||
 	    lv_is_cache_pool(lv))
-		return _lvconvert_repair_cachepool_thinpool(cmd, lv, handle);
+		return _lvconvert_repair_cache_or_thin(cmd, lv, handle);
 
 	if (lv_is_raid(lv) || lv_is_mirror(lv))
 		return _lvconvert_repair_pvs(cmd, lv, handle);
@@ -3814,12 +4143,6 @@ static int _lvconvert_repair_single(struct cmd_context *cmd, struct logical_volu
 	return ECMD_FAILED;
 }
 
-/*
- * FIXME: add option --repair-pvs to call _lvconvert_repair_pvs() directly,
- * and option --repair-thinpool to call _lvconvert_repair_thinpool().
- * and option --repair-cache to call _lvconvert_repair_cache().
- * and option --repair-cachepool to call _lvconvert_repair_cachepool().
- */
 int lvconvert_repair_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct processing_handle *handle;
