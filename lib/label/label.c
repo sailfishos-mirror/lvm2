@@ -1046,6 +1046,15 @@ int label_scan(struct cmd_context *cmd)
 	_prepare_open_file_limit(cmd, dm_list_size(&scan_devs));
 
 	/*
+	 * Read and save the timestamps from VG lock files.  The lock file
+	 * timestamp is updated when a command releases an exclusive lock
+	 * (indicating it has changed the VG.)  So, the timestamps can be
+	 * checked later to detect if another command has changed the VG since
+	 * our label scan.
+	 */
+	file_lock_save_times(cmd);
+
+	/*
 	 * Do the main scan.
 	 */
 	_scan_list(cmd, cmd->filter, &scan_devs, NULL);

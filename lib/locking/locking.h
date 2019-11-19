@@ -78,4 +78,8 @@ int lockf_global_convert(struct cmd_context *cmd, const char *mode);
 int lock_global(struct cmd_context *cmd, const char *mode);
 int lock_global_convert(struct cmd_context *cmd, const char *mode);
 
+void file_lock_save_times(struct cmd_context *cmd);
+bool file_lock_time_unchanged(struct cmd_context *cmd, const char *resource);
+void file_lock_remove_on_unlock(struct cmd_context *cmd, const char *resource);
+
 #endif

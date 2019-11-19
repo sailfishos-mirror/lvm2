@@ -25,36 +25,16 @@
 struct lock_list {
 	struct dm_list list;
 	int lf;
+	unsigned ex:1;
+	unsigned remove_on_unlock:1;
 	char *res;
+	struct timespec save_time;
 };
 
 static struct dm_list _lock_list;
 static int _prioritise_write_locks;
 
-/* Drop lock known to be shared with another file descriptor. */
-static void _drop_shared_flock(const char *file, int fd)
-{
-	log_debug_locking("_drop_shared_flock %s.", file);
-
-	if (close(fd) < 0)
-		log_sys_debug("close", file);
-}
-
-static void _undo_flock(const char *file, int fd)
-{
-	struct stat buf1, buf2;
-
-	log_debug_locking("_undo_flock %s", file);
-	if (!flock(fd, LOCK_NB | LOCK_EX) &&
-	    !stat(file, &buf1) &&
-	    !fstat(fd, &buf2) &&
-	    is_same_inode(buf1, buf2))
-		if (unlink(file))
-			log_sys_debug("unlink", file);
-
-	if (close(fd) < 0)
-		log_sys_debug("close", file);
-}
+#define AUX_LOCK_SUFFIX ":aux"
 
 static struct lock_list *_get_lock_list_entry(const char *file)
 {
@@ -70,6 +50,19 @@ static struct lock_list *_get_lock_list_entry(const char *file)
 	return NULL;
 }
 
+static void _unlink_aux(const char *file)
+{
+	char aux_path[PATH_MAX];
+
+	if (dm_snprintf(aux_path, sizeof(aux_path), "%s%s", file, AUX_LOCK_SUFFIX) < 0) {
+		stack;
+		return;
+	}
+
+	if (unlink(aux_path))
+		log_sys_debug("unlink", aux_path);
+}
+
 static int _release_lock(const char *file, int unlock)
 {
 	struct lock_list *ll;
@@ -78,18 +71,54 @@ static int _release_lock(const char *file, int unlock)
 	dm_list_iterate_safe(llh, llt, &_lock_list) {
 		ll = dm_list_item(llh, struct lock_list);
 
+		if (ll->lf < 0)
+			continue;
+
 		if (!file || !strcmp(ll->res, file)) {
-			dm_list_del(llh);
+			/*
+			 * When a VG is being removed, and the flock is still
+			 * held for the VG, it sets the remove_on_unlock flag,
+			 * so that when the flock is unlocked, the lock file is
+			 * then also removed.
+			 */
+			if (file && unlock && ll->remove_on_unlock) {
+				log_debug("Unlocking %s and removing", ll->res);
+
+				if (_prioritise_write_locks)
+					_unlink_aux(ll->res);
+				if (flock(ll->lf, LOCK_NB | LOCK_UN))
+					log_sys_debug("flock", ll->res);
+				if (unlink(ll->res))
+					log_sys_debug("unlink", ll->res);
+				if (close(ll->lf) < 0)
+					log_sys_debug("close", ll->res);
+
+				dm_list_del(&ll->list);
+				free(ll->res);
+				free(ll);
+				return 1;
+			}
+
+			/*
+			 * Update the lock file timestamp when unlocking an
+			 * exclusive flock.  Other commands may use the
+			 * timestamp change to detect that the VG was changed.
+			 */
+			if (file && unlock && ll->ex) {
+				if (futimens(ll->lf, NULL) < 0)
+					log_debug("lock file %s time update error %d", file, errno);
+			}
+
 			if (unlock) {
 				log_very_verbose("Unlocking %s", ll->res);
 				if (flock(ll->lf, LOCK_NB | LOCK_UN))
 					log_sys_debug("flock", ll->res);
-				_undo_flock(ll->res, ll->lf);
-			} else
-				_drop_shared_flock(ll->res, ll->lf);
+			}
 
-			free(ll->res);
-			free(llh);
+			if (close(ll->lf) < 0)
+				log_sys_debug("close", ll->res);
+
+			ll->lf = -1;
 
 			if (file)
 				return 1;
@@ -154,8 +183,6 @@ static int _do_flock(const char *file, int *fd, int operation, uint32_t nonblock
 	return_0;
 }
 
-#define AUX_LOCK_SUFFIX ":aux"
-
 static int _do_write_priority_flock(const char *file, int *fd, int operation, uint32_t nonblock)
 {
 	int r, fd_aux = -1;
@@ -167,9 +194,11 @@ static int _do_write_priority_flock(const char *file, int *fd, int operation, ui
 	if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, 0))) {
 		if (operation == LOCK_EX) {
 			r = _do_flock(file, fd, operation, nonblock);
-			_undo_flock(file_aux, fd_aux);
+			if (close(fd_aux) < 0)
+				log_sys_debug("close", file_aux);
 		} else {
-			_undo_flock(file_aux, fd_aux);
+			if (close(fd_aux) < 0)
+				log_sys_debug("close", file_aux);
 			r = _do_flock(file, fd, operation, nonblock);
 		}
 	}
@@ -183,6 +212,7 @@ int lock_file(const char *file, uint32_t flags)
 	uint32_t nonblock = flags & LCK_NONBLOCK;
 	uint32_t convert = flags & LCK_CONVERT;
 	int r;
+	int ex = 0;
 	struct lock_list *ll;
 	char state;
 
@@ -194,6 +224,7 @@ int lock_file(const char *file, uint32_t flags)
 	case LCK_WRITE:
 		operation = LOCK_EX;
 		state = 'W';
+		ex = 1;
 		break;
 	case LCK_UNLOCK:
 		return _release_lock(file, 1);
@@ -210,21 +241,26 @@ int lock_file(const char *file, uint32_t flags)
 		log_very_verbose("Locking %s %c%c convert", ll->res, state,
 			 	 nonblock ? ' ' : 'B');
 		r = flock(ll->lf, operation);
-		if (!r)
+		if (!r) {
+			ll->ex = ex;
 			return 1;
+		}
 		log_error("Failed to convert flock on %s %d", file, errno);
 		return 0;
 	}
 
-	if (!(ll = malloc(sizeof(struct lock_list))))
-		return_0;
+	if (!(ll = _get_lock_list_entry(file))) {
+		if (!(ll = zalloc(sizeof(struct lock_list))))
+			return_0;
 
-	if (!(ll->res = strdup(file))) {
-		free(ll);
-		return_0;
+		if (!(ll->res = strdup(file))) {
+			free(ll);
+			return_0;
+		}
+
+		ll->lf = -1;
+		dm_list_add(&_lock_list, &ll->list);
 	}
-
-	ll->lf = -1;
 
 	log_very_verbose("Locking %s %c%c", ll->res, state,
 			 nonblock ? ' ' : 'B');
@@ -237,12 +273,9 @@ int lock_file(const char *file, uint32_t flags)
 	(void) dm_prepare_selinux_context(NULL, 0);
 
 	if (r)
-		dm_list_add(&_lock_list, &ll->list);
-	else {
-		free(ll->res);
-		free(ll);
+		ll->ex = ex;
+	else
 		stack;
-	}
 
 	return r;
 }
@@ -254,3 +287,93 @@ void init_flock(struct cmd_context *cmd)
 	_prioritise_write_locks =
 	    find_config_tree_bool(cmd, global_prioritise_write_locks_CFG, NULL);
 }
+
+void free_flocks(void)
+{
+	struct lock_list *ll, *ll2;
+
+	dm_list_iterate_items_safe(ll, ll2, &_lock_list) {
+		dm_list_del(&ll->list);
+		free(ll->res);
+		free(ll);
+	}
+}
+
+/*
+ * Save the lock file timestamps prior to scanning, so that the timestamps can
+ * be checked later (lock_file_time_unchanged) to see if the VG has been
+ * changed.
+ */
+
+void lock_file_time_init(const char *file)
+{
+	struct lock_list *ll;
+	struct stat buf;
+
+	if (stat(file, &buf) < 0)
+		return;
+
+	if (!(ll = _get_lock_list_entry(file))) {
+		if (!(ll = zalloc(sizeof(struct lock_list))))
+			return;
+
+		if (!(ll->res = strdup(file))) {
+			free(ll);
+			return;
+		}
+
+		ll->lf = -1;
+		ll->save_time = buf.st_mtim;
+		dm_list_add(&_lock_list, &ll->list);
+	}
+}
+
+/*
+ * Check if a lock file timestamp has been changed (by other command) since we
+ * saved it (lock_file_time_init).  Another command may have updated the lock
+ * file timestamp when releasing an ex flock (futimens above.)
+ */
+
+bool lock_file_time_unchanged(const char *file)
+{
+	struct lock_list *ll;
+	struct stat buf;
+	struct timespec *prev, *now;
+
+	if (stat(file, &buf) < 0) {
+		log_debug("lock_file_time_unchanged no file %s", file);
+		return false;
+	}
+
+	if (!(ll = _get_lock_list_entry(file))) {
+		log_debug("lock_file_time_unchanged no list item %s", file);
+		return false;
+	}
+
+	prev = &ll->save_time;
+	now = &buf.st_mtim;
+
+	if ((now->tv_sec == prev->tv_sec) && (now->tv_nsec == prev->tv_nsec)) {
+		log_debug("lock file %s unchanged from %llu.%llu", file,
+			  (unsigned long long)prev->tv_sec,
+			  (unsigned long long)prev->tv_nsec);
+		return true;
+	}
+
+	log_debug("lock file %s changed from %llu.%llu to %llu.%llu", file,
+		  (unsigned long long)prev->tv_sec,
+		  (unsigned long long)prev->tv_nsec,
+		  (unsigned long long)now->tv_sec,
+		  (unsigned long long)now->tv_nsec);
+
+	return false;
+}
+
+void lock_file_remove_on_unlock(const char *file)
+{
+	struct lock_list *ll;
+
+	if ((ll = _get_lock_list_entry(file)))
+		ll->remove_on_unlock = 1;
+}
+

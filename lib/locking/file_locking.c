@@ -26,12 +26,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <dirent.h>
 
 static char _lock_dir[PATH_MAX];
 
 static void _fin_file_locking(void)
 {
 	release_flocks(1);
+	free_flocks();
 }
 
 static void _reset_file_locking(void)
@@ -50,11 +52,12 @@ static int _file_lock_resource(struct cmd_context *cmd, const char *resource,
 			log_error("Too long locking filename %s/P_%s.", _lock_dir, resource + 1);
 			return 0;
 		}
-	} else
+	} else {
 		if (dm_snprintf(lockfile, sizeof(lockfile), "%s/V_%s", _lock_dir, resource) < 0) {
 			log_error("Too long locking filename %s/V_%s.", _lock_dir, resource);
 			return 0;
 		}
+	}
 
 	if (!lock_file(lockfile, flags))
 		return_0;
@@ -95,3 +98,72 @@ int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
 
 	return 1;
 }
+
+/*
+ * For each file in locking_dir with V_ and no aux,
+ * stat and save the file time.
+ */
+
+void file_lock_save_times(struct cmd_context *cmd)
+{
+	char lockfile[PATH_MAX];
+	DIR *dir;
+	struct dirent *de;
+	char *aux;
+
+	if (!(dir = opendir(_lock_dir)))
+		return;
+
+	while ((de = readdir(dir))) {
+		if (de->d_name[0] != 'V')
+			continue;
+		if ((aux = strchr(de->d_name, ':'))) {
+			if (!strncmp(aux, ":aux", 4))
+				continue;
+		}
+
+		if (dm_snprintf(lockfile, sizeof(lockfile), "%s/%s", _lock_dir, de->d_name) < 0)
+			continue;
+
+		lock_file_time_init(lockfile);
+	}
+	closedir(dir);
+}
+
+/*
+ * Check if the file lock timestamp is unchanged from when it was saved by
+ * file_lock_save_times.  Return true if unchanged.  Return false if the
+ * timestamp is different, or if there's no info to know.
+ */
+bool file_lock_time_unchanged(struct cmd_context *cmd, const char *resource)
+{
+	char lockfile[PATH_MAX];
+
+	/* shouldn't be used with this function */
+	if (!strcmp(resource, VG_GLOBAL))
+		return false;
+
+	if (dm_snprintf(lockfile, sizeof(lockfile), "%s/V_%s", _lock_dir, resource) < 0) {
+		log_error("Too long locking filename %s/V_%s.", _lock_dir, resource);
+		return false;
+	}
+
+	return lock_file_time_unchanged(lockfile);
+}
+
+void file_lock_remove_on_unlock(struct cmd_context *cmd, const char *resource)
+{
+	char lockfile[PATH_MAX];
+
+	/* shouldn't be used with this function */
+	if (!strcmp(resource, VG_GLOBAL))
+		return;
+
+	if (dm_snprintf(lockfile, sizeof(lockfile), "%s/V_%s", _lock_dir, resource) < 0) {
+		log_error("Too long locking filename %s/V_%s.", _lock_dir, resource);
+		return;
+	}
+
+	lock_file_remove_on_unlock(lockfile);
+}
+

@@ -4586,6 +4586,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	struct device *mda_dev, *dev_ret, *dev;
 	struct cached_vg_fmtdata *vg_fmtdata = NULL;	/* Additional format-specific data about the vg */
 	struct pv_list *pvl;
+	const char *rescan_reason = NULL;
 	int found_old_metadata = 0;
 	int found_md_component = 0;
 	unsigned use_previous_vg;
@@ -4622,16 +4623,27 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	 *
 	 * The devs in the VG may be persistently inconsistent due to some
 	 * previous problem.  In this case, rescanning the labels here will
-	 * find the same inconsistency.  The VG repair (mistakenly done by
-	 * vg_read below) is supposed to fix that.
+	 * find the same inconsistency.
 	 *
-	 * FIXME: sort out the usage of the global lock (which is mixed up
-	 * with the orphan lock), and when we can tell that the global
-	 * lock is taken prior to the label scan, and still held here,
-	 * we can also skip the rescan in that case.
+	 * Even though it's acceptable to report old metadata that was scanned
+	 * prior to taking the VG lock, we can actually detect the rare case
+	 * when another command has written the metadata between the time of
+	 * our scan and us acquiring the VG lock.  We save the VG lock file
+	 * timestamp prior to scan, then check it again aftrr taking the VG
+	 * lock (file_lock_time_unchanged).  If the timestamp is different, it
+	 * means that another command has written the metadata since our scan,
+	 * and we rescan it here to report the latest metadata.
 	 */
-	if (!cmd->can_use_one_scan || lvmcache_scan_mismatch(cmd, vgname, vgid)) {
-		log_debug_metadata("Rescanning devices for %s %s", vgname, writing ? "rw" : "");
+
+	if (!cmd->can_use_one_scan)
+		rescan_reason = "disabled";
+	else if (lvmcache_scan_mismatch(cmd, vgname, vgid))
+		rescan_reason = "mismatch";
+	else if (!file_lock_time_unchanged(cmd, vgname))
+		rescan_reason = "changed";
+
+	if (rescan_reason) {
+		log_debug_metadata("Rescanning devices for %s %s (%s)", vgname, writing ? "rw" : "", rescan_reason);
 		if (writing)
 			lvmcache_label_rescan_vg_rw(cmd, vgname, vgid);
 		else

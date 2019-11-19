@@ -78,6 +78,8 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
 
 	lockd_free_vg_final(cmd, vg);
 
+	file_lock_remove_on_unlock(cmd, vg->name);
+
 	return ECMD_PROCESSED;
 }
 

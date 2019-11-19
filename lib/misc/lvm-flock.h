@@ -16,7 +16,12 @@
 #define _LVM_FLOCK_H
 
 void init_flock(struct cmd_context *cmd);
+void free_flocks(void);
 int lock_file(const char *file, uint32_t flags);
 void release_flocks(int unlock);
+
+void lock_file_time_init(const char *file);
+bool lock_file_time_unchanged(const char *file);
+void lock_file_remove_on_unlock(const char *file);
 
 #endif /* _LVM_FLOCK_H */
