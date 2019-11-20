@@ -233,6 +233,9 @@ struct lv_prop *get_lv_prop(int lvp_enum);
 struct lv_type *get_lv_type(int lvt_enum);
 struct command *get_command(int cmd_enum);
 
+int get_integrity_options(struct cmd_context *cmd, const char **arg, const char **meta_name,
+                          struct integrity_settings *set);
+
 int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv);
