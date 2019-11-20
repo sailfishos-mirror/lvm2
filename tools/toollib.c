@@ -723,6 +723,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
 		       activation_change_t activate)
 {
 	int r = 1;
+	int integrity_recalculate;
 	struct logical_volume *snapshot_lv;
 
 	if (lv_is_cache_pool(lv)) {
@@ -780,8 +781,33 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
 		return 0;
 	}
 
+	if ((integrity_recalculate = lv_has_integrity_recalculate_metadata(lv))) {
+		/* Don't want pvscan to write VG while running from systemd service. */
+		if (!strcmp(cmd->name, "pvscan")) {
+			log_error("Cannot activate uninitialized integrity LV %s from pvscan.",
+				  display_lvname(lv));
+			return 0;
+		}
+
+		if (vg_is_shared(lv->vg)) {
+			uint32_t lockd_state = 0;
+			if (!lockd_vg(cmd, lv->vg->name, "ex", 0, &lockd_state)) {
+				log_error("Cannot activate uninitialized integrity LV %s without lock.",
+					  display_lvname(lv));
+				return 0;
+			}
+		}
+	}
+
 	if (!lv_active_change(cmd, lv, activate))
 		return_0;
+
+	/* Write VG metadata to clear the integrity recalculate flag. */
+	if (integrity_recalculate && lv_is_active(lv)) {
+		log_print_unless_silent("Updating VG to complete initialization of integrity LV %s.",
+			  display_lvname(lv));
+		lv_clear_integrity_recalculate_metadata(lv);
+	}
 
 	set_lv_notify(lv->vg->cmd);
 
@@ -1142,6 +1168,180 @@ out:
 	*settings = result;
 
 	return ok;
+}
+
+
+static int _get_one_integrity_setting(struct cmd_context *cmd, struct integrity_settings *settings,
+				       char *key, char *val)
+{
+	if (!strncmp(key, "mode", strlen("mode"))) {
+		if (*val == 'D')
+			settings->mode[0] = 'D';
+		else if (*val == 'J')
+			settings->mode[0] = 'J';
+		else if (*val == 'B')
+			settings->mode[0] = 'B';
+		else if (*val == 'R')
+			settings->mode[0] = 'R';
+		else
+			goto_bad;
+		/* lvm assigns a default if the user doesn't. */
+		return 1;
+	}
+
+	if (!strncmp(key, "tag_size", strlen("tag_size"))) {
+		if (sscanf(val, "%u", &settings->tag_size) != 1)
+			goto_bad;
+		/* lvm assigns a default if the user doesn't. */
+		return 1;
+	}
+
+	if (!strncmp(key, "internal_hash", strlen("internal_hash"))) {
+		if (!(settings->internal_hash = dm_pool_strdup(cmd->mem, val)))
+			goto_bad;
+		/* lvm assigns a default if the user doesn't. */
+		return 1;
+	}
+
+	/*
+	 * For the following settings, lvm does not set a default value if the
+	 * user does not specify their own value, and lets dm-integrity use its
+	 * own default.
+	 */
+
+	if (!strncmp(key, "journal_sectors", strlen("journal_sectors"))) {
+		if (sscanf(val, "%u", &settings->journal_sectors) != 1)
+			goto_bad;
+		settings->journal_sectors_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "interleave_sectors", strlen("interleave_sectors"))) {
+		if (sscanf(val, "%u", &settings->interleave_sectors) != 1)
+			goto_bad;
+		settings->interleave_sectors_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "buffer_sectors", strlen("buffer_sectors"))) {
+		if (sscanf(val, "%u", &settings->buffer_sectors) != 1)
+			goto_bad;
+		settings->buffer_sectors_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "journal_watermark", strlen("journal_watermark"))) {
+		if (sscanf(val, "%u", &settings->journal_watermark) != 1)
+			goto_bad;
+		settings->journal_watermark_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "commit_time", strlen("commit_time"))) {
+		if (sscanf(val, "%u", &settings->commit_time) != 1)
+			goto_bad;
+		settings->commit_time_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "block_size", strlen("block_size"))) {
+		if (sscanf(val, "%u", &settings->block_size) != 1)
+			goto_bad;
+		settings->block_size_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "bitmap_flush_interval", strlen("bitmap_flush_interval"))) {
+		if (sscanf(val, "%u", &settings->bitmap_flush_interval) != 1)
+			goto_bad;
+		settings->bitmap_flush_interval_set = 1;
+		return 1;
+	}
+
+	if (!strncmp(key, "sectors_per_bit", strlen("sectors_per_bit"))) {
+		if (sscanf(val, "%llu", (unsigned long long *)&settings->sectors_per_bit) != 1)
+			goto_bad;
+		settings->sectors_per_bit_set = 1;
+		return 1;
+	}
+
+	log_error("Unknown setting: %s", key);
+	return 0;
+
+ bad:
+	log_error("Invalid setting: %s", key);
+	return 0;
+}
+
+static int _get_integrity_settings(struct cmd_context *cmd, struct integrity_settings *settings)
+{
+	struct arg_value_group_list *group;
+	const char *str;
+	char key[64];
+	char val[64];
+	int num;
+	int pos;
+
+	/*
+	 * "grouped" means that multiple --integritysettings options can be used.
+	 * Each option is also allowed to contain multiple key = val pairs.
+	 */
+
+	dm_list_iterate_items(group, &cmd->arg_value_groups) {
+		if (!grouped_arg_is_set(group->arg_values, integritysettings_ARG))
+			continue;
+
+		if (!(str = grouped_arg_str_value(group->arg_values, integritysettings_ARG, NULL)))
+			break;
+
+		pos = 0;
+
+		while (pos < strlen(str)) {
+			/* scan for "key1=val1 key2 = val2  key3= val3" */
+
+			memset(key, 0, sizeof(key));
+			memset(val, 0, sizeof(val));
+
+			if (sscanf(str + pos, " %63[^=]=%63s %n", key, val, &num) != 2) {
+				log_error("Invalid setting at: %s", str+pos);
+				return 0;
+			}
+
+			pos += num;
+
+			if (!_get_one_integrity_setting(cmd, settings, key, val))
+				return_0;
+		}
+	}
+
+	return 1;
+}
+
+int get_integrity_options(struct cmd_context *cmd, const char **arg, const char **meta_name,
+			  struct integrity_settings *set)
+{
+	*arg = NULL;
+	*meta_name = NULL;
+	memset(set, 0, sizeof(struct integrity_settings));
+
+	if (arg_int_value(cmd, integrity_ARG, 0))
+		*arg = "y";
+	else
+		*arg = "n";
+
+	/*
+	 * TODO: set *meta_name to some option value that controls the
+	 * location/placement/allocation of integrity metadata.
+	 * (It was previously a PV name to allocate from or an LV name
+	 * to use as the metadata LV.)
+	 */
+
+	if (arg_is_set(cmd, integritysettings_ARG)) {
+		if (!_get_integrity_settings(cmd, set))
+			return_0;
+	}
+
+	return 1;
 }
 
 /* FIXME move to lib */
@@ -2309,6 +2509,8 @@ static int _lv_is_type(struct cmd_context *cmd, struct logical_volume *lv, int l
 		return seg_is_raid10(seg);
 	case writecache_LVT:
 		return seg_is_writecache(seg);
+	case integrity_LVT:
+		return seg_is_integrity(seg);
 	case error_LVT:
 		return !strcmp(seg->segtype->name, SEG_TYPE_NAME_ERROR);
 	case zero_LVT:
@@ -2367,6 +2569,8 @@ int get_lvt_enum(struct logical_volume *lv)
 		return raid10_LVT;
 	if (seg_is_writecache(seg))
 		return writecache_LVT;
+	if (seg_is_integrity(seg))
+		return integrity_LVT;
 
 	if (!strcmp(seg->segtype->name, SEG_TYPE_NAME_ERROR))
 		return error_LVT;
