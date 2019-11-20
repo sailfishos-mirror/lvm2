@@ -121,6 +121,14 @@ int label_scan_open_rw(struct device *dev);
 int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
 
 /*
+ * These are the sizes the label.c uses to set up
+ * and use bcache (they are not bcache restrictions
+ * or defs.)
+ */
+#define BCACHE_BLOCK_SIZE_IN_SECTORS 256 /* 256*512 = 128K */
+#define BCACHE_BLOCK_SIZE_IN_BYTES 131072
+
+/*
  * Wrappers around bcache equivalents.
  * (these make it easier to disable bcache and revert to direct rw if needed)
  */
