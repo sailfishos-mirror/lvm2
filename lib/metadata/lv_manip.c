@@ -134,7 +134,9 @@ enum {
 	LV_TYPE_SANLOCK,
 	LV_TYPE_CACHEVOL,
 	LV_TYPE_WRITECACHE,
-	LV_TYPE_WRITECACHEORIGIN
+	LV_TYPE_WRITECACHEORIGIN,
+	LV_TYPE_INTEGRITY,
+	LV_TYPE_INTEGRITYORIGIN
 };
 
 static const char *_lv_type_names[] = {
@@ -190,6 +192,8 @@ static const char *_lv_type_names[] = {
 	[LV_TYPE_CACHEVOL] =				"cachevol",
 	[LV_TYPE_WRITECACHE] =				"writecache",
 	[LV_TYPE_WRITECACHEORIGIN] =			"writecacheorigin",
+	[LV_TYPE_INTEGRITY] =				"integrity",
+	[LV_TYPE_INTEGRITYORIGIN] =			"integrityorigin",
 };
 
 static int _lv_layout_and_role_mirror(struct dm_pool *mem,
@@ -461,6 +465,43 @@ bad:
 	return 0;
 }
 
+static int _lv_layout_and_role_integrity(struct dm_pool *mem,
+				     const struct logical_volume *lv,
+				     struct dm_list *layout,
+				     struct dm_list *role,
+				     int *public_lv)
+{
+	int top_level = 0;
+
+	/* non-top-level LVs */
+	if (lv_is_integrity_metadata(lv)) {
+		if (!str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITY]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_METADATA]))
+			goto_bad;
+	} else if (lv_is_integrity_origin(lv)) {
+		if (!str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITY]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_ORIGIN]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITYORIGIN]))
+			goto_bad;
+	} else
+		top_level = 1;
+
+	if (!top_level) {
+		*public_lv = 0;
+		return 1;
+	}
+
+	/* top-level LVs */
+	if (lv_is_integrity(lv)) {
+		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_INTEGRITY]))
+			goto_bad;
+	}
+
+	return 1;
+bad:
+	return 0;
+}
+
 static int _lv_layout_and_role_thick_origin_snapshot(struct dm_pool *mem,
 						     const struct logical_volume *lv,
 						     struct dm_list *layout,
@@ -575,6 +616,11 @@ int lv_layout_and_role(struct dm_pool *mem, const struct logical_volume *lv,
 	/* Caches and related */
 	if ((lv_is_cache_type(lv) || lv_is_cache_origin(lv) || lv_is_writecache(lv) || lv_is_writecache_origin(lv)) &&
 	    !_lv_layout_and_role_cache(mem, lv, *layout, *role, &public_lv))
+		goto_bad;
+
+	/* Integrity related */
+	if ((lv_is_integrity(lv) || lv_is_integrity_origin(lv) || lv_is_integrity_metadata(lv)) &&
+	    !_lv_layout_and_role_integrity(mem, lv, *layout, *role, &public_lv))
 		goto_bad;
 
 	/* VDO and related */
@@ -1454,6 +1500,15 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 					if (seg->pool_lv && !detach_pool_lv(seg))
 						return_0;
 				} else if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+			}
+
+			if (delete && seg_is_integrity(seg)) {
+				/* Remove integrity origin in addition to integrity layer. */
+				if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+				/* Remove integrity metadata. */
+				if (seg->integrity_meta_dev && !lv_remove(seg->integrity_meta_dev))
 					return_0;
 			}
 
@@ -5654,6 +5709,11 @@ int lv_resize(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_integrity(lv)) {
+		log_error("Resize not yet allowed on LVs with integrity.");
+		return 0;
+	}
+
 	if (!_lvresize_check(lv, lp))
 		return_0;
 
@@ -7679,6 +7739,15 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
 	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
 		return 0;
 
+	/*
+	 * dm-integrity requires the first sector (integrity superblock) to be
+	 * zero when creating a new integrity device.
+	 * TODO: print a warning or error if the user specifically
+	 * asks for no wiping or zeroing?
+	 */
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg))
+		return 1;
+
 	/* Cannot zero read-only volume */
 	if ((lv->status & LVM_WRITE) &&
 	    (lp->zero || lp->wipe_signatures))
@@ -7934,6 +8003,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* FIXME Eventually support raid/mirrors with -m */
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
 			return_0;
+
+	} else if (seg_is_integrity(lp)) {
+		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
+			return_0;
+
 	} else if (seg_is_mirrored(lp) || (seg_is_raid(lp) && !seg_is_any_raid0(lp))) {
 		if (!(lp->region_size = adjusted_mirror_region_size(vg->cmd,
 								    vg->extent_size,
@@ -8277,6 +8351,19 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			goto revert_new_lv;
 		}
 		lv->status &= ~LV_TEMPORARY;
+
+	} else if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
+		/*
+		 * Activate the new origin LV so it can be zeroed/wiped
+		 * below before adding integrity.
+		 */
+		lv->status |= LV_TEMPORARY;
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate new LV for wiping.");
+			goto revert_new_lv;
+		}
+		lv->status &= ~LV_TEMPORARY;
+
 	} else if (!lv_active_change(cmd, lv, lp->activate)) {
 		log_error("Failed to activate new LV %s.", display_lvname(lv));
 		goto deactivate_and_revert_new_lv;
@@ -8294,6 +8381,30 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 				  ? "snapshot exception store" : "start of new LV");
 			goto deactivate_and_revert_new_lv;
 		}
+	}
+
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
+		log_verbose("Adding integrity to new LV");
+
+		/* Origin is active from zeroing, deactivate to add integrity. */
+
+		if (!deactivate_lv(cmd, lv)) {
+			log_error("Failed to deactivate LV to add integrity");
+			goto revert_new_lv;
+		}
+
+		if (seg_is_raid1(lp)) {
+			if (!lv_add_integrity_to_raid(lv, lp->integrity_arg,
+						      &lp->integrity_settings, lp->pvh))
+				goto revert_new_lv;
+		} else {
+			if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_name,
+					      &lp->integrity_settings, lp->pvh))
+				goto revert_new_lv;
+		}
+
+		backup(vg);
+		goto out;
 	}
 
 	if (seg_is_vdo_pool(lp)) {
