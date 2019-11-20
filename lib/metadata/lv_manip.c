@@ -134,7 +134,9 @@ enum {
 	LV_TYPE_SANLOCK,
 	LV_TYPE_CACHEVOL,
 	LV_TYPE_WRITECACHE,
-	LV_TYPE_WRITECACHEORIGIN
+	LV_TYPE_WRITECACHEORIGIN,
+	LV_TYPE_INTEGRITY,
+	LV_TYPE_INTEGRITYORIGIN
 };
 
 static const char *_lv_type_names[] = {
@@ -190,6 +192,8 @@ static const char *_lv_type_names[] = {
 	[LV_TYPE_CACHEVOL] =				"cachevol",
 	[LV_TYPE_WRITECACHE] =				"writecache",
 	[LV_TYPE_WRITECACHEORIGIN] =			"writecacheorigin",
+	[LV_TYPE_INTEGRITY] =				"integrity",
+	[LV_TYPE_INTEGRITYORIGIN] =			"integrityorigin",
 };
 
 static int _lv_layout_and_role_mirror(struct dm_pool *mem,
@@ -461,6 +465,43 @@ bad:
 	return 0;
 }
 
+static int _lv_layout_and_role_integrity(struct dm_pool *mem,
+				     const struct logical_volume *lv,
+				     struct dm_list *layout,
+				     struct dm_list *role,
+				     int *public_lv)
+{
+	int top_level = 0;
+
+	/* non-top-level LVs */
+	if (lv_is_integrity_metadata(lv)) {
+		if (!str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITY]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_METADATA]))
+			goto_bad;
+	} else if (lv_is_integrity_origin(lv)) {
+		if (!str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITY]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_ORIGIN]) ||
+		    !str_list_add_no_dup_check(mem, role, _lv_type_names[LV_TYPE_INTEGRITYORIGIN]))
+			goto_bad;
+	} else
+		top_level = 1;
+
+	if (!top_level) {
+		*public_lv = 0;
+		return 1;
+	}
+
+	/* top-level LVs */
+	if (lv_is_integrity(lv)) {
+		if (!str_list_add_no_dup_check(mem, layout, _lv_type_names[LV_TYPE_INTEGRITY]))
+			goto_bad;
+	}
+
+	return 1;
+bad:
+	return 0;
+}
+
 static int _lv_layout_and_role_thick_origin_snapshot(struct dm_pool *mem,
 						     const struct logical_volume *lv,
 						     struct dm_list *layout,
@@ -575,6 +616,11 @@ int lv_layout_and_role(struct dm_pool *mem, const struct logical_volume *lv,
 	/* Caches and related */
 	if ((lv_is_cache_type(lv) || lv_is_cache_origin(lv) || lv_is_writecache(lv) || lv_is_writecache_origin(lv)) &&
 	    !_lv_layout_and_role_cache(mem, lv, *layout, *role, &public_lv))
+		goto_bad;
+
+	/* Integrity related */
+	if ((lv_is_integrity(lv) || lv_is_integrity_origin(lv) || lv_is_integrity_metadata(lv)) &&
+	    !_lv_layout_and_role_integrity(mem, lv, *layout, *role, &public_lv))
 		goto_bad;
 
 	/* VDO and related */
@@ -1454,6 +1500,15 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 					if (seg->pool_lv && !detach_pool_lv(seg))
 						return_0;
 				} else if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+			}
+
+			if (delete && seg_is_integrity(seg)) {
+				/* Remove integrity origin in addition to integrity layer. */
+				if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+				/* Remove integrity metadata. */
+				if (seg->integrity_meta_dev && !lv_remove(seg->integrity_meta_dev))
 					return_0;
 			}
 
@@ -5654,6 +5709,11 @@ int lv_resize(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_integrity(lv)) {
+		log_error("Resize not yet allowed on LVs with integrity.");
+		return 0;
+	}
+
 	if (!_lvresize_check(lv, lp))
 		return_0;
 
@@ -7934,6 +7994,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* FIXME Eventually support raid/mirrors with -m */
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
 			return_0;
+
+	} else if (seg_is_integrity(lp)) {
+		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
+			return_0;
+
 	} else if (seg_is_mirrored(lp) || (seg_is_raid(lp) && !seg_is_any_raid0(lp))) {
 		if (!(lp->region_size = adjusted_mirror_region_size(vg->cmd,
 								    vg->extent_size,
@@ -8182,6 +8247,53 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 	if (test_mode()) {
 		log_verbose("Test mode: Skipping activation, zeroing and signature wiping.");
 		goto out;
+	}
+
+	if (seg_is_integrity(lp) || (seg_is_raid(lp) && lp->integrity_arg)) {
+		log_print("Adding integrity to new LV");
+
+		/*
+		 * internal integrity requires wiping the origin, before
+		 * integrity is added, so the integrity superblock is zero.
+		 * This is independent of wiping the final LV below.
+		 */
+		if (seg_is_integrity(lp) && lp->integrity_arg && !strcmp(lp->integrity_arg, "internal")) {
+			struct wipe_params wp = { .do_zero = 1, .zero_sectors = 8 };
+
+			log_debug("Activating to zero integrity superblock of origin %s", lv->name);
+			lv->status |= LV_TEMPORARY;
+			lv->status |= LV_NOSCAN;
+
+			if (!activate_lv(cmd, lv)) {
+				log_error("Failed to activate LV for zeroing integrity superblock.");
+				goto revert_new_lv;
+			}
+
+			lv->status &= ~LV_TEMPORARY;
+			lv->status &= ~LV_NOSCAN;
+
+			if (!wipe_lv(lv, wp)) {
+				log_error("Failed to zero integrity superblock of new origin.");
+				goto revert_new_lv;
+			}
+
+			if (!deactivate_lv(cmd, lv)) {
+				log_error("Failed to deactivate LV from zeroing integrity superblock.");
+				goto revert_new_lv;
+			}
+		}
+
+		if (seg_is_raid(lp)) {
+			if (!lv_add_integrity_to_raid(lv, lp->integrity_arg,
+						      &lp->integrity_settings, lp->pvh))
+				goto revert_new_lv;
+		} else {
+			if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_name,
+					      &lp->integrity_settings, lp->pvh))
+				goto revert_new_lv;
+		}
+
+		backup(vg);
 	}
 
 	/* Do not scan this LV until properly zeroed/wiped. */

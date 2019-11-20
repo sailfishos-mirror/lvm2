@@ -5730,6 +5730,135 @@ int lvconvert_to_cache_with_cachevol_cmd(struct cmd_context *cmd, int argc, char
 	return ret;
 }
 
+static int _lvconvert_integrity_remove(struct cmd_context *cmd,
+					struct logical_volume *lv)
+{
+	struct volume_group *vg = lv->vg;
+
+	if (!lv_is_integrity(lv) && !lv_is_raid(lv)) {
+		log_error("LV does not have integrity.");
+		return 0;
+	}
+
+	/* TODO: lift this restriction */
+	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
+		log_error("LV must be inactive to remove integrity.");
+		return 0;
+	}
+
+	if (!archive(vg))
+		return_0;
+
+	if (lv_is_integrity(lv)) {
+		if (!lv_remove_integrity(lv))
+			return_0;
+	} else if (lv_is_raid(lv)) {
+		if (!lv_remove_integrity_from_raid(lv))
+			return_0;
+	}
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
+
+	backup(vg);
+
+	log_print_unless_silent("Logical volume %s has removed integrity.", display_lvname(lv));
+	return 1;
+}
+
+static int _lvconvert_integrity_add(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					const char *meta_name,
+					struct integrity_settings *set)
+{
+	struct volume_group *vg = lv->vg;
+	struct lv_segment *seg;
+	struct dm_list *use_pvh;
+	int is_raid;
+	int ret;
+
+	seg = first_seg(lv);
+
+	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
+		log_error("LV must be inactive to add integrity.");
+		return 0;
+	}
+
+	/* ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_0;
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_0;
+	} else
+		use_pvh = &vg->pvs;
+
+	if (!archive(vg))
+		return_0;
+
+	is_raid = seg_is_raid(seg);
+
+	if (is_raid)
+		ret = lv_add_integrity_to_raid(lv, "external", set, use_pvh);
+	else
+		ret = lv_add_integrity(lv, "external", meta_name, set, use_pvh);
+	if (!ret)
+		return 0;
+
+	log_print_unless_silent("Logical volume %s has added integrity.", display_lvname(lv));
+	return 1;
+}
+
+static int _lvconvert_integrity_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct integrity_settings settings;
+	const char *meta_name = NULL;
+	const char *arg = NULL;
+	int ret = 0;
+
+	memset(&settings, 0, sizeof(settings));
+
+	if (!get_integrity_options(cmd, &arg, &meta_name, &settings))
+		return 0;
+
+	if (!arg || !strcmp(arg, "external") || !strcmp(arg, "y"))
+		ret = _lvconvert_integrity_add(cmd, lv, meta_name, &settings);
+
+	else if (!strcmp(arg, "none") || !strcmp(arg, "n"))
+		ret = _lvconvert_integrity_remove(cmd, lv);
+
+	else
+		log_error("Invalid integrity option value.");
+
+	if (!ret)
+		return ECMD_FAILED;
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_integrity_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      &_lvconvert_integrity_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
 /*
  * All lvconvert command defs have their own function,
  * so the generic function name is unused.
