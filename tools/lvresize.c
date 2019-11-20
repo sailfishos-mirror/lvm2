@@ -154,6 +154,8 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
 	lp->resizefs = arg_is_set(cmd, resizefs_ARG);
 	lp->lockopt = arg_str_value(cmd, lockopt_ARG, NULL);
 
+	lp->integritymetadata = arg_str_value(cmd, integritymetadata_ARG, NULL);
+
 	return 1;
 }
 
