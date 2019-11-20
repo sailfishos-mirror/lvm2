@@ -5730,6 +5730,75 @@ int lvconvert_to_cache_with_cachevol_cmd(struct cmd_context *cmd, int argc, char
 	return ret;
 }
 
+static int _lvconvert_integrity_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct volume_group *vg = lv->vg;
+	struct lv_segment *seg;
+	const char *arg = arg_str_value(cmd, integrity_ARG, NULL);
+
+	if (strcmp(arg, "none") && strcmp(arg, "n")) {
+		log_error("Integrity can only be removed from an existing LV (see --integrity none).");
+		return ECMD_FAILED;
+	}
+
+	if (!lv_is_integrity(lv)) {
+		log_error("LV does not have integrity.");
+		return ECMD_FAILED;
+	}
+
+	seg = first_seg(lv);
+
+	if (!seg->integrity_meta_dev) {
+		log_error("Internal integrity cannot be removed.");
+		return ECMD_FAILED;
+	}
+
+	/* TODO: lift this restriction */
+	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
+		log_error("LV must be inactive to remove integrity.");
+		return ECMD_FAILED;
+	}
+
+	if (!archive(vg))
+		return ECMD_FAILED;
+
+	if (!lv_remove_integrity(lv))
+		return ECMD_FAILED;
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return ECMD_FAILED;
+
+	backup(vg);
+
+	log_print_unless_silent("Logical volume %s has removed integrity.", display_lvname(lv));
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_integrity_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	struct lvconvert_result lr = { 0 };
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	handle->custom_handle = &lr;
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      &_lvconvert_integrity_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
 /*
  * All lvconvert command defs have their own function,
  * so the generic function name is unused.

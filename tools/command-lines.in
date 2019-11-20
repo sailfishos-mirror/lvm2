@@ -757,6 +757,14 @@ FLAGS: SECONDARY_SYNTAX
 
 ---
 
+lvconvert --integrity String LV
+OO: OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_integrity
+DESC: Remove integrity from an LV.
+
+---
+
 # --extents is not specified; it's an automatic alternative for --size
 
 OO_LVCREATE: --addtag Tag, --alloc Alloc, --autobackup Bool, --activate Active,
@@ -1266,6 +1274,20 @@ DESC: When LV is not a cache pool, convert the specified LV
 DESC: to type cache after creating a new cache pool LV to use
 DESC: (use lvconvert).
 FLAGS: SECONDARY_SYNTAX
+
+---
+
+lvcreate --type integrity --size SizeMB VG
+OO: --integrity String, --integritymetadata LV, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a LV with integrity.
+
+lvcreate --integrity String --size SizeMB VG
+OO: --type integrity, --integritymetadata LV, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a LV with integrity (infers --type integrity).
 
 ---
 
