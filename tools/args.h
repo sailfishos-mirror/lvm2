@@ -274,6 +274,12 @@ arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
     "and \\fBdiff\\fP types include unsupported settings in their output by default,\n"
     "all the other types ignore unsupported settings.\n")
 
+arg(integrity_ARG, '\0', "integrity", bool_VAL, 0, 0,
+    "Enable or disable integrity metadata for an LV.\n")
+
+arg(integritysettings_ARG, '\0', "integritysettings", string_VAL, ARG_GROUPABLE, 0,
+    "Set dm-integrity parameters.\n")
+
 arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
     "By default the PV is labelled with an LVM2 identifier in its second\n"
     "sector (sector 1). This lets you use a different sector near the\n"

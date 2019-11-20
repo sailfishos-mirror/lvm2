@@ -757,6 +757,14 @@ FLAGS: SECONDARY_SYNTAX
 
 ---
 
+lvconvert --integrity Bool LV_raid_integrity_linear_striped
+OO: OO_LVCONVERT, --integritysettings String
+OP: PV ...
+ID: lvconvert_integrity
+DESC: Add or remove integrity to an LV.
+
+---
+
 # --extents is not specified; it's an automatic alternative for --size
 
 OO_LVCREATE: --addtag Tag, --alloc Alloc, --autobackup Bool, --activate Active,
@@ -870,7 +878,8 @@ DESC: Create a raid1 or mirror LV (infers --type raid1|mirror).
 # R9,R10,R11,R12 (--type raid with any use of --stripes/--mirrors)
 lvcreate --type raid --size SizeMB VG
 OO: --mirrors PNumber, --stripes Number, --stripesize SizeKB,
---regionsize RegionSize, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB, OO_LVCREATE
+--regionsize RegionSize, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB,
+--integrity Bool, --integritysettings String, OO_LVCREATE
 OP: PV ...
 ID: lvcreate_raid_any
 DESC: Create a raid LV (a specific raid level must be used, e.g. raid1).
@@ -1266,6 +1275,18 @@ DESC: When LV is not a cache pool, convert the specified LV
 DESC: to type cache after creating a new cache pool LV to use
 DESC: (use lvconvert).
 FLAGS: SECONDARY_SYNTAX
+
+lvcreate --type integrity --size SizeMB VG
+OO: --integrity Bool, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a linear LV with integrity.
+
+lvcreate --integrity Bool --size SizeMB VG
+OO: --type integrity, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a linear LV with integrity (infers --type integrity).
 
 ---
 
