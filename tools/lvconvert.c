@@ -85,6 +85,8 @@ struct lvconvert_params {
 	struct dm_list idls;
 
 	const char *origin_name;
+
+	struct logical_volume *prev_lv_imeta;
 };
 
 struct convert_poll_id_list {
@@ -1396,6 +1398,14 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 							lp->region_size : seg->region_size , lp->pvh))
 				return_0;
 
+			if (lv_raid_has_integrity(lv)) {
+				struct integrity_settings *isettings = NULL;
+				if (!lv_get_raid_integrity_settings(lv, &isettings))
+					return_0;
+				if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
+					return_0;
+			}
+
 			log_print_unless_silent("Logical volume %s successfully converted.",
 						display_lvname(lv));
 
@@ -1438,6 +1448,14 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 				     lp->region_size, lp->pvh))
 			return_0;
 
+		if (lv_raid_has_integrity(lv)) {
+			struct integrity_settings *isettings = NULL;
+			if (!lv_get_raid_integrity_settings(lv, &isettings))
+				return_0;
+			if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
+				return_0;
+		}
+
 		log_print_unless_silent("Logical volume %s successfully converted.",
 					display_lvname(lv));
 		return 1;
@@ -1458,6 +1476,14 @@ try_new_takeover_or_reshape:
 			     (lp->region_size_supplied || !seg->region_size) ?
 			     lp->region_size : seg->region_size , lp->pvh))
 		return_0;
+
+	if (lv_raid_has_integrity(lv)) {
+		struct integrity_settings *isettings = NULL;
+		if (!lv_get_raid_integrity_settings(lv, &isettings))
+			return_0;
+		if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
+			return_0;
+	}
 
 	log_print_unless_silent("Logical volume %s successfully converted.",
 				display_lvname(lv));
@@ -1712,11 +1738,35 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 				 struct lvconvert_params *lp)
 {
 	struct lv_segment *seg = first_seg(lv);
+	struct integrity_settings isettings;
+	int add_integrity = 0;
 	int ret = 0;
 
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
 		return_ECMD_FAILED;
+
+	/*
+	 * Converting integrity+linear to raid+integrity.  The imeta
+	 * used for the linear LV can be used for that same linear LV
+	 * in its new position as a raid image.
+	 *
+	 * Remove the top integrity layer (saving the detached imeta LV),
+	 * do the raid conversion on the linear LV, which makes the new
+	 * top LV a raid LV.  When integrity is added to the raid images,
+	 * use the saved imeta LV and reattach it to the same linear LV
+	 * that is now a raid image.
+	 */
+	if (lv_is_integrity(lv)) {
+		struct lv_segment *iseg = first_seg(lv);
+
+		memcpy(&isettings, &iseg->integrity_settings, sizeof(isettings));
+		add_integrity = 1;
+
+		if (!lv_remove_integrity(lv, &lp->prev_lv_imeta))
+			goto_out;
+		seg = first_seg(lv);
+	}
 
 	/* Set up segtype either from type_str or else to match the existing one. */
 	if (!*lp->type_str)
@@ -1775,8 +1825,13 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 	 * If operations differ between striped and linear, split this case.
 	 */
 	if (segtype_is_striped(seg->segtype) || segtype_is_linear(seg->segtype)) {
-		ret = _convert_striped(cmd, lv, lp);
-		goto out;
+		if (!_convert_striped(cmd, lv, lp))
+			goto_out;
+
+		if (add_integrity) {
+			if (!lv_add_integrity_to_raid(lv, &isettings, lp->pvh, lp->prev_lv_imeta))
+				goto_out;
+		}
 	}
 
 	/*
@@ -5750,6 +5805,121 @@ int lvconvert_to_cache_with_cachevol_cmd(struct cmd_context *cmd, int argc, char
 
 	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
 			      &_lvconvert_cachevol_attach_single);
+
+	destroy_processing_handle(cmd, handle);
+
+	return ret;
+}
+
+static int _lvconvert_integrity_remove(struct cmd_context *cmd,
+					struct logical_volume *lv)
+{
+	struct volume_group *vg = lv->vg;
+	int ret;
+
+	if (!lv_is_integrity(lv) && !lv_is_raid(lv)) {
+		log_error("LV does not have integrity.");
+		return 0;
+	}
+
+	/* ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_0;
+
+	if (!archive(vg))
+		return_0;
+
+	if (lv_is_raid(lv))
+		ret = lv_remove_integrity_from_raid(lv);
+	else
+		ret = lv_remove_integrity(lv, NULL);
+	if (!ret)
+		return 0;
+
+	backup(vg);
+
+	log_print_unless_silent("Logical volume %s has removed integrity.", display_lvname(lv));
+	return 1;
+}
+
+static int _lvconvert_integrity_add(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					const char *meta_name,
+					struct integrity_settings *set)
+{
+	struct volume_group *vg = lv->vg;
+	struct dm_list *use_pvh;
+	int ret;
+
+	/* ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_0;
+
+	if (cmd->position_argc > 1) {
+		/* First pos arg is required LV, remaining are optional PVs. */
+		if (!(use_pvh = create_pv_list(cmd->mem, vg, cmd->position_argc - 1, cmd->position_argv + 1, 0)))
+			return_0;
+	} else
+		use_pvh = &vg->pvs;
+
+	if (!archive(vg))
+		return_0;
+
+	if (lv_is_raid(lv))
+		ret = lv_add_integrity_to_raid(lv, set, use_pvh, NULL);
+	else
+		ret = lv_add_integrity(lv, set, use_pvh);
+	if (!ret)
+		return 0;
+
+	backup(vg);
+
+	log_print_unless_silent("Logical volume %s has added integrity.", display_lvname(lv));
+	return 1;
+}
+
+static int _lvconvert_integrity_single(struct cmd_context *cmd,
+					struct logical_volume *lv,
+					struct processing_handle *handle)
+{
+	struct integrity_settings settings;
+	const char *meta_name = NULL;
+	const char *arg = NULL;
+	int ret = 0;
+
+	memset(&settings, 0, sizeof(settings));
+
+	if (!get_integrity_options(cmd, &arg, &meta_name, &settings))
+		return 0;
+
+	if (*arg == 'y')
+		ret = _lvconvert_integrity_add(cmd, lv, meta_name, &settings);
+
+	else if (*arg == 'n')
+		ret = _lvconvert_integrity_remove(cmd, lv);
+
+	else
+		log_error("Invalid integrity option value.");
+
+	if (!ret)
+		return ECMD_FAILED;
+	return ECMD_PROCESSED;
+}
+
+int lvconvert_integrity_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	cmd->cname->flags &= ~GET_VGNAME_FROM_OPTIONS;
+
+	ret = process_each_lv(cmd, cmd->position_argc, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE, handle, NULL,
+			      &_lvconvert_integrity_single);
 
 	destroy_processing_handle(cmd, handle);
 
