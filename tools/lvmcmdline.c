@@ -149,6 +149,9 @@ static const struct command_function _command_functions[CMD_COUNT] = {
 	{ lvconvert_to_vdopool_CMD, lvconvert_to_vdopool_cmd },
 	{ lvconvert_to_vdopool_param_CMD, lvconvert_to_vdopool_param_cmd },
 
+	/* lvconvert for integrity */
+	{ lvconvert_integrity_CMD, lvconvert_integrity_cmd },
+
 	{ pvscan_display_CMD, pvscan_display_cmd },
 	{ pvscan_cache_CMD, pvscan_cache_cmd },
 };
@@ -1094,6 +1097,16 @@ int dumptype_arg(struct cmd_context *cmd, struct arg_values *av)
 	    !strcmp(av->value, "metadata_search") ||
 	    !strcmp(av->value, "metadata_area") ||
 	    !strcmp(av->value, "backup_to_raw"))
+		return 1;
+	return 0;
+}
+
+int integritytype_arg(struct cmd_context *cmd, struct arg_values *av)
+{
+	if (!strcmp(av->value, "y") ||
+	    !strcmp(av->value, "n") ||
+	    !strcmp(av->value, "external") ||
+	    !strcmp(av->value, "internal"))
 		return 1;
 	return 0;
 }
