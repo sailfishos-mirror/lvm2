@@ -794,6 +794,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		mirror_default_cfg = (arg_uint_value(cmd, stripes_ARG, 1) > 1)
 			? global_raid10_segtype_default_CFG : global_mirror_segtype_default_CFG;
 		segtype_str = find_config_tree_str(cmd, mirror_default_cfg, NULL);
+	} else if (arg_is_set(cmd, integrity_ARG)) {
+		segtype_str = SEG_TYPE_NAME_INTEGRITY;
 	} else
 		segtype_str = SEG_TYPE_NAME_STRIPED;
 
@@ -828,6 +830,9 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	readahead_ARG,\
 	setactivationskip_ARG,\
 	test_ARG,\
+	integrity_ARG,\
+	integritymetadata_ARG,\
+	integritysettings_ARG,\
 	type_ARG
 
 #define CACHE_POOL_ARGS \
@@ -1225,6 +1230,11 @@ static int _lvcreate_params(struct cmd_context *cmd,
 			log_error("Unable to allocate memory for tag %s.", tag);
 			return 0;
 		}
+	}
+
+	if (seg_is_integrity(lp) || seg_is_raid(lp)) {
+		if (!get_integrity_options(cmd, &lp->integrity_arg, &lp->integrity_meta_name, &lp->integrity_settings))
+			return 0;
 	}
 
 	lcp->pv_count = argc;
@@ -1709,6 +1719,16 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
 
 		log_verbose("Making pool %s in VG %s using segtype %s",
 			    lp->pool_name ? : "with generated name", lp->vg_name, lp->segtype->name);
+	}
+
+	if (seg_is_integrity(lp) && lp->integrity_arg &&
+	    !strcmp(lp->integrity_arg, "internal")) {
+		log_warn("WARNING: integrity cannot be removed from LV with internal metadata.");
+		if (!arg_count(cmd, yes_ARG) &&
+		    (yes_no_prompt("Create LV with internal integrity metadata?") == 'n')) {
+			log_error("LV not created.");
+			goto_out;
+		}
 	}
 
 	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
