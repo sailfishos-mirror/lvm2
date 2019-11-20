@@ -3119,6 +3119,11 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 
 	/* Convert to linear? */
 	if (new_count == 1) {
+		if (seg_is_integrity(first_seg(lv))) {
+			log_error("RAID checksums must be disabled before converting to linear.");
+			return 0;
+		}
+
 		if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to type %s losing all resilience? [y/n]: ",
 					  lvseg_name(first_seg(lv)), display_lvname(lv), SEG_TYPE_NAME_LINEAR) == 'n') {
 			log_error("Logical volume %s NOT converted to \"%s\".",
@@ -3265,6 +3270,11 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 		return 0;
 	}
 
+	if (lv_raid_has_integrity(lv)) {
+		log_error("RAID checksums must be disabled before splitting.");
+		return 0;
+	}
+
 	if ((old_count - new_count) != 1) {
 		log_error("Unable to split more than one image from %s.",
 			  display_lvname(lv));
@@ -3328,9 +3338,11 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 	}
 
 	/* Convert to linear? */
-	if ((new_count == 1) && !_raid_remove_top_layer(lv, &removal_lvs)) {
-		log_error("Failed to remove RAID layer after linear conversion.");
-		return 0;
+	if (new_count == 1) {
+		if (!_raid_remove_top_layer(lv, &removal_lvs)) {
+			log_error("Failed to remove RAID layer after linear conversion.");
+			return 0;
+		}
 	}
 
 	/* Get first item */

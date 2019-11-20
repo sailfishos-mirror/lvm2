@@ -512,6 +512,13 @@ arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", pvmetadatacopies_VAL, 0, 0,
     "This may be useful in VGs containing many PVs (this places limitations\n"
     "on the ability to use vgsplit later.)\n")
 
+arg(raidintegrity_ARG, '\0', "raidintegrity", bool_VAL, 0, 0,
+    "Enable or disable data integrity checksums for raid images.\n")
+
+arg(raidintegritymode_ARG, '\0', "raidintegritymode", string_VAL, 0, 0,
+    "Use a bitmap (default) or journal for keeping integrity checksums consistent\n"
+    "in case of a crash.\n")
+
 arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
     "Run the command in a special read-only mode which will read on-disk\n"
     "metadata without needing to take any locks. This can be used to peek\n"

@@ -757,6 +757,14 @@ FLAGS: SECONDARY_SYNTAX
 
 ---
 
+lvconvert --raidintegrity Bool LV_raid
+OO: --raidintegritymode String, OO_LVCONVERT
+OP: PV ...
+ID: lvconvert_integrity
+DESC: Add or remove data integrity checksums to raid images.
+
+---
+
 # --extents is not specified; it's an automatic alternative for --size
 
 OO_LVCREATE: --addtag Tag, --alloc Alloc, --autobackup Bool, --activate Active,
@@ -870,7 +878,8 @@ DESC: Create a raid1 or mirror LV (infers --type raid1|mirror).
 # R9,R10,R11,R12 (--type raid with any use of --stripes/--mirrors)
 lvcreate --type raid --size SizeMB VG
 OO: --mirrors PNumber, --stripes Number, --stripesize SizeKB,
---regionsize RegionSize, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB, OO_LVCREATE
+--regionsize RegionSize, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB,
+--raidintegrity Bool, --raidintegritymode String, OO_LVCREATE
 OP: PV ...
 ID: lvcreate_raid_any
 DESC: Create a raid LV (a specific raid level must be used, e.g. raid1).
