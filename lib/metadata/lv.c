@@ -585,6 +585,8 @@ struct logical_volume *lv_origin_lv(const struct logical_volume *lv)
 		origin = first_seg(lv)->external_lv;
 	else if (lv_is_writecache(lv) && first_seg(lv)->origin)
 		origin = first_seg(lv)->origin;
+	else if (lv_is_integrity(lv) && first_seg(lv)->origin)
+		origin = first_seg(lv)->origin;
 
 	return origin;
 }
@@ -1200,10 +1202,13 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
 		repstr[0] = (lv_is_merging_origin(lv)) ? 'O' : 'o';
 	else if (lv_is_pool_metadata(lv) ||
 		 lv_is_pool_metadata_spare(lv) ||
-		 lv_is_raid_metadata(lv))
+		 lv_is_raid_metadata(lv) ||
+		 lv_is_integrity_metadata(lv))
 		repstr[0] = 'e';
 	else if (lv_is_cache_type(lv) || lv_is_writecache(lv))
 		repstr[0] = 'C';
+	else if (lv_is_integrity(lv))
+		repstr[0] = 'g';
 	else if (lv_is_raid(lv))
 		repstr[0] = (lv_is_not_synced(lv)) ? 'R' : 'r';
 	else if (lv_is_mirror(lv))
