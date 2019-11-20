@@ -2870,6 +2870,7 @@ int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
 int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 {
 	const struct logical_volume *active_lv;
+	const struct logical_volume *lv_use;
 	int ret;
 
 	/*
@@ -2888,19 +2889,30 @@ int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 		goto out;
 	}
 
+	if (lv->status & LV_UNCOMMITTED)
+		lv_use = lv;
+	else
+		lv_use = lv_committed(lv);
+
 	ret = lv_activate_with_filter(cmd, NULL, 0,
 				      (lv->status & LV_NOSCAN) ? 1 : 0,
 				      (lv->status & LV_TEMPORARY) ? 1 : 0,
-				      lv_committed(lv));
+				      lv_use);
 out:
 	return ret;
 }
 
 int deactivate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 {
+	const struct logical_volume *lv_use;
 	int ret;
 
-	ret = lv_deactivate(cmd, NULL, lv_committed(lv));
+	if (lv->status & LV_UNCOMMITTED)
+		lv_use = lv;
+	else
+		lv_use = lv_committed(lv);
+
+	ret = lv_deactivate(cmd, NULL, lv_use);
 
 	return ret;
 }
