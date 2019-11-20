@@ -1457,6 +1457,15 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 					return_0;
 			}
 
+			if (delete && seg_is_integrity(seg)) {
+				/* Remove integrity origin in addition to integrity layer. */
+				if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+				/* Remove integrity metadata. */
+				if (seg->integrity_meta_dev && !lv_remove(seg->integrity_meta_dev))
+					return_0;
+			}
+
 			if ((pool_lv = seg->pool_lv)) {
 				if (!detach_pool_lv(seg))
 					return_0;
@@ -5654,6 +5663,11 @@ int lv_resize(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_integrity(lv)) {
+		log_error("Resize not yet allowed on LVs with integrity.");
+		return 0;
+	}
+
 	if (!_lvresize_check(lv, lp))
 		return_0;
 
@@ -7410,6 +7424,12 @@ int insert_layer_for_segments_on_pv(struct cmd_context *cmd,
 	return 1;
 }
 
+/* FIXME: copied from label.c */
+#define BCACHE_BLOCK_SIZE_IN_SECTORS 256 /* 256*512 = 128K */
+#define BCACHE_BLOCK_SIZE_IN_BYTES 131072
+#define ONE_MB_IN_BYTES 1048576
+#define ONE_MB_IN_SECTORS 2048   /* 2048 * 512 = 1048576 */
+
 /*
  * Initialize the LV with 'value'.
  */
@@ -7468,7 +7488,44 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
 			stack;
 	}
 
-	if (wp.do_zero) {
+	if (wp.do_zero && !wp.zero_value && (wp.zero_sectors >= ONE_MB_IN_SECTORS)) {
+		uint64_t off = 0, i = 0, j = 0;
+		uint64_t zero_bytes;
+		uint32_t extra_bytes;
+
+		zero_bytes = wp.zero_sectors * 512;
+
+		if ((extra_bytes = (zero_bytes % ONE_MB_IN_BYTES)))
+			zero_bytes -= extra_bytes;
+
+		log_print("Zeroing %llu MiB...", (unsigned long long)(zero_bytes / ONE_MB_IN_BYTES));
+
+		/*
+		 * Write 1MiB at a time to avoid going over bcache size.
+		 * Then write 128KiB at a time to cover remaining dev size.
+		 */
+
+		for (i = 0; i < (zero_bytes / ONE_MB_IN_BYTES); i++) {
+			off = i * ONE_MB_IN_BYTES;
+			if (!dev_write_zeros(dev, off, (size_t)ONE_MB_IN_BYTES))
+				log_error("Failed to zero LV at offset %llu.", (unsigned long long)off);
+		}
+
+		if (extra_bytes) {
+			log_warn("Zeroing %u bytes at %llu...", extra_bytes, (unsigned long long)off);
+
+			for (j = 0; j < (extra_bytes / BCACHE_BLOCK_SIZE_IN_BYTES); j++) {
+				off = i * ONE_MB_IN_BYTES + j * BCACHE_BLOCK_SIZE_IN_BYTES;
+				if (!dev_write_zeros(dev, off, (size_t)BCACHE_BLOCK_SIZE_IN_BYTES))
+					log_error("Failed to zero LV at offset %llu.", (unsigned long long)off);
+			}
+		}
+
+		/* FIXME: bcache can't write partial block yet */
+		if ((extra_bytes = (wp.zero_sectors * 512) - (i * ONE_MB_IN_BYTES + j * BCACHE_BLOCK_SIZE_IN_BYTES)))
+			log_warn("WARNING: last %llu bytes not zeroed.", (unsigned long long)extra_bytes);
+
+	} else if (wp.do_zero) {
 		zero_sectors = wp.zero_sectors ? : UINT64_C(4096) >> SECTOR_SHIFT;
 
 		if (zero_sectors > lv->size)
@@ -7678,6 +7735,15 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
 	    (first_seg(lv)->origin ||
 	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
 		return 0;
+
+	/*
+	 * dm-integrity requires the first sector (integrity superblock) to be
+	 * zero when creating a new integrity device.
+	 * TODO: print a warning or error if the user specifically
+	 * asks for no wiping or zeroing?
+	 */
+	if (seg_is_integrity(lp))
+		return 1;
 
 	/* Cannot zero read-only volume */
 	if ((lv->status & LVM_WRITE) &&
@@ -7934,6 +8000,18 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* FIXME Eventually support raid/mirrors with -m */
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
 			return_0;
+
+	} else if (seg_is_integrity(lp)) {
+		/*
+		 * TODO: if using internal metadata, estimate the amount of metadata
+		 * that will be needed, and add this to the amount of PV space being
+		 * allocated so that the usable LV size is what the user requested.
+		 * Or, just request an extra extent_size bytes, then round the
+		 * provided_data_sectors down to be an extent_size multiple.
+		 */
+		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
+			return_0;
+
 	} else if (seg_is_mirrored(lp) || (seg_is_raid(lp) && !seg_is_any_raid0(lp))) {
 		if (!(lp->region_size = adjusted_mirror_region_size(vg->cmd,
 								    vg->extent_size,
@@ -8277,6 +8355,19 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			goto revert_new_lv;
 		}
 		lv->status &= ~LV_TEMPORARY;
+
+	} else if (seg_is_integrity(lp)) {
+		/*
+		 * Activate the new origin LV so it can be zeroed/wiped
+		 * below before adding integrity.
+		 */
+		lv->status |= LV_TEMPORARY;
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate new LV for wiping.");
+			goto revert_new_lv;
+		}
+		lv->status &= ~LV_TEMPORARY;
+
 	} else if (!lv_active_change(cmd, lv, lp->activate)) {
 		log_error("Failed to activate new LV %s.", display_lvname(lv));
 		goto deactivate_and_revert_new_lv;
@@ -8294,6 +8385,55 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 				  ? "snapshot exception store" : "start of new LV");
 			goto deactivate_and_revert_new_lv;
 		}
+	}
+
+	if (seg_is_integrity(lp)) {
+		struct wipe_params wipe;
+
+		log_verbose("Adding integrity to new LV");
+
+		/* Origin is active from zeroing, deactivate to add integrity. */
+
+		if (!deactivate_lv(cmd, lv)) {
+			log_error("Failed to deactivate LV to add integrity");
+			goto revert_new_lv;
+		}
+
+		if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_lv,
+				      lp->integrity_meta_name, &lp->integrity_settings))
+			goto revert_new_lv;
+
+		backup(vg);
+
+		/*
+		 * This zeroing is for the final integrity LV, which
+		 * initializes the integrity metadata (checksums).  It's
+		 * different from zeroing the first sector of the integrity
+		 * origin or integrity metadata.
+		 */
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate LV to zero integrity.");
+			goto out;
+		}
+
+		memset(&wipe, 0, sizeof(wipe));
+		wipe.do_zero = 1;
+		wipe.zero_sectors = first_seg(lv)->integrity_data_sectors;
+
+		log_print("Zeroing integrity checksums (%llu sectors) on LV %s",
+			  (unsigned long long)wipe.zero_sectors, display_lvname(lv));
+
+		if (!wipe_lv(lv, wipe))
+			log_error("Failed to zero integrity metadata.");
+
+		/* If the final requested state is inactive, then deactivate LV. */
+
+		if (!lv_active_change(cmd, lv, lp->activate)) {
+			log_error("Failed to activate new LV %s.", display_lvname(lv));
+			goto deactivate_and_revert_new_lv;
+		}
+
+		goto out;
 	}
 
 	if (seg_is_vdo_pool(lp)) {
