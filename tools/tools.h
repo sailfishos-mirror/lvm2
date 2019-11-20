@@ -186,6 +186,7 @@ int configreport_arg(struct cmd_context *cmd __attribute__((unused)), struct arg
 int configtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av);
 int repairtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av);
 int dumptype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av);
+int integritytype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av);
 
 /* we use the enums to access the switches */
 unsigned arg_count(const struct cmd_context *cmd, int a);
@@ -235,6 +236,9 @@ struct lv_prop *get_lv_prop(int lvp_enum);
 struct lv_type *get_lv_type(int lvt_enum);
 struct command *get_command(int cmd_enum);
 
+int get_integrity_options(struct cmd_context *cmd, const char **arg, const char **meta_name,
+                          struct integrity_settings *set);
+
 int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_refresh_cmd(struct cmd_context *cmd, int argc, char **argv);
@@ -273,6 +277,8 @@ int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_to_vdopool_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_to_vdopool_param_cmd(struct cmd_context *cmd, int argc, char **argv);
+
+int lvconvert_integrity_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int pvscan_display_cmd(struct cmd_context *cmd, int argc, char **argv);
 int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
