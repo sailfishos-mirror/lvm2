@@ -1269,6 +1269,20 @@ FLAGS: SECONDARY_SYNTAX
 
 ---
 
+lvcreate --type integrity --size SizeMB VG
+OO: --integrity String, --integritymetadata LV, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a LV with integrity.
+
+lvcreate --integrity String --size SizeMB VG
+OO: --type integrity, --integritymetadata LV, --integritysettings String, OO_LVCREATE
+OP: PV ...
+ID: lvcreate_integrity
+DESC: Create a LV with integrity (infers --type integrity).
+
+---
+
 lvdisplay
 OO: --aligned, --all, --binary, --colon, --columns,
 --configreport ConfigReport, --foreign, --history, --ignorelockingfailure,
