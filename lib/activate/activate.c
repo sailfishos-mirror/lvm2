@@ -325,22 +325,8 @@ int lv_resume_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned or
 {
 	return 1;
 }
-int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logical_volume *lv)
-{
-	return 1;
-}
 int lv_activation_filter(struct cmd_context *cmd, const char *lvid_s,
 			 int *activate_lv, const struct logical_volume *lv)
-{
-	return 1;
-}
-int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive, int noscan,
-		int temporary, const struct logical_volume *lv)
-{
-	return 1;
-}
-int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s, int exclusive,
-			    int noscan, int temporary, const struct logical_volume *lv)
 {
 	return 1;
 }
@@ -2413,7 +2399,7 @@ static int _lv_has_open_snapshots(const struct logical_volume *lv)
 	return r;
 }
 
-int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logical_volume *lv)
+static int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logical_volume *lv)
 {
 	struct lvinfo info;
 	static const struct lv_activate_opts laopts = { .skip_in_use = 1 };
@@ -2607,34 +2593,6 @@ static int _lv_activate(struct cmd_context *cmd, const char *lvid_s,
 		stack;
 out:
 	return r;
-}
-
-/* Activate LV */
-int lv_activate(struct cmd_context *cmd, const char *lvid_s, int exclusive,
-		int noscan, int temporary, const struct logical_volume *lv)
-{
-	struct lv_activate_opts laopts = { .exclusive = exclusive,
-					   .noscan = noscan,
-					   .temporary = temporary };
-
-	if (!_lv_activate(cmd, lvid_s, &laopts, 0, lv))
-		return_0;
-
-	return 1;
-}
-
-/* Activate LV only if it passes filter */
-int lv_activate_with_filter(struct cmd_context *cmd, const char *lvid_s, int exclusive,
-			    int noscan, int temporary, const struct logical_volume *lv)
-{
-	struct lv_activate_opts laopts = { .exclusive = exclusive,
-					   .noscan = noscan,
-					   .temporary = temporary };
-
-	if (!_lv_activate(cmd, lvid_s, &laopts, 1, lv))
-		return_0;
-
-	return 1;
 }
 
 int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv)
@@ -2867,10 +2825,18 @@ int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
 	return 1;
 }
 
-int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
+int activate_lv_opts(struct cmd_context *cmd, const struct logical_volume *lv,
+		     struct lv_activate_opts *laopts)
 {
 	const struct logical_volume *active_lv;
+	const struct logical_volume *lv_use;
 	int ret;
+
+	if (lv->status & LV_NOSCAN)
+		laopts->noscan = 1;
+
+	if (lv->status & LV_TEMPORARY)
+		laopts->temporary = 1;
 
 	/*
 	 * When trying activating component LV, make sure none of sub component
@@ -2888,19 +2854,34 @@ int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 		goto out;
 	}
 
-	ret = lv_activate_with_filter(cmd, NULL, 0,
-				      (lv->status & LV_NOSCAN) ? 1 : 0,
-				      (lv->status & LV_TEMPORARY) ? 1 : 0,
-				      lv_committed(lv));
+	if (lv->status & LV_UNCOMMITTED)
+		lv_use = lv;
+	else
+		lv_use = lv_committed(lv);
+
+	ret = _lv_activate(cmd, NULL, laopts, 1, lv_use);
 out:
 	return ret;
 }
 
+int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
+{
+	struct lv_activate_opts laopts = { 0 };
+
+	return activate_lv_opts(cmd, lv, &laopts);
+}
+
 int deactivate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 {
+	const struct logical_volume *lv_use;
 	int ret;
 
-	ret = lv_deactivate(cmd, NULL, lv_committed(lv));
+	if (lv->status & LV_UNCOMMITTED)
+		lv_use = lv;
+	else
+		lv_use = lv_committed(lv);
+
+	ret = lv_deactivate(cmd, NULL, lv_use);
 
 	return ret;
 }

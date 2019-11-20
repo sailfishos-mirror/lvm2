@@ -38,6 +38,7 @@ enum {
 	SEG_STRIPED,
 	SEG_ZERO,
 	SEG_WRITECACHE,
+	SEG_INTEGRITY,
 	SEG_THIN_POOL,
 	SEG_THIN,
 	SEG_VDO,
@@ -78,6 +79,7 @@ static const struct {
 	{ SEG_STRIPED, "striped" },
 	{ SEG_ZERO, "zero"},
 	{ SEG_WRITECACHE, "writecache"},
+	{ SEG_INTEGRITY, "integrity"},
 	{ SEG_THIN_POOL, "thin-pool"},
 	{ SEG_THIN, "thin"},
 	{ SEG_VDO, "vdo" },
@@ -221,6 +223,11 @@ struct load_segment {
 	int writecache_pmem;				/* writecache, 1 if pmem, 0 if ssd */
 	uint32_t writecache_block_size;			/* writecache, in bytes */
 	struct writecache_settings writecache_settings;	/* writecache */
+
+	uint64_t integrity_data_sectors;		/* integrity (provided_data_sectors) */
+	struct dm_tree_node *integrity_meta_node;	/* integrity */
+	struct integrity_settings integrity_settings;	/* integrity */
+	int integrity_recalculate;			/* integrity */
 };
 
 /* Per-device properties */
@@ -2705,6 +2712,88 @@ static int _writecache_emit_segment_line(struct dm_task *dmt,
 	return 1;
 }
 
+static int _integrity_emit_segment_line(struct dm_task *dmt,
+				    struct load_segment *seg,
+				    char *params, size_t paramsize)
+{
+	struct integrity_settings *set = &seg->integrity_settings;
+	int pos = 0;
+	int count;
+	char origin_dev[DM_FORMAT_DEV_BUFSIZE];
+	char meta_dev[DM_FORMAT_DEV_BUFSIZE];
+
+	if (!_build_dev_string(origin_dev, sizeof(origin_dev), seg->origin))
+		return_0;
+
+	if (seg->integrity_meta_node &&
+	    !_build_dev_string(meta_dev, sizeof(meta_dev), seg->integrity_meta_node))
+		return_0;
+
+	count = 1; /* for internal_hash which we always pass in */
+
+	if (seg->integrity_meta_node)
+		count++;
+
+	if (seg->integrity_recalculate)
+		count++;
+
+	if (set->journal_sectors_set)
+		count++;
+	if (set->interleave_sectors_set)
+		count++;
+	if (set->buffer_sectors_set)
+		count++;
+	if (set->journal_watermark_set)
+		count++;
+	if (set->commit_time_set)
+		count++;
+	if (set->block_size_set)
+		count++;
+	if (set->bitmap_flush_interval_set)
+		count++;
+	if (set->sectors_per_bit_set)
+		count++;
+
+	EMIT_PARAMS(pos, "%s 0 %u %s %d internal_hash:%s",
+		    origin_dev,
+		    set->tag_size,
+		    set->mode,
+		    count,
+		    set->internal_hash);
+
+	if (seg->integrity_meta_node)
+		EMIT_PARAMS(pos, " meta_device:%s", meta_dev);
+
+	if (seg->integrity_recalculate)
+		EMIT_PARAMS(pos, " recalculate");
+
+	if (set->journal_sectors_set)
+		EMIT_PARAMS(pos, " journal_sectors:%u", set->journal_sectors);
+
+	if (set->interleave_sectors_set)
+		EMIT_PARAMS(pos, " ineterleave_sectors:%u", set->interleave_sectors);
+
+	if (set->buffer_sectors_set)
+		EMIT_PARAMS(pos, " buffer_sectors:%u", set->buffer_sectors);
+
+	if (set->journal_watermark_set)
+		EMIT_PARAMS(pos, " journal_watermark:%u", set->journal_watermark);
+
+	if (set->commit_time_set)
+		EMIT_PARAMS(pos, " commit_time:%u", set->commit_time);
+
+	if (set->block_size_set)
+		EMIT_PARAMS(pos, " block_size:%u", set->block_size);
+
+	if (set->bitmap_flush_interval_set)
+		EMIT_PARAMS(pos, " bitmap_flush_interval:%u", set->bitmap_flush_interval);
+
+	if (set->sectors_per_bit_set)
+		EMIT_PARAMS(pos, " sectors_per_bit:%llu", (unsigned long long)set->sectors_per_bit);
+
+	return 1;
+}
+
 static int _thin_pool_emit_segment_line(struct dm_task *dmt,
 					struct load_segment *seg,
 					char *params, size_t paramsize)
@@ -2889,6 +2978,10 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 		if (!_writecache_emit_segment_line(dmt, seg, params, paramsize))
 			return_0;
 		break;
+	case SEG_INTEGRITY:
+		if (!_integrity_emit_segment_line(dmt, seg, params, paramsize))
+			return_0;
+		break;
 	}
 
 	switch(seg->type) {
@@ -2901,6 +2994,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 	case SEG_THIN:
 	case SEG_CACHE:
 	case SEG_WRITECACHE:
+	case SEG_INTEGRITY:
 		break;
 	case SEG_CRYPT:
 	case SEG_LINEAR:
@@ -3734,6 +3828,42 @@ int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
 		seg->writecache_settings.new_key = dm_pool_strdup(node->dtree->mem, settings->new_key);
 		seg->writecache_settings.new_val = dm_pool_strdup(node->dtree->mem, settings->new_val);
 	}
+
+	return 1;
+}
+
+int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
+				  uint64_t size,
+				  const char *origin_uuid,
+				  const char *meta_uuid,
+				  struct integrity_settings *settings,
+				  int recalculate)
+{
+	struct load_segment *seg;
+
+	if (!(seg = _add_segment(node, SEG_INTEGRITY, size)))
+		return_0;
+
+	if (meta_uuid) {
+		if (!(seg->integrity_meta_node = dm_tree_find_node_by_uuid(node->dtree, meta_uuid))) {
+			log_error("Missing integrity's meta uuid %s.", meta_uuid);
+			return 0;
+		}
+
+		if (!_link_tree_nodes(node, seg->integrity_meta_node))
+			return_0;
+	}
+
+	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree, origin_uuid))) {
+		log_error("Missing integrity's origin uuid %s.", origin_uuid);
+		return 0;
+	}
+	if (!_link_tree_nodes(node, seg->origin))
+		return_0;
+
+	memcpy(&seg->integrity_settings, settings, sizeof(struct integrity_settings));
+
+	seg->integrity_recalculate = recalculate;
 
 	return 1;
 }
