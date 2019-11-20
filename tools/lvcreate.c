@@ -785,6 +785,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		mirror_default_cfg = (arg_uint_value(cmd, stripes_ARG, 1) > 1)
 			? global_raid10_segtype_default_CFG : global_mirror_segtype_default_CFG;
 		segtype_str = find_config_tree_str(cmd, mirror_default_cfg, NULL);
+	} else if (arg_is_set(cmd, integrity_ARG)) {
+		segtype_str = SEG_TYPE_NAME_INTEGRITY;
 	} else
 		segtype_str = SEG_TYPE_NAME_STRIPED;
 
@@ -1218,6 +1220,11 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		}
 	}
 
+	if (seg_is_integrity(lp)) {
+		if (!get_integrity_options(cmd, &lp->integrity_arg, &lp->integrity_meta_name, &lp->integrity_settings))
+			return 0;
+	}
+
 	lcp->pv_count = argc;
 	lcp->pvs = argv;
 
@@ -1575,6 +1582,13 @@ static int _check_zero_parameters(struct cmd_context *cmd, struct lvcreate_param
 	if (seg_is_thin(lp))
 		return 1;
 
+	if (seg_is_integrity(lp)) {
+		if (lp->zero && !is_change_activating(lp->activate)) {
+			log_error("Zeroing integrity is not compatible with inactive creation (-an).");
+			return 0;
+		}
+	}
+
 	/* If there is some problem, buffer will not be empty */
 	if (dm_snprintf(buf, sizeof(buf), "%s%s%s%s%s%s%s",
 			lp->origin_name ? "origin " : "",
@@ -1702,6 +1716,24 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
 			    lp->pool_name ? : "with generated name", lp->vg_name, lp->segtype->name);
 	}
 
+	/*
+	 * Create an LV to hold integrity metadata when:
+	 *
+	 * . The user wants external (not internal) metadata.  External
+	 *   is indicated by: no option set (external is default), or
+	 *   --integrity y|external.
+	 *
+	 * . The user did not specify an existing metadata LV with
+	 *   --integritymetadata, saved as lp->integrity_meta_name.
+	 */
+	if (seg_is_integrity(lp) && !lp->integrity_meta_name &&
+	    (!lp->integrity_arg ||
+	     !strcmp(lp->integrity_arg, "external") ||
+	     !strcmp(lp->integrity_arg, "y"))) {
+		if (!lv_create_integrity_metadata(cmd, vg, lp))
+			goto_out;
+	}
+
 	if (vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
 		if (!handle_sanlock_lv(cmd, vg)) {
 			log_error("No space for sanlock lock, extend the internal lvmlock LV.");
@@ -1775,5 +1807,13 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 
 	_destroy_lvcreate_params(&lp);
 	destroy_processing_handle(cmd, handle);
+
+	if (lp.integrity_bytes_to_zero) {
+		if (!lp.zero)
+			log_warn("WARNING: not zeroing integrity LV, read errors are possible.");
+		else
+			zero_lv_name(cmd, lp.vg_name, lp.lv_name, lp.integrity_bytes_to_zero);
+	}
+
 	return ret;
 }

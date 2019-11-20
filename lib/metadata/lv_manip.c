@@ -28,6 +28,7 @@
 #include "lib/datastruct/str_list.h"
 #include "lib/config/defaults.h"
 #include "lib/misc/lvm-exec.h"
+#include "lib/misc/lvm-signal.h"
 #include "lib/mm/memlock.h"
 #include "lib/locking/lvmlockd.h"
 #include "lib/label/label.h"
@@ -54,6 +55,8 @@ typedef enum {
 
 #define A_POSITIONAL_FILL	0x40	/* Slots are positional and filled using PREFERRED */
 #define A_PARTITION_BY_TAGS	0x80	/* No allocated area may share any tag with any other */
+
+#define ONE_MB_IN_BYTES 1048576
 
 /*
  * Constant parameters during a single allocation attempt.
@@ -1454,6 +1457,15 @@ static int _lv_reduce(struct logical_volume *lv, uint32_t extents, int delete)
 					if (seg->pool_lv && !detach_pool_lv(seg))
 						return_0;
 				} else if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+			}
+
+			if (delete && seg_is_integrity(seg)) {
+				/* Remove integrity origin in addition to integrity layer. */
+				if (!lv_remove(seg_lv(seg, 0)))
+					return_0;
+				/* Remove integrity metadata. */
+				if (seg->integrity_meta_dev && !lv_remove(seg->integrity_meta_dev))
 					return_0;
 			}
 
@@ -5654,6 +5666,11 @@ int lv_resize(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_integrity(lv)) {
+		log_error("Resize not yet allowed on LVs with integrity.");
+		return 0;
+	}
+
 	if (!_lvresize_check(lv, lp))
 		return_0;
 
@@ -7410,6 +7427,89 @@ int insert_layer_for_segments_on_pv(struct cmd_context *cmd,
 	return 1;
 }
 
+int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t lv_size_bytes)
+{
+	char name[PATH_MAX];
+	struct device *dev;
+	uint64_t off = 0, i = 0, j = 0;
+	uint64_t zero_bytes;
+	uint32_t extra_bytes;
+
+	if (dm_snprintf(name, sizeof(name), "%s%s/%s", cmd->dev_dir, vg_name, lv_name) < 0) {
+		log_error("Device path name too long, device not zeroed (%s).", lv_name);
+		return 0;
+	}
+
+	if (!(dev = dev_cache_get(cmd, name, NULL))) {
+		log_error("Failed to find device %s: device not zeroed.", name);
+		return 0;
+	}
+
+	if (!label_scan_open_rw(dev)) {
+		log_error("Failed to open %s: device not zeroed.", name);
+		return 0;
+	}
+
+	zero_bytes = lv_size_bytes;
+
+	log_print("Zeroing %s %s... (cancel command to zero manually)",
+		  name, display_size(cmd, zero_bytes/512));
+
+	if ((extra_bytes = (zero_bytes % ONE_MB_IN_BYTES)))
+		zero_bytes -= extra_bytes;
+
+	/*
+	 * Write 1MiB at a time to avoid going over bcache size.
+	 * Then write 128KiB (bcache block sizes) at a time to
+	 * cover remaining dev size.
+	 */
+
+	sigint_allow();
+
+	for (i = 0; i < (zero_bytes / ONE_MB_IN_BYTES); i++) {
+		off = i * ONE_MB_IN_BYTES;
+		if (!dev_write_zeros(dev, off, (size_t)ONE_MB_IN_BYTES))
+			log_error("Failed to zero LV at offset %llu.", (unsigned long long)off);
+
+		if (off && !(off % (1024 * ONE_MB_IN_BYTES)))
+			log_print("Zeroed %s...", display_size(cmd, off/512));
+
+		if (sigint_caught()) {
+			log_print("Zeroing canceled.");
+			goto out;
+		}
+
+	}
+
+	if (extra_bytes) {
+		log_debug("Zeroing final %u bytes at %llu.", extra_bytes, (unsigned long long)off);
+
+		for (j = 0; j < (extra_bytes / BCACHE_BLOCK_SIZE_IN_BYTES); j++) {
+			off = i * ONE_MB_IN_BYTES + j * BCACHE_BLOCK_SIZE_IN_BYTES;
+			if (!dev_write_zeros(dev, off, (size_t)BCACHE_BLOCK_SIZE_IN_BYTES))
+				log_error("Failed to zero LV at offset %llu.", (unsigned long long)off);
+
+			if (sigint_caught()) {
+				log_print("Zeroing canceled.");
+				goto out;
+			}
+		}
+	}
+
+	/*
+	 * FIXME: bcache can't write partial blocks yet.
+	 * This shouldn't actually happen given current
+	 * usage where LV size is a multiple of extents.
+	 */
+	if ((extra_bytes = lv_size_bytes - (i * ONE_MB_IN_BYTES + j * BCACHE_BLOCK_SIZE_IN_BYTES)))
+		log_warn("WARNING: last %llu bytes not zeroed.", (unsigned long long)extra_bytes);
+
+out:
+	sigint_restore();
+	label_scan_invalidate(dev);
+	return 1;
+}
+
 /*
  * Initialize the LV with 'value'.
  */
@@ -7679,6 +7779,15 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
 	     first_seg(first_seg(lv)->pool_lv)->zero_new_blocks))
 		return 0;
 
+	/*
+	 * dm-integrity requires the first sector (integrity superblock) to be
+	 * zero when creating a new integrity device.
+	 * TODO: print a warning or error if the user specifically
+	 * asks for no wiping or zeroing?
+	 */
+	if (seg_is_integrity(lp))
+		return 1;
+
 	/* Cannot zero read-only volume */
 	if ((lv->status & LVM_WRITE) &&
 	    (lp->zero || lp->wipe_signatures))
@@ -7934,6 +8043,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* FIXME Eventually support raid/mirrors with -m */
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
 			return_0;
+
+	} else if (seg_is_integrity(lp)) {
+		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
+			return_0;
+
 	} else if (seg_is_mirrored(lp) || (seg_is_raid(lp) && !seg_is_any_raid0(lp))) {
 		if (!(lp->region_size = adjusted_mirror_region_size(vg->cmd,
 								    vg->extent_size,
@@ -8277,6 +8391,19 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			goto revert_new_lv;
 		}
 		lv->status &= ~LV_TEMPORARY;
+
+	} else if (seg_is_integrity(lp)) {
+		/*
+		 * Activate the new origin LV so it can be zeroed/wiped
+		 * below before adding integrity.
+		 */
+		lv->status |= LV_TEMPORARY;
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate new LV for wiping.");
+			goto revert_new_lv;
+		}
+		lv->status &= ~LV_TEMPORARY;
+
 	} else if (!lv_active_change(cmd, lv, lp->activate)) {
 		log_error("Failed to activate new LV %s.", display_lvname(lv));
 		goto deactivate_and_revert_new_lv;
@@ -8294,6 +8421,53 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 				  ? "snapshot exception store" : "start of new LV");
 			goto deactivate_and_revert_new_lv;
 		}
+	}
+
+	if (seg_is_integrity(lp)) {
+		log_verbose("Adding integrity to new LV");
+
+		/* Origin is active from zeroing, deactivate to add integrity. */
+
+		if (!deactivate_lv(cmd, lv)) {
+			log_error("Failed to deactivate LV to add integrity");
+			goto revert_new_lv;
+		}
+
+		if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_lv,
+				      lp->integrity_meta_name, &lp->integrity_settings))
+			goto revert_new_lv;
+
+		backup(vg);
+
+		/*
+		 * The standard option combination should be -Zy -ay, in which
+		 * case we activate here, and zero at the end of the command.
+		 * The invalid combination -Zy -an has been prevented earlier.
+		 * The combination -Zn -an involves no zeroing or activation.
+		 * For combination -Zn -ay we activate here.
+		 */
+		if (lp->zero) {
+			/* Activate for zeroing at the end of lvcreate. */
+		       	if (!activate_lv(cmd, lv)) {
+				log_error("Failed to activate LV %s.", display_lvname(lv));
+				goto out;
+			}
+		} else if (!lp->zero && is_change_activating(lp->activate)) {
+		       	if (!activate_lv(cmd, lv)) {
+				log_error("Failed to activate LV %s.", display_lvname(lv));
+				goto out;
+			}
+		}
+
+		/*
+		 * The entire LV is zeroed, which can take a long time,
+		 * so defer this to the end of the command when no locks
+		 * are held, and the command can be canceled without
+		 * problems (if the user doesn't want to wait, or wants
+		 * to do the zeroing themselves.)
+		 */
+		lp->integrity_bytes_to_zero = first_seg(lv)->integrity_data_sectors * 512;
+		goto out;
 	}
 
 	if (seg_is_vdo_pool(lp)) {

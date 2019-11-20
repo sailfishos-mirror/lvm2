@@ -84,12 +84,14 @@
 #define CONVERTING		UINT64_C(0x0000000000400000)	/* LV */
 
 #define MISSING_PV		UINT64_C(0x0000000000800000)	/* PV */
+#define INTEGRITY		UINT64_C(0x0000000000800000)	/* LV - Internal use only */
 #define PV_MOVED_VG		UINT64_C(0x4000000000000000)	/* PV - Moved to a new VG */
 #define PARTIAL_LV		UINT64_C(0x0000000001000000)	/* LV - derived flag, not
 							   written out in metadata*/
 
 //#define POSTORDER_FLAG	UINT64_C(0x0000000002000000) /* Not real flags, reserved for
 //#define POSTORDER_OPEN_FLAG	UINT64_C(0x0000000004000000)    temporary use inside vg_read_internal. */
+#define LV_UNCOMMITTED		UINT64_C(0x0000000002000000)
 #define VIRTUAL_ORIGIN		UINT64_C(0x0000000008000000)	/* LV - internal use only */
 
 #define MERGING			UINT64_C(0x0000000010000000)	/* LV SEG */
@@ -261,6 +263,7 @@
 #define lv_is_pool_metadata_spare(lv)	(((lv)->status & POOL_METADATA_SPARE) ? 1 : 0)
 #define lv_is_lockd_sanlock_lv(lv)	(((lv)->status & LOCKD_SANLOCK_LV) ? 1 : 0)
 #define lv_is_writecache(lv)   (((lv)->status & WRITECACHE) ? 1 : 0)
+#define lv_is_integrity(lv)   (((lv)->status & INTEGRITY) ? 1 : 0)
 
 #define lv_is_vdo(lv)		(((lv)->status & LV_VDO) ? 1 : 0)
 #define lv_is_vdo_pool(lv)	(((lv)->status & LV_VDO_POOL) ? 1 : 0)
@@ -518,6 +521,10 @@ struct lv_segment {
 	struct logical_volume *writecache;	/* For writecache */
 	uint32_t writecache_block_size;		/* For writecache */
 	struct writecache_settings writecache_settings; /* For writecache */
+
+	uint64_t integrity_data_sectors;
+	struct logical_volume *integrity_meta_dev;
+	struct integrity_settings integrity_settings;
 
 	struct dm_vdo_target_params vdo_params;	/* For VDO-pool */
 	uint32_t vdo_pool_header_size;		/* For VDO-pool */
@@ -992,6 +999,12 @@ struct lvcreate_params {
 	alloc_policy_t alloc; /* all */
 	struct dm_vdo_target_params vdo_params; /* vdo */
 
+	const char *integrity_arg;
+	const char *integrity_meta_name; /* external LV is user-specified */
+	struct logical_volume *integrity_meta_lv; /* external LV we create */
+	struct integrity_settings integrity_settings;
+	uint64_t integrity_bytes_to_zero; /* zeros the final LV after it's created */
+
 	struct dm_list tags;	/* all */
 
 	int yes;
@@ -1384,5 +1397,15 @@ int lv_on_pmem(struct logical_volume *lv);
 int vg_is_foreign(struct volume_group *vg);
 
 void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg);
+
+int lv_add_integrity(struct logical_volume *lv, const char *arg,
+		     struct logical_volume *meta_lv_created,
+		     const char *meta_name, struct integrity_settings *settings);
+int lv_create_integrity_metadata(struct cmd_context *cmd,
+			struct volume_group *vg,
+			struct lvcreate_params *lp);
+int lv_remove_integrity(struct logical_volume *lv);
+
+int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t zero_bytes);
 
 #endif
