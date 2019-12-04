@@ -7473,11 +7473,12 @@ int insert_layer_for_segments_on_pv(struct cmd_context *cmd,
 	return 1;
 }
 
-int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t lv_size_bytes)
+int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t lv_size_sectors)
 {
 	char name[PATH_MAX];
 	struct device *dev;
 	uint64_t off = 0, i = 0, j = 0;
+	uint64_t lv_size_bytes = lv_size_sectors * 512;
 	uint64_t zero_bytes;
 	uint32_t extra_bytes;
 
@@ -7831,7 +7832,7 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
 	 * TODO: print a warning or error if the user specifically
 	 * asks for no wiping or zeroing?
 	 */
-	if (seg_is_integrity(lp))
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg))
 		return 1;
 
 	/* Cannot zero read-only volume */
@@ -8438,7 +8439,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 		lv->status &= ~LV_TEMPORARY;
 
-	} else if (seg_is_integrity(lp)) {
+	} else if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
 		/*
 		 * Activate the new origin LV so it can be zeroed/wiped
 		 * below before adding integrity.
@@ -8469,7 +8470,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 	}
 
-	if (seg_is_integrity(lp)) {
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
 		log_verbose("Adding integrity to new LV");
 
 		/* Origin is active from zeroing, deactivate to add integrity. */
@@ -8480,7 +8481,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 
 		if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_lv,
-				      lp->integrity_meta_name, &lp->integrity_settings))
+				      lp->integrity_meta_name, &lp->integrity_settings, lp->pvh,
+				      &lp->zero_data_sectors))
 			goto revert_new_lv;
 
 		backup(vg);
@@ -8512,7 +8514,6 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		 * problems (if the user doesn't want to wait, or wants
 		 * to do the zeroing themselves.)
 		 */
-		lp->integrity_bytes_to_zero = first_seg(lv)->integrity_data_sectors * 512;
 		goto out;
 	}
 

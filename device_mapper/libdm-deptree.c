@@ -2750,6 +2750,9 @@ static int _integrity_emit_segment_line(struct dm_task *dmt,
 	if (set->sectors_per_bit_set)
 		count++;
 
+	if (set->recalculate)
+		count++;
+
 	EMIT_PARAMS(pos, "%s 0 %u %s %d internal_hash:%s",
 		    origin_dev,
 		    set->tag_size,
@@ -2783,6 +2786,9 @@ static int _integrity_emit_segment_line(struct dm_task *dmt,
 
 	if (set->sectors_per_bit_set)
 		EMIT_PARAMS(pos, " sectors_per_bit:%llu", (unsigned long long)set->sectors_per_bit);
+
+	if (set->recalculate)
+		EMIT_PARAMS(pos, " recalculate");
 
 	return 1;
 }

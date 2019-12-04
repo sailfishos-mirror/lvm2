@@ -1001,6 +1001,8 @@ struct integrity_settings {
 	unsigned block_size_set:1;
 	unsigned bitmap_flush_interval_set:1;
 	unsigned sectors_per_bit_set:1;
+
+	int recalculate; /* not persistent */
 };
 
 int dm_tree_node_add_integrity_target(struct dm_tree_node *node,

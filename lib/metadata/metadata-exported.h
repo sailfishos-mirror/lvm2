@@ -1007,7 +1007,7 @@ struct lvcreate_params {
 	const char *integrity_meta_name; /* external LV is user-specified */
 	struct logical_volume *integrity_meta_lv; /* external LV we create */
 	struct integrity_settings integrity_settings;
-	uint64_t integrity_bytes_to_zero; /* zeros the final LV after it's created */
+	uint64_t zero_data_sectors; /* the resulting size that should be zeroed at the end */
 
 	struct dm_list tags;	/* all */
 
@@ -1406,12 +1406,14 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg);
 
 int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		     struct logical_volume *meta_lv_created,
-		     const char *meta_name, struct integrity_settings *settings);
+		     const char *meta_name, struct integrity_settings *settings,
+		     struct dm_list *pvh,
+		     uint64_t *zero_data_sectors);
 int lv_create_integrity_metadata(struct cmd_context *cmd,
 			struct volume_group *vg,
 			struct lvcreate_params *lp);
 int lv_remove_integrity(struct logical_volume *lv);
 
-int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t zero_bytes);
+int zero_lv_name(struct cmd_context *cmd, const char *vg_name, const char *lv_name, uint64_t lv_size_sectors);
 
 #endif

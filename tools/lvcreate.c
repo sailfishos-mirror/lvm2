@@ -848,6 +848,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	poolmetadataspare_ARG
 
 #define RAID_ARGS \
+	integrity_ARG,\
+	integritysettings_ARG,\
 	maxrecoveryrate_ARG,\
 	minrecoveryrate_ARG,\
 	raidmaxrecoveryrate_ARG,\
@@ -1220,7 +1222,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		}
 	}
 
-	if (seg_is_integrity(lp)) {
+	if (seg_is_integrity(lp) || seg_is_raid(lp)) {
 		if (!get_integrity_options(cmd, &lp->integrity_arg, &lp->integrity_meta_name, &lp->integrity_settings))
 			return 0;
 	}
@@ -1808,11 +1810,15 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 	_destroy_lvcreate_params(&lp);
 	destroy_processing_handle(cmd, handle);
 
-	if (lp.integrity_bytes_to_zero) {
+	/*
+	 * When set, the final LV should be zeroed (set by add_integrity
+	 * to intialize integrity metadata/checksums).
+	 */
+	if (lp.zero_data_sectors) {
 		if (!lp.zero)
 			log_warn("WARNING: not zeroing integrity LV, read errors are possible.");
 		else
-			zero_lv_name(cmd, lp.vg_name, lp.lv_name, lp.integrity_bytes_to_zero);
+			zero_lv_name(cmd, lp.vg_name, lp.lv_name, lp.zero_data_sectors);
 	}
 
 	return ret;

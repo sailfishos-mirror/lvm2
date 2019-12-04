@@ -203,10 +203,277 @@ int lv_remove_integrity(struct logical_volume *lv)
 	return 1;
 }
 
+/*
+ * Add integrity to each raid image.
+ *
+ * for each rimage_N:
+ * . create and allocate a new linear LV rimage_N_imeta
+ * . move the segments from rimage_N to a new rimage_N_iorig
+ * . add an integrity segment to rimage_N with
+ *   origin=rimage_N_iorig, meta_dev=rimage_N_imeta
+ *
+ * Before:
+ * rimage_0
+ *   segment1: striped: pv0:A
+ * rimage_1
+ *   segment1: striped: pv1:B
+ *
+ * After:
+ * rimage_0
+ *   segment1: integrity: rimage_0_iorig, rimage_0_imeta
+ * rimage_1
+ *   segment1: integrity: rimage_1_iorig, rimage_1_imeta
+ * rimage_0_iorig
+ *   segment1: striped: pv0:A
+ * rimage_1_iorig
+ *   segment1: striped: pv1:B
+ * rimage_0_imeta
+ *   segment1: striped: pv2:A
+ * rimage_1_imeta
+ *   segment1: striped: pv2:B
+ *    
+ */
+
+static int _lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
+				     struct integrity_settings *settings,
+				     struct dm_list *pvh,
+				     uint64_t *zero_data_sectors)
+{
+	struct lvcreate_params lp;
+	struct logical_volume *imeta_lvs[DEFAULT_RAID_MAX_IMAGES];
+	struct cmd_context *cmd = lv->vg->cmd;
+	struct volume_group *vg = lv->vg;
+	struct logical_volume *lv_image, *lv_imeta, *lv_iorig;
+	struct lv_segment *seg_top, *seg_image;
+	const struct segment_type *segtype;
+	struct integrity_settings *set;
+	uint64_t lv_image_size; /* sectors */
+	uint64_t status_data_sectors;
+	uint32_t area_count, s;
+	int internal_metadata;
+	int ret = 1;
+
+	memset(imeta_lvs, 0, sizeof(imeta_lvs));
+
+	if (dm_list_size(&lv->segments) != 1)
+		return_0;
+
+	seg_top = first_seg(lv);
+	area_count = seg_top->area_count;
+
+	if ((internal_metadata = !strcmp(arg, "internal"))) {
+		/*
+		 * FIXME: raid on internal integrity might not be used widely
+		 * enough to enable, given the additional complexity/support.
+		 * i.e. nearly everyone may just use external metadata.
+		 *
+		 * FIXME: _info_run() needs code to adjust the length, like
+		 * is done for if (lv_is_integrity()) length = ...
+		 */
+		/* goto skip_imeta; */
+		log_error("Internal integrity metadata is not yet supported with raid.");
+		return 0;
+	}
+
+	/*
+	 * For each rimage, create an _imeta LV for integrity metadata.
+	 * Each needs to be zeroed.
+	 */
+	for (s = 0; s < area_count; s++) {
+		struct logical_volume *meta_lv;
+		struct wipe_params wipe;
+
+		if (s >= DEFAULT_RAID_MAX_IMAGES)
+			return_0;
+
+		lv_image = seg_lv(seg_top, s);
+
+		if (!seg_is_striped(first_seg(lv_image))) {
+			log_error("raid1 image must be linear to add integrity");
+			return_0;
+		}
+
+		/*
+		 * allocate a new linear LV NAME_rimage_N_imeta
+		 * lv_create_integrity_metadata() returns its result in lp
+		 */
+		memset(&lp, 0, sizeof(lp));
+		lp.lv_name = lv_image->name;
+		lp.pvh = pvh;
+		lp.extents = lv_image->size / vg->extent_size;
+
+		if (!lv_create_integrity_metadata(cmd, vg, &lp)) {
+			return_0;
+		}
+		meta_lv = lp.integrity_meta_lv;
+
+		/*
+		 * dm-integrity requires the metadata LV header to be zeroed.
+		 */
+
+		if (!activate_lv(cmd, meta_lv)) {
+			log_error("Failed to activate LV %s to zero", display_lvname(meta_lv));
+			return 0;
+		}
+
+		memset(&wipe, 0, sizeof(wipe));
+		wipe.do_zero = 1;
+		wipe.zero_sectors = 8;
+
+		if (!wipe_lv(meta_lv, wipe)) {
+			log_error("Failed to zero LV for integrity metadata %s", display_lvname(meta_lv));
+			return 0;
+		}
+
+		if (!deactivate_lv(cmd, meta_lv)) {
+			log_error("Failed to deactivate LV %s after zero", display_lvname(meta_lv));
+			return 0;
+		}
+
+		/* Used below to set up the new integrity segment. */
+		imeta_lvs[s] = meta_lv;
+	}
+
+/* skip_imeta: */
+
+	/*
+	 * For each rimage, move its segments to a new rimage_iorig and give
+	 * the rimage a new integrity segment.
+	 */
+	for (s = 0; s < area_count; s++) {
+		lv_image = seg_lv(seg_top, s);
+
+		lv_image_size = lv_image->size; /* sectors */
+
+		if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_INTEGRITY)))
+			return_0;
+
+		log_debug("Adding integrity to raid image %s", lv_image->name);
+
+		/*
+		 * "lv_iorig" is a new LV with new id, but with the segments
+		 * from "lv_image". "lv_image" keeps the existing name and id,
+		 * but gets a new integrity segment, in place of the segments
+		 * that were moved to lv_iorig.
+		 */
+		if (!(lv_iorig = insert_layer_for_lv(cmd, lv_image, INTEGRITY, "_iorig")))
+			return_0;
+
+		lv_image->status |= INTEGRITY;
+
+		/*
+		 * Set up the new first segment of lv_image as integrity.
+		 */
+		seg_image = first_seg(lv_image);
+		seg_image->segtype = segtype;
+
+		if (internal_metadata) {
+			/* dm-integrity wants temp/fake size of 1 to report usable size */
+			lv_image->size = 1;
+			seg_image->integrity_data_sectors = 1;
+		} else {
+			lv_imeta = imeta_lvs[s]; /* external metadata lv created above */
+			lv_imeta->status |= INTEGRITY_METADATA;
+			lv_set_hidden(lv_imeta);
+			seg_image->integrity_data_sectors = lv_image_size;
+			seg_image->integrity_meta_dev = lv_imeta;
+		}
+
+		memcpy(&seg_image->integrity_settings, settings, sizeof(struct integrity_settings));
+		set = &seg_image->integrity_settings;
+
+		if (!set->mode[0])
+			set->mode[0] = DEFAULT_MODE;
+
+		if (!set->tag_size)
+			set->tag_size = DEFAULT_TAG_SIZE;
+
+		if (!set->internal_hash)
+	       		set->internal_hash = DEFAULT_INTERNAL_HASH;
+
+		set->recalculate = 1; /* enable integrity initialization in the kernel */
+	}
+
+	if (internal_metadata) {
+		/* Get the size from the first image, the others will be the same. */
+		lv_image = seg_lv(seg_top, 0);
+
+		lv_image->status |= LV_TEMPORARY;
+		lv_image->status |= LV_NOSCAN;
+		lv_image->status |= LV_UNCOMMITTED;
+
+		log_debug("Activating temporary integrity LV to get data sectors.");
+
+		if (!activate_lv(cmd, lv_image)) {
+			log_error("Failed to activate temporary integrity.");
+			ret = 0;
+			goto out;
+		}
+
+		if (!_get_provided_data_sectors(lv_image, &status_data_sectors)) {
+			log_error("Failed to get data sectors from dm-integrity");
+			ret = 0;
+		} else {
+			log_print("Found integrity provided_data_sectors %llu", (unsigned long long)status_data_sectors);
+			ret = 1;
+		}
+
+		if (!status_data_sectors) {
+			log_error("LV size too small to include metadata.");
+			ret = 0;
+		}
+
+		lv_image->status |= LV_UNCOMMITTED;
+
+		if (!deactivate_lv(cmd, lv_image)) {
+			log_error("Failed to deactivate temporary integrity.");
+			ret = 0;
+		}
+
+		if (!ret)
+			goto_out;
+
+		lv_image->status &= ~LV_UNCOMMITTED;
+		lv_image->status &= ~LV_NOSCAN;
+		lv_image->status &= ~LV_TEMPORARY;
+
+		for (s = 0; s < area_count; s++) {
+			lv_image = seg_lv(seg_top, s);
+			lv_image->size = lv_image_size; /* was 1 temporarily */
+			seg_image = first_seg(lv_image);
+			seg_image->integrity_data_sectors = status_data_sectors;
+		}
+	}
+
+	/*
+	 * recalculate above enables automatic integrity metadata intialization
+	 * in the kernel when first activated, instead of activating the raid
+	 * LV and writing zeroes to the entire thing from the lvcreate command
+	 * to initialize the metadata in the integrity images.
+	 *
+	 * Zeroing the raid LV to intialize integrity metadata on the images
+	 * does not work because dm-raid immediately reads the integrity
+	 * images when activated, and gets errors back because of no init.
+	 *
+	 * When activated with recalculate, dm-integrity will not return errors
+	 * to dm-raid when it reads uninitialized blocks.
+	 */
+	*zero_data_sectors = 0; /* disables intialization by lvcreate */
+
+	log_debug("Write VG with integrity added to LV");
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		ret = 0;
+out:
+	return ret;
+}
+
 int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		     struct logical_volume *meta_lv_created,
 		     const char *meta_name,
-		     struct integrity_settings *settings)
+		     struct integrity_settings *settings,
+		     struct dm_list *pvh,
+		     uint64_t *zero_data_sectors)
 {
 	struct cmd_context *cmd = lv->vg->cmd;
 	struct volume_group *vg = lv->vg;
@@ -217,7 +484,10 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	struct lv_segment *seg;
 	uint64_t meta_bytes, meta_sectors;
 	uint64_t lv_size_sectors;
-	int ret;
+	int ret = 1;
+
+	if (lv_is_raid(lv))
+		return _lv_add_integrity_to_raid(lv, arg, settings, pvh, zero_data_sectors);
 
 	lv_size_sectors = lv->size;
 
@@ -335,7 +605,6 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		seg->integrity_meta_dev = meta_lv;
 		lv_set_hidden(meta_lv);
 		/* TODO: give meta_lv a suffix? e.g. _imeta */
-		ret = 1;
 	} else {
 		/* dm-integrity wants temp/fake size of 1 to report usable size */
 		seg->integrity_data_sectors = 1;
@@ -376,6 +645,11 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		lv->status &= ~LV_NOSCAN;
 		lv->status &= ~LV_TEMPORARY;
 	}
+
+	/*
+	 * Tells lvcreate to zero the final LV at the end of commands.
+	 */
+	*zero_data_sectors = seg->integrity_data_sectors;
 
 	log_debug("Write VG with integrity added to LV");
 

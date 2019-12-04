@@ -240,6 +240,26 @@ static int _raid_text_export(const struct lv_segment *seg, struct formatter *f)
 	return _raid_text_export_raid(seg, f);
 }
 
+static int _image_integrity_data_sectors(struct lv_segment *seg, uint64_t *data_sectors)
+{
+	struct logical_volume *lv_image;
+	struct lv_segment *seg_image;
+	int s;
+
+	*data_sectors = 0;
+
+	for (s = 0; s < seg->area_count; s++) {
+		 lv_image = seg_lv(seg, s);
+
+		 if (lv_is_integrity(lv_image)) {
+			 seg_image = first_seg(lv_image);
+			 *data_sectors = seg_image->integrity_data_sectors;
+			 return 1;
+		 }
+	}
+	return 1;
+}
+
 static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
 				 struct dm_pool *mem __attribute__((unused)),
 				 struct cmd_context *cmd __attribute__((unused)),
@@ -256,6 +276,7 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
 	uint64_t writemostly[RAID_BITMAP_SIZE] = { 0 };
 	struct dm_tree_node_raid_params_v2 params = { 0 };
 	unsigned attrs;
+	uint64_t integrity_data_sectors = 0;
 
 	if (seg_is_raid4(seg)) {
 		if (!_raid_target_present(cmd, NULL, &attrs) ||
@@ -350,6 +371,15 @@ static int _raid_add_target_line(struct dev_manager *dm __attribute__((unused)),
 
 	params.stripe_size = seg->stripe_size;
 	params.flags = flags;
+
+	if (!_image_integrity_data_sectors(seg, &integrity_data_sectors))
+		return_0;
+
+	if (integrity_data_sectors) {
+		log_debug("Reducing raid size from %llu to integrity_data_sectors %llu",
+			  (unsigned long long)len, (unsigned long long)integrity_data_sectors);
+		len = integrity_data_sectors;
+	}
 
 	if (!dm_tree_node_add_raid_target_with_params_v2(node, len, &params))
 		return_0;
