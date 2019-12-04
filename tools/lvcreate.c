@@ -848,6 +848,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	poolmetadataspare_ARG
 
 #define RAID_ARGS \
+	integrity_ARG,\
+	integritysettings_ARG,\
 	maxrecoveryrate_ARG,\
 	minrecoveryrate_ARG,\
 	raidmaxrecoveryrate_ARG,\
@@ -1220,7 +1222,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		}
 	}
 
-	if (seg_is_integrity(lp)) {
+	if (seg_is_integrity(lp) || seg_is_raid(lp)) {
 		if (!get_integrity_options(cmd, &lp->integrity_arg, &lp->integrity_meta_name, &lp->integrity_settings))
 			return 0;
 	}

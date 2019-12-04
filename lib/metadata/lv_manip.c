@@ -7831,7 +7831,7 @@ static int _should_wipe_lv(struct lvcreate_params *lp,
 	 * TODO: print a warning or error if the user specifically
 	 * asks for no wiping or zeroing?
 	 */
-	if (seg_is_integrity(lp))
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg))
 		return 1;
 
 	/* Cannot zero read-only volume */
@@ -8438,7 +8438,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 		lv->status &= ~LV_TEMPORARY;
 
-	} else if (seg_is_integrity(lp)) {
+	} else if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
 		/*
 		 * Activate the new origin LV so it can be zeroed/wiped
 		 * below before adding integrity.
@@ -8469,7 +8469,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 	}
 
-	if (seg_is_integrity(lp)) {
+	if (seg_is_integrity(lp) || (seg_is_raid1(lp) && lp->integrity_arg)) {
 		log_verbose("Adding integrity to new LV");
 
 		/* Origin is active from zeroing, deactivate to add integrity. */
@@ -8480,7 +8480,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 
 		if (!lv_add_integrity(lv, lp->integrity_arg, lp->integrity_meta_lv,
-				      lp->integrity_meta_name, &lp->integrity_settings))
+				      lp->integrity_meta_name, &lp->integrity_settings, lp->pvh))
 			goto revert_new_lv;
 
 		backup(vg);

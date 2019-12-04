@@ -1406,7 +1406,8 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg);
 
 int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		     struct logical_volume *meta_lv_created,
-		     const char *meta_name, struct integrity_settings *settings);
+		     const char *meta_name, struct integrity_settings *settings,
+		     struct dm_list *pvh);
 int lv_create_integrity_metadata(struct cmd_context *cmd,
 			struct volume_group *vg,
 			struct lvcreate_params *lp);
