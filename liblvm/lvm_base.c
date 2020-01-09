@@ -70,6 +70,7 @@ static lvm_t _lvm_init(const char *system_dir)
 	 * cmd_line = "lvm_vg_create: vg1\nlvm_vg_extend vg1 /dev/sda1\n"
 	 */
 	cmd->cmd_line = "liblvm";
+	set_cmd_name("liblvm");
 
 	/*
 	 * Turn off writing to stdout/stderr.
