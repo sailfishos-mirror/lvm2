@@ -44,21 +44,21 @@
 
 %configure %{configure_flags}
 
-make %{?_smp_mflags}
+make %{?_smp_mflags} V=1
 %{?extra_build_commands}
 
 %install
-make install DESTDIR=$RPM_BUILD_ROOT
-make install_system_dirs DESTDIR=$RPM_BUILD_ROOT
+make install DESTDIR=$RPM_BUILD_ROOT V=1
+make install_system_dirs DESTDIR=$RPM_BUILD_ROOT V=1
 %if %{enable_systemd}
-make install_systemd_units DESTDIR=$RPM_BUILD_ROOT
-make install_systemd_generators DESTDIR=$RPM_BUILD_ROOT
-make install_tmpfiles_configuration DESTDIR=$RPM_BUILD_ROOT
+make install_systemd_units DESTDIR=$RPM_BUILD_ROOT V=1
+make install_systemd_generators DESTDIR=$RPM_BUILD_ROOT V=1
+make install_tmpfiles_configuration DESTDIR=$RPM_BUILD_ROOT V=1
 %else
-make install_initscripts DESTDIR=$RPM_BUILD_ROOT
+make install_initscripts DESTDIR=$RPM_BUILD_ROOT V=1
 %endif
 %if %{enable_testsuite}
-make -C test install DESTDIR=$RPM_BUILD_ROOT
+make -C test install DESTDIR=$RPM_BUILD_ROOT V=1
 %endif
 
 # when building an src.rpm from freestanding specfiles
