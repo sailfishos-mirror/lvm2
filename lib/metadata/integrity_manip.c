@@ -161,11 +161,16 @@ fail:
 
 int lv_remove_integrity_from_raid(struct logical_volume *lv)
 {
+	struct logical_volume *iorig_lvs[DEFAULT_RAID_MAX_IMAGES];
+	struct logical_volume *imeta_lvs[DEFAULT_RAID_MAX_IMAGES];
+	struct cmd_context *cmd = lv->vg->cmd;
+	struct volume_group *vg = lv->vg;
 	struct lv_segment *seg_top, *seg_image;
 	struct logical_volume *lv_image;
 	struct logical_volume *lv_iorig;
 	struct logical_volume *lv_imeta;
 	uint32_t area_count, s;
+	int is_active = lv_is_active(lv);
 
 	seg_top = first_seg(lv);
 
@@ -194,33 +199,62 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv)
 		if (!remove_seg_from_segs_using_this_lv(seg_image->integrity_meta_dev, seg_image))
 			return_0;
 
-		lv_set_visible(seg_image->integrity_meta_dev);
+		iorig_lvs[s] = lv_iorig;
+		imeta_lvs[s] = lv_imeta;
 
 		lv_image->status &= ~INTEGRITY;
-		lv_imeta->status &= ~INTEGRITY_METADATA;
-
 		seg_image->integrity_meta_dev = NULL;
 		seg_image->integrity_data_sectors = 0;
 		memset(&seg_image->integrity_settings, 0, sizeof(seg_image->integrity_settings));
 
 		if (!remove_layer_from_lv(lv_image, lv_iorig))
 			return_0;
+	}
+
+	if (is_active) {
+		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
+		if (!lv_update_and_reload(lv)) {
+			log_error("Failed to update and reload LV after integrity remove.");
+			return 0;
+                }
+	}
+
+	for (s = 0; s < area_count; s++) {
+		lv_iorig = iorig_lvs[s];
+		lv_imeta = imeta_lvs[s];
+
+		if (is_active) {
+			if (!deactivate_lv(cmd, lv_iorig))
+				log_error("Failed to deactivate unused iorig LV %s.", lv_iorig->name);
+
+			if (!deactivate_lv(cmd, lv_imeta))
+				log_error("Failed to deactivate unused imeta LV %s.", lv_imeta->name);
+		}
+
+		lv_imeta->status &= ~INTEGRITY_METADATA;
+		lv_set_visible(lv_imeta);
 
 		if (!lv_remove(lv_iorig))
-			return_0;
+			log_error("Failed to remove unused iorig LV %s.", lv_iorig->name);
 
 		if (!lv_remove(lv_imeta))
-			log_warn("WARNING: failed to remove integrity metadata LV.");
+			log_error("Failed to remove unused imeta LV %s.", lv_imeta->name);
 	}
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
 
 	return 1;
 }
 
 int lv_remove_integrity(struct logical_volume *lv)
 {
+	struct cmd_context *cmd = lv->vg->cmd;
+	struct volume_group *vg = lv->vg;
 	struct lv_segment *seg = first_seg(lv);
-	struct logical_volume *origin;
-	struct logical_volume *meta_lv;
+	struct logical_volume *lv_iorig;
+	struct logical_volume *lv_imeta;
+	int is_active = lv_is_active(lv);
 
 	if (!seg_is_integrity(seg)) {
 		log_error("LV %s segment is not integrity.", display_lvname(lv));
@@ -232,12 +266,12 @@ int lv_remove_integrity(struct logical_volume *lv)
 		return 0;
 	}
 
-	if (!(meta_lv = seg->integrity_meta_dev)) {
+	if (!(lv_imeta = seg->integrity_meta_dev)) {
 		log_error("LV %s segment has no integrity metadata device.", display_lvname(lv));
 		return 0;
 	}
 
-	if (!(origin = seg_lv(seg, 0))) {
+	if (!(lv_iorig = seg_lv(seg, 0))) {
 		log_error("LV %s integrity segment has no origin", display_lvname(lv));
 		return 0;
 	}
@@ -245,21 +279,37 @@ int lv_remove_integrity(struct logical_volume *lv)
 	if (!remove_seg_from_segs_using_this_lv(seg->integrity_meta_dev, seg))
 		return_0;
 
-	lv_set_visible(seg->integrity_meta_dev);
-
 	lv->status &= ~INTEGRITY;
-	meta_lv->status &= ~INTEGRITY_METADATA;
-
 	seg->integrity_meta_dev = NULL;
 
-	if (!remove_layer_from_lv(lv, origin))
+	if (!remove_layer_from_lv(lv, lv_iorig))
 		return_0;
 
-	if (!lv_remove(origin))
-		return_0;
+	if (is_active) {
+		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
+		if (!lv_update_and_reload(lv)) {
+			log_error("Failed to update and reload LV after integrity remove.");
+			return_0;
+		}
 
-	if (!lv_remove(meta_lv))
-		log_warn("WARNING: failed to remove integrity metadata LV.");
+		if (!deactivate_lv(cmd, lv_iorig))
+			log_error("Failed to deactivate unused iorig LV %s.", lv_iorig->name);
+
+		if (!deactivate_lv(cmd, lv_imeta))
+			log_error("Failed to deactivate unused imeta LV %s.", lv_iorig->name);
+	}
+
+	lv_imeta->status &= ~INTEGRITY_METADATA;
+	lv_set_visible(lv_imeta);
+
+	if (!lv_remove(lv_iorig))
+		log_error("Failed to remove unused iorig LV %s.", lv_iorig->name);
+
+	if (!lv_remove(lv_imeta))
+		log_error("Failed to remove unused imeta LV %s.", lv_imeta->name);
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_0;
 
 	return 1;
 }
@@ -312,10 +362,13 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	struct dm_list *use_pvh = pvh;
 	uint64_t status_data_sectors = 0;
 	uint32_t area_count, s;
+	int is_active;
 	int external = 0, internal = 0;
 	int ret = 1;
 
 	memset(imeta_lvs, 0, sizeof(imeta_lvs));
+
+	is_active = lv_is_active(lv);
 
 	if (!arg || !strcmp(arg, "y") || !strcmp(arg, "external"))
 		external = 1;
@@ -534,24 +587,35 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		}
 	}
 
-	log_debug("Writing VG with new integrity LV %s", lv->name);
+	if (is_active) {
+		log_print("Writing VG and updating LV with new integrity LV %s", lv->name);
 
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		ret = 0;
-		goto_out;
-	}
+		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
+		if (!lv_update_and_reload(lv)) {
+			log_error("LV update and reload failed");
+			ret = 0;
+			goto_out;
+		}
+	} else {
+		log_debug("Writing VG with new integrity LV %s", lv->name);
 
-	/*
-	 * This first activation includes "recalculate" which starts the
-	 * kernel's recalculating (initialization) process.
-	 */
+		if (!vg_write(vg) || !vg_commit(vg)) {
+			ret = 0;
+			goto_out;
+		}
 
-	log_print("Activating to start integrity initialization for LV %s", lv->name);
+		/*
+		 * This first activation includes "recalculate" which starts the
+		 * kernel's recalculating (initialization) process.
+		 */
 
-	if (!activate_lv(cmd, lv)) {
-		log_error("Failed to activate integrity LV to initialize.");
-		ret = 0;
-		goto_out;
+		log_print("Activating to start integrity initialization for LV %s", lv->name);
+
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate integrity LV to initialize.");
+			ret = 0;
+			goto_out;
+		}
 	}
 
 	/*
@@ -593,10 +657,13 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	struct dm_list *use_pvh = pvh;
 	struct lv_segment *seg;
 	uint64_t lv_size_sectors;
+	int is_active;
 	int external = 0, internal = 0;
 	int ret = 1;
 
 	lv_size_sectors = lv->size;
+
+	is_active = lv_is_active(lv);
 
 	/*
 	 * --integrity <arg> is y|external|internal
@@ -784,24 +851,35 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 			goto_out;
 	}
 
-	log_print("Writing VG with new integrity LV %s", lv->name);
+	if (is_active) {
+		log_print("Writing VG and updating LV with new integrity LV %s", lv->name);
 
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		ret = 0;
-		goto_out;
-	}
+		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
+		if (!lv_update_and_reload(lv)) {
+			log_error("LV update and reload failed");
+			ret = 0;
+			goto_out;
+		}
+	} else {
+		log_print("Writing VG with new integrity LV %s", lv->name);
 
-	/*
-	 * This first activation includes "recalculate" which starts the
-	 * kernel's recalculating (initialization) process.
-	 */
+		if (!vg_write(vg) || !vg_commit(vg)) {
+			ret = 0;
+			goto_out;
+		}
 
-	log_print("Activating to start integrity initialization for LV %s", lv->name);
+		/*
+		 * This first activation includes "recalculate" which starts the
+		 * kernel's recalculating (initialization) process.
+		 */
 
-	if (!activate_lv(cmd, lv)) {
-		log_error("Failed to activate integrity LV to initialize.");
-		ret = 0;
-		goto_out;
+		log_print("Activating to start integrity initialization for LV %s", lv->name);
+
+		if (!activate_lv(cmd, lv)) {
+			log_error("Failed to activate integrity LV to initialize.");
+			ret = 0;
+			goto_out;
+		}
 	}
 
 	/*

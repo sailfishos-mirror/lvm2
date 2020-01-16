@@ -254,12 +254,10 @@ char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lv,
 		/* Suffixes used here MUST match lib/activate/dev_manager.c */
 		layer = lv_is_cache_origin(lv) ? "real" :
 			lv_is_writecache_origin(lv) ? "real" :
-			lv_is_integrity_origin(lv) ? "real" :
 			(lv_is_cache(lv) && lv_is_pending_delete(lv)) ? "real" :
 			lv_is_cache_pool_data(lv) ? "cdata" :
 			lv_is_cache_pool_metadata(lv) ? "cmeta" :
 			lv_is_cache_vol(lv) ? "cvol" :
-			lv_is_integrity_metadata(lv) ? "imeta" :
 			// FIXME: dm-tree needs fixes for mirrors/raids
 			//lv_is_mirror_image(lv) ? "mimage" :
 			//lv_is_mirror_log(lv) ? "mlog" :

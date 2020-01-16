@@ -5734,30 +5734,26 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd,
 					struct logical_volume *lv)
 {
 	struct volume_group *vg = lv->vg;
+	int ret;
 
 	if (!lv_is_integrity(lv) && !lv_is_raid(lv)) {
 		log_error("LV does not have integrity.");
 		return 0;
 	}
 
-	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
-		log_error("LV must be inactive to remove integrity.");
-		return 0;
-	}
+	/* ensure it's not active elsewhere. */
+	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_0;
 
 	if (!archive(vg))
 		return_0;
 
-	if (lv_is_integrity(lv)) {
-		if (!lv_remove_integrity(lv))
-			return_0;
-	} else if (lv_is_raid(lv)) {
-		if (!lv_remove_integrity_from_raid(lv))
-			return_0;
-	}
-
-	if (!vg_write(vg) || !vg_commit(vg))
-		return_0;
+	if (lv_is_raid(lv))
+		ret = lv_remove_integrity_from_raid(lv);
+	else
+		ret = lv_remove_integrity(lv);
+	if (!ret)
+		return 0;
 
 	backup(vg);
 
@@ -5771,17 +5767,8 @@ static int _lvconvert_integrity_add(struct cmd_context *cmd,
 					struct integrity_settings *set)
 {
 	struct volume_group *vg = lv->vg;
-	struct lv_segment *seg;
 	struct dm_list *use_pvh;
-	int is_raid;
 	int ret;
-
-	seg = first_seg(lv);
-
-	if (lv_info(cmd, lv, 1, NULL, 0, 0)) {
-		log_error("LV must be inactive to add integrity.");
-		return 0;
-	}
 
 	/* ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
@@ -5797,14 +5784,14 @@ static int _lvconvert_integrity_add(struct cmd_context *cmd,
 	if (!archive(vg))
 		return_0;
 
-	is_raid = seg_is_raid(seg);
-
-	if (is_raid)
+	if (lv_is_raid(lv))
 		ret = lv_add_integrity_to_raid(lv, "external", meta_name, set, use_pvh);
 	else
 		ret = lv_add_integrity(lv, "external", meta_name, set, use_pvh);
 	if (!ret)
 		return 0;
+
+	backup(vg);
 
 	log_print_unless_silent("Logical volume %s has added integrity.", display_lvname(lv));
 	return 1;

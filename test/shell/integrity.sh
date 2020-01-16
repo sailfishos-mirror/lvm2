@@ -27,6 +27,11 @@ for i in `seq 1 16384`; do echo -n "A" >> fileA; done
 for i in `seq 1 16384`; do echo -n "B" >> fileB; done
 for i in `seq 1 16384`; do echo -n "C" >> fileC; done
 
+# generate random data
+dd if=/dev/urandom of=randA bs=512K count=2
+dd if=/dev/urandom of=randB bs=512K count=3
+dd if=/dev/urandom of=randC bs=512K count=4
+
 _prepare_vg() {
 	# zero devs so we are sure to find the correct file data
 	# on the underlying devs when corrupting it
@@ -125,6 +130,43 @@ _test_fs_with_raid() {
 	umount $mnt
 }
 
+_add_data_to_lv() {
+	mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+
+	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+
+	# add original data
+	cp randA $mnt
+	cp randB $mnt
+	cp randC $mnt
+	mkdir $mnt/1
+	cp fileA $mnt/1
+	cp fileB $mnt/1
+	cp fileC $mnt/1
+	mkdir $mnt/2
+	cp fileA $mnt/2
+	cp fileB $mnt/2
+	cp fileC $mnt/2
+
+	umount $mnt
+}
+
+_verify_data_on_lv() {
+	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+
+	diff randA $mnt/randA
+	diff randB $mnt/randB
+	diff randC $mnt/randC
+	diff fileA $mnt/1/fileA
+	diff fileB $mnt/1/fileB
+	diff fileC $mnt/1/fileC
+	diff fileA $mnt/2/fileA
+	diff fileB $mnt/2/fileB
+	diff fileC $mnt/2/fileC
+
+	umount $mnt
+}
+
 _prepare_vg
 lvcreate --integrity y -n $lv1 -l 8 $vg "$dev1"
 _test_fs_with_error
@@ -187,6 +229,62 @@ lvcreate --type raid6 --integrity y -n $lv1 -l 8 $vg
 _test_fs_with_raid
 lvchange -an $vg/$lv1
 lvconvert --integrity n $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# Test removing integrity from an active LV
+
+_prepare_vg
+lvcreate --integrity y -n $lv1 -l 8 $vg
+# wait for recalc to finish
+sleep 8
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity n $vg/$lv1
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+_prepare_vg
+lvcreate --type raid1 -m1 --integrity y -n $lv1 -l 8 $vg
+# wait for recalc to finish
+sleep 8
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity n $vg/$lv1
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# Test adding integrity to an active LV
+
+_prepare_vg
+lvcreate -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity y $vg/$lv1
+# wait for recalc to finish
+sleep 8
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+_prepare_vg
+lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity y $vg/$lv1
+# wait for recalc to finish
+sleep 8
+_verify_data_on_lv
+lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
