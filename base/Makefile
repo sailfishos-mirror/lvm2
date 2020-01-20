@@ -17,9 +17,12 @@
 # NOTE: this Makefile only works as 'include' for toplevel Makefile
 #       which defined all top_* variables
 
+#BASE_SOURCE=\
+#	base/data-struct/hash.c \
+#	base/data-struct/list.c \
+#	base/data-struct/radix-tree.c
+
 BASE_SOURCE=\
-	base/data-struct/hash.c \
-	base/data-struct/list.c \
 	base/data-struct/radix-tree.c
 
 BASE_TARGET = base/libbase.a
