@@ -42,6 +42,19 @@ int lv_is_integrity_origin(const struct logical_volume *lv)
 	return 0;
 }
 
+static struct logical_volume *_lv_integrity_from_origin(const struct logical_volume *lv)
+{
+	struct seg_list *sl;
+
+	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
+		if (!sl->seg || !sl->seg->lv || !sl->seg->origin)
+			continue;
+		if (lv_is_integrity(sl->seg->lv) && (sl->seg->origin == lv))
+			return sl->seg->lv;
+	}
+	return NULL;
+}
+
 /*
  * Every 500M of data needs 4M of metadata.
  * (From trial and error testing.)
@@ -157,6 +170,161 @@ static int _get_provided_data_sectors(struct logical_volume *lv, uint64_t *provi
 fail:
 	dm_pool_destroy(status.seg_status.mem);
 	return 0;
+}
+
+/*
+ * lv_iorig has been extended, now extend the integrity layer
+ * above it.
+ */
+int lv_extend_integrity_for_origin(struct logical_volume *lv_iorig,
+				   struct dm_list *pvh, const char *meta_name)
+{
+	struct cmd_context *cmd = lv_iorig->vg->cmd;
+	struct volume_group *vg = lv_iorig->vg;
+	const struct segment_type *segtype;
+	struct logical_volume *lv;
+	struct logical_volume *lv_imeta;
+	struct lv_segment *seg;
+	struct device *meta_dev;
+	struct dm_list *use_pvh = pvh;
+	uint64_t lv_size_bytes, meta_bytes, meta_sectors, prev_meta_sectors;
+	uint32_t meta_extents, prev_meta_extents;
+
+	if (meta_name) {
+		if (!(meta_dev = dev_cache_get(cmd, meta_name, NULL))) {
+			log_error("integritymetadata device not found %s.", meta_name);
+			return 0;
+		}
+		if (!(use_pvh = create_pv_list(cmd->mem, vg, 1, (char **)&meta_name, 1))) {
+			log_error("integritymetadata not found in VG %s.", meta_name);
+			return 0;
+		}
+	}
+
+	if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED)))
+		return_0;
+
+	if (!(lv = _lv_integrity_from_origin(lv_iorig)))
+		return_0;
+
+	seg = first_seg(lv);
+
+	lv_imeta = seg->integrity_meta_dev;
+
+	/*
+	 * Shouldn't happen because we prevent extending an LV with
+	 * internal integrity.  To allow that, we'd need to find out
+	 * the new provided_data_sectors to set in the metadata.
+	 * That would require doing a temporary activation of the
+	 * extended LV with provided_data_sectors=1 and then check
+	 * what the kernel reports.
+	 */
+	if (!lv_imeta) {
+		log_error("Cannot extend with internal integrity.");
+		return_0;
+	}
+
+	/* new size in sectors */
+	lv->size = lv_iorig->size;
+	seg->integrity_data_sectors = lv_iorig->size;
+	/* new size in extents */
+	lv->le_count = lv_iorig->le_count;
+	seg->len = lv_iorig->le_count;
+	seg->area_len = lv_iorig->le_count;
+
+	lv_size_bytes = lv_iorig->size * 512;
+	meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes);
+	meta_sectors = meta_bytes / 512;
+	meta_extents = meta_sectors / vg->extent_size;
+
+	prev_meta_sectors = lv_imeta->size;
+	prev_meta_extents = prev_meta_sectors / vg->extent_size;
+
+	if (meta_extents <= prev_meta_extents) {
+		log_debug("extend not needed for imeta LV %s", lv_imeta->name);
+		return 1;
+	}
+
+	if (!lv_extend(lv_imeta, segtype, 1, 0, 0, 0,
+		       meta_extents - prev_meta_extents,
+		       use_pvh, lv_imeta->alloc, 0, NULL)) {
+		log_error("Failed to extend integrity metadata LV %s", lv_imeta->name);
+		return 0;
+	}
+
+	return 1;
+}
+
+int lv_extend_integrity_in_raid(struct logical_volume *lv,
+				struct dm_list *pvh, const char *meta_name)
+{
+	struct cmd_context *cmd = lv->vg->cmd;
+	struct volume_group *vg = lv->vg;
+	const struct segment_type *segtype;
+	struct lv_segment *seg_top, *seg_image;
+	struct logical_volume *lv_image;
+	struct logical_volume *lv_iorig;
+	struct logical_volume *lv_imeta;
+	struct device *meta_dev;
+	struct dm_list *use_pvh = pvh;
+	uint64_t lv_size_bytes, meta_bytes, meta_sectors, prev_meta_sectors;
+	uint32_t meta_extents, prev_meta_extents;
+	uint32_t area_count, s;
+
+	if (meta_name) {
+		if (!(meta_dev = dev_cache_get(cmd, meta_name, NULL))) {
+			log_error("integritymetadata device not found %s.", meta_name);
+			return 0;
+		}
+		if (!(use_pvh = create_pv_list(cmd->mem, vg, 1, (char **)&meta_name, 1))) {
+			log_error("integritymetadata not found in VG %s.", meta_name);
+			return 0;
+		}
+	}
+
+	seg_top = first_seg(lv);
+		                
+	if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED)))
+		return_0;
+
+	area_count = seg_top->area_count;
+
+	for (s = 0; s < area_count; s++) {
+		lv_image = seg_lv(seg_top, s);
+		seg_image = first_seg(lv_image);
+
+		if (!(lv_imeta = seg_image->integrity_meta_dev)) {
+			log_error("LV %s segment has no integrity metadata device.", display_lvname(lv));
+			return 0;
+		}
+
+		if (!(lv_iorig = seg_lv(seg_image, 0))) {
+			log_error("LV %s integrity segment has no origin", display_lvname(lv));
+			return 0;
+		}
+
+		lv_size_bytes = lv_iorig->size * 512;
+		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes);
+		meta_sectors = meta_bytes / 512;
+		meta_extents = meta_sectors / vg->extent_size;
+
+		prev_meta_sectors = lv_imeta->size;
+		prev_meta_extents = prev_meta_sectors / vg->extent_size;
+
+		if (meta_extents <= prev_meta_extents) {
+			log_debug("extend not needed for imeta LV %s", lv_imeta->name);
+			continue;
+		}
+
+		if (!lv_extend(lv_imeta, segtype, 1, 0, 0, 0,
+			       meta_extents - prev_meta_extents,
+			       use_pvh, lv_imeta->alloc, 0, NULL)) {
+			log_error("Failed to extend raid image integrity metadata LV %s", lv_imeta->name);
+			return 0;
+		}
+	}
+
+	return 1;
 }
 
 int lv_remove_integrity_from_raid(struct logical_volume *lv)
@@ -522,7 +690,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 			set->tag_size = DEFAULT_TAG_SIZE;
 
 		if (!set->internal_hash)
-	       		set->internal_hash = DEFAULT_INTERNAL_HASH;
+			set->internal_hash = DEFAULT_INTERNAL_HASH;
 	}
 
 	/*
@@ -746,7 +914,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		segset->tag_size = DEFAULT_TAG_SIZE;
 
 	if (!segset->internal_hash)
-	       	segset->internal_hash = DEFAULT_INTERNAL_HASH;
+		segset->internal_hash = DEFAULT_INTERNAL_HASH;
 
 	/*
 	 * When not using a metadata LV, dm-integrity needs to tell us what the
@@ -965,3 +1133,48 @@ int lv_has_integrity_recalculate_metadata(struct logical_volume *lv)
 	return ret;
 }
 
+int lv_has_integrity_internal(struct logical_volume *lv)
+{
+	struct logical_volume *lv_image;
+	struct lv_segment *seg, *seg_image;
+	uint32_t s;
+
+	seg = first_seg(lv);
+
+	if (seg_is_raid(seg)) {
+		for (s = 0; s < seg->area_count; s++) {
+			lv_image = seg_lv(seg, s);
+			seg_image = first_seg(lv_image);
+
+			if (!seg_is_integrity(seg_image))
+				continue;
+			if (!seg_image->integrity_meta_dev)
+				return 1;
+		}
+	} else if (seg_is_integrity(seg)) {
+		if (!seg->integrity_meta_dev)
+			return 1;
+	}
+	return 0;
+}
+
+int lv_raid_has_integrity(struct logical_volume *lv)
+{
+	struct logical_volume *lv_image;
+	struct lv_segment *seg, *seg_image;
+	uint32_t s;
+
+	seg = first_seg(lv);
+
+	if (seg_is_raid(seg)) {
+		for (s = 0; s < seg->area_count; s++) {
+			lv_image = seg_lv(seg, s);
+			seg_image = first_seg(lv_image);
+
+			if (seg_is_integrity(seg_image))
+				return 1;
+		}
+	}
+
+	return 0;
+}

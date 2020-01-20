@@ -1575,7 +1575,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 		if (!lv_extend(lv, segtype, data_rimages, stripe_size,
 			       mirrors, /* seg_is_any_raid10(seg) ? seg->data_copies : mirrors, */
 			       seg->region_size, reshape_len /* # of reshape LEs to add */,
-			       allocate_pvs, lv->alloc, 0)) {
+			       allocate_pvs, lv->alloc, 0, NULL)) {
 			log_error("Failed to allocate out-of-place reshape space for %s.",
 				  display_lvname(lv));
 			if (!_lv_alloc_reshape_post_extend(lv, segtype_sav, stripe_size_sav, lv_size_cur))

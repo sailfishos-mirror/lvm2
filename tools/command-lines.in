@@ -1321,7 +1321,7 @@ lvextend --size PSizeMB LV
 OO: --alloc Alloc, --autobackup Bool, --force, --mirrors Number,
 --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
 --stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
---type SegType
+--type SegType, --integritymetadata String
 OP: PV ...
 ID: lvextend_by_size
 DESC: Extend an LV by a specified size.
@@ -1330,7 +1330,7 @@ lvextend LV PV ...
 OO: --alloc Alloc, --autobackup Bool, --force, --mirrors Number,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs, --stripes Number, --stripesize SizeKB,
---type SegType
+--type SegType, --integritymetadata String
 ID: lvextend_by_pv
 DESC: Extend an LV by specified PV extents.
 
@@ -1393,7 +1393,7 @@ lvresize --size SSizeMB LV
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
 --stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
---type SegType
+--type SegType, --integritymetadata String
 OP: PV ...
 ID: lvresize_by_size
 DESC: Resize an LV by a specified size.
@@ -1402,7 +1402,7 @@ lvresize LV PV ...
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs, --stripes Number, --stripesize SizeKB,
---type SegType
+--type SegType, --integritymetadata String
 ID: lvresize_by_pv
 DESC: Resize an LV by specified PV extents.
 

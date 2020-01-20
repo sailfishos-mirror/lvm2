@@ -384,12 +384,10 @@ int dm_get_status_integrity(struct dm_pool *mem, const char *params,
 			     struct dm_status_integrity **status)
 {
 	struct dm_status_integrity *s;
-	char recalc_str[8];
+	char recalc_str[8] = "\0";
 
-	if (!(s = dm_pool_zalloc(mem, sizeof(struct dm_status_integrity))))
+	if (!(s = dm_pool_zalloc(mem, sizeof(*s))))
 		return_0;
-
-	memset(recalc_str, 0, sizeof(recalc_str));
 
 	if (sscanf(params, "%llu %llu %s",
 		   (unsigned long long *)&s->number_of_mismatches,

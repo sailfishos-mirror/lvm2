@@ -21,7 +21,7 @@ which mkfs.xfs || skip
 
 mnt="mnt"
 mkdir -p $mnt
-aux prepare_devs 5 64
+aux prepare_devs 5 128
 
 for i in `seq 1 16384`; do echo -n "A" >> fileA; done
 for i in `seq 1 16384`; do echo -n "B" >> fileB; done
@@ -284,6 +284,75 @@ lvconvert --integrity y $vg/$lv1
 # wait for recalc to finish
 sleep 8
 _verify_data_on_lv
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# Test lvextend
+
+_prepare_vg
+lvcreate -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity y $vg/$lv1
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvextend -l 16 $vg/$lv1
+lvchange -ay $vg/$lv1
+_verify_data_on_lv
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+_prepare_vg
+lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity y $vg/$lv1
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvextend -l 16 $vg/$lv1
+lvchange -ay $vg/$lv1
+_verify_data_on_lv
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# lvextend to 512MB is needed for the imeta LV to
+# be extended from 4MB to 8MB.
+
+_prepare_vg
+lvcreate -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --integrity y $vg/$lv1
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvextend -L 512M $vg/$lv1
+lvchange -ay $vg/$lv1
+_verify_data_on_lv
+# wait for recalc to finish
+sleep 8
+lvs -a $vg
+check lv_field $vg/${lv1}_imeta size "8.00m"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg

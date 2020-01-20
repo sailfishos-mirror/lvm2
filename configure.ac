@@ -679,7 +679,7 @@ AC_MSG_RESULT($INTEGRITY)
 
 case "$INTEGRITY" in
  none) ;;
- internal) 
+ internal)
 	AC_DEFINE([INTEGRITY_INTERNAL], 1, [Define to 1 to include built-in support for integrity.])
 	;;
  *) AC_MSG_ERROR([--with-integrity parameter invalid]) ;;

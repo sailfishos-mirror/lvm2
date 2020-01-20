@@ -4157,11 +4157,14 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 				 uint32_t extents, uint32_t first_area,
 				 uint32_t mirrors, uint32_t stripes, uint32_t stripe_size)
 {
+	struct logical_volume *sub_lvs[DEFAULT_RAID_MAX_IMAGES];
 	const struct segment_type *segtype;
-	struct logical_volume *sub_lv, *meta_lv;
+	struct logical_volume *meta_lv, *sub_lv;
 	struct lv_segment *seg = first_seg(lv);
+	struct lv_segment *sub_lv_seg;
 	uint32_t fa, s;
 	int clear_metadata = 0;
+	int integrity_sub_lvs = 0;
 	uint32_t area_multiple = 1;
 
 	if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_STRIPED)))
@@ -4179,16 +4182,28 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 			area_multiple = seg->area_count;
 	}
 
+	for (s = 0; s < seg->area_count; s++) {
+		sub_lv = seg_lv(seg, s);
+		sub_lv_seg = sub_lv ? first_seg(sub_lv) : NULL;
+
+		if (sub_lv_seg && seg_is_integrity(sub_lv_seg)) {
+			sub_lvs[s] = seg_lv(sub_lv_seg, 0);
+			integrity_sub_lvs = 1;
+		} else
+			sub_lvs[s] = sub_lv;
+	}
+
 	for (fa = first_area, s = 0; s < seg->area_count; s++) {
-		if (is_temporary_mirror_layer(seg_lv(seg, s))) {
-			if (!_lv_extend_layered_lv(ah, seg_lv(seg, s), extents / area_multiple,
+		sub_lv = sub_lvs[s];
+
+		if (is_temporary_mirror_layer(sub_lv)) {
+			if (!_lv_extend_layered_lv(ah, sub_lv, extents / area_multiple,
 						   fa, mirrors, stripes, stripe_size))
 				return_0;
-			fa += lv_mirror_count(seg_lv(seg, s));
+			fa += lv_mirror_count(sub_lv);
 			continue;
 		}
 
-		sub_lv = seg_lv(seg, s);
 		if (!lv_add_segment(ah, fa, stripes, sub_lv, segtype,
 				    stripe_size, sub_lv->status, 0)) {
 			log_error("Aborting. Failed to extend %s in %s.",
@@ -4228,6 +4243,41 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 		}
 
 		fa += stripes;
+	}
+
+	/*
+	 * In raid+integrity, the lv_iorig raid images have been extended above.
+	 * Now propagate the new lv_iorig sizes up to the integrity LV layers
+	 * that are referencing the lv_iorig.
+	 */
+	if (integrity_sub_lvs) {
+		for (s = 0; s < seg->area_count; s++) {
+			struct logical_volume *lv_image;
+			struct logical_volume *lv_iorig;
+			struct logical_volume *lv_imeta;
+			struct lv_segment *seg_image;
+
+			lv_image = seg_lv(seg, s);
+			seg_image = first_seg(lv_image);
+
+			if (!(lv_imeta = seg_image->integrity_meta_dev)) {
+				log_error("1");
+				return_0;
+			}
+
+			if (!(lv_iorig = seg_lv(seg_image, 0))) {
+				log_error("2");
+				return_0;
+			}
+
+			/* new size in sectors */
+			lv_image->size = lv_iorig->size;
+			seg_image->integrity_data_sectors = lv_iorig->size;
+			/* new size in extents */
+			lv_image->le_count = lv_iorig->le_count;
+			seg_image->len = lv_iorig->le_count;
+			seg_image->area_len = lv_iorig->le_count;
+		}
 	}
 
 	seg->len += extents;
@@ -4304,7 +4354,7 @@ int lv_extend(struct logical_volume *lv,
 	      uint32_t mirrors, uint32_t region_size,
 	      uint32_t extents,
 	      struct dm_list *allocatable_pvs, alloc_policy_t alloc,
-	      int approx_alloc)
+	      int approx_alloc, const char *integritymetadata)
 {
 	int r = 1;
 	int log_count = 0;
@@ -4391,6 +4441,9 @@ int lv_extend(struct logical_volume *lv,
 						mirrors, stripes, stripe_size)))
 			goto_out;
 
+		if (lv_raid_has_integrity(lv))
+			lv_extend_integrity_in_raid(lv, allocatable_pvs, integritymetadata);
+
 		/*
 		 * If we are expanding an existing mirror, we can skip the
 		 * resync of the extension if the LV is currently in-sync
@@ -4436,6 +4489,11 @@ int lv_extend(struct logical_volume *lv,
 	}
 
 out:
+	if (r && lv_is_integrity_origin(lv)) {
+		if (!lv_extend_integrity_for_origin(lv, allocatable_pvs, integritymetadata))
+			r = 0;
+	}
+
 	alloc_destroy(ah);
 	return r;
 }
@@ -5107,6 +5165,20 @@ static int _lvresize_check(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_integrity(lv) || lv_raid_has_integrity(lv)) {
+		if (lv_has_integrity_internal(lv)) {
+			log_error("LV with internal integrity cannot be extended.");
+			return 0;
+		}
+		if (lp->resize == LV_REDUCE) {
+			log_error("Cannot reduce LV with integrity.");
+			return 0;
+		}
+		if (lv_is_active(lv)) {
+			log_error("Resize not allowed while LV with integrity is active.");
+			return 0;
+		}
+	}
 	return 1;
 }
 
@@ -5621,7 +5693,7 @@ static int _lvresize_volume(struct logical_volume *lv,
 			      lp->stripes, lp->stripe_size,
 			      lp->mirrors, first_seg(lv)->region_size,
 			      lp->extents - lv->le_count,
-			      pvh, alloc, lp->approx_alloc))
+			      pvh, alloc, lp->approx_alloc, lp->integritymetadata))
 		return_0;
 	/* Check for over provisioning only when lv_extend() passed,
 	 * ATM this check does not fail */
@@ -5655,6 +5727,9 @@ static int _lvresize_prepare(struct logical_volume **lv,
 
 	if (lv_is_thin_pool(*lv) || lv_is_vdo_pool(*lv))
 		*lv = seg_lv(first_seg(*lv), 0); /* switch to data LV */
+
+	if (lv_is_integrity(*lv))
+		*lv = seg_lv(first_seg(*lv), 0);
 
 	/* Resolve extents from size */
 	if (lp->size && !_lvresize_adjust_size(vg, lp->size, lp->sign, &lp->extents))
@@ -5706,11 +5781,6 @@ int lv_resize(struct logical_volume *lv,
 
 	if (lv_is_writecache(lv)) {
 		log_error("Resize not yet allowed on LVs with writecache attached.");
-		return 0;
-	}
-
-	if (lv_is_integrity(lv)) {
-		log_error("Resize not yet allowed on LVs with integrity.");
 		return 0;
 	}
 
@@ -7673,7 +7743,7 @@ static struct logical_volume *_create_virtual_origin(struct cmd_context *cmd,
 		return_NULL;
 
 	if (!lv_extend(lv, segtype, 1, 0, 1, 0, voriginextents,
-		       NULL, ALLOC_INHERIT, 0))
+		       NULL, ALLOC_INHERIT, 0, NULL))
 		return_NULL;
 
 	return lv;
@@ -8141,7 +8211,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		       segtype_is_pool(create_segtype) ? lp->pool_metadata_extents : lp->region_size,
 		       (segtype_is_thin_volume(create_segtype) ||
 			segtype_is_vdo(create_segtype)) ? lp->virtual_extents : lp->extents,
-		       lp->pvh, lp->alloc, lp->approx_alloc)) {
+		       lp->pvh, lp->alloc, lp->approx_alloc, NULL)) {
 		unlink_lv_from_vg(lv); /* Keep VG consistent and remove LV without any segment */
 		return_NULL;
 	}

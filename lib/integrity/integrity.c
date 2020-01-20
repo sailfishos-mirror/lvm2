@@ -300,7 +300,7 @@ static int _integrity_add_target_line(struct dev_manager *dm,
 		log_error("_integrity_add_target_line zero size");
 		return_0;
 	}
-	
+
 	if (!dm_tree_node_add_integrity_target(node, seg->integrity_data_sectors,
 					       origin_uuid, meta_uuid,
 					       &seg->integrity_settings,

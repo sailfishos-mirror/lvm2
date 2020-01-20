@@ -394,7 +394,7 @@ dm_percent_t lvseg_percent_with_info_and_seg_status(const struct lv_with_info_an
 			p = DM_PERCENT_100;
 		else
 			p = dm_make_percent(s->integrity->recalc_sector,
-				    	    s->integrity->provided_data_sectors);
+					    s->integrity->provided_data_sectors);
 		break;
 	case SEG_STATUS_CACHE:
 		if (s->cache->fail || s->cache->error)

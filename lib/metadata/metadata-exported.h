@@ -693,6 +693,8 @@ struct lvresize_params {
 	const char *lockopt;
 	char *lockd_lv_refresh_path; /* set during resize to use for refresh at the end */
 	char *lockd_lv_refresh_uuid; /* set during resize to use for refresh at the end */
+
+	const char *integritymetadata;
 };
 
 void pvcreate_params_set_defaults(struct pvcreate_params *pp);
@@ -838,7 +840,7 @@ int lv_extend(struct logical_volume *lv,
 	      uint32_t mirrors, uint32_t region_size,
 	      uint32_t extents,
 	      struct dm_list *allocatable_pvs, alloc_policy_t alloc,
-	      int approx_alloc);
+	      int approx_alloc, const char *integritymetadata);
 
 /* lv must be part of lv->vg->lvs */
 int lv_remove(struct logical_volume *lv);
@@ -1416,5 +1418,11 @@ int lv_remove_integrity(struct logical_volume *lv);
 int lv_remove_integrity_from_raid(struct logical_volume *lv);
 void lv_clear_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_has_integrity_recalculate_metadata(struct logical_volume *lv);
+int lv_has_integrity_internal(struct logical_volume *lv);
+int lv_raid_has_integrity(struct logical_volume *lv);
+int lv_extend_integrity_in_raid(struct logical_volume *lv,
+                                struct dm_list *pvh, const char *meta_name);
+int lv_extend_integrity_for_origin(struct logical_volume *lv_iorig,
+                                   struct dm_list *pvh, const char *meta_name);
 
 #endif
