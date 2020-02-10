@@ -105,7 +105,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 	meta_sectors = meta_bytes / 512;
 	lp_meta.extents = meta_sectors / vg->extent_size;
 
-	log_print("Creating integrity metadata LV %s with size %s.",
+	log_print_unless_silent("Creating integrity metadata LV %s with size %s.",
 		  metaname, display_size(cmd, meta_sectors));
 
 	dm_list_init(&lp_meta.tags);
@@ -756,7 +756,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	}
 
 	if (is_active) {
-		log_print("Writing VG and updating LV with new integrity LV %s", lv->name);
+		log_debug("Writing VG and updating LV with new integrity LV %s", lv->name);
 
 		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
 		if (!lv_update_and_reload(lv)) {
@@ -777,7 +777,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		 * kernel's recalculating (initialization) process.
 		 */
 
-		log_print("Activating to start integrity initialization for LV %s", lv->name);
+		log_debug("Activating to start integrity initialization for LV %s", lv->name);
 
 		if (!activate_lv(cmd, lv)) {
 			log_error("Failed to activate integrity LV to initialize.");
@@ -792,7 +792,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	 * include "recalculate" and restart initialization.
 	 */
 
-	log_print("Writing VG with initialized integrity LV %s", lv->name);
+	log_debug("Writing VG with initialized integrity LV %s", lv->name);
 
 	for (s = 0; s < area_count; s++) {
 		lv_image = seg_lv(seg_top, s);
@@ -1020,7 +1020,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	}
 
 	if (is_active) {
-		log_print("Writing VG and updating LV with new integrity LV %s", lv->name);
+		log_debug("Writing VG and updating LV with new integrity LV %s", lv->name);
 
 		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
 		if (!lv_update_and_reload(lv)) {
@@ -1029,7 +1029,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 			goto_out;
 		}
 	} else {
-		log_print("Writing VG with new integrity LV %s", lv->name);
+		log_debug("Writing VG with new integrity LV %s", lv->name);
 
 		if (!vg_write(vg) || !vg_commit(vg)) {
 			ret = 0;
@@ -1041,7 +1041,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		 * kernel's recalculating (initialization) process.
 		 */
 
-		log_print("Activating to start integrity initialization for LV %s", lv->name);
+		log_debug("Activating to start integrity initialization for LV %s", lv->name);
 
 		if (!activate_lv(cmd, lv)) {
 			log_error("Failed to activate integrity LV to initialize.");
@@ -1060,7 +1060,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	 * (see lv_clear_integrity_recalculate_metadata).
 	 */
 
-	log_print("Writing VG with initialized integrity LV %s", lv->name);
+	log_debug("Writing VG with initialized integrity LV %s", lv->name);
 
 	seg->integrity_recalculate = 0;
 

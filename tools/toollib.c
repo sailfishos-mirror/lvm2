@@ -804,7 +804,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
 
 	/* Write VG metadata to clear the integrity recalculate flag. */
 	if (integrity_recalculate && lv_is_active(lv)) {
-		log_print("Updating VG to complete initialization of integrity LV %s.",
+		log_print_unless_silent("Updating VG to complete initialization of integrity LV %s.",
 			  display_lvname(lv));
 		lv_clear_integrity_recalculate_metadata(lv);
 	}

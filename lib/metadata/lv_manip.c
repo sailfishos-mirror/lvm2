@@ -8320,7 +8320,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 	}
 
 	if (seg_is_integrity(lp) || (seg_is_raid(lp) && lp->integrity_arg)) {
-		log_print("Adding integrity to new LV");
+		log_debug("Adding integrity to new LV");
 
 		/*
 		 * internal integrity requires wiping the origin, before
