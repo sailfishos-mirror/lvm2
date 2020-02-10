@@ -530,9 +530,10 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	struct dm_list *use_pvh = pvh;
 	uint64_t status_data_sectors = 0;
 	uint32_t area_count, s;
+	uint32_t revert_meta_lvs = 0;
 	int is_active;
 	int external = 0, internal = 0;
-	int ret = 1;
+	int ret;
 
 	memset(imeta_lvs, 0, sizeof(imeta_lvs));
 
@@ -597,13 +598,13 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		struct wipe_params wipe = { .do_zero = 1, .zero_sectors = 8 };
 
 		if (s >= DEFAULT_RAID_MAX_IMAGES)
-			return_0;
+			goto_bad;
 
 		lv_image = seg_lv(seg_top, s);
 
 		if (!seg_is_striped(first_seg(lv_image))) {
 			log_error("raid image must be linear to add integrity");
-			return_0;
+			goto_bad;
 		}
 
 		/*
@@ -615,7 +616,12 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		lp.extents = lv_image->size / vg->extent_size;
 
 		if (!_lv_create_integrity_metadata(cmd, vg, &lp, &meta_lv))
-			return_0;
+			goto_bad;
+
+		revert_meta_lvs++;
+
+		/* Used below to set up the new integrity segment. */
+		imeta_lvs[s] = meta_lv;
 
 		/*
 		 * dm-integrity requires the metadata LV header to be zeroed.
@@ -623,21 +629,20 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 
 		if (!activate_lv(cmd, meta_lv)) {
 			log_error("Failed to activate LV %s to zero", display_lvname(meta_lv));
-			return 0;
+			goto_bad;
 		}
 
 		if (!wipe_lv(meta_lv, wipe)) {
 			log_error("Failed to zero LV for integrity metadata %s", display_lvname(meta_lv));
-			return 0;
+			if (deactivate_lv(cmd, meta_lv))
+				log_error("Failed to deactivate LV %s after zero", display_lvname(meta_lv));
+			goto_bad;
 		}
 
 		if (!deactivate_lv(cmd, meta_lv)) {
 			log_error("Failed to deactivate LV %s after zero", display_lvname(meta_lv));
-			return 0;
+			goto_bad;
 		}
-
-		/* Used below to set up the new integrity segment. */
-		imeta_lvs[s] = meta_lv;
 	}
 
 /* skip_imeta: */
@@ -650,7 +655,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		lv_image = seg_lv(seg_top, s);
 
 		if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_INTEGRITY)))
-			return_0;
+			goto_bad;
 
 		log_debug("Adding integrity to raid image %s", lv_image->name);
 
@@ -661,7 +666,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		 * that were moved to lv_iorig.
 		 */
 		if (!(lv_iorig = insert_layer_for_lv(cmd, lv_image, INTEGRITY, "_iorig")))
-			return_0;
+			goto_bad;
 
 		lv_image->status |= INTEGRITY;
 
@@ -710,16 +715,14 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		/* write-commit allows activating the LV to get data_sectors */
 		if (!vg_write(vg) || !vg_commit(vg)) {
 			log_error("Preliminary internal integrity write commit error");
-			ret = 0;
-			goto out;
+			goto_bad;
 		}
 
 		log_debug("Activating temporary integrity LV to get data sectors.");
 
 		if (!activate_lv(cmd, lv_image)) {
 			log_error("Failed to activate temporary integrity.");
-			ret = 0;
-			goto out;
+			goto_bad;
 		}
 
 		if (!_get_provided_data_sectors(lv_image, &status_data_sectors)) {
@@ -741,7 +744,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		}
 
 		if (!ret)
-			goto_out;
+			goto_bad;
 
 		lv_image->status &= ~LV_NOSCAN;
 		lv_image->status &= ~LV_TEMPORARY;
@@ -761,16 +764,17 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
 		if (!lv_update_and_reload(lv)) {
 			log_error("LV update and reload failed");
-			ret = 0;
-			goto_out;
+			goto_bad;
 		}
+		revert_meta_lvs = 0;
+
 	} else {
 		log_debug("Writing VG with new integrity LV %s", lv->name);
 
-		if (!vg_write(vg) || !vg_commit(vg)) {
-			ret = 0;
-			goto_out;
-		}
+		if (!vg_write(vg) || !vg_commit(vg))
+			goto_bad;
+
+		revert_meta_lvs = 0;
 
 		/*
 		 * This first activation includes "recalculate" which starts the
@@ -781,8 +785,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 
 		if (!activate_lv(cmd, lv)) {
 			log_error("Failed to activate integrity LV to initialize.");
-			ret = 0;
-			goto_out;
+			goto_bad;
 		}
 	}
 
@@ -800,13 +803,23 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		seg_image->integrity_recalculate = 0;
 	}
 
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		ret = 0;
-		goto_out;
-	}
+	if (!vg_write(vg) || !vg_commit(vg))
+		goto_bad;
 
-out:
-	return ret;
+	return 1;
+
+bad:
+	log_error("Failed to add integrity.");
+
+	for (s = 0; s < revert_meta_lvs; s++) {
+		if (!lv_remove(imeta_lvs[s]))
+			log_error("New integrity metadata LV may require manual removal.");
+	}
+			       
+	if (!vg_write(vg) || !vg_commit(vg))
+		log_error("New integrity metadata LV may require manual removal.");
+
+	return 0;
 }
 
 int lv_add_integrity(struct logical_volume *lv, const char *arg,
@@ -825,9 +838,10 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	struct dm_list *use_pvh = pvh;
 	struct lv_segment *seg;
 	uint64_t lv_size_sectors;
+	int revert_meta_lv = 0;
 	int is_active;
 	int external = 0, internal = 0;
-	int ret = 1;
+	int ret;
 
 	lv_size_sectors = lv->size;
 
@@ -872,7 +886,9 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		lp.extents = lv->size / vg->extent_size;
 
 		if (!_lv_create_integrity_metadata(cmd, vg, &lp, &meta_lv))
-			goto_out;
+			goto_bad;
+
+		revert_meta_lv = 1;
 
 	} else if (external && meta_lv) {
 		uint64_t meta_bytes, meta_sectors;
@@ -883,12 +899,12 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		if (meta_lv->size < meta_sectors) {
 			log_error("Integrity metadata needs %s, metadata LV is only %s.",
 				 display_size(cmd, meta_sectors), display_size(cmd, meta_lv->size));
-			return 0;
+			goto_bad;
 		}
 	}
 
 	if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_INTEGRITY)))
-		return_0;
+		goto_bad;
 
 	/*
 	 * "lv_orig" is a new LV with new id, but with the segments from "lv".
@@ -897,7 +913,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 	 */
 
 	if (!(lv_orig = insert_layer_for_lv(cmd, lv, INTEGRITY, "_iorig")))
-		return_0;
+		goto_bad;
 
 	seg = first_seg(lv);
 	seg->segtype = segtype;
@@ -935,7 +951,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 
 		if (!sync_local_dev_names(cmd)) {
 			log_error("Failed to sync local devices.");
-			return 0;
+			goto_bad;
 		}
 
 		log_verbose("Zeroing LV for integrity metadata");
@@ -943,18 +959,20 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		if (!lv_is_active(meta_lv)) {
 			if (!activate_lv(cmd, meta_lv)) {
 				log_error("Failed to activate LV %s to zero", display_lvname(meta_lv));
-				return 0;
+				goto_bad;
 			}
 		}
 
 		if (!wipe_lv(meta_lv, wipe)) {
 			log_error("Failed to zero LV for integrity metadata %s", display_lvname(meta_lv));
-			return 0;
+			if (!deactivate_lv(cmd, meta_lv))
+				log_error("Failed to deactivate LV %s after zero", display_lvname(meta_lv));
+			goto_bad;
 		}
 
 		if (!deactivate_lv(cmd, meta_lv)) {
 			log_error("Failed to deactivate LV %s after zero", display_lvname(meta_lv));
-			return 0;
+			goto_bad;
 		}
 
 		if (meta_name) {
@@ -962,10 +980,10 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 			/* LVM tradition to add a suffix to an existing LV when using it. */
 			if (dm_snprintf(imeta_name, sizeof(imeta_name), "%s_imeta", meta_lv->name) < 0) {
 				log_error("Can't prepare new imeta name for %s", display_lvname(meta_lv));
-				return 0;
+				goto_bad;
 			}
 			if (!lv_rename_update(cmd, meta_lv, imeta_name, 0))
-				return_0;
+				goto_bad;
 		}
 
 		meta_lv->status |= INTEGRITY_METADATA;
@@ -981,7 +999,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		/* write-commit allows activating the LV to get data_sectors */
 		if (!vg_write(vg) || !vg_commit(vg)) {
 			log_error("Preliminary internal integrity write commit error");
-			return 0;
+			goto_bad;
 		}
 
 		lv->status |= LV_TEMPORARY;
@@ -991,7 +1009,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 
 		if (!activate_lv(cmd, lv)) {
 			log_error("Failed to activate temporary integrity.");
-			return 0;
+			goto_bad;
 		}
 
 		if (!_get_provided_data_sectors(lv, &seg->integrity_data_sectors)) {
@@ -1016,7 +1034,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		lv->status &= ~LV_TEMPORARY;
 
 		if (!ret)
-			goto_out;
+			goto_bad;
 	}
 
 	if (is_active) {
@@ -1025,16 +1043,17 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 		/* vg_write(), suspend_lv(), vg_commit(), resume_lv() */
 		if (!lv_update_and_reload(lv)) {
 			log_error("LV update and reload failed");
-			ret = 0;
-			goto_out;
+			goto_bad;
 		}
+		revert_meta_lv = 0;
+
 	} else {
 		log_debug("Writing VG with new integrity LV %s", lv->name);
 
-		if (!vg_write(vg) || !vg_commit(vg)) {
-			ret = 0;
-			goto_out;
-		}
+		if (!vg_write(vg) || !vg_commit(vg))
+			goto_bad;
+
+		revert_meta_lv = 0;
 
 		/*
 		 * This first activation includes "recalculate" which starts the
@@ -1045,8 +1064,7 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 
 		if (!activate_lv(cmd, lv)) {
 			log_error("Failed to activate integrity LV to initialize.");
-			ret = 0;
-			goto_out;
+			goto_bad;
 		}
 	}
 
@@ -1064,13 +1082,21 @@ int lv_add_integrity(struct logical_volume *lv, const char *arg,
 
 	seg->integrity_recalculate = 0;
 
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		ret = 0;
-		goto_out;
+	if (!vg_write(vg) || !vg_commit(vg))
+		goto_bad;
+
+	return 1;
+
+ bad:
+	log_error("Failed to add integrity.");
+
+	if (revert_meta_lv) {
+		log_debug("Removing meta LV %s", meta_lv->name);
+		if (!lv_remove(meta_lv) || !vg_write(vg) || !vg_commit(vg))
+			log_error("New integrity metadata LV may require manual removal: %s", display_lvname(meta_lv));
 	}
 
- out:
-	return ret;
+	return 0;
 }
 
 /*
