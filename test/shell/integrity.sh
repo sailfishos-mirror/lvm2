@@ -167,6 +167,26 @@ _verify_data_on_lv() {
 	umount $mnt
 }
 
+_sync_percent() {
+	get lv_field $vg/$lv1 sync_percent | cut -d. -f1
+}
+
+_wait_recalc() {
+	for i in $(seq 1 10) ; do
+		sync=$(_sync_percent)
+		echo "sync_percent is $sync"
+
+		if test "$sync" = "100"; then
+			return
+		fi
+
+		sleep 1
+	done
+
+	echo "timeout waiting for recalc"
+	return 1
+}
+
 _prepare_vg
 lvcreate --integrity y -n $lv1 -l 8 $vg "$dev1"
 _test_fs_with_error
@@ -236,8 +256,7 @@ vgremove -ff $vg
 
 _prepare_vg
 lvcreate --integrity y -n $lv1 -l 8 $vg
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
@@ -249,8 +268,7 @@ vgremove -ff $vg
 
 _prepare_vg
 lvcreate --type raid1 -m1 --integrity y -n $lv1 -l 8 $vg
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
@@ -268,8 +286,7 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -281,8 +298,7 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -296,16 +312,14 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -l 16 $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -317,16 +331,14 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -l 16 $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -341,16 +353,14 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -L 512M $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-# wait for recalc to finish
-sleep 8
+_wait_recalc
 lvs -a $vg
 check lv_field $vg/${lv1}_imeta size "8.00m"
 lvchange -an $vg/$lv1
