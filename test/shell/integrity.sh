@@ -168,12 +168,15 @@ _verify_data_on_lv() {
 }
 
 _sync_percent() {
-	get lv_field $vg/$lv1 sync_percent | cut -d. -f1
+	local checklv=$1
+	get lv_field "$checklv" sync_percent | cut -d. -f1
 }
 
 _wait_recalc() {
+	local checklv=$1
+
 	for i in $(seq 1 10) ; do
-		sync=$(_sync_percent)
+		sync=$(_sync_percent "$checklv")
 		echo "sync_percent is $sync"
 
 		if test "$sync" = "100"; then
@@ -256,7 +259,7 @@ vgremove -ff $vg
 
 _prepare_vg
 lvcreate --integrity y -n $lv1 -l 8 $vg
-_wait_recalc
+_wait_recalc $vg/$lv1
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
@@ -268,7 +271,8 @@ vgremove -ff $vg
 
 _prepare_vg
 lvcreate --type raid1 -m1 --integrity y -n $lv1 -l 8 $vg
-_wait_recalc
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
@@ -286,7 +290,7 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-_wait_recalc
+_wait_recalc $vg/$lv1
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -298,7 +302,8 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-_wait_recalc
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -312,14 +317,14 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-_wait_recalc
+_wait_recalc $vg/$lv1
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -l 16 $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-_wait_recalc
+_wait_recalc $vg/$lv1
 lvs -a $vg
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -331,14 +336,16 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-_wait_recalc
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -l 16 $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-_wait_recalc
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
 lvs -a $vg
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -353,14 +360,14 @@ lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
 lvconvert --integrity y $vg/$lv1
-_wait_recalc
+_wait_recalc $vg/$lv1
 lvs -a $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -L 512M $vg/$lv1
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-_wait_recalc
+_wait_recalc $vg/$lv1
 lvs -a $vg
 check lv_field $vg/${lv1}_imeta size "8.00m"
 lvchange -an $vg/$lv1
