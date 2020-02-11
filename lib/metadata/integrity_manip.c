@@ -343,7 +343,8 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv)
 	seg_top = first_seg(lv);
 
 	if (!seg_is_raid1(seg_top) && !seg_is_raid4(seg_top) &&
-	    !seg_is_any_raid5(seg_top) && !seg_is_any_raid6(seg_top)) {
+	    !seg_is_any_raid5(seg_top) && !seg_is_any_raid6(seg_top) &&
+	    !seg_is_any_raid10(seg_top)) {
 		log_error("LV %s segment is unsupported raid for integrity.", display_lvname(lv));
 		return 0;
 	}
@@ -567,7 +568,8 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	area_count = seg_top->area_count;
 
 	if (!seg_is_raid1(seg_top) && !seg_is_raid4(seg_top) &&
-	    !seg_is_any_raid5(seg_top) && !seg_is_any_raid6(seg_top)) {
+	    !seg_is_any_raid5(seg_top) && !seg_is_any_raid6(seg_top) &&
+	    !seg_is_any_raid10(seg_top)) {
 		log_error("Integrity can only be added to raid1,4,5,6.");
 		return 0;
 	}
