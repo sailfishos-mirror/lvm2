@@ -1424,5 +1424,6 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv,
                                 struct dm_list *pvh, const char *meta_name);
 int lv_extend_integrity_for_origin(struct logical_volume *lv_iorig,
                                    struct dm_list *pvh, const char *meta_name);
+int lv_get_raid_integrity_settings(struct logical_volume *lv, struct integrity_settings **isettings);
 
 #endif

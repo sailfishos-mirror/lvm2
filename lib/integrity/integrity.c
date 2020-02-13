@@ -243,7 +243,7 @@ static int _target_present(struct cmd_context *cmd,
 
 	if (!_integrity_checked) {
 		_integrity_checked = 1;
-		_integrity_present =  target_present(cmd, TARGET_NAME_INTEGRITY, 0);
+		_integrity_present =  target_present(cmd, TARGET_NAME_INTEGRITY, 1);
 
 		if (!target_version(TARGET_NAME_INTEGRITY, &maj, &min, &patchlevel))
 			return 0;

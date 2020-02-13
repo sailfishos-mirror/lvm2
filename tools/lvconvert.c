@@ -1396,6 +1396,14 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 							lp->region_size : seg->region_size , lp->pvh))
 				return_0;
 
+			if (lv_raid_has_integrity(lv)) {
+				struct integrity_settings *isettings = NULL;
+				if (!lv_get_raid_integrity_settings(lv, &isettings))
+					return_0;
+				if (!lv_add_integrity_to_raid(lv, "external", NULL, isettings, lp->pvh))
+					return_0;
+			}
+
 			log_print_unless_silent("Logical volume %s successfully converted.",
 						display_lvname(lv));
 
@@ -1438,6 +1446,14 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 				     lp->region_size, lp->pvh))
 			return_0;
 
+		if (lv_raid_has_integrity(lv)) {
+			struct integrity_settings *isettings = NULL;
+			if (!lv_get_raid_integrity_settings(lv, &isettings))
+				return_0;
+			if (!lv_add_integrity_to_raid(lv, "external", NULL, isettings, lp->pvh))
+				return_0;
+		}
+
 		log_print_unless_silent("Logical volume %s successfully converted.",
 					display_lvname(lv));
 		return 1;
@@ -1458,6 +1474,14 @@ try_new_takeover_or_reshape:
 			     (lp->region_size_supplied || !seg->region_size) ?
 			     lp->region_size : seg->region_size , lp->pvh))
 		return_0;
+
+	if (lv_raid_has_integrity(lv)) {
+		struct integrity_settings *isettings = NULL;
+		if (!lv_get_raid_integrity_settings(lv, &isettings))
+			return_0;
+		if (!lv_add_integrity_to_raid(lv, "external", NULL, isettings, lp->pvh))
+			return_0;
+	}
 
 	log_print_unless_silent("Logical volume %s successfully converted.",
 				display_lvname(lv));

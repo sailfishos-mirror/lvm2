@@ -570,7 +570,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	if (!seg_is_raid1(seg_top) && !seg_is_raid4(seg_top) &&
 	    !seg_is_any_raid5(seg_top) && !seg_is_any_raid6(seg_top) &&
 	    !seg_is_any_raid10(seg_top)) {
-		log_error("Integrity can only be added to raid1,4,5,6.");
+		log_error("Integrity can only be added to raid1,4,5,6,10.");
 		return 0;
 	}
 
@@ -603,6 +603,14 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 			goto_bad;
 
 		lv_image = seg_lv(seg_top, s);
+
+		/*
+		 * This function is used to add integrity to new images added
+		 * to the raid, in which case old images will already be
+		 * integrity.
+		 */
+		if (seg_is_integrity(first_seg(lv_image)))
+			continue;
 
 		if (!seg_is_striped(first_seg(lv_image))) {
 			log_error("raid image must be linear to add integrity");
@@ -655,6 +663,10 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	 */
 	for (s = 0; s < area_count; s++) {
 		lv_image = seg_lv(seg_top, s);
+
+		/* Not adding integrity to this image. */
+		if (!imeta_lvs[s])
+			continue;
 
 		if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_INTEGRITY)))
 			goto_bad;
@@ -1206,3 +1218,27 @@ int lv_raid_has_integrity(struct logical_volume *lv)
 
 	return 0;
 }
+
+int lv_get_raid_integrity_settings(struct logical_volume *lv, struct integrity_settings **isettings)
+{
+	struct logical_volume *lv_image;
+	struct lv_segment *seg, *seg_image;
+	uint32_t s;
+
+	seg = first_seg(lv);
+
+	if (seg_is_raid(seg)) {
+		for (s = 0; s < seg->area_count; s++) {
+			lv_image = seg_lv(seg, s);
+			seg_image = first_seg(lv_image);
+
+			if (seg_is_integrity(seg_image)) {
+				*isettings = &seg_image->integrity_settings;
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
