@@ -520,6 +520,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 			     struct dm_list *pvh)
 {
 	struct lvcreate_params lp;
+	struct dm_list allocatable_pvs;
 	struct logical_volume *imeta_lvs[DEFAULT_RAID_MAX_IMAGES];
 	struct cmd_context *cmd = lv->vg->cmd;
 	struct volume_group *vg = lv->vg;
@@ -528,7 +529,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 	const struct segment_type *segtype;
 	struct integrity_settings *set;
 	struct device *meta_dev = NULL;
-	struct dm_list *use_pvh = pvh;
+	struct dm_list *use_pvh = NULL;
 	uint64_t status_data_sectors = 0;
 	uint32_t area_count, s;
 	uint32_t revert_meta_lvs = 0;
@@ -616,6 +617,16 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 			log_error("raid image must be linear to add integrity");
 			goto_bad;
 		}
+
+		dm_list_init(&allocatable_pvs);
+
+		if (!get_pv_list_for_lv(cmd->mem, lv_image, &allocatable_pvs)) {
+			log_error("Failed to build list of PVs for %s.", display_lvname(lv_image));
+			goto_bad;
+		}
+
+		if (!use_pvh)
+			use_pvh = &allocatable_pvs;
 
 		/*
 		 * allocate a new linear LV NAME_rimage_N_imeta
