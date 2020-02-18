@@ -8340,12 +8340,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		log_debug("Adding integrity to new LV");
 
 		if (seg_is_raid(lp)) {
-			if (!lv_add_integrity_to_raid(lv, lp->integrity_arg,
-						      &lp->integrity_settings, lp->pvh))
+			if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL))
 				goto revert_new_lv;
 		} else {
-			if (!lv_add_integrity(lv, lp->integrity_arg,
-					      &lp->integrity_settings, lp->pvh))
+			if (!lv_add_integrity(lv, &lp->integrity_settings, lp->pvh))
 				goto revert_new_lv;
 		}
 
