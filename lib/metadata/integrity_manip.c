@@ -336,7 +336,7 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv)
 	return 1;
 }
 
-int lv_remove_integrity(struct logical_volume *lv)
+int lv_remove_integrity(struct logical_volume *lv, struct logical_volume **keep_lv_imeta)
 {
 	struct cmd_context *cmd = lv->vg->cmd;
 	struct volume_group *vg = lv->vg;
@@ -394,7 +394,9 @@ int lv_remove_integrity(struct logical_volume *lv)
 	if (!lv_remove(lv_iorig))
 		log_error("Failed to remove unused iorig LV %s.", lv_iorig->name);
 
-	if (!lv_remove(lv_imeta))
+	if (keep_lv_imeta)
+		*keep_lv_imeta = lv_imeta;
+	else if (!lv_remove(lv_imeta))
 		log_error("Failed to remove unused imeta LV %s.", lv_imeta->name);
 
 	if (!vg_write(vg) || !vg_commit(vg))
@@ -434,10 +436,11 @@ int lv_remove_integrity(struct logical_volume *lv)
  *    
  */
 
-int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
-			     struct integrity_settings *settings,
-			     struct dm_list *pvh)
+int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_settings *settings,
+			     struct dm_list *pvh, struct logical_volume *lv_imeta_0)
 {
+	char imeta_name[NAME_LEN];
+	char *imeta_name_dup;
 	struct lvcreate_params lp;
 	struct dm_list allocatable_pvs;
 	struct logical_volume *imeta_lvs[DEFAULT_RAID_MAX_IMAGES];
@@ -493,6 +496,19 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
 		if (!seg_is_striped(first_seg(lv_image))) {
 			log_error("raid image must be linear to add integrity");
 			goto_bad;
+		}
+
+		/*
+		 * Use an existing lv_imeta from previous linear+integrity LV.
+		 * FIXME: is it guaranteed that lv_image_0 is the existing?
+		 */
+		if (!s && lv_imeta_0) {
+			if (dm_snprintf(imeta_name, sizeof(imeta_name), "%s_imeta", lv_image->name) > 0) {
+				if ((imeta_name_dup = dm_pool_strdup(vg->vgmem, imeta_name)))
+					lv_imeta_0->name = imeta_name_dup;
+			}
+			imeta_lvs[0] = lv_imeta_0;
+			continue;
 		}
 
 		dm_list_init(&allocatable_pvs);
@@ -659,8 +675,7 @@ bad:
 	return 0;
 }
 
-int lv_add_integrity(struct logical_volume *lv, const char *arg,
-		     struct integrity_settings *settings,
+int lv_add_integrity(struct logical_volume *lv, struct integrity_settings *settings,
 		     struct dm_list *pvh)
 {
 	struct lvcreate_params lp = { 0 };

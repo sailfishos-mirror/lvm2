@@ -1406,11 +1406,10 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 		                                            char **argv, int allocatable_only);
 struct dm_list *clone_pv_list(struct dm_pool *mem, struct dm_list *pvsl);
 
-int lv_add_integrity(struct logical_volume *lv, const char *arg,
-			struct integrity_settings *settings, struct dm_list *pvh);
-int lv_add_integrity_to_raid(struct logical_volume *lv, const char *arg,
-			struct integrity_settings *settings, struct dm_list *pvh);
-int lv_remove_integrity(struct logical_volume *lv);
+int lv_add_integrity(struct logical_volume *lv, struct integrity_settings *settings, struct dm_list *pvh);
+int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_settings *settings, struct dm_list *pvh,
+			     struct logical_volume *lv_imeta_0);
+int lv_remove_integrity(struct logical_volume *lv, struct logical_volume **keep_lv_imeta);
 int lv_remove_integrity_from_raid(struct logical_volume *lv);
 void lv_clear_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_has_integrity_recalculate_metadata(struct logical_volume *lv);

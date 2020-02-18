@@ -85,6 +85,8 @@ struct lvconvert_params {
 	struct dm_list idls;
 
 	const char *origin_name;
+
+	struct logical_volume *prev_lv_imeta;
 };
 
 struct convert_poll_id_list {
@@ -1400,7 +1402,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 				struct integrity_settings *isettings = NULL;
 				if (!lv_get_raid_integrity_settings(lv, &isettings))
 					return_0;
-				if (!lv_add_integrity_to_raid(lv, "external", isettings, lp->pvh))
+				if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
 					return_0;
 			}
 
@@ -1450,7 +1452,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 			struct integrity_settings *isettings = NULL;
 			if (!lv_get_raid_integrity_settings(lv, &isettings))
 				return_0;
-			if (!lv_add_integrity_to_raid(lv, "external", isettings, lp->pvh))
+			if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
 				return_0;
 		}
 
@@ -1479,7 +1481,7 @@ try_new_takeover_or_reshape:
 		struct integrity_settings *isettings = NULL;
 		if (!lv_get_raid_integrity_settings(lv, &isettings))
 			return_0;
-		if (!lv_add_integrity_to_raid(lv, "external", isettings, lp->pvh))
+		if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
 			return_0;
 	}
 
@@ -1736,11 +1738,35 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 				 struct lvconvert_params *lp)
 {
 	struct lv_segment *seg = first_seg(lv);
+	struct integrity_settings isettings;
+	int add_integrity = 0;
 	int ret = 0;
 
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
 		return_ECMD_FAILED;
+
+	/*
+	 * Converting integrity+linear to raid+integrity.  The imeta
+	 * used for the linear LV can be used for that same linear LV
+	 * in its new position as a raid image.
+	 *
+	 * Remove the top integrity layer (saving the detached imeta LV),
+	 * do the raid conversion on the linear LV, which makes the new
+	 * top LV a raid LV.  When integrity is added to the raid images,
+	 * use the saved imeta LV and reattach it to the same linear LV
+	 * that is now a raid image.
+	 */
+	if (lv_is_integrity(lv)) {
+		struct lv_segment *iseg = first_seg(lv);
+
+		memcpy(&isettings, &iseg->integrity_settings, sizeof(isettings));
+		add_integrity = 1;
+
+		if (!lv_remove_integrity(lv, &lp->prev_lv_imeta))
+			goto_out;
+		seg = first_seg(lv);
+	}
 
 	/* Set up segtype either from type_str or else to match the existing one. */
 	if (!*lp->type_str)
@@ -1799,8 +1825,13 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 	 * If operations differ between striped and linear, split this case.
 	 */
 	if (segtype_is_striped(seg->segtype) || segtype_is_linear(seg->segtype)) {
-		ret = _convert_striped(cmd, lv, lp);
-		goto out;
+		if (!_convert_striped(cmd, lv, lp))
+			goto_out;
+
+		if (add_integrity) {
+			if (!lv_add_integrity_to_raid(lv, &isettings, lp->pvh, lp->prev_lv_imeta))
+				goto_out;
+		}
 	}
 
 	/*
@@ -5795,7 +5826,7 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd,
 	if (lv_is_raid(lv))
 		ret = lv_remove_integrity_from_raid(lv);
 	else
-		ret = lv_remove_integrity(lv);
+		ret = lv_remove_integrity(lv, NULL);
 	if (!ret)
 		return 0;
 
@@ -5829,9 +5860,9 @@ static int _lvconvert_integrity_add(struct cmd_context *cmd,
 		return_0;
 
 	if (lv_is_raid(lv))
-		ret = lv_add_integrity_to_raid(lv, "external", set, use_pvh);
+		ret = lv_add_integrity_to_raid(lv, set, use_pvh, NULL);
 	else
-		ret = lv_add_integrity(lv, "external", set, use_pvh);
+		ret = lv_add_integrity(lv, set, use_pvh);
 	if (!ret)
 		return 0;
 

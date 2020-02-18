@@ -3132,6 +3132,18 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 		}
 		lv->status &= ~(LV_NOTSYNCED | LV_WRITEMOSTLY);
 		first_seg(lv)->writebehind = 0;
+
+		if (seg_is_integrity(first_seg(lv))) {
+			char imeta_name[NAME_LEN];
+			char *imeta_name_dup;
+			struct lv_segment *iseg = first_seg(lv);
+			struct logical_volume *lv_imeta = iseg->integrity_meta_dev;
+
+			if (dm_snprintf(imeta_name, sizeof(imeta_name), "%s_imeta", lv->name) > 0) {
+				if ((imeta_name_dup = dm_pool_strdup(lv->vg->vgmem, imeta_name)))
+					lv_imeta->name = imeta_name_dup;
+			}
+		}
 	}
 
 	if (!commit)
@@ -3328,9 +3340,11 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 	}
 
 	/* Convert to linear? */
-	if ((new_count == 1) && !_raid_remove_top_layer(lv, &removal_lvs)) {
-		log_error("Failed to remove RAID layer after linear conversion.");
-		return 0;
+	if (new_count == 1) {
+		if (!_raid_remove_top_layer(lv, &removal_lvs)) {
+			log_error("Failed to remove RAID layer after linear conversion.");
+			return 0;
+		}
 	}
 
 	/* Get first item */
