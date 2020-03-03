@@ -1003,8 +1003,8 @@ struct lvcreate_params {
 	alloc_policy_t alloc; /* all */
 	struct dm_vdo_target_params vdo_params; /* vdo */
 
-	const char *integrity_arg;
-	const char *integrity_meta_name;
+	int raidintegrity;
+	const char *raidintegritymode;
 	struct integrity_settings integrity_settings;
 
 	struct dm_list tags;	/* all */
@@ -1406,16 +1406,13 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 		                                            char **argv, int allocatable_only);
 struct dm_list *clone_pv_list(struct dm_pool *mem, struct dm_list *pvsl);
 
-int lv_add_integrity(struct logical_volume *lv, struct integrity_settings *settings, struct dm_list *pvh);
 int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_settings *settings, struct dm_list *pvh,
 			     struct logical_volume *lv_imeta_0);
-int lv_remove_integrity(struct logical_volume *lv, struct logical_volume **keep_lv_imeta);
 int lv_remove_integrity_from_raid(struct logical_volume *lv);
 void lv_clear_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_has_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_raid_has_integrity(struct logical_volume *lv);
 int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh);
-int lv_extend_integrity_for_origin(struct logical_volume *lv_iorig, struct dm_list *pvh);
 int lv_get_raid_integrity_settings(struct logical_volume *lv, struct integrity_settings **isettings);
 
 #endif

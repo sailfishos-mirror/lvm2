@@ -3119,6 +3119,11 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 
 	/* Convert to linear? */
 	if (new_count == 1) {
+		if (seg_is_integrity(first_seg(lv))) {
+			log_error("RAID checksums must be disabled before converting to linear.");
+			return 0;
+		}
+
 		if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to type %s losing all resilience? [y/n]: ",
 					  lvseg_name(first_seg(lv)), display_lvname(lv), SEG_TYPE_NAME_LINEAR) == 'n') {
 			log_error("Logical volume %s NOT converted to \"%s\".",
@@ -3132,18 +3137,6 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 		}
 		lv->status &= ~(LV_NOTSYNCED | LV_WRITEMOSTLY);
 		first_seg(lv)->writebehind = 0;
-
-		if (seg_is_integrity(first_seg(lv))) {
-			char imeta_name[NAME_LEN];
-			char *imeta_name_dup;
-			struct lv_segment *iseg = first_seg(lv);
-			struct logical_volume *lv_imeta = iseg->integrity_meta_dev;
-
-			if (dm_snprintf(imeta_name, sizeof(imeta_name), "%s_imeta", lv->name) > 0) {
-				if ((imeta_name_dup = dm_pool_strdup(lv->vg->vgmem, imeta_name)))
-					lv_imeta->name = imeta_name_dup;
-			}
-		}
 	}
 
 	if (!commit)
@@ -3274,6 +3267,11 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 	if (lv->vg->lock_type && !strcmp(lv->vg->lock_type, "sanlock")) {
 		log_error("Splitting raid image is not allowed with lock_type %s.",
 			  lv->vg->lock_type);
+		return 0;
+	}
+
+	if (lv_raid_has_integrity(lv)) {
+		log_error("RAID checksums must be disabled before splitting.");
 		return 0;
 	}
 

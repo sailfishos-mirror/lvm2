@@ -21,7 +21,8 @@ which mkfs.xfs || skip
 
 mnt="mnt"
 mkdir -p $mnt
-aux prepare_devs 5 128
+
+aux prepare_devs 5 64
 
 for i in `seq 1 16384`; do echo -n "A" >> fileA; done
 for i in `seq 1 16384`; do echo -n "B" >> fileB; done
@@ -41,6 +42,7 @@ _prepare_vg() {
 	dd if=/dev/zero of="$dev4" || true
 	dd if=/dev/zero of="$dev5" || true
 	vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+	pvs
 }
 
 _test_fs_with_error() {
@@ -191,75 +193,55 @@ _wait_recalc() {
 }
 
 _prepare_vg
-lvcreate --integrity y -n $lv1 -l 8 $vg "$dev1"
-_test_fs_with_error
+lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+_test_fs_with_raid
 lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
 _prepare_vg
-lvcreate --type raid1 -m1 --integrity y -n $lv1 -l 8 $vg
+lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg
 _test_fs_with_raid
 lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
 _prepare_vg
-lvcreate --type raid1 -m2 --integrity y -n $lv1 -l 8 $vg
+lvcreate --type raid4 --raidintegrity y -n $lv1 -l 8 $vg
 _test_fs_with_raid
 lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
 _prepare_vg
-lvcreate --type raid4 --integrity y -n $lv1 -l 8 $vg
+lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
 _test_fs_with_raid
 lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
 _prepare_vg
-lvcreate --type raid5 --integrity y -n $lv1 -l 8 $vg
+lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
 _test_fs_with_raid
 lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
-lvremove $vg/$lv1
-vgremove -ff $vg
-
-_prepare_vg
-lvcreate --type raid6 --integrity y -n $lv1 -l 8 $vg
-_test_fs_with_raid
-lvchange -an $vg/$lv1
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
 # Test removing integrity from an active LV
 
 _prepare_vg
-lvcreate --integrity y -n $lv1 -l 8 $vg
-_wait_recalc $vg/$lv1
-lvchange -an $vg/$lv1
-lvchange -ay $vg/$lv1
-_add_data_to_lv
-lvconvert --integrity n $vg/$lv1
-_verify_data_on_lv
-lvchange -an $vg/$lv1
-lvremove $vg/$lv1
-vgremove -ff $vg
-
-_prepare_vg
-lvcreate --type raid1 -m1 --integrity y -n $lv1 -l 8 $vg
+lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
 _wait_recalc $vg/${lv1}_rimage_0
 _wait_recalc $vg/${lv1}_rimage_1
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
-lvconvert --integrity n $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
@@ -268,23 +250,11 @@ vgremove -ff $vg
 # Test adding integrity to an active LV
 
 _prepare_vg
-lvcreate -n $lv1 -l 8 $vg
-lvchange -an $vg/$lv1
-lvchange -ay $vg/$lv1
-_add_data_to_lv
-lvconvert --integrity y $vg/$lv1
-_wait_recalc $vg/$lv1
-_verify_data_on_lv
-lvchange -an $vg/$lv1
-lvremove $vg/$lv1
-vgremove -ff $vg
-
-_prepare_vg
 lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
-lvconvert --integrity y $vg/$lv1
+lvconvert --raidintegrity y $vg/$lv1
 _wait_recalc $vg/${lv1}_rimage_0
 _wait_recalc $vg/${lv1}_rimage_1
 _verify_data_on_lv
@@ -295,33 +265,14 @@ vgremove -ff $vg
 # Test lvextend
 
 _prepare_vg
-lvcreate -n $lv1 -l 8 $vg
-lvchange -an $vg/$lv1
-lvchange -ay $vg/$lv1
-_add_data_to_lv
-lvconvert --integrity y $vg/$lv1
-_wait_recalc $vg/$lv1
-lvs -a $vg
-_verify_data_on_lv
-lvchange -an $vg/$lv1
-lvextend -l 16 $vg/$lv1
-lvchange -ay $vg/$lv1
-_verify_data_on_lv
-_wait_recalc $vg/$lv1
-lvs -a $vg
-lvchange -an $vg/$lv1
-lvremove $vg/$lv1
-vgremove -ff $vg
-
-_prepare_vg
 lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
-lvconvert --integrity y $vg/$lv1
+lvconvert --raidintegrity y $vg/$lv1
 _wait_recalc $vg/${lv1}_rimage_0
 _wait_recalc $vg/${lv1}_rimage_1
-lvs -a $vg
+lvs -a -o+devices $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
 lvextend -l 16 $vg/$lv1
@@ -329,31 +280,77 @@ lvchange -ay $vg/$lv1
 _verify_data_on_lv
 _wait_recalc $vg/${lv1}_rimage_0
 _wait_recalc $vg/${lv1}_rimage_1
-lvs -a $vg
+lvs -a -o+devices $vg
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
 
-# lvextend to 512MB is needed for the imeta LV to
-# be extended from 4MB to 8MB.
+# Repeat many of the tests above using journal mode
 
 _prepare_vg
-lvcreate -n $lv1 -l 8 $vg
+lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode journal -n $lv1 -l 8 $vg
+_test_fs_with_raid
+lvchange -an $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+_prepare_vg
+lvcreate --type raid6 --raidintegrity y --raidintegritymode journal -n $lv1 -l 8 $vg
+_test_fs_with_raid
+lvchange -an $vg/$lv1
+lvconvert --raidintegrity n $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# remove from active lv
+_prepare_vg
+lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode journal -n $lv1 -l 8 $vg
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
-lvconvert --integrity y $vg/$lv1
-_wait_recalc $vg/$lv1
-lvs -a $vg
+lvconvert --raidintegrity n $vg/$lv1
 _verify_data_on_lv
-lvchange -an $vg/$lv1
-lvextend -L 512M $vg/$lv1
-lvchange -ay $vg/$lv1
-_verify_data_on_lv
-_wait_recalc $vg/$lv1
-lvs -a $vg
-check lv_field $vg/${lv1}_imeta size "8.00m"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 vgremove -ff $vg
+
+# add to active lv
+_prepare_vg
+lvcreate --type raid1 --raidintegritymode journal -m1 -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --raidintegrity y $vg/$lv1
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
+# lvextend
+_prepare_vg
+lvcreate --type raid1 --raidintegritymode journal -m1 -n $lv1 -l 8 $vg
+lvchange -an $vg/$lv1
+lvchange -ay $vg/$lv1
+_add_data_to_lv
+lvconvert --raidintegrity y $vg/$lv1
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
+lvs -a -o+devices $vg
+_verify_data_on_lv
+lvchange -an $vg/$lv1
+lvextend -l 16 $vg/$lv1
+lvchange -ay $vg/$lv1
+_verify_data_on_lv
+_wait_recalc $vg/${lv1}_rimage_0
+_wait_recalc $vg/${lv1}_rimage_1
+lvs -a -o+devices $vg
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+vgremove -ff $vg
+
 

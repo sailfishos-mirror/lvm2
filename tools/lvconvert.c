@@ -85,8 +85,6 @@ struct lvconvert_params {
 	struct dm_list idls;
 
 	const char *origin_name;
-
-	struct logical_volume *prev_lv_imeta;
 };
 
 struct convert_poll_id_list {
@@ -1738,35 +1736,11 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 				 struct lvconvert_params *lp)
 {
 	struct lv_segment *seg = first_seg(lv);
-	struct integrity_settings isettings;
-	int add_integrity = 0;
 	int ret = 0;
 
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
 		return_ECMD_FAILED;
-
-	/*
-	 * Converting integrity+linear to raid+integrity.  The imeta
-	 * used for the linear LV can be used for that same linear LV
-	 * in its new position as a raid image.
-	 *
-	 * Remove the top integrity layer (saving the detached imeta LV),
-	 * do the raid conversion on the linear LV, which makes the new
-	 * top LV a raid LV.  When integrity is added to the raid images,
-	 * use the saved imeta LV and reattach it to the same linear LV
-	 * that is now a raid image.
-	 */
-	if (lv_is_integrity(lv)) {
-		struct lv_segment *iseg = first_seg(lv);
-
-		memcpy(&isettings, &iseg->integrity_settings, sizeof(isettings));
-		add_integrity = 1;
-
-		if (!lv_remove_integrity(lv, &lp->prev_lv_imeta))
-			goto_out;
-		seg = first_seg(lv);
-	}
 
 	/* Set up segtype either from type_str or else to match the existing one. */
 	if (!*lp->type_str)
@@ -1827,11 +1801,6 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 	if (segtype_is_striped(seg->segtype) || segtype_is_linear(seg->segtype)) {
 		if (!_convert_striped(cmd, lv, lp))
 			goto_out;
-
-		if (add_integrity) {
-			if (!lv_add_integrity_to_raid(lv, &isettings, lp->pvh, lp->prev_lv_imeta))
-				goto_out;
-		}
 	}
 
 	/*
@@ -5811,11 +5780,10 @@ int lvconvert_to_cache_with_cachevol_cmd(struct cmd_context *cmd, int argc, char
 	return ret;
 }
 
-static int _lvconvert_integrity_remove(struct cmd_context *cmd,
-					struct logical_volume *lv)
+static int _lvconvert_integrity_remove(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	struct volume_group *vg = lv->vg;
-	int ret;
+	int ret = 0;
 
 	if (!lv_is_integrity(lv) && !lv_is_raid(lv)) {
 		log_error("LV does not have integrity.");
@@ -5831,10 +5799,8 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd,
 
 	if (lv_is_raid(lv))
 		ret = lv_remove_integrity_from_raid(lv);
-	else
-		ret = lv_remove_integrity(lv, NULL);
 	if (!ret)
-		return 0;
+		return_0;
 
 	backup(vg);
 
@@ -5842,14 +5808,12 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd,
 	return 1;
 }
 
-static int _lvconvert_integrity_add(struct cmd_context *cmd,
-					struct logical_volume *lv,
-					const char *meta_name,
-					struct integrity_settings *set)
+static int _lvconvert_integrity_add(struct cmd_context *cmd, struct logical_volume *lv,
+				    struct integrity_settings *set)
 {
 	struct volume_group *vg = lv->vg;
 	struct dm_list *use_pvh;
-	int ret;
+	int ret = 0;
 
 	/* ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
@@ -5867,10 +5831,8 @@ static int _lvconvert_integrity_add(struct cmd_context *cmd,
 
 	if (lv_is_raid(lv))
 		ret = lv_add_integrity_to_raid(lv, set, use_pvh, NULL);
-	else
-		ret = lv_add_integrity(lv, set, use_pvh);
 	if (!ret)
-		return 0;
+		return_0;
 
 	backup(vg);
 
@@ -5883,23 +5845,17 @@ static int _lvconvert_integrity_single(struct cmd_context *cmd,
 					struct processing_handle *handle)
 {
 	struct integrity_settings settings;
-	const char *meta_name = NULL;
-	const char *arg = NULL;
 	int ret = 0;
 
 	memset(&settings, 0, sizeof(settings));
 
-	if (!get_integrity_options(cmd, &arg, &meta_name, &settings))
-		return 0;
+	if (!integrity_mode_set(arg_str_value(cmd, raidintegritymode_ARG, NULL), &settings))
+		return_ECMD_FAILED;
 
-	if (*arg == 'y')
-		ret = _lvconvert_integrity_add(cmd, lv, meta_name, &settings);
-
-	else if (*arg == 'n')
-		ret = _lvconvert_integrity_remove(cmd, lv);
-
+	if (arg_int_value(cmd, raidintegrity_ARG, 0))
+		ret = _lvconvert_integrity_add(cmd, lv, &settings);
 	else
-		log_error("Invalid integrity option value.");
+		ret = _lvconvert_integrity_remove(cmd, lv);
 
 	if (!ret)
 		return ECMD_FAILED;

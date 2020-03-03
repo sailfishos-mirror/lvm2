@@ -794,8 +794,6 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		mirror_default_cfg = (arg_uint_value(cmd, stripes_ARG, 1) > 1)
 			? global_raid10_segtype_default_CFG : global_mirror_segtype_default_CFG;
 		segtype_str = find_config_tree_str(cmd, mirror_default_cfg, NULL);
-	} else if (arg_is_set(cmd, integrity_ARG)) {
-		segtype_str = SEG_TYPE_NAME_INTEGRITY;
 	} else
 		segtype_str = SEG_TYPE_NAME_STRIPED;
 
@@ -830,8 +828,6 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	readahead_ARG,\
 	setactivationskip_ARG,\
 	test_ARG,\
-	integrity_ARG,\
-	integritysettings_ARG,\
 	type_ARG
 
 #define CACHE_POOL_ARGS \
@@ -862,7 +858,9 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	maxrecoveryrate_ARG,\
 	minrecoveryrate_ARG,\
 	raidmaxrecoveryrate_ARG,\
-	raidminrecoveryrate_ARG
+	raidminrecoveryrate_ARG, \
+	raidintegrity_ARG, \
+	raidintegritymode_ARG
 
 #define SIZE_ARGS \
 	extents_ARG,\
@@ -1231,9 +1229,12 @@ static int _lvcreate_params(struct cmd_context *cmd,
 		}
 	}
 
-	if (seg_is_integrity(lp) || seg_is_raid(lp)) {
-		if (!get_integrity_options(cmd, &lp->integrity_arg, &lp->integrity_meta_name, &lp->integrity_settings))
-			return 0;
+	if (seg_is_raid(lp)) {
+		lp->raidintegrity = arg_int_value(cmd, raidintegrity_ARG, 0);
+		if (arg_is_set(cmd, raidintegritymode_ARG)) {
+			if (!integrity_mode_set(arg_str_value(cmd, raidintegritymode_ARG, NULL), &lp->integrity_settings))
+				return_0;
+		}
 	}
 
 	lcp->pv_count = argc;

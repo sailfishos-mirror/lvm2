@@ -212,6 +212,8 @@ unsigned grouped_arg_is_set(const struct arg_values *av, int a);
 const char *grouped_arg_str_value(const struct arg_values *av, int a, const char *def);
 int32_t grouped_arg_int_value(const struct arg_values *av, int a, const int32_t def); 
 
+int integrity_mode_set(const char *mode, struct integrity_settings *settings);
+
 const char *command_name(struct cmd_context *cmd);
 
 int pvmove_poll(struct cmd_context *cmd, const char *pv_name, const char *uuid,
@@ -234,9 +236,6 @@ int vgchange_systemid_cmd(struct cmd_context *cmd, int argc, char **argv);
 struct lv_prop *get_lv_prop(int lvp_enum);
 struct lv_type *get_lv_type(int lvt_enum);
 struct command *get_command(int cmd_enum);
-
-int get_integrity_options(struct cmd_context *cmd, const char **arg, const char **meta_name,
-                          struct integrity_settings *set);
 
 int lvchange_properties_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvchange_activate_cmd(struct cmd_context *cmd, int argc, char **argv);

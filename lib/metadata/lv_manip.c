@@ -4498,18 +4498,6 @@ int lv_extend(struct logical_volume *lv,
 	}
 
 out:
-	/* 
-	 * When an integrity+linear LV is being extended, the lv_iorig (origin)
-	 * is passed into lv_extend() as 'lv'.  lv_is_integrity_origin checks
-	 * if this lv has an integrity layer above it, and if so, calls
-	 * lv_extend_integrity_for_origin to change the sizes in the integrity
-	 * layer to match the newly extended origin, and to extend the imeta LV.
-	 */
-	if (r && lv_is_integrity_origin(lv)) {
-		if (!lv_extend_integrity_for_origin(lv, allocatable_pvs))
-			r = 0;
-	}
-
 	alloc_destroy(ah);
 	return r;
 }
@@ -8336,16 +8324,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		goto out;
 	}
 
-	if (seg_is_integrity(lp) || (seg_is_raid(lp) && lp->integrity_arg)) {
+	if (seg_is_raid(lp) && lp->raidintegrity) {
 		log_debug("Adding integrity to new LV");
 
-		if (seg_is_raid(lp)) {
-			if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL))
-				goto revert_new_lv;
-		} else {
-			if (!lv_add_integrity(lv, &lp->integrity_settings, lp->pvh))
-				goto revert_new_lv;
-		}
+		if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL))
+			goto revert_new_lv;
 
 		backup(vg);
 	}

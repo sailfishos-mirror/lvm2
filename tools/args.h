@@ -274,12 +274,6 @@ arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
     "and \\fBdiff\\fP types include unsupported settings in their output by default,\n"
     "all the other types ignore unsupported settings.\n")
 
-arg(integrity_ARG, '\0', "integrity", bool_VAL, 0, 0,
-    "Enable or disable integrity metadata for an LV.\n")
-
-arg(integritysettings_ARG, '\0', "integritysettings", string_VAL, ARG_GROUPABLE, 0,
-    "Set dm-integrity parameters.\n")
-
 arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
     "By default the PV is labelled with an LVM2 identifier in its second\n"
     "sector (sector 1). This lets you use a different sector near the\n"
@@ -517,6 +511,13 @@ arg(pvmetadatacopies_ARG, '\0', "pvmetadatacopies", pvmetadatacopies_VAL, 0, 0,
     "When 0, no copies of the VG metadata are stored on the given PV.\n"
     "This may be useful in VGs containing many PVs (this places limitations\n"
     "on the ability to use vgsplit later.)\n")
+
+arg(raidintegrity_ARG, '\0', "raidintegrity", bool_VAL, 0, 0,
+    "Enable or disable data integrity checksums for raid images.\n")
+
+arg(raidintegritymode_ARG, '\0', "raidintegritymode", string_VAL, 0, 0,
+    "Use a bitmap (default) or journal for keeping integrity checksums consistent\n"
+    "in case of a crash.\n")
 
 arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
     "Run the command in a special read-only mode which will read on-disk\n"
