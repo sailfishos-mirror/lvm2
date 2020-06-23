@@ -320,4 +320,7 @@
 
 #define DEFAULT_MD_COMPONENT_CHECKS "auto"
 
+#define DEFAULT_USE_DEVICES_FILE 1
+#define DEFAULT_DEVICES_FILE "lvm_devices.dat"
+
 #endif				/* _LVM_DEFAULTS_H */
