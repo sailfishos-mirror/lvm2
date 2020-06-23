@@ -182,14 +182,24 @@ struct cmd_context {
 	unsigned pvscan_recreate_hints:1;	/* enable special case hint handling for pvscan --cache */
 	unsigned scan_lvs:1;
 	unsigned wipe_outdated_pvs:1;
+	unsigned enable_devices_list:1;		/* command is using --devices option */
+	unsigned enable_devices_file:1;		/* command is using devices file */
+	unsigned create_edit_devices_file:1;	/* command expects to create and/or edit devices file */
+	unsigned edit_devices_file:1;		/* command expects to edit devices file */
+	unsigned filter_deviceid_skip:1;	/* don't use filter-deviceid */
+	unsigned filter_regex_with_devices_file:1; /* use filter-regex even when devices file is enabled */
 	unsigned filter_nodata_only:1;          /* only use filters that do not require data from the dev */
+	unsigned search_for_devnames:1;		/* scan all devs for missing devices file devname entry */
 
 	/*
 	 * Devices and filtering.
 	 */
 	struct dev_filter *filter;
 	struct dm_list hints;
+	struct dm_list use_device_ids;
 	const char *md_component_checks;
+	const char *devicesfile;                /* from --devicesfile option */
+	struct dm_list deviceslist;             /* from --devices option, struct dm_str_list */
 
 	/*
 	 * Configuration.
@@ -221,6 +231,7 @@ struct cmd_context {
 	char system_dir[PATH_MAX];
 	char dev_dir[PATH_MAX];
 	char proc_dir[PATH_MAX];
+	char devices_file_path[PATH_MAX];
 
 	/*
 	 * Reporting.
