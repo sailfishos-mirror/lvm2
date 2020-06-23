@@ -38,6 +38,7 @@
 #define DEV_SCAN_FOUND_LABEL	0x00010000      /* label scan read dev and found label */
 #define DEV_IS_MD_COMPONENT	0x00020000	/* device is an md component */
 #define DEV_UDEV_INFO_MISSING   0x00040000	/* we have no udev info for this device */
+#define DEV_MATCHED_USE_ID	0x00080000	/* matched an entry from cmd->use_device_ids */
 
 /*
  * Support for external device info.
@@ -56,12 +57,41 @@ struct dev_ext {
 	void *handle;
 };
 
+#define DEV_ID_TYPE_SYS_WWID   0x0001
+#define DEV_ID_TYPE_SYS_SERIAL 0x0002
+#define DEV_ID_TYPE_MPATH_UUID 0x0003
+#define DEV_ID_TYPE_DEVNAME 0x0004
+#define DEV_ID_TYPE_LOOP_FILE 0x0005
+
+/* A device ID of a certain type for a device. */
+
+struct dev_id {
+	struct dm_list list;
+	struct device *dev;
+	uint16_t idtype;
+	char *idname;
+};
+
+/* A device listed in devices file that lvm should use. */
+
+struct use_id {
+	struct dm_list list;
+	struct device *dev;
+	int part;
+	uint16_t idtype;
+	char *idname;
+	char *devname;
+	char *pvid;
+};
+
 /*
  * All devices in LVM will be represented by one of these.
  * pointer comparisons are valid.
  */
 struct device {
 	struct dm_list aliases;	/* struct dm_str_list */
+	struct dm_list ids; /* struct dev_id */
+	struct dev_id *id; /* points to the ids entry being used for this dev */
 	dev_t dev;
 
 	/* private */
@@ -71,6 +101,7 @@ struct device {
 	int logical_block_size;  /* From BLKSSZGET: lowest possible block size that the storage device can address */
 	int read_ahead;
 	int bcache_fd;
+	int part;		/* partition number */
 	uint32_t flags;
 	unsigned size_seqno;
 	uint64_t size;

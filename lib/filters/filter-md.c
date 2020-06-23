@@ -86,6 +86,9 @@ static int _passes_md_filter(struct cmd_context *cmd, struct dev_filter *f __att
 {
 	int ret;
 
+	if (cmd->filter_nodata_only)
+		return 1;
+
 	/*
 	 * When md_component_dectection=0, don't even try to skip md
 	 * components.

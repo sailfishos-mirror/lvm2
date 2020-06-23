@@ -1254,8 +1254,17 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 
 	_online_dir_setup();
 
-	/* Creates a list of dev names from /dev, sysfs, etc; does not read any. */
-	dev_cache_scan();
+	/*
+	 * Set up device ids.  Does not open or read any devices.
+	 * Matches devs in dev-cache to devices file entries.
+	 * Devs that don't match an entry rejected by filter-deviceid,
+	 * in dev_cache_get below which applies filters and returns NULL
+	 * if the requested device name doesn't pass filters.
+	 */
+	if (!setup_devices(cmd)) {
+		log_error("Failed to set up devices.");
+		return ECMD_FAILED;
+	}
 
 	if (cmd->md_component_detection && !cmd->use_full_md_check &&
 	    !strcmp(cmd->md_component_checks, "auto") &&
