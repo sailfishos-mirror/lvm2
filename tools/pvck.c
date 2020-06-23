@@ -19,6 +19,7 @@
 #include "lib/format_text/layout.h"
 #include "lib/mm/xlate.h"
 #include "lib/misc/crc.h"
+#include "lib/device/device_id.h"
 
 #define ONE_MB_IN_BYTES 1048576
 
@@ -3040,6 +3041,8 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
 
 	if (arg_is_set(cmd, dump_ARG)) {
 		pv_name = argv[0];
+
+		setup_device(cmd, pv_name);
 
 		dev = dev_cache_get(cmd, pv_name, cmd->filter);
 
