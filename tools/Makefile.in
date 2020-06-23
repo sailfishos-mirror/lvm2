@@ -58,6 +58,7 @@ SOURCES =\
 	vgextend.c \
 	vgimport.c \
 	vgimportclone.c \
+	vgimportdevices.c \
 	vgmerge.c \
 	vgmknodes.c \
 	vgreduce.c \
