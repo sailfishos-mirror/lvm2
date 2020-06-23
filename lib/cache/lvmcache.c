@@ -18,6 +18,7 @@
 #include "lib/cache/lvmcache.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/device/dev-cache.h"
+#include "lib/device/device_id.h"
 #include "lib/locking/locking.h"
 #include "lib/metadata/metadata.h"
 #include "lib/mm/memlock.h"
@@ -1024,12 +1025,14 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 {
 	struct dm_list del_cache_devs;
 	struct dm_list add_cache_devs;
+	struct dm_list renamed_devs;
 	struct lvmcache_info *info;
 	struct lvmcache_vginfo *vginfo;
 	struct device_list *devl;
 	int vginfo_count = 0;
-
 	int r = 0;
+
+	dm_list_init(&renamed_devs);
 
 	log_debug_cache("Finding VG info");
 
@@ -1043,12 +1046,23 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	 * Do the actual scanning.  This populates lvmcache
 	 * with infos/vginfos based on reading headers from
 	 * each device, and a vg summary from each mda.
-	 *
-	 * Note that this will *skip* scanning a device if
-	 * an info struct already exists in lvmcache for
-	 * the device.
 	 */
 	label_scan(cmd);
+
+	/*
+	 * When devnames are used as device ids (which is dispreferred),
+	 * changing/unstable devnames can lead to entries in the devices file
+	 * not being matched to a dev even if the PV is present on the system.
+	 * Or, a devices file entry may have been matched to the wrong device
+	 * (with the previous name) that does not have the PVID specified in
+	 * the entry.  This function detects that problem, scans labels on all
+	 * devs on the system to find the missing PVIDs, and corrects the
+	 * devices file.  We then need to run label scan on these correct
+	 * devices.
+	 */
+	device_ids_find_renamed_devs(cmd, &renamed_devs);
+	if (!dm_list_empty(&renamed_devs))
+		label_scan_devs(cmd, cmd->filter, &renamed_devs);
 
 	/*
 	 * _choose_duplicates() returns:
