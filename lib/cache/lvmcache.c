@@ -18,6 +18,7 @@
 #include "lib/cache/lvmcache.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/device/dev-cache.h"
+#include "lib/device/device_id.h"
 #include "lib/locking/locking.h"
 #include "lib/metadata/metadata.h"
 #include "lib/mm/memlock.h"
@@ -507,6 +508,25 @@ static const char *_get_pvsummary_device_hint(char *pvid)
 	return NULL;
 }
 
+static const char *_get_pvsummary_device_id(char *pvid, const char **device_id_type)
+{
+	char pvid_s[ID_LEN + 1] __attribute__((aligned(8)));
+	struct lvmcache_vginfo *vginfo;
+	struct pv_list *pvl;
+
+	dm_list_iterate_items(vginfo, &_vginfos) {
+		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
+			(void) dm_strncpy(pvid_s, (char *) &pvl->pv->id, sizeof(pvid_s));
+			if (!strcmp(pvid_s, pvid)) {
+				*device_id_type = pvl->pv->device_id_type;
+				return pvl->pv->device_id;
+			}
+		}
+	}
+
+	return NULL;
+}
+
 /*
  * Check if any PVs in vg->pvs have the same PVID as any
  * entries in _unused_duplicates.
@@ -612,6 +632,8 @@ static void _choose_duplicates(struct cmd_context *cmd,
 	struct device_list *devl, *devl_safe, *devl_add, *devl_del;
 	struct lvmcache_info *info;
 	struct device *dev1, *dev2;
+	const char *device_id = NULL, *device_id_type = NULL;
+	const char *idname1 = NULL, *idname2 = NULL;
 	uint32_t dev1_major, dev1_minor, dev2_major, dev2_minor;
 	uint64_t dev1_size, dev2_size, pvsummary_size;
 	int in_subsys1, in_subsys2;
@@ -620,6 +642,7 @@ static void _choose_duplicates(struct cmd_context *cmd,
 	int has_lv1, has_lv2;
 	int same_size1, same_size2;
 	int same_name1 = 0, same_name2 = 0;
+	int same_id1 = 0, same_id2 = 0;
 	int prev_unchosen1, prev_unchosen2;
 	int change;
 
@@ -750,6 +773,19 @@ next:
 			same_name2 = !strcmp(device_hint, dev_name(dev2));
 		}
 
+		if ((device_id = _get_pvsummary_device_id(devl->dev->pvid, &device_id_type))) {
+			uint16_t idtype = idtype_from_str(device_id_type);
+
+			if (idtype) {
+				idname1 = device_id_system_read(cmd, dev1, idtype);
+				idname2 = device_id_system_read(cmd, dev2, idtype);
+			}
+			if (idname1)
+				same_id1 = !strcmp(idname1, device_id);
+			if (idname2)
+				same_id2 = !strcmp(idname2, device_id);
+		}
+
 		has_lv1 = (dev1->flags & DEV_USED_FOR_LV) ? 1 : 0;
 		has_lv2 = (dev2->flags & DEV_USED_FOR_LV) ? 1 : 0;
 
@@ -767,6 +803,12 @@ next:
 				dev_name(dev1), dev1_major, dev1_minor,
 				dev_name(dev2), dev2_major, dev2_minor,
 				device_hint ?: "none");
+
+		log_debug_cache("PV %s: device_id %s. %s is %s. %s is %s.",
+				devl->dev->pvid,
+				device_id ?: ".",
+				dev_name(dev1), idname1 ?: ".",
+				dev_name(dev2), idname2 ?: ".");
 
 		log_debug_cache("PV %s: size %llu. %s is %llu. %s is %llu.",
 				devl->dev->pvid,
@@ -808,6 +850,13 @@ next:
 		} else if (prev_unchosen2 && !prev_unchosen1) {
 			/* keep 1 (NB when unchosen is set we unprefer) */
 			reason = "of previous preference";
+		} else if (same_id1 && !same_id2) {
+			/* keep 1 */
+			reason = "device id";
+		} else if (same_id2 && !same_id1) {
+			/* change to 2 */
+			change = 1;
+			reason = "device id";
 		} else if (has_lv1 && !has_lv2) {
 			/* keep 1 */
 			reason = "device is used by LV";
@@ -1056,12 +1105,14 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 {
 	struct dm_list del_cache_devs;
 	struct dm_list add_cache_devs;
+	struct dm_list renamed_devs;
 	struct lvmcache_info *info;
 	struct lvmcache_vginfo *vginfo;
 	struct device_list *devl;
 	int vginfo_count = 0;
-
 	int r = 0;
+
+	dm_list_init(&renamed_devs);
 
 	log_debug_cache("Finding VG info");
 
@@ -1075,12 +1126,23 @@ int lvmcache_label_scan(struct cmd_context *cmd)
 	 * Do the actual scanning.  This populates lvmcache
 	 * with infos/vginfos based on reading headers from
 	 * each device, and a vg summary from each mda.
-	 *
-	 * Note that this will *skip* scanning a device if
-	 * an info struct already exists in lvmcache for
-	 * the device.
 	 */
 	label_scan(cmd);
+
+	/*
+	 * When devnames are used as device ids (which is dispreferred),
+	 * changing/unstable devnames can lead to entries in the devices file
+	 * not being matched to a dev even if the PV is present on the system.
+	 * Or, a devices file entry may have been matched to the wrong device
+	 * (with the previous name) that does not have the PVID specified in
+	 * the entry.  This function detects that problem, scans labels on all
+	 * devs on the system to find the missing PVIDs, and corrects the
+	 * devices file.  We then need to run label scan on these correct
+	 * devices.
+	 */
+	device_ids_find_renamed_devs(cmd, &renamed_devs);
+	if (!dm_list_empty(&renamed_devs))
+		label_scan_devs(cmd, cmd->filter, &renamed_devs);
 
 	/*
 	 * _choose_duplicates() returns:
