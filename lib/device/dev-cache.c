@@ -16,6 +16,7 @@
 #include "base/memory/zalloc.h"
 #include "lib/misc/lib.h"
 #include "lib/device/dev-type.h"
+#include "lib/device/device_id.h"
 #include "lib/datastruct/btree.h"
 #include "lib/config/config.h"
 #include "lib/commands/toolcontext.h"
@@ -72,6 +73,7 @@ static void _dev_init(struct device *dev)
 	dev->ext.src = DEV_EXT_NONE;
 
 	dm_list_init(&dev->aliases);
+	dm_list_init(&dev->ids);
 }
 
 void dev_destroy_file(struct device *dev)
@@ -351,7 +353,7 @@ static int _add_alias(struct device *dev, const char *path)
 	return 1;
 }
 
-static int _get_sysfs_value(const char *path, char *buf, size_t buf_size, int error_if_no_value)
+int get_sysfs_value(const char *path, char *buf, size_t buf_size, int error_if_no_value)
 {
 	FILE *fp;
 	size_t len;
@@ -392,7 +394,7 @@ static int _get_dm_uuid_from_sysfs(char *buf, size_t buf_size, int major, int mi
 		return 0;
 	}
 
-	return _get_sysfs_value(path, buf, buf_size, 0);
+	return get_sysfs_value(path, buf, buf_size, 0);
 }
 
 static struct dm_list *_get_or_add_list_by_index_key(struct dm_hash_table *idx, const char *key)
@@ -473,7 +475,7 @@ static struct device *_get_device_for_sysfs_dev_name_using_devno(const char *dev
 		return NULL;
 	}
 
-	if (!_get_sysfs_value(path, buf, sizeof(buf), 1))
+	if (!get_sysfs_value(path, buf, sizeof(buf), 1))
 		return_NULL;
 
 	if (sscanf(buf, "%d:%d", &major, &minor) != 2) {
@@ -971,7 +973,7 @@ static int _dev_cache_iterate_sysfs_for_index(const char *path)
 	return r;
 }
 
-int dev_cache_index_devs(void)
+static int dev_cache_index_devs(void)
 {
 	static int sysfs_has_dev_block = -1;
 	char path[PATH_MAX];
@@ -1320,11 +1322,18 @@ int dev_cache_check_for_open_devices(void)
 
 int dev_cache_exit(void)
 {
+	struct device *dev;
+	struct dm_hash_node *n;
 	int num_open = 0;
 
 	if (_cache.names)
 		if ((num_open = _check_for_open_devices(1)) > 0)
 			log_error(INTERNAL_ERROR "%d device(s) were left open and have been closed.", num_open);
+
+	dm_hash_iterate(n, _cache.names) {
+		dev = (struct device *) dm_hash_get_data(_cache.names, n);
+		free_dids(&dev->ids);
+	}
 
 	if (_cache.mem)
 		dm_pool_destroy(_cache.mem);
@@ -1655,5 +1664,78 @@ bool dev_cache_has_md_with_end_superblock(struct dev_types *dt)
 	}
 
 	return false;
+}
+
+/*
+ * Add all system devices to dev-cache, and attempt to
+ * match all devices_file entries to dev-cache entries.
+ */
+void setup_devices(struct cmd_context *cmd)
+{
+	/*
+	 * Read the list of device ids that lvm can use.
+	 * Adds a struct dev_id to cmd->use_device_ids for each one.
+	 *
+	 * (Changing enable_device_ids=0 must ensure that nothing
+	 * in the command thus far has been done on the basis of
+	 * enable_device_ids=1.)
+	 */
+	if (!device_ids_read(cmd)) {
+		log_warn("WARNING: disabling use of devices_file, failed to read file.");
+		cmd->enable_device_ids = 0;
+	}
+
+	/*
+	 * Add a 'struct device' to dev-cache for each device available on the system.
+	 * This will not open or read any devices, but may look at sysfs properties.
+	 * This list of devs comes from looking /dev entries, or from asking libudev.
+	 * TODO: or from /proc/partitions?
+	 *
+	 * TODO: dev_cache_scan() optimization: start by looking only at
+	 * devnames listed in the devices_file, and if the device_ids for
+	 * those all match we won't need any others.
+	 * Exceptions: the command wants a new device for pvcreate, or
+	 * device_ids don't match the devnames.
+	 */
+	dev_cache_scan();
+
+	/*
+	 * Match entries from cmd->use_device_ids with device structs in dev-cache.
+	 */
+	device_ids_match(cmd);
+}
+
+/*
+ * Add one system device to dev-cache, and attempt to
+ * match its dev-cache entry to a devices_file entry.
+ */
+void setup_device(struct cmd_context *cmd, const char *devname)
+{
+	struct stat buf;
+	struct device *dev;
+
+	if (!device_ids_read(cmd)) {
+		log_warn("WARNING: disabling use of devices_file, failed to read file.");
+		cmd->enable_device_ids = 0;
+	}
+
+	if (stat(devname, &buf) < 0)
+		return;
+
+	if (!S_ISBLK(buf.st_mode))
+		return;
+
+	if (!_insert_dev(devname, buf.st_rdev))
+		return;
+
+	if (!(dev = (struct device *) dm_hash_lookup(_cache.names, devname))) {
+		stack;
+		return;
+	}
+
+	/* Match this device to an entry in devices_file so it will not
+	   be rejected by filter-deviceid. */
+	if (cmd->enable_device_ids)
+		device_ids_match_dev(cmd, dev);
 }
 

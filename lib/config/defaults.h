@@ -320,4 +320,6 @@
 
 #define DEFAULT_MD_COMPONENT_CHECKS "auto"
 
+#define DEFAULT_DEVICES_FILE "/etc/lvm/lvm_devices.dat"
+
 #endif				/* _LVM_DEFAULTS_H */
