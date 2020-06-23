@@ -288,6 +288,29 @@ cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, C
 	"preferred_names = [ \"^/dev/mpath/\", \"^/dev/mapper/mpath\", \"^/dev/[hs]d\" ]\n"
 	"#\n")
 
+cfg(devices_use_devicesfile_CFG, "use_devicesfile", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_DEVICES_FILE, vsn(2, 3, 10), NULL, 0, NULL,
+	"Enable or disable the use of a devices file.\n"
+	"When enabled, lvm will only use devices that\n"
+	"are lised in the devices file.\n")
+
+cfg(devices_devicesfile_CFG, "devicesfile", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_DEVICES_FILE, vsn(2, 3, 10), NULL, 0, NULL,
+	"The name of the devices file that lists devices LVM should use.\n")
+
+cfg(devices_search_for_devnames_CFG, "search_for_devnames", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_SEARCH_FOR_DEVNAMES, vsn(2, 3, 10), NULL, 0, NULL,
+	"Look outside of the devices file for missing devname entries.\n"
+	"A devname entry may have a different device name after reboot,\n"
+	"or when reattached, in which case the device may be present on\n"
+	"the system but appear to be missing to lvm commands. When this\n"
+	"setting is enabled, lvm commands will automatically scan other\n"
+	"devices outside of the devices file to try to locate a missing\n"
+	"devices file entry on a new device (based on the PVID.) If this\n"
+	"setting is disabled, a user can run lvmdevices --addpvid to locate\n"
+	"a renamed device and update the devices file. This setting does\n"
+	"not apply to devices with stable device id types. Note that a\n"
+	"devices file entry that has been detached from the system will\n"
+	"lead to every command doing a search, so detached devices should\n"
+	"be removed from the devices file promptly.\n")
+
 cfg_array(devices_filter_CFG, "filter", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, "#Sa|.*|", vsn(1, 0, 0), NULL, 0, NULL,
 	"Limit the block devices that are used by LVM commands.\n"
 	"This is a list of regular expressions used to accept or reject block\n"
