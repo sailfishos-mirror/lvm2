@@ -15,6 +15,7 @@
 
 #include "lib/misc/lib.h"
 #include "lib/filters/filter.h"
+#include "lib/commands/toolcontext.h"
 
 struct rfilter {
 	struct dm_pool *mem;
@@ -150,6 +151,11 @@ static int _accept_p(struct cmd_context *cmd, struct dev_filter *f, struct devic
 	int m, first = 1, rejected = 0;
 	struct rfilter *rf = (struct rfilter *) f->private;
 	struct dm_str_list *sl;
+
+	if (cmd->enable_device_ids) {
+		/* TODO: print a notice if the filter is set to something and we ignore it here. */
+		return 1;
+	}
 
 	dm_list_iterate_items(sl, &dev->aliases) {
 		m = dm_regex_match(rf->engine, sl->str);
