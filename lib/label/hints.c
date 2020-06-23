@@ -145,6 +145,7 @@
 #include "lib/activate/activate.h"
 #include "lib/label/hints.h"
 #include "lib/device/dev-type.h"
+#include "lib/device/device_id.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -166,8 +167,10 @@ static const char *_newhints_file = DEFAULT_RUN_DIR "/newhints";
  * than they were built with.  Increase the minor number
  * when adding features that older lvm versions can just
  * ignore while continuing to use the other content.
+ *
+ * MAJOR 2: add devices_file
  */
-#define HINTS_VERSION_MAJOR 1
+#define HINTS_VERSION_MAJOR 2
 #define HINTS_VERSION_MINOR 1
 
 #define HINT_LINE_LEN (PATH_MAX + NAME_LEN + ID_LEN + 64)
@@ -701,8 +704,9 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 				break;
 			}
 
-			if (hv_major > HINTS_VERSION_MAJOR) {
-				log_debug("ignore hints with newer major version %d.%d", hv_major, hv_minor);
+			if (hv_major != HINTS_VERSION_MAJOR) {
+				log_debug("ignore hints with version %d.%d current %d.%d",
+					  hv_major, hv_minor, HINTS_VERSION_MAJOR, HINTS_VERSION_MINOR);
 				*needs_refresh = 1;
 				break;
 			}
@@ -741,6 +745,25 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 			if ((sscanf(_hint_line + keylen, "%u", &scan_lvs) != 1) ||
 			    scan_lvs != cmd->scan_lvs) {
 				log_debug("ignore hints with different or unreadable scan_lvs");
+				*needs_refresh = 1;
+				break;
+			}
+			continue;
+		}
+
+		keylen = strlen("devices_file:");
+		if (!strncmp(_hint_line, "devices_file:", keylen)) {
+			const char *df_hint = _hint_line + keylen;
+			const char *df_config = find_config_tree_str(cmd, devices_devicesfile_CFG, NULL);
+			/* when a devices file is not used, hints should have devices_file:. */
+			if (!cmd->enable_devices_file || !df_hint || !df_config) {
+				if (df_hint[0] != '.') {
+					log_debug("ignore hints with different devices_file: not enabled vs %s", df_hint);
+					*needs_refresh = 1;
+					break;
+				}
+			} else if (strcmp(df_hint, df_config)) {
+				log_debug("ignore hints with different devices_file: %s vs %s", df_hint, df_config);
 				*needs_refresh = 1;
 				break;
 			}
@@ -815,17 +838,30 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 	/*
 	 * Calculate and compare hash of devices that may be scanned.
 	 */
-	if (!(iter = dev_iter_create(NULL, 0)))
-		return 0;
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (!_dev_in_hint_hash(cmd, dev))
-			continue;
-		memset(devpath, 0, sizeof(devpath));
-		strncpy(devpath, dev_name(dev), PATH_MAX);
-		calc_hash = calc_crc(calc_hash, (const uint8_t *)devpath, strlen(devpath));
-		calc_count++;
+	if (cmd->enable_devices_file) {
+		struct use_id *uid;
+		dm_list_iterate_items(uid, &cmd->use_device_ids) {
+			dev = uid->dev;
+			if (!dev || !_dev_in_hint_hash(cmd, dev))
+				continue;
+			memset(devpath, 0, sizeof(devpath));
+			strncpy(devpath, dev_name(dev), PATH_MAX);
+			calc_hash = calc_crc(calc_hash, (const uint8_t *)devpath, strlen(devpath));
+			calc_count++;
+		}
+	} else {
+		if (!(iter = dev_iter_create(NULL, 0)))
+			return 0;
+		while ((dev = dev_iter_get(cmd, iter))) {
+			if (!_dev_in_hint_hash(cmd, dev))
+				continue;
+			memset(devpath, 0, sizeof(devpath));
+			strncpy(devpath, dev_name(dev), PATH_MAX);
+			calc_hash = calc_crc(calc_hash, (const uint8_t *)devpath, strlen(devpath));
+			calc_count++;
+		}
+		dev_iter_destroy(iter);
 	}
-	dev_iter_destroy(iter);
 
 	if (read_hash && (read_hash != calc_hash)) {
 		/* The count is just informational. */
@@ -879,6 +915,7 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	struct device *dev;
 	const char *vgname;
 	char *filter_str = NULL;
+	const char *devicesfile = NULL;
 	uint32_t hash = INITIAL_CRC;
 	uint32_t count = 0;
 	time_t t;
@@ -939,6 +976,19 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 
 	fprintf(fp, "scan_lvs:%d\n", cmd->scan_lvs);
 
+	/*
+	 * Only associate hints with the default/system devices file.
+	 * If no default/system devices file is used, "." is set.
+	 * If we are using a devices file other than the config setting
+	 * (from --devicesfile), then we should not be using hints and
+	 * shouldn't get here.
+	 */
+	devicesfile = find_config_tree_str(cmd, devices_devicesfile_CFG, NULL);
+	if (cmd->enable_devices_file && devicesfile && cmd->devices_file && !strcmp(devicesfile, cmd->devices_file))
+		fprintf(fp, "devices_file:%s\n", cmd->devices_file);
+	else
+		fprintf(fp, "devices_file:.\n");
+
 	/* 
 	 * iterate through all devs and write a line for each
 	 * dev flagged DEV_SCAN_FOUND_LABEL
@@ -956,6 +1006,14 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	 * 2. add PVs to the hint file
 	 */
 	while ((dev = dev_iter_get(cmd, iter))) {
+		if (cmd->enable_devices_file && !get_uid_for_dev(cmd, dev)) {
+			if (dev->flags & DEV_SCAN_FOUND_LABEL) {
+				/* should never happen */
+				log_error("skip hint hash no uid but found label %s", dev_name(dev));
+			}
+			continue;
+		}
+
 		if (!_dev_in_hint_hash(cmd, dev)) {
 			if (dev->flags & DEV_SCAN_FOUND_LABEL) {
 				/* should never happen */

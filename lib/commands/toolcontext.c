@@ -32,6 +32,7 @@
 #include "lib/cache/lvmcache.h"
 #include "lib/format_text/archiver.h"
 #include "lib/lvmpolld/lvmpolld-client.h"
+#include "lib/device/device_id.h"
 
 #include <locale.h>
 #include <sys/stat.h>
@@ -1066,7 +1067,49 @@ static int _init_dev_cache(struct cmd_context *cmd)
 	return 1;
 }
 
-#define MAX_FILTERS 10
+int set_devices_file(struct cmd_context *cmd, const char *name)
+{
+	int ret = 1;
+
+	if (!name || !strlen(name) || !cmd->system_dir[0])
+		goto no_file;
+
+	if (!validate_name(name)) {
+		log_error("Invalid devices file name \"%s\".", name);
+		ret = 0;
+		goto no_file;
+	}
+
+	if (dm_snprintf(cmd->devices_file_path, sizeof(cmd->devices_file_path), "%s/devices/%s",
+			cmd->system_dir, name) < 0) {
+		log_error("Failed to create devices file path.");
+		ret = 0;
+		goto no_file;
+	}
+
+	if (!(cmd->devices_file = dm_pool_strdup(cmd->libmem, name))) {
+		stack;
+		ret = 0;
+		goto no_file;
+	}
+
+	log_debug("devices file is %s", cmd->devices_file_path);
+	return 1;
+
+ no_file:
+	log_debug("devices file is empty");
+	memset(cmd->devices_file_path, 0, sizeof(cmd->devices_file_path));
+	cmd->devices_file = "";
+	return ret;
+}
+
+static int _init_device_ids(struct cmd_context *cmd)
+{
+	device_ids_init(cmd);
+	return set_devices_file(cmd, find_config_tree_str(cmd, devices_devicesfile_CFG, NULL));
+}
+
+#define MAX_FILTERS 11
 
 static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 {
@@ -1085,6 +1128,9 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 	 * sysfs filter. Only available on 2.6 kernels.  Non-critical.
 	 * Listed first because it's very efficient at eliminating
 	 * unavailable devices.
+	 *
+	 * TODO: I suspect that using the lvm_type and device_id
+	 * filters before this one may be more efficient.
 	 */
 	if (find_config_tree_bool(cmd, devices_sysfs_scan_CFG, NULL)) {
 		if ((filters[nr_filt] = sysfs_filter_create()))
@@ -1119,6 +1165,13 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 	/* device type filter. Required. */
 	if (!(filters[nr_filt] = lvm_type_filter_create(cmd->dev_types))) {
 		log_error("Failed to create lvm type filter");
+		goto bad;
+	}
+	nr_filt++;
+
+	/* filter based on the device_ids saved in the lvm_devices file */
+	if (!(filters[nr_filt] = deviceid_filter_create(cmd))) {
+		log_error("Failed to create deviceid device filter");
 		goto bad;
 	}
 	nr_filt++;
@@ -1717,6 +1770,9 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 	if (!_init_dev_cache(cmd))
 		goto_out;
 
+	if (!_init_device_ids(cmd))
+		return_0;
+
 	memlock_init(cmd);
 
 	if (!_init_formats(cmd))
@@ -1842,6 +1898,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	_destroy_segtypes(&cmd->segtypes);
 	_destroy_formats(cmd, &cmd->formats);
 
+	device_ids_exit(cmd);
 	if (!dev_cache_exit())
 		stack;
 	_destroy_dev_types(cmd);
@@ -1921,6 +1978,9 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	if (!_init_dev_cache(cmd))
 		return_0;
 
+	if (!_init_device_ids(cmd))
+		return_0;
+
 	if (!_init_formats(cmd))
 		return_0;
 
@@ -1970,6 +2030,7 @@ void destroy_toolcontext(struct cmd_context *cmd)
 	_destroy_filters(cmd);
 	if (cmd->mem)
 		dm_pool_destroy(cmd->mem);
+	device_ids_exit(cmd);
 	dev_cache_exit();
 	_destroy_dev_types(cmd);
 	_destroy_tags(cmd);
