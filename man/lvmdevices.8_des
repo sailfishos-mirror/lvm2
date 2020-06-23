@@ -1,0 +1,58 @@
+The LVM devices file lists devices that lvm can use.  The default file is
+/etc/lvm/devices/system.devices, and the lvmdevices(8) command is used to
+add or remove device entries.  If the file does not exist, or if lvm.conf
+includes use_devicesfile=0, then lvm will not use a devices file.
+
+With no devices file, lvm will use any device on the system, and applies
+the filter to limit the full set of system devices.  With a devices file,
+the regex filter is not used, and the filter settings in lvm.conf or the
+command line are ignored.
+
+To use a device with lvm, add it to the devices file with the command
+lvmdevices --adddev, and to prevent lvm from seeing or using a device,
+remove it from the devices file with lvmdevices --deldev.  The
+vgimportdevices(8) command adds all devices from a VG to the devices file.
+Adding new devices to the devices file necessarily looks outside the
+existing devices file to find the devices to add.  pvcreate and vgcreate
+will also look outside the devices file to create new PVs and add them to
+the devices file.
+
+If the system devices file does not yet exist, the pvcreate or vgcreate
+commands will create it if they find no existing VGs on the system.
+Simply creating an empty system.devices file, e.g. with touch, will cause
+subsequent commands to use it.  (An empty devices file will cause lvm to
+see no devices.)
+
+LVM records devices in the devices file using hardware-specific IDs, such
+as the WWID, and attempts to use subsystem-specific IDs for virtual device
+types (which should ideally be as unique and stable a hardware-based ID.)
+These device IDs are also written in the VG metadata.  When no hardware or
+virtual ID is available, lvm falls back using the unstable device name as
+the device ID.  When devnames are used, lvm performs extra scanning to
+find devices if their devname changes, e.g. after reboot.
+
+When proper device IDs are used, an lvm command will not look at devices
+outside the devices file, but when devnames are used as a fallback, lvm
+will scan devices outside the devices file to locate PVs on renamed
+devices.  A config setting search_for_devnames can be used to control the
+scanning for renamed devname entries.
+
+It is recommended to use lvm commands to make changes to the file to
+ensure correct and consistent information.
+
+Related to the devices file, the new command option --devices <devnames>
+allows a specific list of devices to be exposed to the lvm command,
+overriding the devices file.  The listed devices act as a sort of devices
+file in terms of limiting which devices lvm will see and use.  Devices
+that are not listed will appear to be missing to the lvm command.
+    
+Multiple devices files can be kept in /etc/lvm/devices, which allows lvm
+to be used with different, independent sets of devices, e.g. system
+devices do not need to be exposed to a specific application, and that
+application can use lvm on its own devices that are not exposed to the
+system.  The option --devicesfile <filename> is used to select the devices
+file to use with the command.  Without the option set, the default system
+devices file is used.
+    
+Setting --devicesfile "" causes lvm to not use a devices file.
+
