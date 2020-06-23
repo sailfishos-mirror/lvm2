@@ -684,7 +684,8 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 			if (!_scan_dev_open(devl->dev)) {
 				log_debug_devs("Scan failed to open %s.", dev_name(devl->dev));
 				dm_list_del(&devl->list);
-				dm_list_add(&reopen_devs, &devl->list);
+				lvmcache_del_dev(devl->dev);
+				scan_failed_count++;
 				continue;
 			}
 		}
