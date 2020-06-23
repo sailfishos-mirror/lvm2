@@ -1066,7 +1066,14 @@ static int _init_dev_cache(struct cmd_context *cmd)
 	return 1;
 }
 
-#define MAX_FILTERS 10
+static int _init_device_ids(struct cmd_context *cmd)
+{
+	dm_list_init(&cmd->use_device_ids);
+	cmd->devices_file = find_config_tree_str(cmd, devices_devicesfile_CFG, NULL);
+	return 1;
+}
+
+#define MAX_FILTERS 11
 
 static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 {
@@ -1085,6 +1092,9 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 	 * sysfs filter. Only available on 2.6 kernels.  Non-critical.
 	 * Listed first because it's very efficient at eliminating
 	 * unavailable devices.
+	 *
+	 * TODO: I suspect that using the lvm_type and device_id
+	 * filters before this one may be more efficient.
 	 */
 	if (find_config_tree_bool(cmd, devices_sysfs_scan_CFG, NULL)) {
 		if ((filters[nr_filt] = sysfs_filter_create()))
@@ -1119,6 +1129,13 @@ static struct dev_filter *_init_filter_chain(struct cmd_context *cmd)
 	/* device type filter. Required. */
 	if (!(filters[nr_filt] = lvm_type_filter_create(cmd->dev_types))) {
 		log_error("Failed to create lvm type filter");
+		goto bad;
+	}
+	nr_filt++;
+
+	/* filter based on the device_ids saved in the lvm_devices file */
+	if (!(filters[nr_filt] = deviceid_filter_create(cmd))) {
+		log_error("Failed to create deviceid device filter");
 		goto bad;
 	}
 	nr_filt++;
@@ -1717,6 +1734,9 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 	if (!_init_dev_cache(cmd))
 		goto_out;
 
+	if (!_init_device_ids(cmd))
+		return_0;
+
 	memlock_init(cmd);
 
 	if (!_init_formats(cmd))
@@ -1919,6 +1939,9 @@ int refresh_toolcontext(struct cmd_context *cmd)
 		return_0;
 
 	if (!_init_dev_cache(cmd))
+		return_0;
+
+	if (!_init_device_ids(cmd))
 		return_0;
 
 	if (!_init_formats(cmd))

@@ -207,6 +207,10 @@ xx(vgimportclone,
    "Import a VG from cloned PVs",
    ALLOW_EXPORTED)
 
+xx(vgimportdevices,
+   "Add devices for a VG to the devices file.",
+   ALL_VGS_IS_DEFAULT | ALLOW_EXPORTED)
+
 xx(vgmerge,
    "Merge volume groups",
    0)

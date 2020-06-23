@@ -182,13 +182,16 @@ struct cmd_context {
 	unsigned pvscan_recreate_hints:1;	/* enable special case hint handling for pvscan --cache */
 	unsigned scan_lvs:1;
 	unsigned wipe_outdated_pvs:1;
+	unsigned enable_device_ids:1;
 
 	/*
 	 * Devices and filtering.
 	 */
 	struct dev_filter *filter;
 	struct dm_list hints;
+	struct dm_list use_device_ids;
 	const char *md_component_checks;
+	const char *devices_file;
 
 	/*
 	 * Configuration.

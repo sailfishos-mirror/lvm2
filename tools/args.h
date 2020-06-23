@@ -199,6 +199,15 @@ arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0,
     "Detaches a metadata profile from a VG or LV.\n"
     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
 
+arg(deviceid_ARG, '\0', "deviceid", string_VAL, 0, 0,
+    "A device ID with a format determined by --deviceidtype.")
+
+arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
+    "A device ID type: sys_wwid, sys_serial, mpath_uuid.")
+
+arg(devicesfile_ARG, '\0', "devicesfile", string_VAL, 0, 0,
+    "The file listing device IDs that LVM should use.")
+
 arg(discards_ARG, '\0', "discards", discards_VAL, 0, 0,
     "Specifies how the device-mapper thin pool layer in the kernel should\n"
     "handle discards.\n"
