@@ -28,13 +28,12 @@ struct cmd_context;
 struct dev_filter {
 	int (*passes_filter) (struct cmd_context *cmd, struct dev_filter *f, struct device *dev, const char *use_filter_name);
 	void (*destroy) (struct dev_filter *f);
-	void (*wipe) (struct dev_filter *f);
+	void (*wipe) (struct cmd_context *cmd, struct dev_filter *f, struct device *dev, const char *use_filter_name);
 	void *private;
 	unsigned use_count;
 	const char *name;
 };
 
-int dev_cache_index_devs(void);
 struct dm_list *dev_cache_get_dev_list_for_vgid(const char *vgid);
 struct dm_list *dev_cache_get_dev_list_for_lvid(const char *lvid);
 
@@ -73,5 +72,11 @@ void dev_reset_error_count(struct cmd_context *cmd);
 void dev_cache_failed_path(struct device *dev, const char *path);
 
 bool dev_cache_has_md_with_end_superblock(struct dev_types *dt);
+
+int get_sysfs_value(const char *path, char *buf, size_t buf_size, int error_if_no_value);
+
+int setup_devices_file(struct cmd_context *cmd);
+int setup_devices(struct cmd_context *cmd);
+int setup_device(struct cmd_context *cmd, const char *devname);
 
 #endif
