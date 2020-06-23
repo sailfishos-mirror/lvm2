@@ -820,6 +820,11 @@ static void _online_pvscan_all_devs(struct cmd_context *cmd,
 	struct device *dev;
 	const char *pvid_without_metadata;
 
+	/*
+	 * TODO: label_scan() calls setup_devices(), but pvscan --cache is a
+	 * special case in which setup_devices() has already been called.
+	 * So, we could improve things by suppressing the second setup_devices().
+	 */
 	lvmcache_label_scan(cmd);
 
 	if (!(iter = dev_iter_create(cmd->filter, 1))) {
@@ -1254,8 +1259,8 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 
 	_online_dir_setup();
 
-	/* Creates a list of dev names from /dev, sysfs, etc; does not read any. */
-	dev_cache_scan();
+	/* Creates a list of available devices, does not open or read any. */
+	setup_devices(cmd);
 
 	if (cmd->md_component_detection && !cmd->use_full_md_check &&
 	    !strcmp(cmd->md_component_checks, "auto") &&
