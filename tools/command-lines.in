@@ -188,7 +188,7 @@
 #
 OO_ALL: --commandprofile String, --config String, --debug,
 --driverloaded Bool, --help, --nolocking, --lockopt String, --longhelp, --profile String, --quiet,
---verbose, --version, --yes, --test
+--verbose, --version, --yes, --test, --devicesfile String
 
 #
 # options for pvs, lvs, vgs, fullreport
@@ -1349,6 +1349,31 @@ ID: lvmconfig_general
 
 ---
 
+lvmdevices
+ID: lvmdevices_list
+
+lvmdevices --check
+ID: lvmdevices_check
+
+lvmdevices --update
+ID: lvmdevices_update
+
+lvmdevices --adddev PV
+OO: --deviceidtype String, --deviceid String
+ID: lvmdevices_edit
+
+lvmdevices --deldev PV
+ID: lvmdevices_edit
+
+lvmdevices --addpvid String
+OO: --deviceidtype String, --deviceid String
+ID: lvmdevices_edit
+
+lvmdevices --delpvid String
+ID: lvmdevices_edit
+
+---
+
 lvreduce --size NSizeMB LV
 OO: --autobackup Bool, --force, --nofsck, --noudevsync,
 --reportformat ReportFmt, --resizefs
@@ -1479,7 +1504,8 @@ OO: --dataalignment SizeKB, --dataalignmentoffset SizeKB, --bootloaderareasize S
 --force, --labelsector Number, --metadatatype MetadataType,
 --pvmetadatacopies MetadataCopiesPV, --metadatasize SizeMB,
 --metadataignore Bool, --norestorefile, --setphysicalvolumesize SizeMB,
---reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool
+--reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool,
+--deviceidtype String, --deviceid String
 ID: pvcreate_general
 RULE: --norestorefile not --restorefile
 RULE: --bootloaderareasize not --restorefile
@@ -1731,6 +1757,18 @@ DESC: Import all VGs.
 vgimportclone PV ...
 OO: --basevgname VG, --import
 ID: vgimportclone_general
+
+---
+
+vgimportdevices VG|Tag|Select ...
+OO: --deviceidtype String, --select String, --foreign, --reportformat ReportFmt
+ID: vgimportdevices_some
+DESC: Add devices from specific VGs to the devices file.
+
+vgimportdevices --all
+OO: --deviceidtype String, --foreign, --reportformat ReportFmt
+ID: vgimportdevices_all
+DESC: Add devices from all accessible VGs to the devices file.
 
 ---
 

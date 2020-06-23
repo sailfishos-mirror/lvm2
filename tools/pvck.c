@@ -19,6 +19,7 @@
 #include "lib/format_text/layout.h"
 #include "lib/mm/xlate.h"
 #include "lib/misc/crc.h"
+#include "lib/device/device_id.h"
 
 #define ONE_MB_IN_BYTES 1048576
 
@@ -3032,6 +3033,11 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
 	if (arg_is_set(cmd, repairtype_ARG) || arg_is_set(cmd, repair_ARG)) {
 		pv_name = argv[0];
 
+		if (!setup_device(cmd, pv_name)) {
+			log_error("Failed to set up device %s.", pv_name);
+			return ECMD_FAILED;
+		}
+
 		if (!(dev = dev_cache_get(cmd, pv_name, cmd->filter))) {
 			log_error("No device found for %s %s.", pv_name, dev_cache_filtered_reason(pv_name));
 			return ECMD_FAILED;
@@ -3040,6 +3046,11 @@ int pvck(struct cmd_context *cmd, int argc, char **argv)
 
 	if (arg_is_set(cmd, dump_ARG)) {
 		pv_name = argv[0];
+
+		if (!setup_device(cmd, pv_name)) {
+			log_error("Failed to set up device %s.", pv_name);
+			return ECMD_FAILED;
+		}
 
 		dev = dev_cache_get(cmd, pv_name, cmd->filter);
 
