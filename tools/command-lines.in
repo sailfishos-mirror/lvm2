@@ -188,7 +188,7 @@
 #
 OO_ALL: --commandprofile String, --config String, --debug,
 --driverloaded Bool, --help, --nolocking, --lockopt String, --longhelp, --profile String, --quiet,
---verbose, --version, --yes, --test
+--verbose, --version, --yes, --test, --devicesfile String
 
 #
 # options for pvs, lvs, vgs, fullreport
@@ -1479,7 +1479,8 @@ OO: --dataalignment SizeKB, --dataalignmentoffset SizeKB, --bootloaderareasize S
 --force, --labelsector Number, --metadatatype MetadataType,
 --pvmetadatacopies MetadataCopiesPV, --metadatasize SizeMB,
 --metadataignore Bool, --norestorefile, --setphysicalvolumesize SizeMB,
---reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool
+--reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool,
+--deviceidtype String, --deviceid String
 ID: pvcreate_general
 RULE: --norestorefile not --restorefile
 RULE: --bootloaderareasize not --restorefile
