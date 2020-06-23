@@ -44,6 +44,15 @@ arg(addtag_ARG, '\0', "addtag", tag_VAL, ARG_GROUPABLE, 0,
     "Adds a tag to a PV, VG or LV. This option can be repeated to add\n"
     "multiple tags at once. See \\fBlvm\\fP(8) for information about tags.\n")
 
+arg(adddev_ARG, '\0', "adddev", pv_VAL, 0, 0,
+    "Add a device to the devices file.\n")
+arg(deldev_ARG, '\0', "deldev", pv_VAL, 0, 0,
+    "Remove a device from the devices file.\n")
+arg(addpvid_ARG, '\0', "addpvid", string_VAL, 0, 0,
+    "Find a device with the PVID and add the device to the devices file.\n")
+arg(delpvid_ARG, '\0', "delpvid", string_VAL, 0, 0,
+    "Remove a device with the PVID from the devices file.\n")
+
 arg(aligned_ARG, '\0', "aligned", 0, 0, 0,
     "Use with --separator to align the output columns\n")
 
@@ -126,6 +135,9 @@ arg(cachepool_ARG, '\0', "cachepool", lv_VAL, 0, 0,
 arg(cachevol_ARG, '\0', "cachevol", lv_VAL, 0, 0,
     "The name of a cache volume.\n")
 
+arg(check_ARG, '\0', "check", 0, 0, 0,
+    "Check the content of the devices file.\n")
+
 arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0,
     "The command profile to use for command configuration.\n"
     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
@@ -198,6 +210,15 @@ arg(deltag_ARG, '\0', "deltag", tag_VAL, ARG_GROUPABLE, 0,
 arg(detachprofile_ARG, '\0', "detachprofile", 0, 0, 0,
     "Detaches a metadata profile from a VG or LV.\n"
     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
+
+arg(deviceid_ARG, '\0', "deviceid", string_VAL, 0, 0,
+    "A device ID with a format determined by --deviceidtype.")
+
+arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
+    "A device ID type: sys_wwid, sys_serial, mpath_uuid.")
+
+arg(devicesfile_ARG, '\0', "devicesfile", string_VAL, 0, 0,
+    "The file listing device IDs that LVM should use.")
 
 arg(discards_ARG, '\0', "discards", discards_VAL, 0, 0,
     "Specifies how the device-mapper thin pool layer in the kernel should\n"
@@ -768,6 +789,9 @@ arg(unbuffered_ARG, '\0', "unbuffered", 0, 0, 0,
 arg(uncache_ARG, '\0', "uncache", 0, 0, 0,
     "Separates a cache pool from a cache LV, and deletes the unused cache pool LV.\n"
     "Before the separation, the cache is flushed. Also see --splitcache.\n")
+
+arg(update_ARG, '\0', "update", 0, 0, 0,
+    "Update the content of the devices file.\n")
 
 arg(cachepolicy_ARG, '\0', "cachepolicy", string_VAL, 0, 0,
     "Specifies the cache policy for a cache LV.\n"

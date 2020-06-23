@@ -17,6 +17,7 @@
 
 #include "lvm2cmdline.h"
 #include "lib/label/label.h"
+#include "lib/device/device_id.h"
 #include "lvm-version.h"
 #include "lib/locking/lvmlockd.h"
 
@@ -2476,6 +2477,11 @@ static int _get_current_settings(struct cmd_context *cmd)
 	cmd->include_historical_lvs = arg_is_set(cmd, history_ARG) ? 1 : 0;
 	cmd->record_historical_lvs = find_config_tree_bool(cmd, metadata_record_lvs_history_CFG, NULL) ?
 							  (arg_is_set(cmd, nohistory_ARG) ? 0 : 1) : 0;
+
+	if (arg_is_set(cmd, devicesfile_ARG)) {
+		if (!set_devices_file(cmd, arg_str_value(cmd, devicesfile_ARG, NULL)))
+			return EINVALID_CMD_LINE;
+	}
 
 	/*
 	 * This is set to zero by process_each which wants to print errors
