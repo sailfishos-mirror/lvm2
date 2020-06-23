@@ -1,0 +1,33 @@
+The LVM devices file lists devices that lvm can use.  The default file is
+/etc/lvm/devices/system.devices, and the lvmdevices(8) command is used to
+add or remove device entries.  If the file does not exist, or if lvm.conf
+includes use_devicesfile=0, then lvm will not use a devices file.
+
+When not using a devices file, lvm defaults to using all devices on the
+system, and allows the lvm.conf filter to limit the full set of system
+devices. When using a devices file, lvm does not use the filter setting.
+
+To use a device with lvm, that device should be added to the devices file
+with the command lvmdevices --adddev.  To prevent lvm from seeing or using
+a device, remove it from the devices file with lvmdevices --deldev.  (To
+help the transition to the devices file, the pvcreate command will also
+add new PVs to the file.)
+
+LVM records entries in the devices file using hardware-specific IDs, such
+as the WWID or serial number. This avoids problems with unstable device
+names, and allows lvm to find its devices without scanning headers from
+other devices on the system.  Virtual device types (e.g. multipath, crypt,
+md, loop) are identified with subsystem-specific ids.  When a device has
+no hardware or subystem ID, lvm falls back to recording it based on the
+device name. This results in less optimal behavior when the device name
+changes -- lvm will scan devices outside the devices file to locate a
+"missing" PV on a new device name (this only applies to devices using the
+name as an ID.)
+
+It is recommended to use lvm commands to make changes to the file to
+ensure correct and consistent information.
+
+Multiple devices files may be created, each containing different sets of
+devices.  The --devicesfile <name> command line option is used to specify
+which devices file the command should use.
+

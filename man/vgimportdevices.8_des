@@ -1,0 +1,5 @@
+Add all PVs from a VG to the devices file.  This is the equivalent of
+using lvmdevices --adddev to add each PV to the devices file individually.
+vgimportdevices will also add the device IDs to the VG metadata (which the
+lvmdevices command does not do.)
+
