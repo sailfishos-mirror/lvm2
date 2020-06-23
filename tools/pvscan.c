@@ -1445,7 +1445,10 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 
 	cmd->pvscan_cache_single = 1;
 
-	dev_cache_scan();
+	if (!setup_devices(cmd)) {
+		log_error("Failed to set up devices.");
+		return_0;
+	}
 
 	/*
 	 * Get list of args.  Do not use filters.
