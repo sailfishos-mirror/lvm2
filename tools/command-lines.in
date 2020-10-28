@@ -512,7 +512,7 @@ RULE: all and lv_is_visible
 
 ---
 
-lvconvert --type thin-pool LV_linear_striped_raid_cache
+lvconvert --type thin-pool LV_linear_striped_raid_cache_writecache
 OO: --stripes_long Number, --stripesize SizeKB,
 --discards Discards, OO_LVCONVERT_POOL, OO_LVCONVERT
 OP: PV ...
