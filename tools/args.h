@@ -313,6 +313,15 @@ arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
     "start of the disk (between 0 and 3 inclusive - see LABEL_SCAN_SECTORS\n"
     "in the source). Use with care.\n")
 
+arg(listlvs_ARG, '\0', "listlvs", 0, 0, 0,
+    "Print a list of LVs that use the device.\n")
+
+arg(listvg_ARG, '\0', "listvg", 0, 0, 0,
+    "Print the VG that uses the device.\n")
+
+arg(checkcomplete_ARG, '\0', "checkcomplete", 0, 0, 0,
+    "Check if all the devices used by VG or LV are present.\n")
+
 arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0,
     "Used to pass options for special cases to lvmlockd.\n"
     "See \\fBlvmlockd\\fP(8) for more information.\n")
@@ -795,6 +804,10 @@ arg(type_ARG, '\0', "type", segtype_VAL, 0, 0,
     "(e.g. --stripes, --mirrors, --snapshot, --virtualsize, --thin, --cache, --vdo).\n"
     "Use inferred types with care because it can lead to unexpected results.\n")
 
+arg(udevoutput_ARG, '\0', "udevoutput", 0, 0, 0,
+    "Command output is modified to be imported from a udev rule.\n"
+    "This option is not for general purpose use.\n")
+
 arg(unbuffered_ARG, '\0', "unbuffered", 0, 0, 0,
     "Produce output immediately without sorting or aligning the columns properly.\n")
 
@@ -870,6 +883,10 @@ arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", vgmetadatacopies_VAL, 0, 0,
     "metadataignore flags.\n"
     "\\fBall\\fP causes LVM to first clear the metadataignore flags on\n"
     "all PVs, and then to become unmanaged.\n")
+
+arg(vgonline_ARG, '\0', "vgonline", 0, 0, 0,
+    "The first command to see the complete VG will report it uniquely.\n"
+    "Other commands to see the complete VG will report it differently.\n")
 
 arg(withsummary_ARG, '\0', "withsummary", 0, 0, 0,
     "Display a one line comment for each configuration node.\n")
