@@ -1175,6 +1175,64 @@ static int _get_args_devs(struct cmd_context *cmd, struct dm_list *pvscan_args,
 	return 1;
 }
 
+static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group *vg)
+{
+	char path[PATH_MAX];
+	char file_vgname[NAME_LEN];
+	char pvid[ID_LEN+1] = { 0 };
+	struct pv_list *pvl;
+	struct device *dev;
+	int major, minor;
+	dev_t devno;
+
+	dm_list_iterate_items(pvl, &vg->pvs) {
+		memcpy(&pvid, &pvl->pv->id.uuid, ID_LEN);
+
+		if (pvl->pv->status & MISSING_PV) {
+			log_debug("set_pv_devices_online vg %s pv %s missing flag already set",
+				  vg->name, pvid);
+			continue;
+		}
+
+		if (!_online_pvid_file_exists(pvid)) {
+			log_debug("set_pv_devices_online vg %s pv %s no online file",
+				  vg->name, pvid);
+			pvl->pv->status |= MISSING_PV;
+			continue;
+		}
+
+		memset(path, 0, sizeof(path));
+		snprintf(path, sizeof(path), "%s/%s", _pvs_online_dir, pvid);
+
+		major = 0;
+		minor = 0;
+		file_vgname[0] = '\0';
+
+		_online_pvid_file_read(path, &major, &minor, file_vgname);
+
+		if (file_vgname[0] && strcmp(vg->name, file_vgname)) {
+			log_warn("WARNING: VG %s PV %s wrong vgname in online file %s",
+				  vg->name, pvid, file_vgname);
+			pvl->pv->status |= MISSING_PV;
+			continue;
+		}
+
+		devno = MKDEV(major, minor);
+
+		if (!(dev = dev_cache_get_by_devt(cmd, devno, NULL, NULL))) {
+			log_print("WARNING: VG %s PV %s no device found for %d:%d",
+				  vg->name, pvid, major, minor);
+			pvl->pv->status |= MISSING_PV;
+			continue;
+		}
+
+		log_debug("set_pv_devices_online vg %s pv %s is online %s",
+			  vg->name, pvid, dev_name(dev));
+
+		pvl->pv->dev = dev;
+	}
+}
+
 static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvscan_devs,
 			int *pv_count, struct dm_list *complete_vgnames)
 {
@@ -1188,7 +1246,11 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 	struct volume_group *vg;
 	const char *vgname;
 	uint32_t ext_version, ext_flags;
+	int do_cache = arg_is_set(cmd, cache_long_ARG);
 	int do_activate = arg_is_set(cmd, activate_ARG);
+	int list_lvs = arg_is_set(cmd, listlvs_ARG);
+	int list_vg = arg_is_set(cmd, listvg_ARG);
+	int check_complete = arg_is_set(cmd, checkcomplete_ARG);
 	int pvs_online;
 	int pvs_offline;
 	int pvs_unknown;
@@ -1243,8 +1305,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 			goto online;
 		}
 
-		set_pv_devices(fid, vg, NULL);
-
+#if 0
 		/*
 		 * Skip devs that are md components (set_pv_devices can do new
 		 * md check), are shared, or foreign.
@@ -1255,6 +1316,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 			release_vg(vg);
 			continue;
 		}
+#endif
 
 		if (vg_is_shared(vg)) {
 			log_print("pvscan[%d] PV %s ignore shared VG.", getpid(), dev_name(dev));
@@ -1286,8 +1348,9 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 
 		/*
 		 * Create file named for pvid to record this PV is online.
+		 * The command creates/checks online files only when --cache is used.
 		 */
-		if (!_online_pvid_file_create(dev, vg ? vg->name : NULL)) {
+		if (do_cache && !_online_pvid_file_create(dev, vg ? vg->name : NULL)) {
 			log_error("pvscan[%d] PV %s failed to create online file.", getpid(), dev_name(dev));
 			release_vg(vg);
 			ret = 0;
@@ -1295,9 +1358,9 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 		}
 
 		/*
-		 * When not activating we don't need to know about vg completeness.
+		 * A plain pvscan --cache <dev> just creates the online file.
 		 */
-		if (!do_activate) {
+		if (!do_activate && !list_lvs && !list_vg) {
 			log_print("pvscan[%d] PV %s online.", getpid(), dev_name(dev));
 			release_vg(vg);
 			continue;
@@ -1306,61 +1369,126 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 		/*
 		 * Check if all the PVs for this VG are online.  If the arrival
 		 * of this dev completes the VG, then save the vgname in
-		 * complete_vgnames so it will be activated.
+		 * complete_vgnames (activation phase will want to know which
+		 * VGs to activate.)
 		 */
-		pvs_online = 0;
-		pvs_offline = 0;
-		pvs_unknown = 0;
-		vg_complete = 0;
+		if (do_activate || check_complete) {
+			pvs_online = 0;
+			pvs_offline = 0;
+			pvs_unknown = 0;
+			vg_complete = 0;
 
-		if (vg) {
-			/*
-			 * Use the VG metadata from this PV for a list of all
-			 * PVIDs.  Write a lookup file of PVIDs in case another
-			 * pvscan needs it.  After writing lookup file, recheck
-			 * pvid files to resolve a possible race with another
-			 * pvscan reading the lookup file that missed it.
-			 */
-			log_debug("checking all pvid files from vg %s", vg->name);
-			_count_pvid_files(vg, &pvs_online, &pvs_offline);
-
-			if (pvs_offline && _write_lookup_file(cmd, vg)) {
-				log_debug("rechecking all pvid files from vg %s", vg->name);
+			if (vg) {
+				/*
+				 * Use the VG metadata from this PV for a list of all
+				 * PVIDs.  Write a lookup file of PVIDs in case another
+				 * pvscan needs it.  After writing lookup file, recheck
+				 * pvid files to resolve a possible race with another
+				 * pvscan reading the lookup file that missed it.
+				 */
+				log_debug("checking all pvid files from vg %s", vg->name);
 				_count_pvid_files(vg, &pvs_online, &pvs_offline);
-				if (!pvs_offline)
-					log_print("pvscan[%d] VG %s complete after recheck.", getpid(), vg->name);
+	
+				if (pvs_offline && _write_lookup_file(cmd, vg)) {
+					log_debug("rechecking all pvid files from vg %s", vg->name);
+					_count_pvid_files(vg, &pvs_online, &pvs_offline);
+					if (!pvs_offline)
+						log_print("pvscan[%d] VG %s complete after recheck.", getpid(), vg->name);
+				}
+	
+				vgname = vg->name;
+			} else {
+				/*
+				 * No VG metadata on this PV, so try to use a lookup
+				 * file written by a prior pvscan for a list of all
+				 * PVIDs.  A lookup file may not exist for this PV if
+				 * it's the first to appear from the VG.
+				 */
+				log_debug("checking all pvid files from lookup file");
+				if (!_count_pvid_files_from_lookup_file(cmd, dev, &pvs_online, &pvs_offline, &vgname))
+					pvs_unknown = 1;
 			}
+	
+			if (pvs_unknown) {
+				log_print("pvscan[%d] PV %s online, VG unknown.", getpid(), dev_name(dev));
+				vg_complete = 0;
+	
+			} else if (pvs_offline) {
+				log_print("pvscan[%d] PV %s online, VG %s incomplete (need %d).",
+					  getpid(), dev_name(dev), vgname, pvs_offline);
+				vg_complete = 0;
+	
+			} else {
+				log_print("pvscan[%d] PV %s online, VG %s is complete.", getpid(), dev_name(dev), vgname);
+				if (!str_list_add(cmd->mem, complete_vgnames, dm_pool_strdup(cmd->mem, vgname)))
+					stack;
+				vg_complete = 1;
+			}
+		}
 
+		if (!vgname && vg)
 			vgname = vg->name;
-		} else {
+
+		if (list_lvs) {
+			struct dm_list lvs_list;
+			struct lv_list *lvl;
+
+			dm_list_init(&lvs_list);
+
 			/*
-			 * No VG metadata on this PV, so try to use a lookup
-			 * file written by a prior pvscan for a list of all
-			 * PVIDs.  A lookup file may not exist for this PV if
-			 * it's the first to appear from the VG.
+			 * For each vg->pvs entry, get the dev based on the online file
+			 * for the pvid and set pv->dev or pv->status MISSING_PV.
 			 */
-			log_debug("checking all pvid files from lookup file");
-			if (!_count_pvid_files_from_lookup_file(cmd, dev, &pvs_online, &pvs_offline, &vgname))
-				pvs_unknown = 1;
+			_set_pv_devices_online(cmd, vg);
+
+			/*
+			 * lvs_list are LVs that use dev.
+			 */
+			if (!get_visible_lvs_using_pv(cmd, vg, dev, &lvs_list))
+				log_warn("WARNING: failed to find LVs using %s.", dev_name(dev));
+
+			if (!check_complete) {
+				dm_list_iterate_items(lvl, &lvs_list)
+					log_print("LV %s", display_lvname(lvl->lv));
+			} else if (vg_complete) {
+				/*
+				 * A shortcut; the vg complete implies all lvs are complete.
+				 */
+				dm_list_iterate_items(lvl, &lvs_list)
+					log_print("LV %s complete", display_lvname(lvl->lv));
+			} else {
+				/*
+				 * For each LV in VG, check if all devs are present.
+				 * Sets the PARTIAL flag on LVs that are not complete.
+				 */
+				if (!vg_mark_partial_lvs(vg, 1))
+					log_print("Failed to check partial lvs.");
+
+				dm_list_iterate_items(lvl, &lvs_list) {
+					if (!lv_is_partial(lvl->lv))
+						log_print("LV %s complete", display_lvname(lvl->lv));
+					else
+						log_print("LV %s incomplete", display_lvname(lvl->lv));
+				}
+			}
 		}
 
-		if (pvs_unknown) {
-			log_print("pvscan[%d] PV %s online, VG unknown.", getpid(), dev_name(dev));
-			vg_complete = 0;
-
-		} else if (pvs_offline) {
-			log_print("pvscan[%d] PV %s online, VG %s incomplete (need %d).",
-				  getpid(), dev_name(dev), vgname, pvs_offline);
-			vg_complete = 0;
-
-		} else {
-			log_print("pvscan[%d] PV %s online, VG %s is complete.", getpid(), dev_name(dev), vgname);
-			if (!str_list_add(cmd->mem, complete_vgnames, dm_pool_strdup(cmd->mem, vgname)))
-				stack;
-			vg_complete = 1;
+		if (list_vg) {
+			if (!vgname)
+				log_print("VG unknown");
+			else if (!check_complete)
+				log_print("VG %s", vgname);
+			else if (vg_complete)
+				log_print("VG %s complete", vgname);
+			else
+				log_print("VG %s incomplete", vgname);
 		}
 
-		if (!saved_vg && vg && vg_complete && !do_all && (dm_list_size(pvscan_devs) == 1))
+		/*
+		 * When "pvscan --cache -aay <dev>" completes the vg, save the
+		 * struct vg to use for quick activation function.
+		 */
+		if (do_activate && !saved_vg && vg && vg_complete && !do_all && (dm_list_size(pvscan_devs) == 1))
 			saved_vg = vg;
 		else
 			release_vg(vg);

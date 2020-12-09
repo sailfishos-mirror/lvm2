@@ -286,6 +286,15 @@ arg(labelsector_ARG, '\0', "labelsector", number_VAL, 0, 0,
     "start of the disk (between 0 and 3 inclusive - see LABEL_SCAN_SECTORS\n"
     "in the source). Use with care.\n")
 
+arg(listlvs_ARG, '\0', "listlvs", 0, 0, 0,
+    "Print a list of LVs that use the device.\n")
+
+arg(listvg_ARG, '\0', "listvg", 0, 0, 0,
+    "Print the VG that uses the device.\n")
+
+arg(checkcomplete_ARG, '\0', "checkcomplete", 0, 0, 0,
+    "Check if all the devices used by VG or LV are present.\n")
+
 arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0,
     "Used to pass options for special cases to lvmlockd.\n"
     "See \\fBlvmlockd\\fP(8) for more information.\n")
