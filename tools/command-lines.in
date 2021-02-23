@@ -1398,14 +1398,12 @@ lvmdevices --update
 ID: lvmdevices_update
 
 lvmdevices --adddev PV
-OO: --deviceidtype String, --deviceid String
 ID: lvmdevices_edit
 
 lvmdevices --deldev PV
 ID: lvmdevices_edit
 
 lvmdevices --addpvid String
-OO: --deviceidtype String, --deviceid String
 ID: lvmdevices_edit
 
 lvmdevices --delpvid String
@@ -1543,8 +1541,7 @@ OO: --dataalignment SizeKB, --dataalignmentoffset SizeKB, --bootloaderareasize S
 --force, --labelsector Number, --metadatatype MetadataType,
 --pvmetadatacopies MetadataCopiesPV, --metadatasize SizeMB,
 --metadataignore Bool, --norestorefile, --setphysicalvolumesize SizeMB,
---reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool,
---deviceidtype String, --deviceid String
+--reportformat ReportFmt, --restorefile String, --uuidstr String, --zero Bool
 ID: pvcreate_general
 RULE: --norestorefile not --restorefile
 RULE: --bootloaderareasize not --restorefile
@@ -1800,12 +1797,12 @@ ID: vgimportclone_general
 ---
 
 vgimportdevices VG|Tag|Select ...
-OO: --deviceidtype String, --select String, --foreign, --reportformat ReportFmt
+OO: --select String, --foreign, --reportformat ReportFmt
 ID: vgimportdevices_some
 DESC: Add devices from specific VGs to the devices file.
 
 vgimportdevices --all
-OO: --deviceidtype String, --foreign, --reportformat ReportFmt
+OO: --foreign, --reportformat ReportFmt
 ID: vgimportdevices_all
 DESC: Add devices from all accessible VGs to the devices file.
 

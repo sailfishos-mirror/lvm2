@@ -281,9 +281,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 				 dev_name(dev), dev_filtered_reason(dev));
 		}
 
-		if (!device_id_add(cmd, dev, dev->pvid,
-			      arg_str_value(cmd, deviceidtype_ARG, NULL),
-			      arg_str_value(cmd, deviceid_ARG, NULL)))
+		/* allow deviceidtype_ARG/deviceid_ARG ? */
+		if (!device_id_add(cmd, dev, dev->pvid, NULL, NULL))
 			goto_bad;
 		if (!device_ids_write(cmd))
 			goto_bad;

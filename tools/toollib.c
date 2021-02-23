@@ -5651,9 +5651,8 @@ do_command:
 				pvl->pv = vgpvl->pv;
 				dm_list_add(&pp->pvs, &pvl->list);
 
-				device_id_add(cmd, pd->dev, (const char *)&pvl->pv->id.uuid,
-					      arg_str_value(cmd, deviceidtype_ARG, NULL),
-					      arg_str_value(cmd, deviceid_ARG, NULL));
+				/* allow deviceidtype_ARG/deviceid_ARG ? */
+				device_id_add(cmd, pd->dev, (const char *)&pvl->pv->id.uuid, NULL, NULL);
 
 			} else {
 				log_error("Failed to find PV %s", pd->name);
@@ -5691,9 +5690,8 @@ do_command:
 			continue;
 		}
 
-		device_id_add(cmd, pd->dev, (const char *)&pv->id.uuid,
-			      arg_str_value(cmd, deviceidtype_ARG, NULL),
-			      arg_str_value(cmd, deviceid_ARG, NULL));
+		/* allow deviceidtype_ARG/deviceid_ARG ? */
+		device_id_add(cmd, pd->dev, (const char *)&pv->id.uuid, NULL, NULL);
 
 		log_verbose("Set up physical volume for \"%s\" with %" PRIu64
 			    " available sectors.", pv_name, pv_size(pv));

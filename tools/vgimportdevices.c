@@ -31,7 +31,7 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
 	struct physical_volume *pv;
 	int update_vg = 1;
 	int updated_pvs = 0;
-	const char *idtypestr;
+	const char *idtypestr = NULL; /* deviceidtype_ARG ? */
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		if (is_missing_pv(pvl->pv) || !pvl->pv->dev) {
@@ -52,11 +52,6 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
 	 */
 	if (vg_is_foreign(vg) || vg_is_shared(vg))
 		update_vg = 0;
-
-	/*
-	 * User can select the idtype to use when importing.
-	 */
-	idtypestr = arg_str_value(cmd, deviceidtype_ARG, NULL);
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		pv = pvl->pv;
