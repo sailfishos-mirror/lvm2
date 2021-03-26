@@ -300,6 +300,9 @@ if (( sysreport )); then
 		for unit in $("$GREP" lvm2-pvscan "$sysreport_dir/systemd_unit_list" | cut -d " " -f 1); do
 			log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise $unit >> \"$sysreport_dir/systemd_lvm2_pvscan_service_status\""
 		done
+		for unit in $("$GREP" lvm-vgchange "$sysreport_dir/systemd_unit_list" | cut -d " " -f 1); do
+			log "$SYSTEMCTL status -l --no-pager -n $log_lines -o short-precise $unit >> \"$sysreport_dir/systemd_lvm_vgchange_service_status\""
+		done
 	fi
 fi
 
