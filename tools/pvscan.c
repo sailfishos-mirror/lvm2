@@ -1810,6 +1810,12 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 		return ECMD_PROCESSED;
 	}
 
+	if (arg_is_set(cmd, udevoutput_ARG) &&
+	    !find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
+		printf("LVM_EVENT_ACTIVATION=0\n");
+		return ECMD_PROCESSED;
+	}
+
 	if (arg_is_set(cmd, major_ARG) + arg_is_set(cmd, minor_ARG))
 		devno_args = 1;
 
