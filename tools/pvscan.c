@@ -1362,6 +1362,12 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 			continue;
 		}
 
+		if (vg_is_exported(vg)) {
+			log_print_pvscan(cmd, "PV %s ignore exported VG.", dev_name(dev));
+			release_vg(vg);
+			continue;
+		}
+
 		/*
 		 * online file phase
 		 * create pvs_online/<pvid>
