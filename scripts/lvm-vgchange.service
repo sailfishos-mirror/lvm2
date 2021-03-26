@@ -1,0 +1,12 @@
+[Unit]
+Description=LVM event activation of VG %i
+Documentation=man:vgchange(8)
+DefaultDependencies=no
+StartLimitIntervalSec=0
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=@SBINDIR@/lvm vgchange -aay %i
