@@ -687,6 +687,7 @@ struct lvresize_params {
 	int nosync;
 	int nofsck;
 	int resizefs;
+	int checkfs;
 
 	unsigned mirrors;
 	uint32_t stripes;

@@ -1449,7 +1449,7 @@ DESC: Remove the devices file entry for the given PVID.
 
 lvreduce --size NSizeMB LV
 OO: --autobackup Bool, --force, --nofsck, --noudevsync,
---reportformat ReportFmt, --resizefs
+--reportformat ReportFmt, --resizefs, --checkfs Bool
 ID: lvreduce_general
 
 ---
@@ -1479,7 +1479,7 @@ lvresize --size SSizeMB LV
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
 --stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
---type SegType
+--type SegType, --checkfs Bool
 OP: PV ...
 ID: lvresize_by_size
 DESC: Resize an LV by a specified size.
@@ -1488,7 +1488,7 @@ lvresize LV PV ...
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs, --stripes Number, --stripesize SizeKB,
---type SegType
+--type SegType, --checkfs Bool
 ID: lvresize_by_pv
 DESC: Resize an LV by specified PV extents.
 

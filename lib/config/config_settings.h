@@ -1115,6 +1115,15 @@ cfg(global_lvdisplay_shows_full_device_path_CFG, "lvdisplay_shows_full_device_pa
 	"Previously this was always shown as /dev/vgname/lvname even when that\n"
 	"was never a valid path in the /dev filesystem.\n")
 
+cfg(global_lvreduce_checkfs_CFG, "lvreduce_checkfs", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 1, vsn(2, 3, 12), 0, 0, NULL,
+	"Control if lvreduce will check for a file system that cannot be reduced.\n"
+	"When enabled, lvreduce will read the LV to check that the file system type\n"
+	"can be reduced. If the file system type cannot be reduced, then lvreduce\n"
+	"will not be performed. The LV will be activated, if it is not already active,\n"
+	"to check for a file system. When disabled, lvreduce will not check for\n"
+	"file systems on the LV. This risks corrupting the file system.\n"
+	"The command line option --checkfs y|n will override this setting.\n")
+
 cfg(global_event_activation_CFG, "event_activation", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 1, vsn(2, 3, 1), 0, 0, NULL,
 	"Activate LVs based on system-generated device events.\n"
 	"When a PV appears on the system, a system-generated uevent triggers\n"
