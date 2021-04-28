@@ -6050,6 +6050,55 @@ int lv_resize(struct logical_volume *lv,
 	    (pvh != &vg->pvs))
 		log_print_unless_silent("Ignoring PVs on command line when reducing.");
 
+	if (lp->detectfs) {
+		char pathname[PATH_MAX];
+		char *dmname;
+		char fs_buf[16] = {0};
+		int fs_can_reduce = 0;
+
+		/* if lv is not active, activate it */
+		if (!lv_is_active(lv)) {
+			if (!activate_lv(cmd, lv)) {
+				log_error("Failed to activate %s for --detectfs.", display_lvname(lv));
+				return 0;
+			}
+			if (!sync_local_dev_names(cmd))
+				return_0;
+			activated = 1;
+		}
+
+		if (!(dmname = dm_build_dm_name(cmd->mem, vg->name, lv->name, NULL)))
+			return_0;
+
+		if (dm_snprintf(pathname, sizeof(pathname), "%s/%s", dm_dir(), dmname) < 0)
+			return_0;
+
+		/* use blkid to check fs type, we know which types can reduce */
+		if (!get_fs_can_reduce(pathname, &fs_can_reduce, fs_buf, sizeof(fs_buf))) {
+			log_error("Failed to find file system type for --detectfs.");
+			goto bad;
+		}
+
+		if (!fs_can_reduce) {
+			log_error("Detected file system type %s that cannot be reduced (from --detectfs).",
+				  fs_buf[0] ? fs_buf : "unknown");
+			goto bad;
+		}
+
+		/*
+		 * We've checked that the fs can reduce, but if the user has
+		 * not set --resizefs to actually do the fs reduction, then
+		 * report an error since it would unnecessarily cause data
+		 * loss.  i.e. require the user to add either --detectfs n or
+		 * --resizefs.
+		 */
+		if (!lp->resizefs) {
+			log_error("Detected file system type %s that can be reduced (see --resizefs).",
+				  fs_buf[0] ? fs_buf : "unknown");
+			goto bad;
+		}
+	}
+
 	/* Request confirmation before operations that are often mistakes. */
 	/* aux_lv never resize fs */
 	if ((lp->resizefs || (lp->resize == LV_REDUCE)) &&

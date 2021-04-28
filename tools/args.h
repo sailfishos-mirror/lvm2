@@ -155,6 +155,10 @@ arg(cachesize_ARG, '\0', "cachesize", sizemb_VAL, 0, 0,
 arg(check_ARG, '\0', "check", 0, 0, 0,
     "Check the content of the devices file.\n")
 
+arg(detectfs_ARG, '\0', "detectfs", bool_VAL, 0, 0,
+    "Check the LV for file system information. This activates the LV if\n"
+    "needed so that the LV can be read to look for fs superblocks.\n")
+
 arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0,
     "The command profile to use for command configuration.\n"
     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")

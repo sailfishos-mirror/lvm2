@@ -726,6 +726,39 @@ int get_fs_block_size(struct device *dev, uint32_t *fs_block_size)
 #endif
 
 #ifdef BLKID_WIPING_SUPPORT
+int get_fs_can_reduce(const char *pathname, int *fs_can_reduce, char *fs_buf, int fs_buf_len)
+{
+	char *fs_str = NULL;
+
+	if ((fs_str = blkid_get_tag_value(NULL, "TYPE", pathname))) {
+		if (fs_buf && fs_buf_len)
+			strncpy(fs_buf, fs_str, fs_buf_len-1);
+
+		log_debug("Found blkid filesystem TYPE %s on %s", fs_str, pathname);
+
+		if (fs_str && !strcmp(fs_str, "ext4"))
+			*fs_can_reduce = 1;
+		else
+			*fs_can_reduce = 0;
+
+		free(fs_str);
+		return 1;
+	} else {
+		log_debug("No blkid filesystem TYPE found for %s", pathname);;
+		*fs_can_reduce = 0;
+		return 0;
+	}
+}
+#else
+int get_fs_can_reduce(const char *pathname, int *fs_can_reduce, char *fs_buf, int fs_buf_len)
+{
+	log_warn("Disabled blkid for fs type check.");
+	*fs_can_reduce = 0;
+	return 0;
+}
+#endif
+
+#ifdef BLKID_WIPING_SUPPORT
 
 static inline int _type_in_flag_list(const char *type, uint32_t flag_list)
 {
