@@ -39,6 +39,13 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
 	else
 		lp->resize = LV_ANY;
 
+	if (lp->resize == LV_REDUCE) {
+		if (arg_is_set(cmd, detectfs_ARG))
+			lp->detectfs = arg_int_value(cmd, detectfs_ARG, 1);
+		else
+			lp->detectfs = 1;
+	}
+
 	lp->sign = lp->poolmetadata_sign = SIGN_NONE;
 
 	if ((lp->use_policies = arg_is_set(cmd, usepolicies_ARG))) {
