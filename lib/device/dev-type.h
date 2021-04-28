@@ -102,4 +102,6 @@ int dev_is_lv(struct device *dev);
 
 int get_fs_block_size(const char *pathname, uint32_t *fs_block_size);
 
+int get_fs_can_reduce(const char *pathname, int *fs_can_reduce, char *fs_buf, int fs_buf_len);
+
 #endif

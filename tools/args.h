@@ -155,6 +155,13 @@ arg(cachesize_ARG, '\0', "cachesize", sizemb_VAL, 0, 0,
 arg(check_ARG, '\0', "check", 0, 0, 0,
     "Check the content of the devices file.\n")
 
+arg(detectfs_ARG, '\0', "detectfs", bool_VAL, 0, 0,
+    "Use blkid to check for a file system on the LV before reducing it.\n"
+    "If a shrinkable file system is found, then --resizefs is also required.\n"
+    "If a non-shrinkable file system is found, then the LV is not reduced.\n"
+    "If no file system is found, then the LV is reduced.\n"
+    "An inactive LV is activated to look for file systems.\n")
+
 arg(commandprofile_ARG, '\0', "commandprofile", string_VAL, 0, 0,
     "The command profile to use for command configuration.\n"
     "See \\fBlvm.conf\\fP(5) for more information about profiles.\n")
