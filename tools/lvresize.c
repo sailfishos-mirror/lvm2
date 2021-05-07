@@ -43,7 +43,7 @@ static int _lvresize_params(struct cmd_context *cmd, int argc, char **argv,
 		if (arg_is_set(cmd, detectfs_ARG))
 			lp->detectfs = arg_int_value(cmd, detectfs_ARG, 1);
 		else
-			lp->detectfs = 1;
+			lp->detectfs = find_config_tree_bool(cmd, global_lvreduce_detectfs_CFG, NULL);;
 	}
 
 	lp->sign = lp->poolmetadata_sign = SIGN_NONE;
