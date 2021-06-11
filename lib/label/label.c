@@ -1032,6 +1032,7 @@ int label_scan(struct cmd_context *cmd)
 	struct dev_iter *iter;
 	struct device_list *devl, *devl2;
 	struct device *dev;
+	char *vgname_hint = NULL;
 	uint64_t max_metadata_size_bytes;
 	int device_ids_invalid = 0;
 	int using_hints;
@@ -1137,21 +1138,54 @@ int label_scan(struct cmd_context *cmd)
 	 * by using hints which tell us which devices are PVs, which
 	 * are the only devices we actually need to scan.  Without
 	 * hints we need to scan all devs to find which are PVs.
-	 *
-	 * TODO: if the command is using hints and a single vgname
+	 */
+	if (!get_hints(cmd, &hints_list, &create_hints, &all_devs, &scan_devs, &vgname_hint)) {
+		dm_list_splice(&scan_devs, &all_devs);
+		dm_list_init(&hints_list);
+		using_hints = 0;
+	} else
+		using_hints = 1;
+
+	/*
+	 * If the command is using hints and a single vgname
 	 * arg, we can also take the vg lock here, prior to scanning.
 	 * This means we would not need to rescan the PVs in the VG
 	 * in vg_read (skip lvmcache_label_rescan_vg) after the
 	 * vg lock is usually taken.  (Some commands are already
 	 * able to avoid rescan in vg_read, but locking early would
 	 * apply to more cases.)
+	 *
+	 * TODO: we don't know exactly which vg lock mode (read or write)
+	 * the command will use in vg_read() for the normal lock_vol(),
+	 * but we could make a fairly accurate guess of READ/WRITE based
+	 * on looking at the command name.  If we guess wrong we can
+	 * just unlock_vg and lock_vol again with the correct mode in
+	 * vg_read().
 	 */
-	if (!get_hints(cmd, &hints_list, &create_hints, &all_devs, &scan_devs)) {
-		dm_list_splice(&scan_devs, &all_devs);
-		dm_list_init(&hints_list);
-		using_hints = 0;
-	} else
-		using_hints = 1;
+	if (vgname_hint) {
+		uint32_t lck_type = LCK_VG_WRITE;
+
+		log_debug("Early lock vg");
+
+		/* FIXME: borrowing this lockd flag which should be
+		   quite close to what we want, based on the command name.
+		   Need to do proper mode selection here, and then check
+		   in case the later lock_vol in vg_read wants different. */
+		if (cmd->lockd_vg_default_sh)
+			lck_type = LCK_VG_READ;
+
+		if (!lock_vol(cmd, vgname_hint, lck_type, NULL)) {
+			log_warn("Could not pre-lock VG %s.", vgname_hint);
+			/* not an error since this is just an optimization */
+		} else {
+			/* Save some state indicating that the vg lock
+			   is already held so that the normal lock_vol()
+			   will know. */
+			cmd->early_lock_vg_mode = lck_type;
+		}
+
+		free(vgname_hint);
+	}
 
 	/*
 	 * If the total number of devices exceeds the soft open file

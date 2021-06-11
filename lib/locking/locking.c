@@ -203,6 +203,11 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
 	if (is_orphan_vg(vol))
 		return 1;
 
+	if (!is_global && cmd->early_lock_vg_mode && (lck_type != LCK_UNLOCK)) {
+		log_debug("VG was locked early.");
+		return 1;
+	}
+
 	if (!_blocking_supported)
 		flags |= LCK_NONBLOCK;
 

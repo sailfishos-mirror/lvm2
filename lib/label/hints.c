@@ -1288,11 +1288,13 @@ check:
  */
 
 int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
-	      struct dm_list *devs_in, struct dm_list *devs_out)
+	      struct dm_list *devs_in, struct dm_list *devs_out, char **vgname_out)
 {
 	struct dm_list hints_list;
 	int needs_refresh = 0;
 	char *vgname = NULL;
+
+	*vgname_out = NULL;
 
 	dm_list_init(&hints_list);
 
@@ -1433,7 +1435,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
 
 	dm_list_splice(hints_out, &hints_list);
 
-	free(vgname);
+	*vgname_out = vgname;
 
 	return 1;
 }
