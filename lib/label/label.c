@@ -1221,7 +1221,7 @@ int label_scan(struct cmd_context *cmd)
 	 * If the largest metadata is within 1MB of the bcache size, then start
 	 * warning.
 	 */
-	max_metadata_size_bytes = lvmcache_max_metadata_size();
+	max_metadata_size_bytes = lvmcache_max_metadata_size_bytes();
 
 	if (max_metadata_size_bytes + (1024 * 1024) > _current_bcache_size_bytes) {
 		/* we want bcache to be 1MB larger than the max metadata seen */
@@ -1235,6 +1235,14 @@ int label_scan(struct cmd_context *cmd)
 		log_warn("WARNING: increase lvm.conf io_memory_size to at least %llu KiB",
 			 (unsigned long long)want_size_kb);
 	}
+
+	/*
+	 * If vg metadata is using a large percentage of a metadata area, then
+	 * create /run/lvm/scan_lock_global to tell future lvm commands to
+	 * begin doing lock_global() prior to scanning to avoid problems due to
+	 * metadata wrapping between label_scan and vg_read.
+	 */
+	set_scan_lock_global(cmd);
 
 	dm_list_init(&cmd->hints);
 

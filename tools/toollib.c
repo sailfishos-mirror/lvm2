@@ -2140,6 +2140,7 @@ int process_each_vg(struct cmd_context *cmd,
 	struct dm_list vgnameids_to_process;	/* vgnameid_list */
 	int enable_all_vgs = (cmd->cname->flags & ALL_VGS_IS_DEFAULT);
 	int process_all_vgs_on_system = 0;
+	int gl_ex = 0;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
 
@@ -2173,11 +2174,25 @@ int process_each_vg(struct cmd_context *cmd,
 		process_all_vgs_on_system = 1;
 
 	/*
-	 * Needed for a current listing of the global VG namespace.
+	 * The global lock will be taken prior to scanning if the
+	 * /run/lvm/scan_lock_global file has been created by a prior command,
+	 * indicating that vg metadata sizes are large enough to possibly wrap
+	 * around the metadata area during label_scan or between label_scan and
+	 * vg_read, which can invalidate the scan results (normally unlocked)
+	 * and prevent a valid vg_read (which uses metadata locations saved by
+	 * label_scan).
 	 */
-	if (process_all_vgs_on_system && !lock_global(cmd, "sh")) {
-		ret_max = ECMD_FAILED;
-		goto_out;
+	if (do_scan_lock_global(cmd, &gl_ex)) {
+		if (!lock_global(cmd, gl_ex ? "ex" : "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
+	} else if (process_all_vgs_on_system) {
+		/* Needed for a current listing of the global VG namespace. */
+	       	if (!lock_global(cmd, "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
 	}
 
 	/*
@@ -3668,6 +3683,7 @@ int process_each_lv(struct cmd_context *cmd,
 	struct dm_list vgnameids_to_process;	/* vgnameid_list */
 	int enable_all_vgs = (cmd->cname->flags & ALL_VGS_IS_DEFAULT);
 	int process_all_vgs_on_system = 0;
+	int gl_ex = 0;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
 
@@ -3722,12 +3738,17 @@ int process_each_lv(struct cmd_context *cmd,
 	else if (dm_list_empty(&arg_vgnames) && handle->internal_report_for_select)
 		process_all_vgs_on_system = 1;
 
-	/*
-	 * Needed for a current listing of the global VG namespace.
-	 */
-	if (process_all_vgs_on_system && !lock_global(cmd, "sh")) {
-		ret_max = ECMD_FAILED;
-		goto_out;
+	if (do_scan_lock_global(cmd, &gl_ex)) {
+		if (!lock_global(cmd, gl_ex ? "ex" : "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
+	} else if (process_all_vgs_on_system) {
+		/* Needed for a current listing of the global VG namespace. */
+		if (!lock_global(cmd, "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
 	}
 
 	/*
@@ -4384,6 +4405,7 @@ int process_each_pv(struct cmd_context *cmd,
 	struct device_id_list *dil;
 	int process_all_pvs;
 	int process_all_devices;
+	int gl_ex = 0;
 	int ret_max = ECMD_PROCESSED;
 	int ret;
 
@@ -4434,10 +4456,17 @@ int process_each_pv(struct cmd_context *cmd,
 
 	process_all_devices = process_all_pvs && (cmd->cname->flags & ENABLE_ALL_DEVS) && all_is_set;
 
-	/* Needed for a current listing of the global VG namespace. */
-	if (!only_this_vgname && !lock_global(cmd, "sh")) {
-		ret_max = ECMD_FAILED;
-		goto_out;
+	if (do_scan_lock_global(cmd, &gl_ex)) {
+		if (!lock_global(cmd, gl_ex ? "ex" : "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
+	} else if (!only_this_vgname) {
+		/* Needed for a current listing of the global VG namespace. */
+		if (!lock_global(cmd, "sh")) {
+			ret_max = ECMD_FAILED;
+			goto_out;
+		}
 	}
 
 	if (!(read_flags & PROCESS_SKIP_SCAN))

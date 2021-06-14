@@ -359,10 +359,8 @@ static int _lockf_global(struct cmd_context *cmd, const char *mode, int convert,
 	if (!strcmp(mode, "ex")) {
 		flags |= LCK_WRITE;
 
-		if (cmd->lockf_global_ex) {
-			log_warn("global flock already held ex");
+		if (cmd->lockf_global_ex)
 			return 1;
-		}
 
 		ret = lock_vol(cmd, VG_GLOBAL, flags, NULL);
 		if (ret)

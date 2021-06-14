@@ -183,8 +183,9 @@ bool lvmcache_scan_mismatch(struct cmd_context *cmd, const char *vgname, const c
 
 int lvmcache_vginfo_has_pvid(struct lvmcache_vginfo *vginfo, char *pvid);
 
-uint64_t lvmcache_max_metadata_size(void);
-void lvmcache_save_metadata_size(uint64_t val);
+uint64_t lvmcache_max_metadata_size_bytes(void);
+void lvmcache_save_metadata_size_bytes(uint64_t val);
+void lvmcache_save_metadata_size_percent(uint64_t meta_size, uint64_t mdah_size);
 
 int dev_in_device_list(struct device *dev, struct dm_list *head);
 
@@ -225,5 +226,9 @@ struct metadata_area *lvmcache_get_dev_mda(struct device *dev, int mda_num);
 void lvmcache_extra_md_component_checks(struct cmd_context *cmd);
 
 unsigned int lvmcache_vg_info_count(void);
+
+void set_scan_lock_global(struct cmd_context *cmd);
+int do_scan_lock_global(struct cmd_context *cmd, int *gl_ex);
+
 
 #endif

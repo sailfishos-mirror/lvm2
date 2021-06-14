@@ -88,6 +88,9 @@ static int _vgs_locked = 0;
 static int _found_duplicate_vgnames = 0;
 static int _outdated_warning = 0;
 
+static const char *_scan_lock_global_file = DEFAULT_RUN_DIR "/scan_lock_global";
+static int _scan_lock_global_file_exists = 0;
+
 int lvmcache_init(struct cmd_context *cmd)
 {
 	/*
@@ -2742,19 +2745,115 @@ bool lvmcache_scan_mismatch(struct cmd_context *cmd, const char *vgname, const c
 	return true;
 }
 
-static uint64_t _max_metadata_size;
+/*
+ * max_size_bytes and max_size_percent may come from different areas and
+ * different vgs because of different area sizes.
+ */
+static uint64_t _max_metadata_size_bytes;
+static dm_percent_t _max_metadata_size_percent = DM_PERCENT_INVALID;
 
-void lvmcache_save_metadata_size(uint64_t val)
+void lvmcache_save_metadata_size_bytes(uint64_t val)
 {
-	if (!_max_metadata_size)
-		_max_metadata_size = val;
-	else if (_max_metadata_size < val)
-		_max_metadata_size = val;
+	if (!_max_metadata_size_bytes)
+		_max_metadata_size_bytes = val;
+	else if (_max_metadata_size_bytes < val)
+		_max_metadata_size_bytes = val;
 }
 
-uint64_t lvmcache_max_metadata_size(void)
+uint64_t lvmcache_max_metadata_size_bytes(void)
 {
-	return _max_metadata_size;
+	return _max_metadata_size_bytes;
+}
+
+/*
+ * TODO: enable/disable scan_lock_global with config setting:
+ * y: always use it
+ * n: never use it
+ * auto (default): use based on /run/lvm/scan_lock_global
+ */
+void lvmcache_save_metadata_size_percent(uint64_t meta_size, uint64_t mdah_size)
+{
+
+	dm_percent_t pc = dm_make_percent(meta_size, mdah_size);
+
+	if (pc == DM_PERCENT_INVALID || pc == DM_PERCENT_FAILED ||
+	    pc == DM_PERCENT_0 || pc == DM_PERCENT_1)
+		return;
+
+	if (_max_metadata_size_percent == DM_PERCENT_INVALID) {
+		_max_metadata_size_percent = pc;
+		return;
+	}
+
+	if (_max_metadata_size_percent < pc)
+		_max_metadata_size_percent = pc;
+}
+
+/*
+ * TODO: make the percent at which scan_lock_global is used
+ * configurable?
+ */
+#define SCAN_LOCK_GLOBAL_METADATA_PERCENT (DM_PERCENT_1 * 25)
+
+void set_scan_lock_global(struct cmd_context *cmd)
+{
+	FILE *fp;
+
+	if (_max_metadata_size_percent == DM_PERCENT_INVALID)
+		return;
+
+	if (_max_metadata_size_percent >= SCAN_LOCK_GLOBAL_METADATA_PERCENT) {
+		if (_scan_lock_global_file_exists)
+			return;
+		log_debug("Creating %s.", _scan_lock_global_file);
+		if (!(fp = fopen(_scan_lock_global_file, "w")))
+			return;
+		if (fclose(fp))
+			stack;
+	} else {
+		if (_scan_lock_global_file_exists) {
+			log_debug("Unlinking %s.", _scan_lock_global_file);
+			if (unlink(_scan_lock_global_file))
+				stack;
+		}
+	}
+}
+
+int do_scan_lock_global(struct cmd_context *cmd, int *gl_ex)
+{
+	struct stat buf;
+
+	if (cmd->nolocking)
+		return 0;
+
+	/* global lock is already held */
+	if (cmd->lockf_global_ex)
+		return 0;
+
+	if (!stat(_scan_lock_global_file, &buf)) {
+		_scan_lock_global_file_exists = 1;
+
+		/*
+		 * Tell the caller to use sh or ex.  A command that may write
+		 * vg metadata should use ex, otherwise sh.
+		 *
+		 * lockd_vg_default_sh/LOCKD_VG_SH is set for commands that
+		 * do not modify vg metadata.
+		 *
+		 * FIXME: this variable/flag was previously used only for
+		 * lvmlockd locking logic, but is now more general, so
+		 * it should be renamed.
+		 */
+		if (cmd->lockd_vg_default_sh)
+			*gl_ex = 0;
+		else
+			*gl_ex = 1;
+
+		return 1;
+
+	}
+
+	return 0;
 }
 
 int lvmcache_vginfo_has_pvid(struct lvmcache_vginfo *vginfo, char *pvid)

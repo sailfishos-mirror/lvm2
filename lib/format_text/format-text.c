@@ -1646,7 +1646,9 @@ int read_metadata_location_summary(const struct format_type *fmt,
 	vgsummary->mda_size = rlocn->size;
 
 	/* Keep track of largest metadata size we find. */
-	lvmcache_save_metadata_size(rlocn->size);
+	lvmcache_save_metadata_size_bytes(rlocn->size);
+	/* Keep track of the most full metadata area. */
+	lvmcache_save_metadata_size_percent(rlocn->size, mdah->size);
 
 	lvmcache_lookup_mda(vgsummary);
 
