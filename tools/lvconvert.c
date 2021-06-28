@@ -5439,6 +5439,7 @@ static int _lvconvert_to_vdopool_single(struct cmd_context *cmd,
 {
 	const char *vg_name = NULL;
 	unsigned int vdo_pool_zero;
+	uint64_t vdo_pool_header_size;
 	struct volume_group *vg = lv->vg;
 	struct logical_volume *vdo_lv;
 	struct dm_vdo_target_params vdo_params; /* vdo */
@@ -5481,7 +5482,7 @@ static int _lvconvert_to_vdopool_single(struct cmd_context *cmd,
 		goto out;
 	}
 
-	if (!fill_vdo_target_params(cmd, &vdo_params, vg->profile))
+	if (!fill_vdo_target_params(cmd, &vdo_params, &vdo_pool_header_size, vg->profile))
 		goto_out;
 
 	if (arg_is_set(cmd, compression_ARG))
@@ -5526,7 +5527,8 @@ static int _lvconvert_to_vdopool_single(struct cmd_context *cmd,
 	if (!archive(vg))
 		goto_out;
 
-	if (!convert_vdo_pool_lv(lv, &vdo_params, &lvc.virtual_extents, vdo_pool_zero))
+	if (!convert_vdo_pool_lv(lv, &vdo_params, &lvc.virtual_extents,
+				 vdo_pool_zero, vdo_pool_header_size))
 		goto_out;
 
 	dm_list_init(&lvc.tags);
