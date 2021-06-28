@@ -558,11 +558,11 @@
 /* Define to 1 to include code that uses lvmlockd dlm option. */
 #undef LOCKDDLM_SUPPORT
 
-/* Define to 1 to include code that uses lvmlockd sanlock option. */
-#undef LOCKDSANLOCK_SUPPORT
-
 /* Define to 1 to include code that uses lvmlockd IDM option. */
 #undef LOCKDIDM_SUPPORT
+
+/* Define to 1 to include code that uses lvmlockd sanlock option. */
+#undef LOCKDSANLOCK_SUPPORT
 
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */
@@ -686,6 +686,9 @@
 
 /* Enable a valgrind aware build of pool */
 #undef VALGRIND_POOL
+
+/* Path to vdoimport binary. */
+#undef VDOIMPORT_PATH
 
 /* The path to 'vdoformat', if available. */
 #undef VDO_FORMAT_CMD

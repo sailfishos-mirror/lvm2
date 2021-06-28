@@ -643,6 +643,8 @@ WRITE_INSTALL
 WRITECACHE
 VDO_LIB
 VDO_INCLUDE
+VDOIMPORT_PATH
+VDOIMPORT
 VDO
 VALGRIND_POOL
 USRSBINDIR
@@ -747,7 +749,6 @@ BUILD_DMFILEMAPD
 BUILD_LOCKDDLM_CONTROL
 BUILD_LOCKDDLM
 BUILD_LOCKDSANLOCK
-BUILD_LOCKDIDM
 BUILD_LVMLOCKD
 BUILD_LVMPOLLD
 BUILD_LVMDBUSD
@@ -773,18 +774,18 @@ UDEV_LIBS
 UDEV_CFLAGS
 SYSTEMD_LIBS
 SYSTEMD_CFLAGS
-BLKID_LIBS
-BLKID_CFLAGS
 NOTIFY_DBUS_LIBS
 NOTIFY_DBUS_CFLAGS
+BLKID_LIBS
+BLKID_CFLAGS
+LOCKD_IDM_LIBS
+LOCKD_IDM_CFLAGS
 LOCKD_DLM_CONTROL_LIBS
 LOCKD_DLM_CONTROL_CFLAGS
 LOCKD_DLM_LIBS
 LOCKD_DLM_CFLAGS
 LOCKD_SANLOCK_LIBS
 LOCKD_SANLOCK_CFLAGS
-LOCKD_IDM_LIBS
-LOCKD_IDM_CFLAGS
 VALGRIND_LIBS
 VALGRIND_CFLAGS
 GENPNG
@@ -1025,10 +1026,10 @@ LOCKD_DLM_CONTROL_CFLAGS
 LOCKD_DLM_CONTROL_LIBS
 LOCKD_IDM_CFLAGS
 LOCKD_IDM_LIBS
-NOTIFY_DBUS_CFLAGS
-NOTIFY_DBUS_LIBS
 BLKID_CFLAGS
 BLKID_LIBS
+NOTIFY_DBUS_CFLAGS
+NOTIFY_DBUS_LIBS
 SYSTEMD_CFLAGS
 SYSTEMD_LIBS
 UDEV_CFLAGS
@@ -1708,6 +1709,7 @@ Optional Features:
   --enable-pkgconfig      install pkgconfig support
   --enable-write_install  install user writable files
   --disable-fsadm         disable fsadm
+  --disable-vdoimport     disable vdoimport
   --disable-blkdeactivate disable blkdeactivate
   --enable-dmeventd       enable the device-mapper event daemon
   --disable-selinux       disable selinux support
@@ -1843,13 +1845,13 @@ Some influential environment variables:
               C compiler flags for LOCKD_IDM, overriding pkg-config
   LOCKD_IDM_LIBS
               linker flags for LOCKD_IDM, overriding pkg-config
+  BLKID_CFLAGS
+              C compiler flags for BLKID, overriding pkg-config
+  BLKID_LIBS  linker flags for BLKID, overriding pkg-config
   NOTIFY_DBUS_CFLAGS
               C compiler flags for NOTIFY_DBUS, overriding pkg-config
   NOTIFY_DBUS_LIBS
               linker flags for NOTIFY_DBUS, overriding pkg-config
-  BLKID_CFLAGS
-              C compiler flags for BLKID, overriding pkg-config
-  BLKID_LIBS  linker flags for BLKID, overriding pkg-config
   SYSTEMD_CFLAGS
               C compiler flags for SYSTEMD, overriding pkg-config
   SYSTEMD_LIBS
@@ -3140,6 +3142,7 @@ case "$host_os" in
 		DM_IOCTLS=yes
 		SELINUX=yes
 		FSADM=yes
+		VDOIMPORT=yes
 		BLKDEACTIVATE=yes
 		;;
 	darwin*)
@@ -3153,6 +3156,7 @@ case "$host_os" in
 		DM_IOCTLS=no
 		SELINUX=no
 		FSADM=no
+		VDOIMPORT=no
 		BLKDEACTIVATE=no
 		;;
 	*)
@@ -11260,7 +11264,7 @@ fi
 
 
 if test $pkg_failed = yes; then
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
@@ -11278,7 +11282,7 @@ fi
 
 	$bailout
 elif test $pkg_failed = untried; then
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	$bailout
 else
@@ -11286,6 +11290,7 @@ else
 	LOCKD_IDM_LIBS=$pkg_cv_LOCKD_IDM_LIBS
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
+	HAVE_LOCKD_IDM=yes
 fi
 
 pkg_failed=no
@@ -12543,6 +12548,18 @@ fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $FSADM" >&5
 $as_echo "$FSADM" >&6; }
+
+
+################################################################################
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install vdoimport" >&5
+$as_echo_n "checking whether to install vdoimport... " >&6; }
+# Check whether --enable-fsadm was given.
+if test "${enable_fsadm+set}" = set; then :
+  enableval=$enable_fsadm; VDOIMPORT=$enableval
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $VDOIMPORT" >&5
+$as_echo "$VDOIMPORT" >&6; }
 
 ################################################################################
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to install blkdeactivate" >&5
@@ -14030,6 +14047,13 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+VDOIMPORT_PATH="$SBINDIR/vdoimport"
+
+cat >>confdefs.h <<_ACEOF
+#define VDOIMPORT_PATH "$VDOIMPORT_PATH"
+_ACEOF
+
+
 ################################################################################
 if test "$BUILD_DMEVENTD" = yes; then
 
@@ -14201,6 +14225,8 @@ _ACEOF
 
 
 ################################################################################
+
+
 
 
 
