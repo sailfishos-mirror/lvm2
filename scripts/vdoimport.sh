@@ -264,6 +264,7 @@ convert2lvm_() {
 	local EXTENTSZ
 	local IS_LV=1
 
+	DM_UUID=""
 	detect_lv_ "$DEVICE"
 	case "$DM_UUID" in
 		LVM-*)	eval "$(dmsetup splitname --nameprefixes --noheadings --separator ' ' "$DM_NAME")"
@@ -285,7 +286,7 @@ convert2lvm_() {
 
 	VDONAME=$(awk -v DNAME="$DEVICE" '/.*VDOService$/ {VNAME=substr($1, 0, length($1) - 1)} /[[:space:]]*device:/ { if ($2 ~ DNAME) {print VNAME}}' "$TEMPDIR/vdoconf.yml")
 	TRVDONAME=$(echo "$VDONAME" | tr '-' '_')
-	eval "$(parse_yaml_ "$TEMPDIR/vdoconf.yml" vdo | grep "$TRVDONAME" | sed -e "s/vdoconfig_vdos_$TRVDONAME/vdo/g")"
+	eval "$(parse_yaml_ "$TEMPDIR/vdoconf.yml" _ | grep "$TRVDONAME" | sed -e "s/_config_vdos_$TRVDONAME/vdo/g")"
 
 	vdo_logicalSize=$(get_kb_size_with_unit_ "$vdo_logicalSize")
 	vdo_physicalSize=$(get_kb_size_with_unit_ "$vdo_physicalSize")
