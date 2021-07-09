@@ -1,5 +1,8 @@
 Version 2.03.13 - 
 ===============================
+  Add vdoimport tool to support conversion of VDO volumes.
+  Support configurable allocation/vdo_pool_header_size.
+  Fix handling of lvconvert --type vdo-pool --virtualsize.
   Fix load of kvdo target when it is not present in memory (2.03.12).
 
 Version 2.03.12 - 07th May 2021
