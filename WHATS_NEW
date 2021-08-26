@@ -1,3 +1,7 @@
+Version 2.03.14 - 
+==================================
+  Rename vdoimport to lvm_import_vdo.
+
 Version 2.03.13 - 
 ===============================
   Support --poolmetadataspare with vgsplit and vgmerge.
