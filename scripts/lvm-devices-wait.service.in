@@ -1,0 +1,21 @@
+[Unit]
+Description=Wait for LVM devices to be ready
+Documentation=man:lvmdevices(8)
+After=systemd-udev-trigger.service
+Before=lvm-activate-vgs-main.service lvm-activate-vgs-last.service
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+# Waits for entries in /etc/lvm/devices/system.devices to be processed
+# by udev and pvscan --cache.  Only device entries that are found in
+# sysfs are waited for.  See lvm.conf devices_wait_service "timeout=N"
+# to configure the number of seconds that this service will wait.
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvmdevices --wait pvsonline
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
+

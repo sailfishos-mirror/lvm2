@@ -19,6 +19,7 @@
 
 /* coverity[unnecessary_header] needed for MuslC */
 #include <sys/file.h>
+#include <time.h>
 
 static void _search_devs_for_pvids(struct cmd_context *cmd, struct dm_list *search_pvids, struct dm_list *found_devs)
 {
@@ -119,18 +120,36 @@ static void _search_devs_for_pvids(struct cmd_context *cmd, struct dm_list *sear
 	}
 }
 
+static int _all_pvids_online(struct cmd_context *cmd, struct dm_list *wait_pvids)
+{
+	struct device_id_list *dil, *dil2;
+	int notfound = 0;
+
+	dm_list_iterate_items_safe(dil, dil2, wait_pvids) {
+		if (online_pvid_file_exists(dil->pvid))
+			dm_list_del(&dil->list);
+		else
+			notfound++;
+	}
+
+	return notfound ? 0 : 1;
+}
+
 int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct dm_list search_pvids;
+	struct dm_list wait_pvids;
 	struct dm_list found_devs;
 	struct device_id_list *dil;
 	struct device_list *devl;
 	struct device *dev;
 	struct dev_use *du, *du2;
 	const char *deviceidtype;
+	time_t begin;
 	int changes = 0;
 
 	dm_list_init(&search_pvids);
+	dm_list_init(&wait_pvids);
 	dm_list_init(&found_devs);
 
 	if (!setup_devices_file(cmd))
@@ -140,6 +159,9 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 		log_error("Devices file not enabled.");
 		return ECMD_FAILED;
 	}
+
+	if (arg_is_set(cmd, wait_ARG))
+		cmd->print_device_id_not_found = 0;
 
 	if (arg_is_set(cmd, update_ARG) ||
 	    arg_is_set(cmd, adddev_ARG) || arg_is_set(cmd, deldev_ARG) ||
@@ -451,6 +473,62 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 
 		free_du(du);
 		device_ids_write(cmd);
+		goto out;
+	}
+
+	if (arg_is_set(cmd, wait_ARG)) {
+		if (strcmp("pvsonline", arg_str_value(cmd, wait_ARG, ""))) {
+			log_error("wait option invalid.");
+			goto bad;
+		}
+
+		/* TODO: lvm.conf lvmdevices_wait_settings "disabled" do nothing */
+
+		/* TODO: lvm.conf auto_activation_settings "event_only" do nothing */
+
+		/* TODO: if no devices file exists, what should this do?
+		   do a udev-settle?  do nothing and cause more event-based activations? */
+
+		/* for each du, if du->wwid matched, wait for /run/lvm/pvs_online/du->pvid */
+		dm_list_iterate_items(du, &cmd->use_devices) {
+			if (!du->dev)
+				continue;
+			if (!(dil = dm_pool_zalloc(cmd->mem, sizeof(*dil))))
+				continue;
+			dil->dev = du->dev;
+			memcpy(dil->pvid, du->pvid, ID_LEN);
+			dm_list_add(&wait_pvids, &dil->list);
+		}
+
+		log_print("Waiting for PVs online for %u matched devices file entries.", dm_list_size(&wait_pvids));
+		begin = time(NULL);
+
+		while (1) {
+			if (_all_pvids_online(cmd, &wait_pvids)) {
+				log_print("Found all PVs online");
+				goto out;
+			}
+			log_print("Waiting for PVs online for %u devices.", dm_list_size(&wait_pvids));
+
+			/* TODO: lvm.conf lvmdevices_wait_ids "sys_wwid=111", "sys_wwid=222" etc
+			   waits for the specifically named devices even if the devices do not exist. */
+
+			/* TODO: lvm.conf lvmdevices_wait_settings "timeout=N" */
+			if (time(NULL) - begin >= 10) {
+				log_print("Time out waiting for PVs online:");
+				dm_list_iterate_items(dil, &wait_pvids)
+					log_print("Need PVID %s on %s", dil->pvid, dev_name(dil->dev));
+				break;
+			}
+
+			if (dm_list_size(&wait_pvids) > 10) {
+				if (interruptible_usleep(1000000)) /* 1 sec */
+					break;
+			} else {
+				if (interruptible_usleep(500000)) /* .5 sec */
+					break;
+			}
+		}
 		goto out;
 	}
 

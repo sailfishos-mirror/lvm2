@@ -156,6 +156,7 @@
 #include <sys/file.h>
 #include <sys/sysmacros.h>
 
+/* FIXME: move online pv functions to pvs_online.c */
 int online_pvid_file_read(char *path, int *major, int *minor, char *vgname);
 
 static const char *_hints_file = DEFAULT_RUN_DIR "/hints";
@@ -1406,7 +1407,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
 	*newhints = NEWHINTS_NONE;
 
 	/* No commands are using hints. */
-	if (!cmd->enable_hints)
+	if (!cmd->enable_hints && !cmd->hints_pvs_online)
 		return 0;
 
 	/*
@@ -1426,7 +1427,11 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
 	if (!cmd->use_hints)
 		return 0;
 
-	/* hints = "pvs_online" */
+	/*
+	 * enable_hints is 0 for the special hints=pvs_online
+	 * and by lvm.conf hints="none" does not disable hints=pvs_online.
+	 * hints=pvs_online can be disabled with --nohints.
+	 */
 	if (cmd->hints_pvs_online) {
 		if (!_get_hints_from_pvs_online(cmd, &hints_list, devs_in, devs_out)) {
 			log_debug("get_hints: pvs_online failed");
