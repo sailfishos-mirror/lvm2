@@ -782,39 +782,6 @@ AC_DEFINE_UNQUOTED(DEFAULT_RUN_DIR, ["$DEFAULT_RUN_DIR"],
 		   [Default LVM run directory.])
 
 ################################################################################
-dnl -- Build cluster mirror log daemon
-AC_MSG_CHECKING(whether to build cluster mirror log daemon)
-AC_ARG_ENABLE(cmirrord,
-	      AS_HELP_STRING([--enable-cmirrord],
-			     [enable the cluster mirror log daemon]),
-	      CMIRRORD=$enableval, CMIRRORD=no)
-AC_MSG_RESULT($CMIRRORD)
-
-BUILD_CMIRRORD=$CMIRRORD
-
-################################################################################
-dnl -- cmirrord pidfile
-if test "$BUILD_CMIRRORD" = yes; then
-	AC_ARG_WITH(cmirrord-pidfile,
-		    AS_HELP_STRING([--with-cmirrord-pidfile=PATH],
-				   [cmirrord pidfile [PID_DIR/cmirrord.pid]]),
-		    CMIRRORD_PIDFILE=$withval,
-		    CMIRRORD_PIDFILE="$DEFAULT_PID_DIR/cmirrord.pid")
-	AC_DEFINE_UNQUOTED(CMIRRORD_PIDFILE, ["$CMIRRORD_PIDFILE"],
-			   [Path to cmirrord pidfile.])
-fi
-
-################################################################################
-dnl -- Look for corosync libraries if required.
-if [[ "$BUILD_CMIRRORD" = yes ]]; then
-	pkg_config_init
-
-	if test "$HAVE_CPG" != yes; then
-		PKG_CHECK_MODULES(CPG, libcpg)
-	fi
-fi
-
-################################################################################
 dnl -- Enable debugging
 AC_MSG_CHECKING(whether to enable debugging)
 AC_ARG_ENABLE(debug, AS_HELP_STRING([--enable-debug], [enable debugging]),
@@ -1655,10 +1622,6 @@ fi
 AC_MSG_CHECKING(whether to enable editline)
 AC_MSG_RESULT($EDITLINE)
 
-if test "$BUILD_CMIRRORD" = yes; then
-	AC_CHECK_FUNCS(atexit,,hard_bailout)
-fi
-
 if test "$BUILD_LVMLOCKD" = yes; then
 	AS_IF([test "$HAVE_REALTIME" != yes], [AC_MSG_ERROR([Realtime clock support is mandatory for lvmlockd.])])
 	AC_CHECK_FUNCS(strtoull,,hard_bailout)
@@ -1834,7 +1797,6 @@ AC_ARG_VAR([UDEV_LIBS], [linker flags for udev])
 ################################################################################
 AC_SUBST(AWK)
 AC_SUBST(BLKID_PC)
-AC_SUBST(BUILD_CMIRRORD)
 AC_SUBST(BUILD_DMEVENTD)
 AC_SUBST(BUILD_LVMDBUSD)
 AC_SUBST(BUILD_LVMPOLLD)
@@ -1967,7 +1929,6 @@ AC_SUBST(WRITE_INSTALL)
 AC_SUBST(DMEVENTD_PIDFILE)
 AC_SUBST(LVMPOLLD_PIDFILE)
 AC_SUBST(LVMLOCKD_PIDFILE)
-AC_SUBST(CMIRRORD_PIDFILE)
 AC_SUBST(interface)
 AC_SUBST(kerneldir)
 AC_SUBST(missingkernel)
@@ -1989,7 +1950,6 @@ Makefile
 make.tmpl
 libdm/make.tmpl
 daemons/Makefile
-daemons/cmirrord/Makefile
 daemons/dmeventd/Makefile
 daemons/dmeventd/libdevmapper-event.pc
 daemons/dmeventd/plugins/Makefile
@@ -2023,14 +1983,15 @@ libdm/libdevmapper.pc
 man/Makefile
 po/Makefile
 scripts/lvm2-pvscan.service
+scripts/lvm-activate-vgs-main.service
+scripts/lvm-activate-vgs-last.service
+scripts/lvm-devices-wait.service
 scripts/blkdeactivate.sh
 scripts/blk_availability_init_red_hat
 scripts/blk_availability_systemd_red_hat.service
-scripts/cmirrord_init_red_hat
 scripts/com.redhat.lvmdbus1.service
 scripts/dm_event_systemd_red_hat.service
 scripts/dm_event_systemd_red_hat.socket
-scripts/lvm2_cmirrord_systemd_red_hat.service
 scripts/lvm2_lvmdbusd_systemd_red_hat.service
 scripts/lvm2_lvmpolld_init_red_hat
 scripts/lvm2_lvmpolld_systemd_red_hat.service

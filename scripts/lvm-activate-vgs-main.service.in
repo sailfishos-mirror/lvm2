@@ -1,0 +1,22 @@
+[Unit]
+Description=Activate LVM Volume Groups
+Documentation=man:vgchange(8)
+After=dm-event.socket dm-event.service lvm-devices-wait.service
+Before=local-fs-pre.target shutdown.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+# "--autoactivation service" tells vgchange it is being called
+# from an autoactivation service, so it will do nothing if
+# lvm.conf autoactivation_settings has "event_only".
+# By default this vgchange will use device hints from pvs_online
+# files, so it will only look at PVs that have finished being
+# processed by udev and pvscan --cache.
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvm vgchange -aay --vgonline --autoactivation service
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

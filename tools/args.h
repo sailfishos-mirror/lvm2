@@ -87,6 +87,11 @@ arg(atversion_ARG, '\0', "atversion", string_VAL, 0, 0,
     "which does not contain any newer settings for which LVM would\n"
     "issue a warning message when checking the configuration.\n")
 
+arg(autoactivation_ARG, '\0', "autoactivation", string_VAL, 0, 0,
+    "Specify if the command is running autoactivation from an event\n"
+    "or a service. lvm.conf autoactivation_settings determine if\n"
+    "activation commands from services or events are used.\n")
+
 arg(setautoactivation_ARG, '\0', "setautoactivation", bool_VAL, 0, 0,
     "Set the autoactivation property on a VG or LV.\n"
     "Display the property with vgs or lvs \"-o autoactivation\".\n"
@@ -919,6 +924,10 @@ arg(vgmetadatacopies_ARG, '\0', "vgmetadatacopies", vgmetadatacopies_VAL, 0, 0,
 arg(vgonline_ARG, '\0', "vgonline", 0, 0, 0,
     "The first command to see a complete VG will report it uniquely.\n"
     "Other commands to see the complete VG will report it differently.\n")
+
+arg(wait_ARG, '\0', "wait", string_VAL, 0, 0,
+    "pvsonline: wait for /run/lvm/pvs_online files to exist\n"
+    "for all devices file entries matched to a system device.\n")
 
 arg(withsummary_ARG, '\0', "withsummary", 0, 0, 0,
     "Display a one line comment for each configuration node.\n")

@@ -257,6 +257,9 @@ cfg(devices_hints_CFG, "hints", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_
 	"    Use no hints.\n"
 	"#\n")
 
+cfg(devices_lvmdevices_wait_seconds_CFG, "lvmdevices_wait_seconds", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_LVMDEVICES_WAIT_SECONDS, vsn(2, 3, 14), NULL, 0, NULL,
+	"Max number of seconds the lvmdevices --wait command should wait.\n")
+
 cfg_array(devices_preferred_names_CFG, "preferred_names", devices_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED , CFG_TYPE_STRING, NULL, vsn(1, 2, 19), NULL, 0, NULL,
 	"Select which path name to display for a block device.\n"
 	"If multiple path names exist for a block device, and LVM needs to\n"
@@ -1121,12 +1124,8 @@ cfg(global_lvdisplay_shows_full_device_path_CFG, "lvdisplay_shows_full_device_pa
 cfg(global_event_activation_CFG, "event_activation", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 1, vsn(2, 3, 1), 0, 0, NULL,
 	"Activate LVs based on system-generated device events.\n"
 	"When a PV appears on the system, a system-generated uevent triggers\n"
-	"the lvm2-pvscan service which runs the pvscan --cache -aay command.\n"
-	"If the new PV completes a VG, pvscan autoactivates LVs in the VG.\n"
-	"When event_activation is disabled, the lvm2-activation services are\n"
-	"generated and run at fixed points during system startup.  These\n"
-	"services run vgchange -aay to autoactivate LVs in VGs that happen\n"
-	"to be present at that point in time.\n"
+	"the pvscan command, and autoactivation when all PVs for a VG are online.\n"
+	"Also see auto_activation_settings.\n"
 	"See the --setautoactivation option or the auto_activation_volume_list\n"
 	"setting to configure autoactivation for specific VGs or LVs.\n")
 
@@ -1408,6 +1407,21 @@ cfg_array(activation_volume_list_CFG, "volume_list", activation_CFG_SECTION, CFG
 	"Example\n"
 	"volume_list = [ \"vg1\", \"vg2/lvol1\", \"@tag1\", \"@*\" ]\n"
 	"#\n")
+
+cfg_array(activation_auto_activation_settings_CFG, "auto_activation_settings", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_AUTOACTIVATION_SETTINGS, vsn(2, 3, 14), NULL, 0, NULL,
+	"Configure autoactivation behavior.\n"
+	"service_and_event: use fixed activation services, then switch to event activation\n."
+	"(Only used when event_activation=1.)\n"
+	"event_only: use only event activation\n"
+	"(Only used when event_activation=1.)\n"
+	"service_only: use only fixed activation services\n"
+	"(Effectively the equivalent of event_activation=0.)\n"
+	"pvscan_hints: autoactivation commands will use PVs that\n"
+	"that have been processed by pvscan (from udev rule.)\n"
+	"Without pvscan_hints, pvscan only be used when it is needed\n"
+	"to perform event activation.\n"
+	"Autoactivation commands should set --autoactivation service|event\n"
+	"to indicate if they are performing service or event activation.\n")
 
 cfg_array(activation_auto_activation_volume_list_CFG, "auto_activation_volume_list", activation_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 97), NULL, 0, NULL,
 	"A list of VGs or LVs that should be autoactivated.\n"
