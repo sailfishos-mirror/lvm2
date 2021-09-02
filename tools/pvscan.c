@@ -46,6 +46,8 @@ static const char *_pvs_online_dir = DEFAULT_RUN_DIR "/pvs_online";
 static const char *_vgs_online_dir = DEFAULT_RUN_DIR "/vgs_online";
 static const char *_pvs_lookup_dir = DEFAULT_RUN_DIR "/pvs_lookup";
 
+static const char *_event_activation_file = DEFAULT_RUN_DIR "/event-activation-on";
+
 static int _pvscan_display_pv(struct cmd_context *cmd,
 				  struct physical_volume *pv,
 				  struct pvscan_params *params)
@@ -177,6 +179,84 @@ out:
 	destroy_processing_handle(cmd, handle);
 
 	return ret;
+}
+
+/*
+ * Event based activation
+ * lvm.conf event_activation_options = "event_only"
+ * . all events are used for activation
+ * . no fixed services are used for activation
+ * . lvm.conf event_activation=1 required
+ *
+ * vgchange -aay --eventactivation service
+ * . does nothing
+ * vgchange -aay --eventactivation event
+ * . does activation
+ * pvscan --eventactivation event
+ * . does activation
+ *
+ * ---
+ *
+ * Non-event based activation
+ * lvm.conf event_activation_options = "service_only"
+ * . fixed services are used for activation
+ * . no events are used for activation
+ * . lvm.conf event_activation=0 is equivalent to
+ *   event_activation=1 event_activation_options="service_only"
+ *
+ * vgchange -aay --eventactivation service
+ * . does activation
+ * vgchange -aay --eventactivation event
+ * . does nothing
+ * pvscan --eventactivation event
+ * . does nothing
+ *
+ * ---
+ *
+ * Mix of event and non-event based activation
+ * lvm.conf event_activation_options = "service_to_event"
+ * . both services and events are used for activation
+ * . fixed services are used for activation initially,
+ *   and last service enables event based activation
+ *   by creating the event-activation-on file
+ *
+ * vgchange -aay --eventactivation service
+ * . does activation only if event-activation-on does not exist
+ * vgchange -aay --eventactivation event
+ * . does activation only if event-activation-on exists
+ * vgchange -aay --eventactivation service,on
+ * . does activation only if event-activation-on does not exist
+ * . creates event-activation-on to enable event-based activation
+ * vgchange --eventactivation on|off
+ * . create or remove event-activation-on to enable|disable
+ *   event-based activation
+ * pvscan --eventactivation event
+ * . does activation only if event-activation-on exists
+ *
+ */
+
+int event_activation_enable(struct cmd_context *cmd)
+{
+	FILE *fp;
+
+	if (!(fp = fopen(_event_activation_file, "w")))
+		return_0;
+	if (fclose(fp))
+                stack;
+	return 1;
+}
+
+int event_activation_is_on(struct cmd_context *cmd)
+{
+	struct stat buf;
+
+	if (!stat(_event_activation_file, &buf))
+		return 1;
+
+	if (errno != ENOENT)
+		log_debug("event_activation_is_on errno %d", errno);
+
+	return 0;
 }
 
 /*
@@ -367,7 +447,7 @@ static void _online_files_remove(const char *dirpath)
 		log_sys_debug("closedir", dirpath);
 }
 
-static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname)
+int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname, int ignore_existing, int *exists)
 {
 	char path[PATH_MAX];
 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
@@ -407,8 +487,13 @@ static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev,
 
 	fd = open(path, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		if (errno == EEXIST)
+		if (errno == EEXIST) {
+			if (exists)
+				*exists = 1;
+			if (ignore_existing)
+				return 1;
 			goto check_duplicate;
+		}
 		log_error_pvscan(cmd, "Failed to create online file for %s path %s error %d", dev_name(dev), path, errno);
 		return 0;
 	}
@@ -427,7 +512,6 @@ static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev,
 	}
 
 	/* We don't care about syncing, these files are not even persistent. */
-
 	if (close(fd))
 		log_sys_debug("close", path);
 
@@ -1412,7 +1496,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 		 * Create file named for pvid to record this PV is online.
 		 * The command creates/checks online files only when --cache is used.
 		 */
-		if (do_cache && !_online_pvid_file_create(cmd, dev, vg ? vg->name : NULL)) {
+		if (do_cache && !online_pvid_file_create(cmd, dev, vg ? vg->name : NULL, 0, NULL)) {
 			log_error_pvscan(cmd, "PV %s failed to create online file.", dev_name(dev));
 			release_vg(vg);
 			ret = 0;
@@ -1857,6 +1941,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct pvscan_aa_params pp = { 0 };
 	struct dm_list complete_vgnames;
+	const char *ea;
 	int do_activate = arg_is_set(cmd, activate_ARG);
 	int event_activation;
 	int devno_args = 0;
@@ -1930,6 +2015,36 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 			log_verbose("Ignoring pvscan --cache because event_activation is disabled.");
 			return ECMD_PROCESSED;
 		}
+
+
+		if ((ea = arg_str_value(cmd, eventactivation_ARG, NULL))) {
+			int service_only = 0, event_only = 0, service_to_event = 0;
+			int ea_service = 0, ea_event = 0, ea_on = 0;
+
+			if (!get_event_activation_config_settings(cmd, &service_only, &event_only, &service_to_event))
+				return ECMD_FAILED;
+			if (!get_event_activation_command_options(cmd, ea, &ea_service, &ea_event, &ea_on))
+				return ECMD_FAILED;
+
+			if (ea_event) {
+				if (!event_activation) {
+					log_print("Skip pvscan for event and event_activation=0.");
+					return ECMD_PROCESSED;
+				}
+				if (service_only) {
+					log_print("Skip pvscan for event and event_activation_options service_only.");
+					return ECMD_PROCESSED;
+				}
+				if (service_to_event && !event_activation_is_on(cmd)) {
+					log_print("Skip pvscan for event and no event-activation-on.");
+					return ECMD_PROCESSED;
+				}
+			} else {
+				log_error("Option --eventactivation %s is not used by pvscan.", ea);
+				return ECMD_FAILED;
+			}
+		}
+
 		if (!_pvscan_cache_args(cmd, argc, argv, &complete_vgnames))
 			return ECMD_FAILED;
 	}

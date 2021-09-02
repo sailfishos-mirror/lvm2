@@ -329,4 +329,7 @@
 
 #define DEFAULT_WWIDS_FILE "/etc/multipath/wwids"
 
+#define DEFAULT_EVENT_ACTIVATION_OPTION1 "service_to_event"
+#define DEFAULT_EVENT_ACTIVATION_OPTIONS "#S" DEFAULT_EVENT_ACTIVATION_OPTION1
+
 #endif				/* _LVM_DEFAULTS_H */
