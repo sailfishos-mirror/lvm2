@@ -296,5 +296,7 @@ int lvconvert_cachevol_attach_single(struct cmd_context *cmd,
                                      struct processing_handle *handle);
 
 void online_vg_file_remove(const char *vgname);
+int online_vg_file_create(struct cmd_context *cmd, const char *vgname);
+void online_dir_setup(struct cmd_context *cmd);
 
 #endif

@@ -662,7 +662,7 @@ static int _count_pvid_files_from_lookup_file(struct cmd_context *cmd, struct de
 	return (vgname) ? 1 : 0;
 }
 
-static void _online_dir_setup(struct cmd_context *cmd)
+void online_dir_setup(struct cmd_context *cmd)
 {
 	struct stat st;
 	int rv;
@@ -758,7 +758,7 @@ static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
 	return ECMD_PROCESSED;
 }
 
-static int _online_vg_file_create(struct cmd_context *cmd, const char *vgname)
+int online_vg_file_create(struct cmd_context *cmd, const char *vgname)
 {
 	char path[PATH_MAX];
 	int fd;
@@ -1072,7 +1072,7 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
 	 * to run the activation.  The first to create the file will do it.
 	 */
 	dm_list_iterate_items_safe(sl, sl2, vgnames) {
-		if (!_online_vg_file_create(cmd, sl->str)) {
+		if (!online_vg_file_create(cmd, sl->str)) {
 			log_print_pvscan(cmd, "VG %s skip autoactivation.", sl->str);
 			str_list_del(vgnames, sl->str);
 			continue;
@@ -1507,7 +1507,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 			} else if (!do_check_complete) {
 				log_print("VG %s", vgname);
 			} else if (vg_complete) {
-				if (do_vgonline && !_online_vg_file_create(cmd, vgname)) {
+				if (do_vgonline && !online_vg_file_create(cmd, vgname)) {
 					log_print("VG %s finished", vgname);
 				} else {
 					/*
@@ -1935,7 +1935,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 
 	do_all = !argc && !devno_args;
 
-	_online_dir_setup(cmd);
+	online_dir_setup(cmd);
 
 	if (do_all) {
 		if (!_pvscan_cache_all(cmd, argc, argv, &complete_vgnames))
