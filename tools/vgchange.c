@@ -194,6 +194,41 @@ int vgchange_background_polling(struct cmd_context *cmd, struct volume_group *vg
 	return 1;
 }
 
+static int _online_pvid_file_create_all(struct cmd_context *cmd)
+{
+	struct lvmcache_info *info;
+	struct dev_iter *iter;
+	struct device *dev;
+	const char *vgname;
+	int exists;
+	int exist_count = 0;
+	int create_count = 0;
+
+	if (!(iter = dev_iter_create(NULL, 0)))
+		return 0;
+	while ((dev = dev_iter_get(cmd, iter))) {
+		if (dev->pvid[0] &&
+		    (info = lvmcache_info_from_pvid(dev->pvid, dev, 0))) {
+			vgname = lvmcache_vgname_from_info(info);
+			if (vgname && !is_orphan_vg(vgname)) {
+				/*
+				 * Ignore exsting pvid file because a pvscan may be creating
+				 * the same file as the same time we are, which is expected.
+				 */
+				exists = 0;
+				online_pvid_file_create(cmd, dev, vgname, 1, &exists);
+				if (exists)
+					exist_count++;
+				else
+					create_count++;
+			}
+		}
+	}
+	dev_iter_destroy(iter);
+	log_debug("PV online files created %d exist %d", create_count, exist_count);
+	return 1;
+}
+
 int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 		      activation_change_t activate)
 {
@@ -216,6 +251,11 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 
 	if ((activate == CHANGE_AAY) && (vg->status & NOAUTOACTIVATE)) {
 		log_debug("Autoactivation is disabled for VG %s.", vg->name);
+		return 1;
+	}
+
+	if (arg_is_set(cmd, vgonline_ARG) && !online_vg_file_create(cmd, vg->name)) {
+		log_print("VG %s already online", vg->name);
 		return 1;
 	}
 
@@ -260,11 +300,6 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 				    monitored, vg->name,
 				    dmeventd_monitor_mode() ? "" : "un");
 		}
-	}
-
-	if (arg_is_set(cmd, vgonline_ARG) && !online_vg_file_create(cmd, vg->name)) {
-		log_print("VG %s finished", vg->name);
-		return 1;
 	}
 
 	if (!_activate_lvs_in_vg(cmd, vg, activate)) {
@@ -733,6 +768,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
 int vgchange(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct processing_handle *handle;
+	const char *ea;
 	uint32_t flags = 0;
 	int ret;
 
@@ -843,6 +879,39 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
 		/* Allow deactivating if locks fail. */
 		if (is_change_activating((activation_change_t)arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
 			cmd->lockd_vg_enforce_sh = 1;
+	}
+
+	/*
+	 * When enabling event-based activation for pvscan, we first created
+	 * the /run/lvm/event-activation-on file to tell pvscans to begin
+	 * processing new PVs and doing activation for newly completed VGs.  We
+	 * also need to create online files for existing PVs because some VGs
+	 * may be incomplete at this point, and future pvscan commands need to
+	 * find online files for PVs that have already appeared.  The label
+	 * scan gives us the info to know which PVs are present and should have
+	 * pvid online files created.
+	 *
+	 * process_each_vg() usually begins with lock_global() and
+	 * lvmcache_label_scan(), and then processes each VG.  In this case,
+	 * lock_global/lvmcache_label_scan are done before calling
+	 * process_each_vg. This allows a special step to be inserted between
+	 * the label scan and processing vgs. That step creates the pvid online
+	 * files, which requires label scan info.  The lock_global and
+	 * lvmcache_label_scan will be skipped by process_each_vg since they
+	 * are already done here.
+	 */
+	if ((ea = arg_str_value(cmd, eventactivation_ARG, NULL)) && !strcmp(ea, "enable")) {
+		if (!find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
+			log_print("Skip event activation enable for lvm.conf event_activation 0.");
+		} else {
+			if (!event_activation_enable(cmd))
+				log_warn("WARNING: failed to enable event activation");
+		}
+		if (!lock_global(cmd, "sh"))
+			return ECMD_FAILED;
+		lvmcache_label_scan(cmd);
+		_online_pvid_file_create_all(cmd);
+		flags |= PROCESS_SKIP_SCAN;
 	}
 
 	if (update)

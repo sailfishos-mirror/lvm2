@@ -278,6 +278,10 @@ arg(errorwhenfull_ARG, '\0', "errorwhenfull", bool_VAL, 0, 0,
     "(Also see dm-thin-pool kernel module option no_space_timeout.)\n"
     "See \\fBlvmthin\\fP(7) for more information.\n")
 
+arg(eventactivation_ARG, '\0', "eventactivation", string_VAL, 0, 0,
+    "Use a run file to coordinate the transition to event\n"
+    "activation.\n")
+
 arg(force_long_ARG, '\0', "force", 0, ARG_COUNTABLE, 0,
     "Force metadata restore even with thin pool LVs.\n"
     "Use with extreme caution. Most changes to thin metadata\n"
