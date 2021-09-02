@@ -1,0 +1,19 @@
+[Unit]
+Description=Activate LVM Volume Groups
+Documentation=man:vgchange(8)
+After=dm-event.socket dm-event.service
+Before=local-fs-pre.target shutdown.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+# "--eventactivation service" tells vgchange it is being called 
+# from an activation service, so it will do nothing if
+# lvm.conf event_activation_options = "event_only".
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvm vgchange -aay --nohints --vgonline --eventactivation service
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

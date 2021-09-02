@@ -1,0 +1,22 @@
+[Unit]
+Description=Activate LVM Volume Groups (last)
+Documentation=man:vgchange(8)
+Wants=systemd-udev-settle.service
+After=lvm-activate-vgs-main.service systemd-udev-settle.service multipathd.service cryptsetup.target
+Before=local-fs-pre.target shutdown.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+# "--eventactivation service" tells vgchange it is being called
+# from an activation service, so it will do nothing if
+# lvm.conf event_activation_options = "event_only".
+# "--eventactivation on" tells vgchange to enable event-based
+# pvscan activations by creating /run/lvm/event-activation-on.
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvm vgchange -aay --nohints --vgonline --eventactivation service,on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
