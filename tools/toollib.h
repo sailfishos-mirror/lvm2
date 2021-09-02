@@ -237,4 +237,9 @@ int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
 
 int get_lvt_enum(struct logical_volume *lv);
 
+int get_autoactivation_config_settings(struct cmd_context *cmd, int *service_only,
+			int *event_only, int *service_and_event, int *pvscan_hints);
+int get_autoactivation_command_options(struct cmd_context *cmd, const char *aa,
+			int *opt_service, int *opt_event, int *opt_event_enable);
+
 #endif

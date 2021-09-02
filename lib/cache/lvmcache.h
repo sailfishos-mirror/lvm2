@@ -229,4 +229,6 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd);
 
 unsigned int lvmcache_vg_info_count(void);
 
+const char *lvmcache_ignore_pv_reason(struct cmd_context *cmd, const char *vgname);
+
 #endif

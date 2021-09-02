@@ -5714,3 +5714,96 @@ bad:
 out:
 	return 0;
 }
+
+int get_autoactivation_config_settings(struct cmd_context *cmd,
+			int *service_only, int *event_only, int *service_and_event, int *pvscan_hints)
+{
+	const struct dm_config_node *cn;
+	const struct dm_config_value *cv;
+	int eo = 0, so = 0, se = 0, ph = 0;
+
+	if (!(cn = find_config_tree_array(cmd, activation_auto_activation_settings_CFG, NULL)))
+                return 1;
+
+	for (cv = cn->v; cv; cv = cv->next) {
+		if (cv->type != DM_CFG_STRING)
+			continue;
+		if (!strcmp(cv->v.str, "service_only"))
+			so = 1;
+		else if (!strcmp(cv->v.str, "event_only"))
+			eo = 1;
+		else if (!strcmp(cv->v.str, "service_and_event"))
+			se = 1;
+		else if (!strcmp(cv->v.str, "pvscan_hints"))
+			ph = 1;
+		else if (strlen(cv->v.str) > 0)
+			log_warn("WARNING: ignoring unrecognized auto_activation_settings value %s.", cv->v.str);
+	}
+
+	if (se && (so || eo)) {
+		log_warn("WARNING: ignoring incompatible auto_activation_settings, using service_and_event.");
+		*service_and_event = 1;
+	} else if (so && eo) {
+		log_warn("WARNING: ignoring incompatible auto_activation_settings, using event_only.");
+		*event_only = 1;
+	} else if (se) {
+		*service_and_event = 1;
+	} else if (so) {
+		*service_only = 1;
+	} else if (eo) {
+		*event_only = 1;
+	} else {
+		*service_and_event = 1;
+	}
+
+	if (ph)
+		*pvscan_hints = 1;
+
+	return 1;
+}
+
+static int _aa_option_value(const char *val, int *opt_service, int *opt_event, int *opt_event_enable)
+{
+	if (!strcmp(val, "service"))
+		*opt_service = 1;
+	else if (!strcmp(val, "event"))
+		*opt_event = 1;
+	else if (!strcmp(val, "event_enable"))
+		*opt_event_enable = 1;
+	else {
+		log_error("Unknown --autoactivation value.");
+		return 0;
+	}
+	return 1;
+}
+
+int get_autoactivation_command_options(struct cmd_context *cmd, const char *aa, int *opt_service, int *opt_event, int *opt_event_enable)
+{
+	char vals[128] = { 0 };
+	char *val1, *val2;
+
+	strncpy(vals, aa, 127);
+
+	/* Currently only two values can be used at once. */
+
+	val1 = vals;
+
+	if ((val2 = strchr(vals, ','))) {
+		*val2 = '\0';
+		val2++;
+	}
+
+	if (val1 && !_aa_option_value(val1, opt_service, opt_event, opt_event_enable))
+		return 0;
+
+	if (val2 && !_aa_option_value(val2, opt_service, opt_event, opt_event_enable))
+		return 0;
+
+	if (*opt_service && *opt_event) {
+		log_error("Invalid --autoactivation options, service and event are incompatible.");
+		return 0;
+	}
+
+	return 1;
+}
+

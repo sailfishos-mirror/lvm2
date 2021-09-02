@@ -2974,3 +2974,23 @@ const char *devname_error_reason(const char *devname)
 	return "device not found";
 }
 
+/*
+ * this shouldn't be a function, it has only one small and specific
+ * purpose, but it's necessary because vginfo values can't be seen
+ * outside this file.
+ */
+const char *lvmcache_ignore_pv_reason(struct cmd_context *cmd, const char *vgname)
+{
+	struct lvmcache_vginfo *vginfo;
+
+	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, NULL)))
+		return NULL;
+	if (is_lockd_type(vginfo->lock_type))
+		return "ignore_shared";
+	if (vginfo->status & EXPORTED_VG)
+		return "ignore_exported";
+	if (!is_system_id_allowed(cmd, vginfo->system_id))
+		return "ignore_foreign";
+	return NULL;
+}
+
