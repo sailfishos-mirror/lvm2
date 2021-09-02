@@ -21,7 +21,19 @@
 
 #include <dirent.h>
 
-int online_pvid_file_read(char *path, int *major, int *minor, char *vgname);
+struct aa_settings {
+	/* from lvm.conf */
+	int event_activation;
+	int service_only;
+	int event_only;
+	int service_and_event;
+	int pvscan_hints;
+
+	/* from --autoactivation */
+	int opt_service;
+	int opt_event;
+	int opt_event_enable;
+};
 
 struct pvscan_params {
 	int new_pvs_found;
@@ -47,6 +59,8 @@ static struct volume_group *saved_vg;
 static const char *_pvs_online_dir = DEFAULT_RUN_DIR "/pvs_online";
 static const char *_vgs_online_dir = DEFAULT_RUN_DIR "/vgs_online";
 static const char *_pvs_lookup_dir = DEFAULT_RUN_DIR "/pvs_lookup";
+
+static const char *_event_activation_file = DEFAULT_RUN_DIR "/event-activation-on";
 
 static int _pvscan_display_pv(struct cmd_context *cmd,
 				  struct physical_volume *pv,
@@ -179,6 +193,80 @@ out:
 	destroy_processing_handle(cmd, handle);
 
 	return ret;
+}
+
+/*
+ * Event based activation
+ * lvm.conf auto_activation_settings = "event_only"
+ * . all events are used for activation
+ * . no fixed services are used for activation
+ * . lvm.conf event_activation=1 required
+ *
+ * vgchange -aay --autoactivation service
+ * . does nothing
+ * vgchange -aay --autoactivation event
+ * . does activation
+ * pvscan --autoactivation event
+ * . does activation
+ *
+ * ---
+ *
+ * Non-event based activation
+ * lvm.conf event_activaion=0 or
+ * lvm.conf event_activaion=1 and auto_activation_settings = "service_only"
+ * . fixed services are used for activation
+ * . no events are used for activation
+ *
+ * vgchange -aay --autoactivation service
+ * . does activation
+ * vgchange -aay --autoactivation event
+ * . does nothing
+ * pvscan --autoactivation event
+ * . does not trigger activation
+ * . may still create pvs_online for hints
+ *
+ * ---
+ *
+ * Mix of event and service based activation
+ * lvm.conf auto_activation_settings = "service_and_event"
+ * . both services and events are used for activation
+ * . fixed services are used for activation initially,
+ *   and the last service enables event based activation
+ *   by creating the event-activation-on file
+ *
+ * vgchange -aay --autoactivation service
+ * . does activation only if event-activation-on does not exist
+ * vgchange -aay --autoactivation event
+ * . does activation only if event-activation-on exists
+ * vgchange -aay --autoactivation service,event_enable
+ * . does activation only if event-activation-on does not exist
+ * . creates event-activation-on to enable event-based activation
+ * pvscan --autoactivation event
+ * . triggers activation only if event-activation-on exists
+ */
+
+int event_activation_enable(struct cmd_context *cmd)
+{
+	FILE *fp;
+
+	if (!(fp = fopen(_event_activation_file, "w")))
+		return_0;
+	if (fclose(fp))
+                stack;
+	return 1;
+}
+
+int event_activation_is_on(struct cmd_context *cmd)
+{
+	struct stat buf;
+
+	if (!stat(_event_activation_file, &buf))
+		return 1;
+
+	if (errno != ENOENT)
+		log_debug("event_activation_is_on errno %d", errno);
+
+	return 0;
 }
 
 /*
@@ -369,7 +457,7 @@ static void _online_files_remove(const char *dirpath)
 		log_sys_debug("closedir", dirpath);
 }
 
-static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname)
+int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname, int ignore_existing, int *exists)
 {
 	char path[PATH_MAX];
 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
@@ -409,8 +497,13 @@ static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev,
 
 	fd = open(path, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
-		if (errno == EEXIST)
+		if (errno == EEXIST) {
+			if (exists)
+				*exists = 1;
+			if (ignore_existing)
+				return 1;
 			goto check_duplicate;
+		}
 		log_error_pvscan(cmd, "Failed to create online file for %s path %s error %d", dev_name(dev), path, errno);
 		return 0;
 	}
@@ -429,7 +522,6 @@ static int _online_pvid_file_create(struct cmd_context *cmd, struct device *dev,
 	}
 
 	/* We don't care about syncing, these files are not even persistent. */
-
 	if (close(fd))
 		log_sys_debug("close", path);
 
@@ -469,7 +561,7 @@ check_duplicate:
 	return 0;
 }
 
-static int _online_pvid_file_exists(const char *pvid)
+int online_pvid_file_exists(const char *pvid)
 {
 	char path[PATH_MAX] = { 0 };
 	struct stat buf;
@@ -555,7 +647,7 @@ static void _lookup_file_count_pvid_files(FILE *fp, const char *vgname, int *pvs
 			continue;
 		}
 
-		if (_online_pvid_file_exists((const char *)pvid))
+		if (online_pvid_file_exists((const char *)pvid))
 			(*pvs_online)++;
 		else
 			(*pvs_offline)++;
@@ -662,7 +754,7 @@ static int _count_pvid_files_from_lookup_file(struct cmd_context *cmd, struct de
 	return (vgname) ? 1 : 0;
 }
 
-static void _online_dir_setup(struct cmd_context *cmd)
+void online_dir_setup(struct cmd_context *cmd)
 {
 	struct stat st;
 	int rv;
@@ -727,7 +819,7 @@ static void _count_pvid_files(struct volume_group *vg, int *pvs_online, int *pvs
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
-		if (_online_pvid_file_exists(pvid))
+		if (online_pvid_file_exists(pvid))
 			(*pvs_online)++;
 		else
 			(*pvs_offline)++;
@@ -750,7 +842,7 @@ static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
 
 	log_debug("pvscan autoactivating VG %s.", vg_name);
 
-	if (!vgchange_activate(cmd, vg, CHANGE_AAY)) {
+	if (!vgchange_activate(cmd, vg, CHANGE_AAY, 1)) {
 		log_error_pvscan(cmd, "%s: autoactivation failed.", vg->name);
 		pp->activate_errors++;
 	}
@@ -758,7 +850,7 @@ static int _pvscan_aa_single(struct cmd_context *cmd, const char *vg_name,
 	return ECMD_PROCESSED;
 }
 
-static int _online_vg_file_create(struct cmd_context *cmd, const char *vgname)
+int online_vg_file_create(struct cmd_context *cmd, const char *vgname)
 {
 	char path[PATH_MAX];
 	int fd;
@@ -1038,7 +1130,7 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
 
 	log_debug("pvscan autoactivating VG %s.", vgname);
 
-	if (!vgchange_activate(cmd, vg, CHANGE_AAY)) {
+	if (!vgchange_activate(cmd, vg, CHANGE_AAY, 1)) {
 		log_error_pvscan(cmd, "%s: autoactivation failed.", vg->name);
 		pp->activate_errors++;
 	}
@@ -1072,7 +1164,7 @@ static int _pvscan_aa(struct cmd_context *cmd, struct pvscan_aa_params *pp,
 	 * to run the activation.  The first to create the file will do it.
 	 */
 	dm_list_iterate_items_safe(sl, sl2, vgnames) {
-		if (!_online_vg_file_create(cmd, sl->str)) {
+		if (!online_vg_file_create(cmd, sl->str)) {
 			log_print_pvscan(cmd, "VG %s skip autoactivation.", sl->str);
 			str_list_del(vgnames, sl->str);
 			continue;
@@ -1242,7 +1334,7 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group 
 			continue;
 		}
 
-		if (!_online_pvid_file_exists(pvid)) {
+		if (!online_pvid_file_exists(pvid)) {
 			log_debug("set_pv_devices_online vg %s pv %s no online file",
 				  vg->name, pvid);
 			pvl->pv->status |= MISSING_PV;
@@ -1282,7 +1374,7 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group 
 }
 
 static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvscan_devs,
-			int *pv_count, struct dm_list *complete_vgnames)
+			int *pv_count, struct dm_list *complete_vgnames, struct aa_settings *set)
 {
 	struct device_list *devl, *devl2;
 	struct device *dev;
@@ -1422,7 +1514,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 		 * Create file named for pvid to record this PV is online.
 		 * The command creates/checks online files only when --cache is used.
 		 */
-		if (do_cache && !_online_pvid_file_create(cmd, dev, vg ? vg->name : NULL)) {
+		if (do_cache && !online_pvid_file_create(cmd, dev, vg ? vg->name : NULL, 0, NULL)) {
 			log_error_pvscan(cmd, "PV %s failed to create online file.", dev_name(dev));
 			release_vg(vg);
 			ret = 0;
@@ -1434,6 +1526,20 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 		 */
 		if (!do_activate && !do_list_lvs && !do_list_vg) {
 			log_print_pvscan(cmd, "PV %s online.", dev_name(dev));
+			release_vg(vg);
+			continue;
+		}
+
+		/*
+		 * A fixed activation service will create event-activation-on
+		 * after which this pvscan will do the steps to trigger
+		 * event based activation.  We get to this point because the
+		 * fixed activation service uses pvscan_hints which requires
+		 * this pvscan to create the pvs_online file.  The online
+		 * file has now been created so the command is done.
+		 */
+		if (set && set->service_and_event && !event_activation_is_on(cmd)) {
+			log_print_pvscan(cmd, "PV %s online before event activation.", dev_name(dev));
 			release_vg(vg);
 			continue;
 		}
@@ -1507,7 +1613,7 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 			} else if (!do_check_complete) {
 				log_print("VG %s", vgname);
 			} else if (vg_complete) {
-				if (do_vgonline && !_online_vg_file_create(cmd, vgname)) {
+				if (do_vgonline && !online_vg_file_create(cmd, vgname)) {
 					log_print("VG %s finished", vgname);
 				} else {
 					/*
@@ -1660,13 +1766,14 @@ static int _pvscan_cache_all(struct cmd_context *cmd, int argc, char **argv,
 	}
 	dev_iter_destroy(iter);
 
-	_online_devs(cmd, 1, &pvscan_devs, &pv_count, complete_vgnames);
+	_online_devs(cmd, 1, &pvscan_devs, &pv_count, complete_vgnames, NULL);
 
 	return 1;
 }
 
 static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
-			      struct dm_list *complete_vgnames)
+			      struct dm_list *complete_vgnames,
+			      struct aa_settings *settings)
 {
 	struct dm_list pvscan_args; /* struct pvscan_arg */
 	struct dm_list pvscan_devs; /* struct device_list */
@@ -1679,7 +1786,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	dm_list_init(&pvscan_args);
 	dm_list_init(&pvscan_devs);
 
-	cmd->pvscan_cache_single = 1;
+	cmd->expect_missing_vg_device = 1;
 
 	/*
 	 * Special pvscan-specific setup steps to avoid looking
@@ -1852,7 +1959,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	 */
 	label_scan_devs_cached(cmd, NULL, &pvscan_devs);
 
-	ret = _online_devs(cmd, 0, &pvscan_devs, &pv_count, complete_vgnames);
+	ret = _online_devs(cmd, 0, &pvscan_devs, &pv_count, complete_vgnames, settings);
 
 	/*
 	 * When a new PV appears, the system runs pvscan --cache dev.
@@ -1869,12 +1976,126 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	return ret;
 }
 
+/*
+event_activation=1 service_and_event=1 pvscan_hints=1
+services, then events
+pvscan --cache creates pvs_online for all PVs
+lvm-activate-vgs* used first
+lvm-activate-<vgname> used later
+vgchanges use hints=pvs_online from services and events
+
+event_activation=1 event_only=1 pvscan_hints=1
+only event activations
+pvscan --cache creates pvs_online for all PVs
+lvm-activate-vgs* skipped
+lvm-activate-<vgname> used
+vgchanges use hints=pvs_online from events
+
+event_activation=1 service_only=1 pvscan_hints=1
+only service activations
+pvscan --cache creates pvs_online for all PVs
+lvm-activate-vgs* used first
+lvm-activate-<vgname> skipped
+vgchanges use hints=pvs_online from services
+(pvscan --cache could be skipped after services finish)
+
+event_activation=1 service_and_event=1 pvscan_hints=0
+services, then events
+pvscan --cache skipped in service mode
+pvscan --cache creates pvs_online in event mode
+vgchange when enabling event mode must create pvs_online for existing PVs
+lvm-activate-vgs* used first
+lvm-activate-<vgname> used later
+vgchanges scan all PVs from services and events
+
+event_activation=1 event_only=1 pvscan_hints=0
+only event activations
+pvscan --cache creates pvs_online for all PVs
+lvm-activate-vgs* skipped
+lvm-activate-<vgname> used
+vgchanges scan all PVs from events
+
+event_activation=1 service_only=1 pvscan_hints=0
+only service activations
+pvscan --cache always skipped
+lvm-activate-vgs* used first
+lvm-activate-<vgname> skipped
+vgchanges scan all PVs from services
+
+event_activation=0
+only service activations
+ignores service_and_events=1 or events_only=1
+. for pvscan_hints=1
+  pvscan --cache creates pvs_online for all PVs
+  lvm-activate-vgs* used first
+  lvm-activate-<vgname> skipped
+  vgchanges use hints=pvs_online from services
+  (pvscan --cache could be skipped after services finish)
+. for pvscan_hints=0
+  pvscan --cache always skipped
+  lvm-activate-vgs* used first
+  lvm-activate-<vgname> skipped
+  vgchanges scan all PVs from services
+*/
+
+static int _get_autoactivation(struct cmd_context *cmd,
+				 struct aa_settings *set,
+				 int *skip_command)
+{
+	const char *aa_str;
+
+	/*
+	 * The lvm.conf settings only apply when the command uses --autoactivation
+	 * which says if the command is used for event or service activation.
+	 */
+	if (!(aa_str = arg_str_value(cmd, autoactivation_ARG, NULL)))
+		return 1;
+
+	if (!get_autoactivation_config_settings(cmd, &set->service_only, &set->event_only, &set->service_and_event, &set->pvscan_hints))
+		return 0;
+
+	if (!get_autoactivation_command_options(cmd, aa_str, &set->opt_service, &set->opt_event, &set->opt_event_enable))
+		return 0;
+
+	if (!set->opt_event) {
+		log_print_pvscan(cmd, "Skip pvscan without autoactivation=event.");
+		*skip_command = 1;
+		return 1;
+	}
+
+	if (!set->event_activation && !set->pvscan_hints) {
+		log_print_pvscan(cmd, "Skip pvscan with event_activation=0.");
+		*skip_command = 1;
+		return 1;
+	}
+
+	if (set->service_only && !set->pvscan_hints) {
+		log_print_pvscan(cmd, "Skip pvscan with service_only.");
+		*skip_command = 1;
+		return 1;
+	}
+
+	if (set->service_and_event && !set->pvscan_hints && !event_activation_is_on(cmd)) {
+		/*
+		 * Note that when vgchange enables events, it needs to compensate for this
+		 * skipped pvscan by creating pvs_online files for all existing PVs.
+		 */
+		log_print_pvscan(cmd, "Skip pvscan without event-activation-on.");
+		*skip_command = 1;
+		return 1;
+	}
+
+	return 1;
+}
+
 int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 {
 	struct pvscan_aa_params pp = { 0 };
 	struct dm_list complete_vgnames;
+	struct aa_settings settings = { 0 };
 	int do_activate = arg_is_set(cmd, activate_ARG);
 	int event_activation;
+	int skip_command = 0;
 	int devno_args = 0;
 	int do_all;
 	int ret;
@@ -1888,6 +2109,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 	cmd->ignore_device_name_mismatch = 1;
 
 	event_activation = find_config_tree_bool(cmd, global_event_activation_CFG, NULL);
+	settings.event_activation = event_activation;
 
 	if (do_activate && !event_activation) {
 		log_verbose("Ignoring pvscan --cache -aay because event_activation is disabled.");
@@ -1935,7 +2157,7 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 
 	do_all = !argc && !devno_args;
 
-	_online_dir_setup(cmd);
+	online_dir_setup(cmd);
 
 	if (do_all) {
 		if (!_pvscan_cache_all(cmd, argc, argv, &complete_vgnames))
@@ -1946,7 +2168,14 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 			log_verbose("Ignoring pvscan --cache because event_activation is disabled.");
 			return ECMD_PROCESSED;
 		}
-		if (!_pvscan_cache_args(cmd, argc, argv, &complete_vgnames))
+
+		if (!_get_autoactivation(cmd, &settings, &skip_command))
+			return_ECMD_FAILED;
+
+		if (skip_command)
+			return ECMD_PROCESSED;
+
+		if (!_pvscan_cache_args(cmd, argc, argv, &complete_vgnames, &settings))
 			return ECMD_FAILED;
 	}
 
