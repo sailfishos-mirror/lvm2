@@ -23,10 +23,10 @@ if [ $1 = 0 ]; then
 fi
 
 %triggerun -- %{name} < 2.02.86-2
-%{_bindir}/systemd-sysv-convert --save lvm2-monitor >/dev/null 2>&1 || :
-/bin/systemctl --no-reload enable lvm2-monitor.service > /dev/null 2>&1 || :
-/sbin/chkconfig --del lvm2-monitor > /dev/null 2>&1 || :
-/bin/systemctl try-restart lvm2-monitor.service > /dev/null 2>&1 || :
+%{_bindir}/systemd-sysv-convert --save lvm-monitor >/dev/null 2>&1 || :
+/bin/systemctl --no-reload enable lvm-monitor.service > /dev/null 2>&1 || :
+/sbin/chkconfig --del lvm-monitor > /dev/null 2>&1 || :
+/bin/systemctl try-restart lvm-monitor.service > /dev/null 2>&1 || :
 # files in the main package
 
 %files
@@ -100,9 +100,6 @@ fi
 %{_mandir}/man8/lvm-config.8.gz
 %{_mandir}/man8/lvm-dumpconfig.8.gz
 %{_mandir}/man8/lvm.8.gz
-%if %{enable_systemd}
- %{_mandir}/man8/lvm2-activation-generator.8.gz
-%endif
 %{_mandir}/man8/lvmconfig.8.gz
 %{_mandir}/man8/lvmdevices.8.gz
 %{_mandir}/man8/lvmdiskscan.8.gz
@@ -187,16 +184,17 @@ fi
 %dir %{_default_run_dir}
 %if %{enable_systemd}
  %{_tmpfilesdir}/%{name}.conf
+ %{_unitdir}/lvm-activate-vgs-main.service
+ %{_unitdir}/lvm-activate-vgs-last.service
+ %{_unitdir}/lvm-monitor.service
  %{_unitdir}/blk-availability.service
- %{_unitdir}/lvm2-monitor.service
- %attr(555, -, -) %{_prefix}/lib/systemd/system-generators/lvm2-activation-generator
  %if %{have_service lvmpolld}
   %{_unitdir}/lvm2-lvmpolld.service
   %{_unitdir}/lvm2-lvmpolld.socket
  %endif
 %else
  %{_sysconfdir}/rc.d/init.d/blk-availability
- %{_sysconfdir}/rc.d/init.d/lvm2-monitor
+ %{_sysconfdir}/rc.d/init.d/lvm-monitor
  %if %{have_service lvmpolld}
   %{_sysconfdir}/rc.d/init.d/lvm2-lvmpolld
  %endif
