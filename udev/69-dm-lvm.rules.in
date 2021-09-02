@@ -78,9 +78,19 @@ ENV{SYSTEMD_READY}="1"
 #
 # TODO: adjust the output of vgchange -aay so that
 # it's better suited to appearing in the journal.
+#
+# "--eventactivation event" used with pvscan or vgchange
+# tells the command that it is being run from an event.
+# The command does nothing if lvm.conf event_activation=0.
+# The command does nothing if lvm.conf event_activation=1,
+# and lvm.conf event_activation_options="service_only".
+# The command goes ahead if event_activation_options="event_only",
+# or if event_activation_options="service_to_event" and the
+# event-activation-on file exists.
+#
 
-IMPORT{program}="(LVM_EXEC)/lvm pvscan --cache --listvg --checkcomplete --vgonline --udevoutput --journal=output $env{DEVNAME}"
-ENV{LVM_VG_NAME_COMPLETE}=="?*", RUN+="/usr/bin/systemd-run -r --no-block --property DefaultDependencies=no --unit lvm-activate-$env{LVM_VG_NAME_COMPLETE} lvm vgchange -aay --nohints $env{LVM_VG_NAME_COMPLETE}"
+IMPORT{program}="(LVM_EXEC)/lvm pvscan --cache --listvg --checkcomplete --vgonline --eventactivation event --udevoutput --journal=output $env{DEVNAME}"
+ENV{LVM_VG_NAME_COMPLETE}=="?*", RUN+="/usr/bin/systemd-run -r --no-block --property DefaultDependencies=no --unit lvm-activate-$env{LVM_VG_NAME_COMPLETE} lvm vgchange -aay --nohints --eventactivation event $env{LVM_VG_NAME_COMPLETE}"
 GOTO="lvm_end"
 
 LABEL="lvm_end"

@@ -1129,6 +1129,9 @@ int label_scan(struct cmd_context *cmd)
 			}
 		}
 	}
+
+	log_debug_devs("Filtering devices to scan done (nodata)");
+
 	cmd->filter_nodata_only = 0;
 
 	dm_list_iterate_items(devl, &all_devs)
