@@ -262,6 +262,11 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 		}
 	}
 
+	if (arg_is_set(cmd, vgonline_ARG) && !online_vg_file_create(cmd, vg->name)) {
+		log_print("VG %s finished", vg->name);
+		return 1;
+	}
+
 	if (!_activate_lvs_in_vg(cmd, vg, activate)) {
 		stack;
 		r = 0;
@@ -698,6 +703,9 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
 
 		log_print_unless_silent("Volume group \"%s\" successfully changed", vg->name);
 	}
+
+	if (arg_is_set(cmd, vgonline_ARG))
+		online_dir_setup(cmd);
 
 	if (arg_is_set(cmd, activate_ARG)) {
 		activate = (activation_change_t) arg_uint_value(cmd, activate_ARG, 0);
