@@ -295,8 +295,11 @@ int lvconvert_cachevol_attach_single(struct cmd_context *cmd,
                                      struct logical_volume *lv,
                                      struct processing_handle *handle);
 
+int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const char *vgname, int ignore_existing, int *exists);
 void online_vg_file_remove(const char *vgname);
 int online_vg_file_create(struct cmd_context *cmd, const char *vgname);
 void online_dir_setup(struct cmd_context *cmd);
+int event_activation_enable(struct cmd_context *cmd);
+int event_activation_is_on(struct cmd_context *cmd);
 
 #endif

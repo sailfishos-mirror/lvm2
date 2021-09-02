@@ -5714,3 +5714,90 @@ bad:
 out:
 	return 0;
 }
+
+int get_event_activation_config_settings(struct cmd_context *cmd,
+				  int *service_only, int *event_only, int *service_to_event)
+{
+	const struct dm_config_node *cn;
+	const struct dm_config_value *cv;
+	int eo = 0, so = 0, se = 0;
+
+	if (!(cn = find_config_tree_array(cmd, global_event_activation_options_CFG, NULL)))
+                return 1;
+
+	for (cv = cn->v; cv; cv = cv->next) {
+		if (cv->type != DM_CFG_STRING)
+			continue;
+		if (!strcmp(cv->v.str, "service_only"))
+			so = 1;
+		else if (!strcmp(cv->v.str, "event_only"))
+			eo = 1;
+		else if (!strcmp(cv->v.str, "service_to_event"))
+			se = 1;
+		else if (strlen(cv->v.str) > 0)
+			log_warn("WARNING: ignoring unrecognized event_activation_options value %s.", cv->v.str);
+	}
+
+	if (se && (so || eo)) {
+		log_warn("WARNING: ignoring incompatible event_activation_options, using service_to_event.");
+		*service_to_event = 1;
+	} else if (so && eo) {
+		log_warn("WARNING: ignoring incompatible event_activation_options, using event_only.");
+		*event_only = 1;
+	} else if (se) {
+		*service_to_event = 1;
+	} else if (so) {
+		*service_only = 1;
+	} else if (eo) {
+		*event_only = 1;
+	} else {
+		*service_to_event = 1;
+	}
+	return 1;
+}
+
+static int _ea_option_value(const char *val, int *ea_service, int *ea_event, int *ea_on)
+{
+	if (!strcmp(val, "service"))
+		*ea_service = 1;
+	else if (!strcmp(val, "event"))
+		*ea_event = 1;
+	else if (!strcmp(val, "on"))
+		*ea_on = 1;
+	else {
+		log_error("Unknown --eventactivation value.");
+		return 0;
+	}
+	return 1;
+}
+
+int get_event_activation_command_options(struct cmd_context *cmd, const char *ea, int *ea_service, int *ea_event, int *ea_on)
+{
+	char ea_vals[128] = {0};
+	char *val1, *val2;
+
+	strncpy(ea_vals, ea, 127);
+
+	/* Currently only two values can be used together. */
+
+	val1 = ea_vals;
+
+	if ((val2 = strchr(ea_vals, ','))) {
+		*val2 = '\0';
+		val2++;
+	}
+
+	if (val1 && !_ea_option_value(val1, ea_service, ea_event, ea_on))
+		return 0;
+
+	if (val2 && !_ea_option_value(val2, ea_service, ea_event, ea_on))
+		return 0;
+
+	if (*ea_service && *ea_event) {
+		log_error("Invalid --eventactivation options, service and event are incompatible.");
+		return 0;
+	}
+
+	return 1;
+}
+

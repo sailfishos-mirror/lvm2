@@ -1130,6 +1130,18 @@ cfg(global_event_activation_CFG, "event_activation", global_CFG_SECTION, CFG_DEF
 	"See the --setautoactivation option or the auto_activation_volume_list\n"
 	"setting to configure autoactivation for specific VGs or LVs.\n")
 
+cfg_array(global_event_activation_options_CFG, "event_activation_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_EVENT_ACTIVATION_OPTIONS, vsn(2, 3, 14), NULL, 0, NULL,
+	"Set event activation options.\n"
+	"service_to_event: begin with fixed activation services,\n"
+	"then switch to event based activation.\n"
+	"event_only: only use event based activation.\n"
+	"service_only: only use fixed activation services.\n"
+	"(This is equivalent to event_activation=0.)\n"
+	"Autoactivation commands should set --eventactivation service|event\n"
+	"to indicate if they are performing service or event activation.\n"
+	"An autoactivation command may then be skipped according to the\n"
+	"value of this setting.\n")
+
 cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 93), 0, vsn(2, 3, 0), NULL,
 	NULL)
 
