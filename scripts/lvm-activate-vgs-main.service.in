@@ -1,0 +1,15 @@
+[Unit]
+Description=Activate LVM Volume Groups
+Documentation=man:vgchange(8)
+After=dm-event.socket dm-event.service
+Before=local-fs-pre.target shutdown.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvm vgchange -aay --nohints --vgonline
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target

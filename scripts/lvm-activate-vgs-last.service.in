@@ -1,0 +1,16 @@
+[Unit]
+Description=Activate LVM Volume Groups (last)
+Documentation=man:vgchange(8)
+Wants=systemd-udev-settle.service
+After=lvm-activate-vgs-main.service systemd-udev-settle.service multipathd.service cryptsetup.target
+Before=local-fs-pre.target shutdown.target
+DefaultDependencies=no
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=@SBINDIR@/lvm vgchange -aay --nohints --vgonline --eventactivation enable
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
