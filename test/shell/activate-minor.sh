@@ -15,6 +15,8 @@ SKIP_WITH_LVMPOLLD=1
 
 . lib/inittest
 
+find /sys
+
 # Just skip this test if minor is already in use...
 dmsetup info | tee info
 grep -E "^Major, minor: *[0-9]+, 123" info && skip
