@@ -336,24 +336,26 @@ else
     fi
 fi
 
-# Now we have a suitably editted config file in a temp place,
-# backup the original and copy our new one into place.
+if [ -e "$TMPFILE" ]; then
+    # Now we have a suitably editted config file in a temp place,
+    # backup the original and copy our new one into place.
 
-cp "$CONFIGFILE" "$CONFIGFILE.lvmconfold"
-if [ $? != 0 ]
-    then
-    echo "failed to backup old config file, $CONFIGFILE not updated"
-    exit 2
+    cp "$CONFIGFILE" "$CONFIGFILE.lvmconfold"
+    if [ $? != 0 ]
+        then
+        echo "failed to backup old config file, $CONFIGFILE not updated"
+        exit 2
+    fi
+
+    cp "$TMPFILE" "$CONFIGFILE"
+    if [ $? != 0 ]
+        then
+        echo "failed to copy new config file into place, check $CONFIGFILE is still OK"
+        exit 3
+    fi
+
+    rm -f "$SCRIPTFILE" "$TMPFILE"
 fi
-
-cp "$TMPFILE" "$CONFIGFILE"
-if [ $? != 0 ]
-    then
-    echo "failed to copy new config file into place, check $CONFIGFILE is still OK"
-    exit 3
-fi
-
-rm -f "$SCRIPTFILE" "$TMPFILE"
 
 function set_service {
     local type=$1
