@@ -1652,8 +1652,8 @@ static int _get_autoactivation(struct cmd_context *cmd, int event_activation, in
 		return 1;
 	}
 	
-	if (!event_activation) {
-		log_print_pvscan(cmd, "Skip pvscan for event with event_activation=0.");
+	if (event_activation == 2) {
+		log_print_pvscan(cmd, "Skip pvscan for event with event_activation=2.");
 		*skip_command = 1;
 		return 1;
 	}
@@ -1680,32 +1680,32 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 
 	cmd->ignore_device_name_mismatch = 1;
 
-	event_activation = find_config_tree_bool(cmd, global_event_activation_CFG, NULL);
+	event_activation = find_config_tree_int(cmd, global_event_activation_CFG, NULL);
 
-	if (do_activate && !event_activation) {
-		log_verbose("Ignoring pvscan --cache -aay because event_activation is disabled.");
+	if (do_activate && (event_activation == 2)) {
+		log_verbose("Ignoring pvscan --cache -aay because event_activation is disabled (2).");
 		return ECMD_PROCESSED;
 	}
 
 	/*
 	 * lvm udev rules call:
 	 *   pvscan --cache --listvg|--listlvs --checkcomplete PV
-	 * when PVs appear, even if event_activation=0 in lvm.conf.
+	 * when PVs appear, even if event_activation=2 in lvm.conf.
 	 *
 	 * The udev rules will do autoactivation if they see complete
 	 * VGs/LVs reported from the pvscan.
 	 *
-	 * When event_activation=0 we do not want to do autoactivation
+	 * When event_activation=2 we do not want to do autoactivation
 	 * from udev events, so we need the pvscan to not report any
-	 * complete VGs/LVs when event_activation=0 so that the udev
+	 * complete VGs/LVs when event_activation=2 so that the udev
 	 * rules do not attempt to autoactivate.
 	 */
 
-	if (arg_is_set(cmd, checkcomplete_ARG) && !event_activation) {
+	if (arg_is_set(cmd, checkcomplete_ARG) && (event_activation == 2)) {
 		if (arg_is_set(cmd, udevoutput_ARG))
 			printf("LVM_EVENT_ACTIVATION=0\n");
 		else
-			log_print_pvscan(cmd, "Ignoring pvscan with --checkcomplete because event_activation is disabled.");
+			log_print_pvscan(cmd, "Ignoring pvscan with --checkcomplete because event_activation is disabled (2).");
 		return ECMD_PROCESSED;
 	}
 
@@ -1734,9 +1734,9 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv)
 		if (!_pvscan_cache_all(cmd, argc, argv, &complete_vgnames))
 			return ECMD_FAILED;
 	} else {
-		if (!arg_is_set(cmd, checkcomplete_ARG) && !event_activation) {
+		if (!arg_is_set(cmd, checkcomplete_ARG) && (event_activation == 2)) {
 			/* Avoid doing anything for device removal: pvscan --cache <devno> */
-			log_verbose("Ignoring pvscan --cache because event_activation is disabled.");
+			log_verbose("Ignoring pvscan --cache because event_activation is disabled (2).");
 			return ECMD_PROCESSED;
 		}
 

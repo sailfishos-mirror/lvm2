@@ -178,9 +178,9 @@ concurrent commands attempt to activate a VG at once.
 .SS static autoactivation
 .P
 A static autoactivation method is no longer provided by lvm.
-Setting event_activation=0 still disables event based autoactivation.
-WARNING: disabling event activation without an alternative may prevent a
-system from booting.  A custom systemd service could be written to run
+Setting event_activation=0 now leaves event based autoactivation
+enabled, and disabling event based autoactivation requires setting
+event_activation=2. A custom systemd service could be written to run
 autoactivation during system startup, in which case disabling event
 autoactivation may be useful.
 .

@@ -767,7 +767,10 @@ static int _process_config(struct cmd_context *cmd)
 	init_pv_min_size((uint64_t)pv_min_kb * (1024 >> SECTOR_SHIFT));
 
 	cmd->check_pv_dev_sizes = find_config_tree_bool(cmd, metadata_check_pv_device_sizes_CFG, NULL);
-	cmd->event_activation = find_config_tree_bool(cmd, global_event_activation_CFG, NULL);
+	cmd->event_activation = find_config_tree_int(cmd, global_event_activation_CFG, NULL);
+
+	if (!cmd->event_activation)
+		log_warn("WARNING: event_activation=0 has been removed, please update lvm.conf (using 1.)");
 
 	if (!process_profilable_config(cmd))
 		return_0;

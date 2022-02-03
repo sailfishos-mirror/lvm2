@@ -200,11 +200,11 @@ struct cmd_context {
 	unsigned print_device_id_not_found:1;	/* print devices file entries not found */
 	unsigned ignore_device_name_mismatch:1; /* skip updating devices file names */
 	unsigned backup_disabled:1;		/* skip repeated debug message */
-	unsigned event_activation:1;		/* whether event_activation is set */
 	unsigned udevoutput:1;
 	unsigned online_vg_file_removed:1;
 	unsigned disable_dm_devs:1;		/* temporarily disable use of dm devs cache */
 
+	int event_activation;			/* 1 enabled, 0 enabled (to handle compat), 2 disabled */
 	/*
 	 * Devices and filtering.
 	 */

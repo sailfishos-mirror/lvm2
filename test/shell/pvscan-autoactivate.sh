@@ -32,7 +32,7 @@ _clear_online_files() {
 aux prepare_devs 8 16
 
 # Check 'pvscan' is ignored when event_activation is 0
-pvscan --cache -aay -v --config 'global/event_activation=0' 2>&1 | tee out
+pvscan --cache -aay -v --config 'global/event_activation=2' 2>&1 | tee out
 grep "Ignoring pvscan" out
 
 vgcreate $vg1 "$dev1" "$dev2"

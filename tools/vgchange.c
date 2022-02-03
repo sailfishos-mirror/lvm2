@@ -755,8 +755,8 @@ static int _vgchange_autoactivation_setup(struct cmd_context *cmd,
 		return 1;
 	}
 
-	if (!find_config_tree_bool(cmd, global_event_activation_CFG, NULL)) {
-		log_print("Skip vgchange for event and event_activation=0.");
+	if (find_config_tree_int(cmd, global_event_activation_CFG, NULL) == 2) {
+		log_print("Skip vgchange for event and event_activation disabled (2).");
 		*skip_command = 1;
 		return 1;
 	}

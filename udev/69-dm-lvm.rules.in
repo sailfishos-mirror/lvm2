@@ -72,7 +72,7 @@ ENV{SYSTEMD_READY}="1"
 # and uses temp files under /run/lvm to check if
 # other PVs in the VG are present.
 #
-# If event_activation=0 in lvm.conf, this pvscan
+# If event_activation=2 in lvm.conf, this pvscan
 # (using checkcomplete) will do nothing, so that
 # no event-based autoactivation will be happen.
 #

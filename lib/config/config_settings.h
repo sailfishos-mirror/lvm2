@@ -1118,12 +1118,16 @@ cfg(global_lvdisplay_shows_full_device_path_CFG, "lvdisplay_shows_full_device_pa
 	"Previously this was always shown as /dev/vgname/lvname even when that\n"
 	"was never a valid path in the /dev filesystem.\n")
 
-cfg(global_event_activation_CFG, "event_activation", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 1, vsn(2, 3, 1), 0, 0, NULL,
-	"Disable event based autoactivation commands.\n"
-	"WARNING: setting this to zero may cause machine startup to fail.\n"
-	"Previously, setting this to zero would enable static autoactivation\n"
-	"services (via the lvm2-activation-generator), but the autoactivation\n"
-	"services and generator have been removed.\n")
+cfg(global_event_activation_CFG, "event_activation", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 1, vsn(2, 3, 1), 0, 0, NULL,
+	"Disable event based autoactivation commands by setting to 2.\n"
+	"Disabling this (setting to 2) may cause machine startup to fail.\n"
+	"Previously, setting this to 0 would disable event based autoactivation\n"
+	"and enable static autoactivation services (via lvm2-activation-generator).\n"
+	"Now that static autoactivation services have been removed, setting this\n"
+	"to 0 will keep event based autoactivation enabled (so 0 and 1 are the\n"
+	"same.) Setting this to 2 disables both event and static autoactivation\n"
+	"commands (the lvm udev rule will continue to run those commands, but they\n"
+	"will exit when they detect this setting.\n")
 
 cfg(global_use_lvmetad_CFG, "use_lvmetad", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 93), 0, vsn(2, 3, 0), NULL,
 	NULL)

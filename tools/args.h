@@ -355,7 +355,7 @@ arg(checkcomplete_ARG, '\0', "checkcomplete", 0, 0, 0,
     "and print \"complete\" or \"incomplete\" for each listed\n"
     "VG or LV.  This option is used as a part of event-based\n"
     "autoactivation, so pvscan will do nothing if this option\n"
-    "is set and event_activation=0 in the config settings.\n")
+    "is set and event_activation=2 (disabled) in the config settings.\n")
 
 arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0,
     "Used to pass options for special cases to lvmlockd.\n"
