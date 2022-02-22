@@ -347,6 +347,8 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
 	}
 
 	else if (idtype == DEV_ID_TYPE_DEVNAME) {
+		if (dm_list_empty(&dev->aliases))
+			goto_bad;
 		if (!(idname = strdup(dev_name(dev))))
 			goto_bad;
 		return idname;
@@ -953,6 +955,10 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
 	int part = 0;
 
 	if (!dev_get_partition_number(dev, &part))
+		return_0;
+
+	/* Ensure valid dev_name(dev) below. */
+	if (dm_list_empty(&dev->aliases))
 		return_0;
 
 	/*
@@ -1577,7 +1583,7 @@ void device_ids_match_device_list(struct cmd_context *cmd)
 	dm_list_iterate_items(du, &cmd->use_devices) {
 		if (du->dev)
 			continue;
-		if (!(du->dev = dev_cache_get(cmd, du->devname, NULL))) {
+		if (!(du->dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
 			log_warn("Device not found for %s.", du->devname);
 		} else {
 			/* Should we set dev->id?  Which idtype?  Use --deviceidtype? */
@@ -1625,7 +1631,7 @@ void device_ids_match(struct cmd_context *cmd)
 		 * the du/dev pairs in preparation for using the filters.
 		 */
 		if (du->devname &&
-		    (dev = dev_cache_get(cmd, du->devname, NULL))) {
+		    (dev = dev_cache_get_existing(cmd, du->devname, NULL))) {
 			/* On successful match, du, dev, and id are linked. */
 			if (_match_du_to_dev(cmd, du, dev))
 				continue;
@@ -1840,6 +1846,9 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
 		 * the PVID from disk and cannot verify the devices file entry.
 		 */
 		if (dev->flags & DEV_SCAN_NOT_READ)
+			continue;
+
+		if (dm_list_empty(&dev->aliases))
 			continue;
 
 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
@@ -2225,14 +2234,14 @@ void device_ids_find_renamed_devs(struct cmd_context *cmd, struct dm_list *dev_l
 	dm_list_iterate_items(dil, &search_pvids) {
 		char *dup_devname1, *dup_devname2, *dup_devname3;
 
-		if (!dil->dev) {
+		if (!dil->dev || dm_list_empty(&dil->dev->aliases)) {
 			not_found++;
 			continue;
 		}
-		found++;
 
 		dev = dil->dev;
 		devname = dev_name(dev);
+		found++;
 
 		if (!(du = get_du_for_pvid(cmd, dil->pvid))) {
 			/* shouldn't happen */
