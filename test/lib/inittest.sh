@@ -188,6 +188,12 @@ if test -n "$LVM_TEST_LVMLOCKD_TEST" ; then
 	aux prepare_lvmlockd
 fi
 
-echo "<======== Processing test: \"$TESTNAME\" ========>"
+(
+	MSG="<======== Processing test: \"$TESTNAME\" ========>"
+	echo "$MSG"
+	echo "$MSG" > /dev/console 2>/dev/null
+	logger -p user.notice "$MSG" 2>/dev/null
+	true
+)
 
 set -vx
