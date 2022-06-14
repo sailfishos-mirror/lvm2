@@ -215,14 +215,14 @@ test_ext2_resize() {
 	fsadm --lvresize resize $1 30M
 	# Fails - not enough space for 4M fs
 	not fsadm -y --lvresize resize "$2" 4M
-	lvresize -L+10M --fs resize_fsadm $1
-	lvreduce -L10M --fs resize_fsadm $1
+	lvresize -L+10M --fs resize $1
+	lvreduce -L10M --fs resize $1
 
 	fscheck_ext3 "$3"
 	mount "$3" "$mount_dir"
 	not fsadm -y --lvresize resize $1 4M
-	echo n | not lvresize -L4M --fs resize_fsadm -n $1
-	lvresize -L+20M --fs resize_fsadm -n $1
+	echo n | not lvresize -L4M --fs resize -n $1
+	lvresize -L+20M --fs resize -n $1
 	umount "$mount_dir"
 	fscheck_ext3 "$3"
 }
@@ -230,8 +230,8 @@ test_ext2_resize() {
 test_ext2_small_shrink() {
 	mkfs.ext2 "$3"
 
-	lvresize -L-1 --fs resize_fsadm $1
-	lvresize -L-1 --fs resize_fsadm $1
+	lvresize -L-1 --fs resize $1
+	lvresize -L-1 --fs resize $1
 
 	fscheck_ext3 "$3"
 }
@@ -242,25 +242,25 @@ test_ext3_resize() {
 	fsadm --lvresize resize $1 30M
 	# Fails - not enough space for 4M fs
 	not fsadm -y --lvresize resize "$2" 4M
-	lvresize -L+10M --fs resize_fsadm $1
-	lvreduce -L10M --fs resize_fsadm $1
+	lvresize -L+10M --fs resize $1
+	lvreduce -L10M --fs resize $1
 
 	fscheck_ext3 "$3"
 	mount "$3" "$mount_dir"
-	lvresize -L+10M --fs resize_fsadm $1
+	lvresize -L+10M --fs resize $1
 
 	not fsadm -y --lvresize resize $1 4M
-	echo n | not lvresize -L4M --fs resize_fsadm -n $1
-	lvresize -L+20M --fs resize_fsadm -n $1
-	lvresize -L-10M --fs resize_fsadm  -y $1
+	echo n | not lvresize -L4M --fs resize -n $1
+	lvresize -L+20M --fs resize -n $1
+	lvresize -L-10M --fs resize  -y $1
 	umount "$mount_dir"
 }
 
 test_ext3_small_shrink() {
 	mkfs.ext3 "$3"
 
-	lvresize -L-1 --fs resize_fsadm $1
-	lvresize -L-1 --fs resize_fsadm  $1
+	lvresize -L-1 --fs resize $1
+	lvresize -L-1 --fs resize  $1
 
 	fscheck_ext3 "$3"
 }
@@ -270,12 +270,12 @@ test_xfs_resize() {
 
 	fsadm --lvresize resize $1 30M
 	# Fails - not enough space for 4M fs
-	lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	lvresize -L+10M -y --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	fscheck_xfs "$3"
 	mount "$3" "$mount_dir"
-	lvresize -L+10M --fs resize_fsadm -n $1
+	lvresize -L+10M -y --fs resize -n $1
 	umount "$mount_dir"
 	fscheck_xfs "$3"
 }
@@ -283,7 +283,7 @@ test_xfs_resize() {
 test_xfs_small_shrink() {
 	mkfs.xfs -l internal,size=1536b -f "$3"
 
-	not lvresize -L-1 --fs resize_fsadm $1
+	not lvresize -L-1 --fs resize $1
 	fscheck_xfs "$3"
 }
 
@@ -291,7 +291,7 @@ test_reiserfs_resize() {
 	mkfs.reiserfs -s 513 -f "$3"
 
 	fsadm --lvresize resize $1 30M
-	lvresize -L+10M --fs resize_fsadm $1
+	lvresize -L+10M --fs resize $1
 	fsadm --lvresize -y resize $1 10M
 
 	fscheck_reiserfs "$3"
@@ -305,8 +305,8 @@ test_reiserfs_resize() {
 test_reiserfs_small_shrink() {
 	mkfs.reiserfs -s 513 -f "$3"
 
-	lvresize -y -L-1 --fs resize_fsadm $1
-	lvresize -y -L-1 --fs resize_fsadm  $1
+	lvresize -y -L-1 --fs resize $1
+	lvresize -y -L-1 --fs resize  $1
 
 	fscheck_reiserfs "$3"
 }
@@ -321,8 +321,8 @@ test_ext2_inactive() {
 	crypt_close "$4"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	crypt_open "$2" $PWD2 "$4"
 	fscheck_ext3 "$3"
@@ -335,8 +335,8 @@ test_ext3_inactive() {
 	crypt_close "$4"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	crypt_open "$2" $PWD2 "$4"
 	fscheck_ext3 "$3"
@@ -349,8 +349,8 @@ test_xfs_inactive() {
 	crypt_close "$4"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	crypt_open "$2" $PWD2 "$4"
 	fscheck_xfs "$3"
@@ -363,8 +363,8 @@ test_reiserfs_inactive() {
 	crypt_close "$4"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	crypt_open "$2" $PWD2 "$4"
 	fscheck_reiserfs "$3"
@@ -379,8 +379,8 @@ test_ext2_plain() {
 	mkfs.ext2 -b4096 -j "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	fscheck_ext3 "$3"
 
 	fsadm --cryptresize resize $3 30M
@@ -394,8 +394,8 @@ test_ext2_plain() {
 
 	crypt_close "$4"
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	crypt_open_plain "$2" $PWD3 "$4"
 	fscheck_ext3 "$3"
 }
@@ -404,8 +404,8 @@ test_ext3_plain() {
 	mkfs.ext3 -b4096 -j "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	fscheck_ext3 "$3"
 
 	fsadm --cryptresize resize $3 30M
@@ -419,8 +419,8 @@ test_ext3_plain() {
 
 	crypt_close "$4"
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	crypt_open_plain "$2" $PWD3 "$4"
 	fscheck_ext3 "$3"
 }
@@ -429,8 +429,8 @@ test_xfs_plain() {
 	mkfs.xfs -l internal,size=1536b -f "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	fscheck_xfs "$3"
 
 	lvresize -f -L+10M $1
@@ -441,8 +441,8 @@ test_xfs_plain() {
 
 	crypt_close "$4"
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	crypt_open_plain "$2" $PWD3 "$4"
 	fscheck_xfs "$3"
 
@@ -453,8 +453,8 @@ test_reiserfs_plain() {
 	mkfs.reiserfs -s 513 -f "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L-10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L-10M --fs resize $1
 	fscheck_reiserfs "$3"
 
 	fsadm -y --cryptresize resize $3 30M
@@ -463,8 +463,8 @@ test_reiserfs_plain() {
 
 	crypt_close "$4"
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	crypt_open_plain "$2" $PWD3 "$4"
 	fscheck_reiserfs "$3"
 }
@@ -477,8 +477,8 @@ test_ext2_detached() {
 	mkfs.ext2 -b4096 -j "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	fscheck_ext3 "$3"
 }
 
@@ -486,8 +486,8 @@ test_ext3_detached() {
 	mkfs.ext3 -b4096 -j "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 	fscheck_ext3 "$3"
 }
 
@@ -495,8 +495,8 @@ test_xfs_detached() {
 	mkfs.xfs -l internal,size=1536b -f "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	fscheck_xfs "$3"
 }
@@ -505,8 +505,8 @@ test_reiserfs_detached() {
 	mkfs.reiserfs -s 513 -f "$3"
 
 	not fsadm --lvresize resize $1 30M
-	not lvresize -L+10M --fs resize_fsadm $1
-	not lvreduce -L10M --fs resize_fsadm $1
+	not lvresize -L+10M --fs resize $1
+	not lvreduce -L10M --fs resize $1
 
 	fscheck_reiserfs "$3"
 }
