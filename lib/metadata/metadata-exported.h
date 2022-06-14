@@ -674,8 +674,9 @@ struct lvresize_params {
 	int force;
 	int nosync;
 	int nofsck;
-	int resizefs;
 	int use_policies;
+	int user_set_fs;
+	char fsopt[32]; /* set by --resizefs|--fs, empty for --fs ignore */
 
 	const struct segment_type *segtype;
 	unsigned mirrors;
@@ -695,6 +696,7 @@ struct lvresize_params {
 	int approx_alloc;
 	int extents_are_pes;	/* Is 'extents' counting PEs or LEs? */
 	int size_changed;	/* Was there actually a size change */
+	int extend_fs_error;    /* FS extend error after LV extend success */
 
 	const char *lockopt;
 	char *lockd_lv_refresh_path; /* set during resize to use for refresh at the end */

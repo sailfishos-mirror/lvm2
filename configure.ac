@@ -1713,6 +1713,24 @@ AC_DEFINE_UNQUOTED(FSADM_PATH, ["$FSADM_PATH"], [Path to fsadm binary.])
 LVMIMPORTVDO_PATH="$SBINDIR/lvm_import_vdo"
 AC_DEFINE_UNQUOTED(LVMIMPORTVDO_PATH, ["$LVMIMPORTVDO_PATH"], [Path to lvm_import_vdo script.])
 
+MOUNT_PATH="/usr/bin/mount"
+AC_DEFINE_UNQUOTED(MOUNT_PATH, ["$MOUNT_PATH"], [Path to mount binary.])
+
+UMOUNT_PATH="/usr/bin/umount"
+AC_DEFINE_UNQUOTED(UMOUNT_PATH, ["$UMOUNT_PATH"], [Path to umount binary.])
+
+E2FSCK_PATH="$SBINDIR/e2fsck"
+AC_DEFINE_UNQUOTED(E2FSCK_PATH, ["$E2FSCK_PATH"], [Path to e2fsck binary.])
+
+RESIZE2FS_PATH="$SBINDIR/resize2fs"
+AC_DEFINE_UNQUOTED(RESIZE2FS_PATH, ["$RESIZE2FS_PATH"], [Path to resize2fs binary.])
+
+XFS_GROWFS_PATH="$SBINDIR/xfs_growfs"
+AC_DEFINE_UNQUOTED(XFS_GROWFS_PATH, ["$XFS_GROWFS_PATH"], [Path to xfs_growfs binary.])
+
+CRYPTSETUP_PATH="$SBINDIR/cryptsetup"
+AC_DEFINE_UNQUOTED(CRYPTSETUP_PATH, ["$CRYPTSETUP_PATH"], [Path to cryptsetup binary.])
+
 ################################################################################
 dnl -- dmeventd pidfile and executable path
 if test "$BUILD_DMEVENTD" = yes; then
@@ -1882,6 +1900,12 @@ AC_SUBST(DM_LIB_PATCHLEVEL)
 AC_SUBST(ELDFLAGS)
 AC_SUBST(FSADM)
 AC_SUBST(FSADM_PATH)
+AC_SUBST(MOUNT_PATH)
+AC_SUBST(UMOUNT_PATH)
+AC_SUBST(E2FSCK_PATH)
+AC_SUBST(RESIZE2FS_PATH)
+AC_SUBST(XFS_GROWFS_PATH)
+AC_SUBST(CRYPTSETUP_PATH)
 AC_SUBST(BLKDEACTIVATE)
 AC_SUBST(HAVE_LIBDL)
 AC_SUBST(HAVE_REALTIME)

@@ -301,6 +301,27 @@ arg(foreign_ARG, '\0', "foreign", 0, 0, 0,
     "Report/display foreign VGs that would otherwise be skipped.\n"
     "See \\fBlvmsystemid\\fP(7) for more information about foreign VGs.\n")
 
+arg(fs_ARG, '\0', "fs", string_VAL, 0, 0,
+    "File system handling when resizing an LV.\n"
+    "\\fBchecksize\\fP: Only when reducing size, does nothing when extending.\n"
+    "Check the fs size and reduce the LV if the fs is not using the affected\n"
+    "space, i.e. the fs does not need to be shrunk. Fail the command without\n"
+    "reducing the fs or LV if the fs is using the affected space.\n"
+    "\\fBresize_remount\\fP: Resize the fs if needed. Mounts or unmounts the fs as\n"
+    "required (avoids mounting/unmounting when possible.)\n"
+    "Attempts to restore the original mount state when finished.\n"
+    "\\fBresize_keepmount\\fP: Resize the fs if needed, only if it can be done without\n"
+    "changing the current mount state.  Fail the command without\n"
+    "resizing the fs or LV if an fs resize requires mounting or unmounting\n"
+    "\\fBresize_unmount\\fP: Resize the fs if needed, only while unmounted. Unmount the\n"
+    "fs if needed.  Fail the command without resizing the fs\n"
+    "or LV if an fs resize is needed that requires the the fs to be mounted\n"
+    "\\fBresize\\fP: Equivalent to resize_remount.\n"
+    "\\fBresize_fsadm\\fP: Use the old method of calling fsadm to do handle the fs\n"
+    "(deprecated).\n"
+    "\\fBignore\\fP: Resize the LV without checking for or handling a file system.\n"
+    "WARNING: using ignore when reducing the LV size may cause data loss.\n")
+
 arg(handlemissingpvs_ARG, '\0', "handlemissingpvs", 0, 0, 0,
     "Allows a polling operation to continue when PVs are missing,\n"
     "e.g. for repairs due to faulty devices.\n")
@@ -1452,7 +1473,8 @@ arg(readahead_ARG, 'r', "readahead", readahead_VAL, 0, 0,
     "\\fBnone\\fP is equivalent to zero.\n")
 
 arg(resizefs_ARG, 'r', "resizefs", 0, 0, 0,
-    "Resize underlying filesystem together with the LV using \\fBfsadm\\fP(8).\n")
+    "Resize the file system on the LV.\n"
+    "Equivalent to --fs resize_remount. See --fs for more options.\n")
 
 /* Not used */
 arg(reset_ARG, 'R', "reset", 0, 0, 0, NULL)

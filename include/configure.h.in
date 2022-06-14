@@ -127,8 +127,13 @@
 /* Define to 1 to include the LVM editline shell. */
 #undef EDITLINE_SUPPORT
 
-/* Path to fsadm binary. */
+/* Paths to binaries. */
 #undef FSADM_PATH
+#undef MOUNT_PATH
+#undef UMOUNT_PATH
+#undef E2FSCK_PATH
+#undef RESIZE2FS_PATH
+#undef XFS_GROWFS_PATH
 
 /* Define to use GNU versioning in the shared library. */
 #undef GNU_SYMVER
