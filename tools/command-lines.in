@@ -1379,7 +1379,7 @@ lvextend --size PSizeMB LV
 OO: --alloc Alloc, --autobackup Bool, --force, --mirrors Number,
 --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
 --stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
---type SegType
+--type SegType, --fs String
 OP: PV ...
 ID: lvextend_size
 DESC: Extend an LV by a specified size.
@@ -1388,7 +1388,7 @@ lvextend LV PV ...
 OO: --alloc Alloc, --autobackup Bool, --force, --mirrors Number,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs, --stripes Number, --stripesize SizeKB,
---type SegType
+--type SegType, --fs String
 ID: lvextend_pv
 DESC: Extend an LV by specified PV extents.
 
@@ -1405,7 +1405,7 @@ lvextend --usepolicies LV_snapshot_thinpool_vdopool
 OO: --alloc Alloc, --autobackup Bool, --force, --mirrors Number,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs,
---type SegType
+--type SegType, --fs String
 OP: PV ...
 ID: lvextend_policy
 DESC: Extend an LV according to a predefined policy.
@@ -1454,7 +1454,7 @@ DESC: Remove the devices file entry for the given PVID.
 
 lvreduce --size NSizeMB LV
 OO: --autobackup Bool, --force, --nofsck, --noudevsync,
---reportformat ReportFmt, --resizefs
+--reportformat ReportFmt, --resizefs, --fs String
 ID: lvreduce_size
 
 ---
@@ -1484,7 +1484,7 @@ lvresize --size SSizeMB LV
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync, --reportformat ReportFmt, --resizefs,
 --stripes Number, --stripesize SizeKB, --poolmetadatasize PSizeMB,
---type SegType
+--type SegType, --fs String
 OP: PV ...
 ID: lvresize_size
 DESC: Resize an LV by a specified size.
@@ -1493,7 +1493,7 @@ lvresize LV PV ...
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --resizefs, --stripes Number, --stripesize SizeKB,
---type SegType
+--type SegType, --fs String
 ID: lvresize_pv
 DESC: Resize an LV by specified PV extents.
 
