@@ -19,6 +19,7 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
 {
 	const char *type_str = arg_str_value(cmd, type_ARG, NULL);
 	int only_linear = 0;
+	int set_fsopt = 0;
 	int set_extents_and_size = 0;
 
 	memset(lp, 0, sizeof(struct lvresize_params));
@@ -54,41 +55,87 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
 		lp->percent = PERCENT_PVS;
 		lp->sign = SIGN_PLUS;
 		lp->poolmetadata_size = 0;
-		lp->resizefs = arg_is_set(cmd, resizefs_ARG);
-		lp->nofsck = arg_is_set(cmd, nofsck_ARG);
+		set_fsopt = 1;
 		break;
 
 	case lvextend_size_CMD:
 		lp->resize = LV_EXTEND;
-		lp->resizefs = arg_is_set(cmd, resizefs_ARG);
-		lp->nofsck = arg_is_set(cmd, nofsck_ARG);
 		if ((lp->poolmetadata_size = arg_uint64_value(cmd, poolmetadatasize_ARG, 0)))
 			lp->poolmetadata_sign = arg_sign_value(cmd, poolmetadatasize_ARG, SIGN_NONE);
 		set_extents_and_size = 1;
+		set_fsopt = 1;
 		break;
 
 	case lvreduce_size_CMD:
 		lp->resize = LV_REDUCE;
 		lp->poolmetadata_size = 0;
-		lp->resizefs = arg_is_set(cmd, resizefs_ARG);
-		lp->nofsck = arg_is_set(cmd, nofsck_ARG);
 		set_extents_and_size = 1;
+		set_fsopt = 1;
 		break;
 
 	case lvresize_size_CMD:
 		lp->resize = LV_ANY;
 		lp->poolmetadata_size = arg_uint64_value(cmd, poolmetadatasize_ARG, 0);
-		lp->resizefs = arg_is_set(cmd, resizefs_ARG);
-		lp->nofsck = arg_is_set(cmd, nofsck_ARG);
 		if ((lp->poolmetadata_size = arg_uint64_value(cmd, poolmetadatasize_ARG, 0)))
 			lp->poolmetadata_sign = arg_sign_value(cmd, poolmetadatasize_ARG, SIGN_NONE);
 		set_extents_and_size = 1;
+		set_fsopt = 1;
 		break;
 
 	default:
 		log_error(INTERNAL_ERROR "unknown lvresize type");
 		return 0;
 	};
+
+	if (set_fsopt) {
+		const char *str;
+
+		if ((str = arg_str_value(cmd, fs_ARG, NULL))) {
+			if (!strcmp(str, "checksize") ||
+			    !strcmp(str, "resize") ||
+			    !strcmp(str, "resize_fsadm")) {
+				strncpy(lp->fsopt, str, sizeof(lp->fsopt)-1);
+			} else if (!strcmp(str, "ignore")) {
+				lp->fsopt[0] = '\0';
+			} else {
+				log_error("Unknown --fs value.");
+				return 0;
+			}
+			lp->user_set_fs = 1;
+		} else if (arg_is_set(cmd, resizefs_ARG)) {
+			/* --resizefs alone equates to --fs resize */
+			strncpy(lp->fsopt, "resize", sizeof(lp->fsopt)-1);
+			lp->user_set_fs = 1;
+		} else {
+			/*
+			 * Use checksize when no fs option is specified.
+			 * checksize with extend does nothing: the LV
+			 * is extended and any fs is ignored.
+			 * checksize with reduce checks for an fs that
+			 * needs reducing: the LV is reduced only if the
+			 * fs does not need to be reduced (or no fs.)
+			 */
+			strncpy(lp->fsopt, "checksize", sizeof(lp->fsopt)-1);
+		}
+
+		if (lp->fsopt[0])
+			lp->nofsck = arg_is_set(cmd, nofsck_ARG);
+
+		if ((str = arg_str_value(cmd, fsmode_ARG, NULL))) {
+			if (!strcmp(str, "nochange") ||
+			    !strcmp(str, "offline") ||
+			    !strcmp(str, "manage")) {
+				strncpy(lp->fsmode, str, sizeof(lp->fsmode)-1);
+				lp->user_set_fsmode = 1;
+			} else {
+				log_error("Unknown --fsmode value.");
+				return 0;
+			}
+		} else {
+			/* Use manage when no fsmode option is specified. */
+			strncpy(lp->fsmode, "manage", sizeof(lp->fsmode)-1);
+		}
+	}
 
 	if (set_extents_and_size) {
 		if ((lp->extents = arg_uint_value(cmd, extents_ARG, 0))) {
@@ -237,6 +284,7 @@ static int _lvresize_single(struct cmd_context *cmd, struct logical_volume *lv,
 			    struct processing_handle *handle)
 {
 	struct lvresize_params *lp = (struct lvresize_params *) handle->custom_handle;
+	int ret;
 
 	if (cmd->position_argc > 1) {
 		/* First pos arg is required LV, remaining are optional PVs. */
@@ -245,11 +293,13 @@ static int _lvresize_single(struct cmd_context *cmd, struct logical_volume *lv,
 	} else
 		lp->pvh = &lv->vg->pvs;
 
-	if (!lv_resize(cmd, lv, lp))
-		return ECMD_FAILED;
+	ret = lv_resize(cmd, lv, lp);
 
-	log_print_unless_silent("Logical volume %s successfully resized.",
-				display_lvname(lv));
+	if (ret || lp->extend_fs_error)
+		log_print_unless_silent("Logical volume %s successfully resized.",
+					display_lvname(lv));
+	if (!ret)
+		return ECMD_FAILED;
 	return ECMD_PROCESSED;
 }
 
