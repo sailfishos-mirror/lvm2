@@ -18,6 +18,7 @@
 #include "lib/device/device.h"
 #include "lib/display/display.h"
 #include "lib/label/label.h"
+#include "lib/device/filesystem.h"
 
 #define NUMBER_OF_MAJORS 4096
 
@@ -102,6 +103,8 @@ int dev_is_nvme(struct dev_types *dt, struct device *dev);
 int dev_is_lv(struct device *dev);
 
 int get_fs_block_size(const char *pathname, uint32_t *fs_block_size);
+int get_fs_type(const char *pathname, char *fstype);
+int fs_get_blkid(const char *pathname, struct fs_info *fsi);
 
 int dev_is_used_by_active_lv(struct cmd_context *cmd, struct device *dev, int *used_by_lv_count,
 			     char **used_by_dm_name, char **used_by_vg_uuid, char **used_by_lv_uuid);
