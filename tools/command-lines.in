@@ -1766,6 +1766,7 @@ ID: vgchange_refresh
 DESC: Reactivate LVs using the latest metadata.
 
 vgchange --systemid String VG
+OO: --majoritypvs
 ID: vgchange_systemid
 DESC: Change the system ID of a VG.
 
