@@ -235,14 +235,14 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 	 * Safe, since we never write out new metadata here. Required for
 	 * partial activation to work.
 	 */
-        cmd->handles_missing_pvs = 1;
+	cmd->handles_missing_pvs = 1;
 
 	/* FIXME: Force argument to deactivate them? */
 	if (!do_activate) {
 		dm_list_iterate_items(lvl, &vg->lvs)
 			label_scan_invalidate_lv(cmd, lvl->lv);
 
-	       	if ((lv_open = lvs_in_vg_opened(vg))) {
+		if ((lv_open = lvs_in_vg_opened(vg))) {
 			dm_list_iterate_items(lvl, &vg->lvs) {
 				if (lv_is_visible(lvl->lv) &&
 				    !lv_is_vdo_pool(lvl->lv) && // FIXME: API skip flag missing
@@ -900,25 +900,9 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
 
 	int update = update_partial_safe || update_partial_unsafe;
 
-	if (!update && !noupdate) {
-		log_error("Need one or more command options.");
-		return EINVALID_CMD_LINE;
-	}
-
 	if ((arg_is_set(cmd, profile_ARG) || arg_is_set(cmd, metadataprofile_ARG)) &&
 	     arg_is_set(cmd, detachprofile_ARG)) {
 		log_error("Only one of --metadataprofile and --detachprofile permitted.");
-		return EINVALID_CMD_LINE;
-	}
-
-	if (arg_is_set(cmd, activate_ARG) && arg_is_set(cmd, refresh_ARG)) {
-		log_error("Only one of -a and --refresh permitted.");
-		return EINVALID_CMD_LINE;
-	}
-
-	if ((arg_is_set(cmd, ignorelockingfailure_ARG) ||
-	     arg_is_set(cmd, sysinit_ARG)) && update) {
-		log_error("Only -a permitted with --ignorelockingfailure and --sysinit");
 		return EINVALID_CMD_LINE;
 	}
 
@@ -928,29 +912,6 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
 			log_error("Only -ay* allowed with --monitor or --poll.");
 			return EINVALID_CMD_LINE;
 		}
-	}
-
-	if (arg_is_set(cmd, poll_ARG) && arg_is_set(cmd, sysinit_ARG)) {
-		log_error("Only one of --poll and --sysinit permitted.");
-		return EINVALID_CMD_LINE;
-	}
-
-	if (arg_is_set(cmd, maxphysicalvolumes_ARG) &&
-	    arg_sign_value(cmd, maxphysicalvolumes_ARG, SIGN_NONE) == SIGN_MINUS) {
-		log_error("MaxPhysicalVolumes may not be negative");
-		return EINVALID_CMD_LINE;
-	}
-
-	if (arg_is_set(cmd, physicalextentsize_ARG) &&
-	    arg_sign_value(cmd, physicalextentsize_ARG, SIGN_NONE) == SIGN_MINUS) {
-		log_error("Physical extent size may not be negative");
-		return EINVALID_CMD_LINE;
-	}
-
-	if (arg_is_set(cmd, clustered_ARG) && !argc && !arg_is_set(cmd, yes_ARG) &&
-	    (yes_no_prompt("Change clustered property of all volumes groups? [y/n]: ") == 'n')) {
-		log_error("No volume groups changed.");
-		return ECMD_FAILED;
 	}
 
 	if (!update || !update_partial_unsafe)
