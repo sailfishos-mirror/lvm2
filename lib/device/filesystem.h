@@ -41,14 +41,11 @@ struct fs_info {
 
 int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
                 struct fs_info *fsi, int include_mount);
-int fs_fsck_command(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi);
-int fs_reduce_command(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
-                      uint64_t newsize_bytes);
-int fs_extend_command(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi);
-int fs_mount_command(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
-                     int reuse_mount_dir);
-int fs_unmount_command(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi);
 
-int crypt_resize_command(struct cmd_context *cmd, dev_t crypt_devt, uint64_t newsize_bytes);
-
+int fs_extend_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
+		uint64_t newsize_bytes, char *fsopt);
+int fs_reduce_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
+		uint64_t newsize_bytes, char *fsopt);
+int crypt_resize_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi,
+		uint64_t newsize_bytes_fs);
 #endif

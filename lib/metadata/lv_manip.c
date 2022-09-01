@@ -6346,7 +6346,6 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 	struct fs_info fsinfo2;
 	uint64_t newsize_bytes_lv;
 	uint64_t newsize_bytes_fs;
-	int mounted = 0, unmounted = 0;
 	int ret = 0;
 
 	memset(&fsinfo, 0, sizeof(fsinfo));
@@ -6365,8 +6364,8 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 	newsize_bytes_fs = newsize_bytes_lv;
 
 	/*
-	 * If needs_crypt, then newsize_bytes passed to fs_reduce_command() and
-	 * crypt_resize_command() needs to be decreased by the offset of crypt
+	 * If needs_crypt, then newsize_bytes passed to fs_reduce_script() and
+	 * crypt_resize_script() needs to be decreased by the offset of crypt
 	 * data on the LV (usually the size of the LUKS header which is usually
 	 * 2MB for LUKS1 and 16MB for LUKS2.)
 	 */
@@ -6391,7 +6390,7 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 	 * the LV size, so that the FS does not see an incorrect device size.
 	 */
 	if (!fsinfo.needs_reduce && fsinfo.needs_crypt && !test_mode()) {
-		ret = crypt_resize_command(cmd, fsinfo.crypt_devt, newsize_bytes_fs);
+		ret = crypt_resize_script(cmd, lv, &fsinfo, newsize_bytes_fs);
 		goto out;
 	}
 
@@ -6425,30 +6424,8 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 	 */
 	unlock_vg(cmd, lv->vg, lv->vg->name);
 
-	if (fsinfo.needs_unmount) {
-		if (!fs_unmount_command(cmd, lv, &fsinfo))
-			goto_out;
-		unmounted = 1;
-	}
-
-	if (fsinfo.needs_fsck) {
-		if (!fs_fsck_command(cmd, lv, &fsinfo))
-			goto_out;
-	}
-
-	if (fsinfo.needs_mount) {
-		if (!fs_mount_command(cmd, lv, &fsinfo, 0))
-			goto_out;
-		mounted = 1;
-	}
-
-	if (!fs_reduce_command(cmd, lv, &fsinfo, newsize_bytes_fs))
+	if (!fs_reduce_script(cmd, lv, &fsinfo, newsize_bytes_fs, lp->fsopt))
 		goto_out;
-
-	if (fsinfo.needs_crypt) {
-		if (!crypt_resize_command(cmd, fsinfo.crypt_devt, newsize_bytes_fs))
-			goto_out;
-	}
 
 	if (!lock_vol(cmd, lv->vg->name, LCK_VG_WRITE, NULL)) {
 		log_error("Failed to lock VG, cannot reduce LV.");
@@ -6482,16 +6459,6 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 	}
 
 	ret = 1;
-
-	/*
-	 * put the fs back into the original mounted|unmounted state.
-	 */
-	if (!strcmp(lp->fsopt, "resize_remount") || !strcmp(lp->fsopt, "resize")) {
-		if (mounted && !fs_unmount_command(cmd, lv, &fsinfo))
-			ret = 0;
-		if (unmounted && !fs_mount_command(cmd, lv, &fsinfo, 1))
-			ret = 0;
-	}
  out:
 	return ret;
 }
@@ -6500,7 +6467,8 @@ static int _fs_extend(struct cmd_context *cmd, struct logical_volume *lv,
 		      struct lvresize_params *lp)
 {
 	struct fs_info fsinfo;
-	int mounted = 0, unmounted = 0;
+	uint64_t newsize_bytes_lv;
+	uint64_t newsize_bytes_fs;
 	int ret = 0;
 
 	memset(&fsinfo, 0, sizeof(fsinfo));
@@ -6511,6 +6479,22 @@ static int _fs_extend(struct cmd_context *cmd, struct logical_volume *lv,
 	if (fsinfo.nofs) {
 		ret = 1;
 		goto_out;
+	}
+
+	/*
+	 * Note: here in the case of extend, newsize_bytes_lv/newsize_bytes_fs 
+	 * are only calculated and used for log messages.  The extend commands
+	 * do not use these values, they just extend to the new LV size that
+	 * is visible to them.
+	 */
+
+	/* extent_size units is SECTOR_SIZE (512) */
+	newsize_bytes_lv = lp->extents * lv->vg->extent_size * SECTOR_SIZE;
+	newsize_bytes_fs = newsize_bytes_lv;
+	if (fsinfo.needs_crypt) {
+		newsize_bytes_fs -= fsinfo.crypt_offset_bytes;
+		log_print("File system size %llub is adjusted for crypt data offset %ub.",
+			  (unsigned long long)newsize_bytes_fs, fsinfo.crypt_offset_bytes);
 	}
 
 	/*
@@ -6550,42 +6534,10 @@ static int _fs_extend(struct cmd_context *cmd, struct logical_volume *lv,
 	 */
 	unlock_vg(cmd, lv->vg, lv->vg->name);
 
-	if (fsinfo.needs_unmount) {
-		if (!fs_unmount_command(cmd, lv, &fsinfo))
-			goto_out;
-		unmounted = 1;
-	}
-
-	if (fsinfo.needs_fsck) {
-		if (!fs_fsck_command(cmd, lv, &fsinfo))
-			goto_out;
-	}
-
-	if (fsinfo.needs_crypt) {
-		if (!crypt_resize_command(cmd, fsinfo.crypt_devt, 0))
-			goto_out;
-	}
-
-	if (fsinfo.needs_mount) {
-	       	if (!fs_mount_command(cmd, lv, &fsinfo, 0))
-			goto_out;
-		mounted = 1;
-	}
-
-	if (!fs_extend_command(cmd, lv, &fsinfo))
+	if (!fs_extend_script(cmd, lv, &fsinfo, newsize_bytes_fs, lp->fsopt))
 		goto_out;
 
 	ret = 1;
-
-	/*
-	 * put the fs back into the original mounted|unmounted state.
-	 */
-	if (!strcmp(lp->fsopt, "resize_remount") || !strcmp(lp->fsopt, "resize")) {
-		if (mounted && !fs_unmount_command(cmd, lv, &fsinfo))
-			ret = 0;
-		if (unmounted && !fs_mount_command(cmd, lv, &fsinfo, 1))
-			ret = 0;
-	}
  out:
 	return ret;
 }

@@ -717,6 +717,7 @@ df --output=size "$mount_dir" |tee df1
 # fs is 200M, reduced size is 216M, so no fs reduce is needed
 lvreduce -L216M $vg/$lv
 check lv_field $vg/$lv lv_size "216.00m"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size unchanged
 diff df1 df2
@@ -735,6 +736,7 @@ df --output=size "$mount_dir" |tee df1
 # fs is 200M, reduced size is 200M, so no fs reduce is needed
 lvreduce -L200M $vg/$lv
 check lv_field $vg/$lv lv_size "200.00m"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size unchanged
 diff df1 df2
@@ -752,6 +754,7 @@ df --output=size "$mount_dir" |tee df1
 # lvreduce runs resize2fs to shrink the fs
 lvreduce --yes --fs resize -L-200M $vg/$lv
 check lv_field $vg/$lv lv_size "256.00m"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size is changed
 not diff df1 df2
@@ -773,6 +776,8 @@ df --output=size "$mount_dir" |tee df1
 not lvreduce --yes --fs resize -L-200M $vg/$lv
 check lv_field $vg/$lv lv_size "456.00m"
 mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
+ls -l $mount_dir/zeros1
+ls -l $mount_dir/zeros2
 df --output=size "$mount_dir" |tee df2
 # fs size is unchanged
 diff df1 df2
@@ -795,6 +800,7 @@ umount "$mount_dir"
 lvreduce -L216M $vg/$lv
 check lv_field $vg/$lv lv_size "216.00m"
 mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size unchanged
 diff df1 df2
@@ -815,6 +821,7 @@ umount "$mount_dir"
 lvreduce -L200M $vg/$lv
 check lv_field $vg/$lv lv_size "200.00m"
 mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size unchanged
 diff df1 df2
@@ -834,6 +841,7 @@ umount "$mount_dir"
 lvreduce --fs resize -L-200M $vg/$lv
 check lv_field $vg/$lv lv_size "256.00m"
 mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size is changed
 not diff df1 df2
@@ -854,6 +862,7 @@ umount "$mount_dir"
 not lvreduce --yes --fs resize -L-200M $vg/$lv
 check lv_field $vg/$lv lv_size "456.00m"
 mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size is unchanged
 diff df1 df2
@@ -949,6 +958,7 @@ df --output=size "$mount_dir" |tee df1
 # lvreduce runs resize2fs to shrink the fs
 lvreduce --yes --fs resize_fsadm -L-200M $vg/$lv
 check lv_field $vg/$lv lv_size "256.00m"
+ls -l $mount_dir/zeros1
 df --output=size "$mount_dir" |tee df2
 # fs size is changed
 not diff df1 df2
