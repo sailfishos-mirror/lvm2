@@ -185,6 +185,42 @@ void free_dids(struct dm_list *ids)
 	}
 }
 
+static int _read_sys_dasd(struct cmd_context *cmd, struct device *dev,
+			  char *sysbuf, int sysbufsize)
+{
+	char path[PATH_MAX];
+	char basebuf[16] = { 0 };
+	char *base;
+	int i, j = 0, ret;
+
+	if (dm_list_empty(&dev->aliases))
+		return 0;
+
+	base = basename(dev_name(dev));
+	for (i = 0; i < strlen(base); i++) {
+		if (isdigit(base[i]))
+			break;
+		basebuf[j++] = base[i];
+	}
+
+	if (dm_snprintf(path, sizeof(path), "%sdev/block/%s/device/uid",
+			dm_sysfs_dir(), basebuf) < 0) {
+		log_error("Failed to create sysfs path for %s", dev_name(dev));
+		return 0;
+	}
+
+	ret = get_sysfs_value(path, sysbuf, sysbufsize, 0);
+	if (ret && !sysbuf[0])
+		ret = 0;
+
+	if (ret) {
+		sysbuf[sysbufsize - 1] = '\0';
+		return 1;
+	}
+
+	return 0;
+}
+
 static int _read_sys_block(struct cmd_context *cmd, struct device *dev,
 			   const char *suffix, char *sysbuf, int sysbufsize,
 			   int binary, int *retlen)
@@ -572,6 +608,9 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
 		return idname;
 	}
 
+	else if (idtype == DEV_ID_TYPE_DASD)
+		_read_sys_dasd(cmd, dev, sysbuf, sizeof(sysbuf));
+
 	else if (idtype == DEV_ID_TYPE_WWID_NAA ||
 		 idtype == DEV_ID_TYPE_WWID_EUI ||
 		 idtype == DEV_ID_TYPE_WWID_T10) {
@@ -667,6 +706,10 @@ static int _dev_has_stable_id(struct cmd_context *cmd, struct device *dev)
 	if (!dm_list_empty(&dev->wwids))
 		return 1;
 
+	if ((MAJOR(dev->dev) == cmd->dev_types->dasd_major) &&
+	    _read_sys_dasd(cmd, dev, sysbuf, sizeof(sysbuf)))
+		return 1;
+
  out:
 	/* DEV_ID_TYPE_DEVNAME would be used for this dev. */
 	return 0;
@@ -696,6 +739,8 @@ const char *idtype_to_str(uint16_t idtype)
 		return "wwid_eui";
 	if (idtype == DEV_ID_TYPE_WWID_T10)
 		return "wwid_t10";
+	if (idtype == DEV_ID_TYPE_DASD)
+		return "dasd";
 	return "unknown";
 }
 
@@ -723,6 +768,8 @@ uint16_t idtype_from_str(const char *str)
 		return DEV_ID_TYPE_WWID_EUI;
 	if (!strcmp(str, "wwid_t10"))
 		return DEV_ID_TYPE_WWID_T10;
+	if (!strcmp(str, "dasd"))
+		return DEV_ID_TYPE_DASD;
 	return 0;
 }
 
@@ -1672,6 +1719,9 @@ static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idt
 	if (idtype == DEV_ID_TYPE_LOOP_FILE)
 		return (major == cmd->dev_types->loop_major);
 
+	if (idtype == DEV_ID_TYPE_DASD)
+		return (major == cmd->dev_types->dasd_major);
+
 	if (major == cmd->dev_types->device_mapper_major)
 		return (idtype == DEV_ID_TYPE_MPATH_UUID ||
 			idtype == DEV_ID_TYPE_CRYPT_UUID ||
@@ -1685,6 +1735,10 @@ static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idt
 	if (major == cmd->dev_types->loop_major)
 		return (idtype == DEV_ID_TYPE_LOOP_FILE ||
 			idtype == DEV_ID_TYPE_DEVNAME);
+
+	if (major == cmd->dev_types->dasd_major)
+		return (idtype == DEV_ID_TYPE_DASD ||
+		        idtype == DEV_ID_TYPE_DEVNAME);
 
 	return 1;
 }

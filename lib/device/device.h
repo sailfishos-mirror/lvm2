@@ -70,6 +70,7 @@ struct dev_ext {
 #define DEV_ID_TYPE_WWID_NAA   9
 #define DEV_ID_TYPE_WWID_EUI  10
 #define DEV_ID_TYPE_WWID_T10  11
+#define DEV_ID_TYPE_DASD      12
 
 /* Max length of WWID_NAA, WWID_EUI, WWID_T10 */
 #define DEV_WWID_SIZE 128
