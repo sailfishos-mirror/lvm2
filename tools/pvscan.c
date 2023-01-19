@@ -44,6 +44,8 @@ struct pvscan_aa_params {
  */
 static struct volume_group *saved_vg;
 
+static int _found_filter_symlinks;
+
 static int _pvscan_display_pv(struct cmd_context *cmd,
 				  struct physical_volume *pv,
 				  struct pvscan_params *params)
@@ -930,6 +932,7 @@ static int _get_args_devs(struct cmd_context *cmd, struct dm_list *pvscan_args,
 	if (!cmd->enable_devices_file && !cmd->enable_devices_list &&
 	    (_filter_uses_symlinks(cmd, devices_filter_CFG) ||
 	     _filter_uses_symlinks(cmd, devices_global_filter_CFG))) {
+		_found_filter_symlinks = 1;
 		log_print_pvscan(cmd, "finding all devices for filter symlinks.");
 		dev_cache_scan(cmd);
 	}
@@ -1549,6 +1552,18 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	}
 
 	cmd->filter_nodata_only = 1;
+
+	if ((dm_list_size(&pvscan_devs) == 1) && _found_filter_symlinks) {
+		char *env_str;
+		struct dm_list *env_aliases;
+		devl = dm_list_item(dm_list_first(&pvscan_devs), struct device_list);
+		if ((env_str = getenv("DEVLINKS"))) {
+			env_aliases = str_to_str_list(cmd->mem, env_str, " ", 0);
+			dm_list_splice(&devl->dev->aliases, env_aliases);
+		}
+		/* A symlink from env may not actually exist so don't try to use it. */
+		dev_cache_disable_preferred_names();
+	}
 
 	dm_list_iterate_items_safe(devl, devl2, &pvscan_devs) {
 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {

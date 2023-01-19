@@ -61,6 +61,8 @@ struct device *dev_hash_get(const char *name);
 
 void dev_set_preferred_name(struct dm_str_list *sl, struct device *dev);
 
+void dev_cache_disable_preferred_names(void);
+
 /*
  * Object for iterating through the cache.
  */

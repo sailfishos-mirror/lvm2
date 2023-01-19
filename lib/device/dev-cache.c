@@ -52,6 +52,7 @@ static struct {
 	struct dm_regex *preferred_names_matcher;
 	const char *dev_dir;
 
+	int preferred_names_disabled;
 	int has_scanned;
 	long st_dev;
 	struct dm_list dirs;
@@ -166,9 +167,17 @@ void dev_set_preferred_name(struct dm_str_list *sl, struct device *dev)
 	if (_cache.preferred_names_matcher)
 		return;
 
+	if (_cache.preferred_names_disabled)
+		return;
+
 	log_debug_devs("%s: New preferred name", sl->str);
 	dm_list_del(&sl->list);
 	dm_list_add_h(&dev->aliases, &sl->list);
+}
+
+void dev_cache_disable_preferred_names(void)
+{
+	_cache.preferred_names_disabled = 1;
 }
 
 /*
