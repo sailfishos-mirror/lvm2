@@ -1,0 +1,37 @@
+build-job:
+  stage: build
+  tags:
+    - rhel8
+  script:
+    - echo "# PATHS:"
+    - pwd
+    - ls -l
+    - echo ""
+    - echo "# NETWORK"
+    - ip a
+    - echo "# VARIABLES:"
+    - set
+    - sleep 60
+
+      #- ip a
+      #- id -a
+      #- mount
+      #- lsblk
+      #- blkid
+      #- free
+      #- df
+      # TODO: run these only for the known sources! kabi's, mine, dct's
+      # - or for PR's with origin and target in main repo (thus known author)
+      # - or ONLY after review
+      #- ./configure
+      #- make
+
+test-job1:
+  stage: test
+  tags:
+    - rhel8
+  script:
+    - echo "TODO"
+
+      # run test on push to main/rhel branches
+      # in main repo run ONLY for push, MR originated in same repo, or MR with known author(?)
