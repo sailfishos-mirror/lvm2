@@ -997,6 +997,8 @@ static void _monitor_unregister(void *arg)
 	_lock_mutex();
 	thread->status = DM_THREAD_DONE; /* Last access to thread memory! */
 	_unlock_mutex();
+	if (_exit_now)  /* Exit is already in-progress, wake-up sleeping select() */
+		kill(getpid(), SIGINT);
 }
 
 /* Device monitoring thread. */
@@ -1159,6 +1161,36 @@ static int _unregister_for_event(struct message_data *message_data)
 	DEBUGLOG("Unregistered event for %s.", thread->device.name);
 
 	return ret;
+}
+
+static void _unregister_all_threads(void)
+{
+	struct thread_status *thread, *tmp;
+
+	_lock_mutex();
+
+	dm_list_iterate_items_safe(thread, tmp, &_thread_registry)
+		_update_events(thread, 0);
+
+	_unlock_mutex();
+}
+
+static void _wait_for_new_pid(void)
+{
+	unsigned long st_ino = 0;
+	struct stat st;
+	int i;
+
+	for (i = 0; i < 400000; ++i) {
+		if (lstat(DMEVENTD_PIDFILE, &st) == 0) {
+			if (!st_ino)
+				st_ino = st.st_ino;
+			else if (st_ino != st.st_ino)
+				break; /* different pidfile */
+		} else if (errno == ENOENT)
+			break; /* pidfile is removed */
+		usleep(100);
+	}
 }
 
 /*
@@ -1677,9 +1709,9 @@ static void _process_request(struct dm_event_fifos *fifos)
 	free(msg.data);
 
 	if (cmd == DM_EVENT_CMD_DIE) {
-		if (unlink(DMEVENTD_PIDFILE))
-			log_sys_error("unlink", DMEVENTD_PIDFILE);
-		_exit(0);
+		_unregister_all_threads();
+		_exit_now = DM_SCHEDULED_EXIT;
+		log_info("dmeventd exiting for restart.");
 	}
 }
 
@@ -1769,7 +1801,8 @@ static void _init_thread_signals(void)
  */
 static void _exit_handler(int sig __attribute__((unused)))
 {
-	_exit_now = DM_SIGNALED_EXIT;
+	if (!_exit_now)
+		_exit_now = DM_SIGNALED_EXIT;
 }
 
 #ifdef __linux__
@@ -2116,19 +2149,15 @@ static void _restart_dmeventd(void)
 	    ((e = getenv(SD_ACTIVATION_ENV_VAR_NAME)) && strcmp(e, "1")))
 		_systemd_activation = 1;
 
-	for (i = 0; i < 10; ++i) {
-		if ((access(DMEVENTD_PIDFILE, F_OK) == -1) && (errno == ENOENT))
-			break;
-		usleep(10);
-	}
+	fini_fifos(&fifos);
 
-	if (!_systemd_activation) {
-		fini_fifos(&fifos);
+	/* Give a few seconds dmeventd to finish */
+	_wait_for_new_pid();
+
+	if (!_systemd_activation)
 		return;
-	}
 
 	/* Reopen fifos. */
-	fini_fifos(&fifos);
 	if (!init_fifos(&fifos)) {
 		fprintf(stderr, "Could not initiate communication with new instance of dmeventd.\n");
 		exit(EXIT_FAILURE);
