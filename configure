@@ -730,6 +730,7 @@ DEFAULT_PROFILE_SUBDIR
 DEFAULT_PID_DIR
 DEFAULT_MIRROR_SEGTYPE
 DEFAULT_LOCK_DIR
+DEFAULT_DMEVENTD_EXIT_ON_PATH
 DEFAULT_DM_RUN_DIR
 DEFAULT_CACHE_SUBDIR
 DEFAULT_BACKUP_SUBDIR
@@ -989,6 +990,7 @@ with_systemdsystemunitdir
 with_tmpfilesdir
 with_dmeventd_pidfile
 with_dmeventd_path
+with_dmeventd_exit_on_path
 with_default_system_dir
 with_default_profile_subdir
 with_default_archive_subdir
@@ -1793,6 +1795,9 @@ Optional Packages:
                           dmeventd pidfile [PID_DIR/dmeventd.pid]
   --with-dmeventd-path=PATH
                           dmeventd path [EPREFIX/sbin/dmeventd]
+  --with-dmeventd-exit-on-path=PATH
+                          Default path to exit-on file in dmeventd
+                          [/run/nologin]
   --with-default-system-dir=DIR
                           default LVM system directory [/etc/lvm]
   --with-default-profile-subdir=SUBDIR
@@ -14081,8 +14086,6 @@ _ACEOF
 
 
 ################################################################################
-if test "$BUILD_DMEVENTD" = yes; then
-
 # Check whether --with-dmeventd-pidfile was given.
 if test "${with_dmeventd_pidfile+set}" = set; then :
   withval=$with_dmeventd_pidfile; DMEVENTD_PIDFILE=$withval
@@ -14090,14 +14093,6 @@ else
   DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid"
 fi
 
-
-cat >>confdefs.h <<_ACEOF
-#define DMEVENTD_PIDFILE "$DMEVENTD_PIDFILE"
-_ACEOF
-
-fi
-
-if test "$BUILD_DMEVENTD" = yes; then
 
 # Check whether --with-dmeventd-path was given.
 if test "${with_dmeventd_path+set}" = set; then :
@@ -14107,8 +14102,26 @@ else
 fi
 
 
+# Check whether --with-dmeventd-exit-on-path was given.
+if test "${with_dmeventd_exit_on_path+set}" = set; then :
+  withval=$with_dmeventd_exit_on_path; DEFAULT_DMEVENTD_EXIT_ON_PATH=$withval
+else
+  DEFAULT_DMEVENTD_EXIT_ON_PATH="/run/nologin"
+fi
+
+
+if test "$BUILD_DMEVENTD" = yes; then
+
+cat >>confdefs.h <<_ACEOF
+#define DMEVENTD_PIDFILE "$DMEVENTD_PIDFILE"
+_ACEOF
+
 cat >>confdefs.h <<_ACEOF
 #define DMEVENTD_PATH "$DMEVENTD_PATH"
+_ACEOF
+
+cat >>confdefs.h <<_ACEOF
+#define DEFAULT_DMEVENTD_EXIT_ON_PATH "$DEFAULT_DMEVENTD_EXIT_ON_PATH"
 _ACEOF
 
 fi
