@@ -1715,24 +1715,29 @@ AC_DEFINE_UNQUOTED(LVMIMPORTVDO_PATH, ["$LVMIMPORTVDO_PATH"], [Path to lvm_impor
 
 ################################################################################
 dnl -- dmeventd pidfile and executable path
-if test "$BUILD_DMEVENTD" = yes; then
-	AC_ARG_WITH(dmeventd-pidfile,
-		    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
-				   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
-		    DMEVENTD_PIDFILE=$withval,
-		    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
-	AC_DEFINE_UNQUOTED(DMEVENTD_PIDFILE, ["$DMEVENTD_PIDFILE"],
-			   [Path to dmeventd pidfile.])
-fi
+AC_ARG_WITH(dmeventd-pidfile,
+	    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
+			   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
+	    DMEVENTD_PIDFILE=$withval,
+	    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
+AC_ARG_WITH(dmeventd-path,
+	    AS_HELP_STRING([--with-dmeventd-path=PATH],
+			   [dmeventd path [EPREFIX/sbin/dmeventd]]),
+	    DMEVENTD_PATH=$withval,
+	    DMEVENTD_PATH="$SBINDIR/dmeventd")
+AC_ARG_WITH(dmeventd-exit-on-path,
+	    AS_HELP_STRING([--with-dmeventd-exit-on-path=PATH],
+			   [Default path to exit-on file in dmeventd [/run/nologin]]),
+	    DEFAULT_DMEVENTD_EXIT_ON_PATH=$withval,
+	    DEFAULT_DMEVENTD_EXIT_ON_PATH="/run/nologin")
 
 if test "$BUILD_DMEVENTD" = yes; then
-	AC_ARG_WITH(dmeventd-path,
-		    AS_HELP_STRING([--with-dmeventd-path=PATH],
-				   [dmeventd path [EPREFIX/sbin/dmeventd]]),
-		    DMEVENTD_PATH=$withval,
-		    DMEVENTD_PATH="$SBINDIR/dmeventd")
+	AC_DEFINE_UNQUOTED(DMEVENTD_PIDFILE, ["$DMEVENTD_PIDFILE"],
+			   [Path to dmeventd pidfile.])
 	AC_DEFINE_UNQUOTED(DMEVENTD_PATH, ["$DMEVENTD_PATH"],
 			   [Path to dmeventd binary.])
+	AC_DEFINE_UNQUOTED(DEFAULT_DMEVENTD_EXIT_ON_PATH, ["$DEFAULT_DMEVENTD_EXIT_ON_PATH"],
+			   [Path to exit-on dmeventd file.])
 fi
 
 ################################################################################
@@ -1861,6 +1866,7 @@ AC_SUBST(DEFAULT_ARCHIVE_SUBDIR)
 AC_SUBST(DEFAULT_BACKUP_SUBDIR)
 AC_SUBST(DEFAULT_CACHE_SUBDIR)
 AC_SUBST(DEFAULT_DM_RUN_DIR)
+AC_SUBST(DEFAULT_DMEVENTD_EXIT_ON_PATH)
 AC_SUBST(DEFAULT_LOCK_DIR)
 AC_SUBST(DEFAULT_MIRROR_SEGTYPE)
 AC_SUBST(DEFAULT_PID_DIR)
