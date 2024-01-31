@@ -252,7 +252,7 @@ when selecting the writecache cachevol size and the writecache block size.
 .P
 .IP \[bu] 2
 writecache block size 4096: each 100 GiB of writecache cachevol uses
-slighly over 2 GiB of system memory.
+slightly over 2 GiB of system memory.
 .IP \[bu] 2
 writecache block size 512: each 100 GiB of writecache cachevol uses
 a little over 16 GiB of system memory.
