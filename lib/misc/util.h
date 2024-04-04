@@ -35,6 +35,12 @@
 #define uninitialized_var(x) x = x
 #endif
 
+/* Use wrapper for checked results */
+static inline __attribute__((warn_unused_result))
+    int dm_strncpy_check(char *dest, const char *src, size_t n) {
+	return dm_strncpy(dest, src, n);
+}
+
 /*
  * GCC 3.4 adds a __builtin_clz, which uses the count leading zeros (clz)
  * instruction on arches that have one. Provide a fallback using shifts
