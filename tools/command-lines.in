@@ -1907,6 +1907,11 @@ OO: --foreign, --reportformat ReportFmt
 ID: vgimportdevices_all
 DESC: Add devices from all accessible VGs to the devices file.
 
+vgimportdevices --rootvg
+OO: --auto, --reportformat ReportFmt
+ID: vgimportdevices_root
+DESC: Add devices from root VG to the devices file.
+
 ---
 
 vgmerge VG VG
