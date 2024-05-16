@@ -1,5 +1,6 @@
 Version 2.03.25 - 
 ==================
+  Revert Don't import DM_UDEV_DISABLE_OTHER_RULES_FLAG in LVM rules, DM rules cover it.
 
 Version 2.03.24 - 16th May 2024
 ===============================
