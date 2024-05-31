@@ -69,6 +69,8 @@ struct dev_iter;
 struct dev_iter *dev_iter_create(struct dev_filter *f, int unused);
 void dev_iter_destroy(struct dev_iter *iter);
 struct device *dev_iter_get(struct cmd_context *cmd, struct dev_iter *iter);
+struct radix_tree_iterator;
+void dev_cache_iterate(struct radix_tree_iterator *it);
 
 void dev_cache_failed_path(struct device *dev, const char *path);
 

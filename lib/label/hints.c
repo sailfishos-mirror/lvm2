@@ -137,6 +137,7 @@
 
 #include "lib/misc/lib.h"
 #include "base/memory/zalloc.h"
+#include "base/data-struct/radix-tree.h"
 #include "lib/label/label.h"
 #include "lib/misc/crc.h"
 #include "lib/cache/lvmcache.h"
@@ -454,6 +455,58 @@ static int _dev_in_hint_hash(struct cmd_context *cmd, struct device *dev)
 	return 1;
 }
 
+struct visitor {
+	struct radix_tree_iterator it;
+	FILE *fp;
+	struct cmd_context *cmd;
+	struct dm_list *hints;
+	uint32_t hash;
+	uint32_t count;
+	int ret;
+};
+
+static bool _visit_validate_hints(struct radix_tree_iterator *it,
+				  const void *key, size_t keylen,
+				  union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct device *dev = v.ptr;
+	struct hint *hint;
+
+	if (dm_list_empty(&dev->aliases))
+		return true;
+	if (!(hint = _find_hint_name(vt->hints, dev_name(dev))))
+		return true;
+
+	/* The cmd hasn't needed this hint's dev so it's not been scanned. */
+	if (!hint->chosen)
+		return true;
+
+	/*
+	 * label_scan was unable to read the dev so we don't know its pvid.
+	 * Since we are unable to verify the hint is correct, it's possible
+	 * that the PVID is actually found on a different device, so don't
+	 * depend on hints. (This would also fail the following pvid check.)
+	 */
+	if (dev->flags & DEV_SCAN_NOT_READ) {
+		log_debug("Uncertain hint for unread device %d:%d %s",
+			  major(hint->devt), minor(hint->devt), dev_name(dev));
+		vt->ret = 0;
+		return true;
+	}
+
+	if (strcmp(dev->pvid, hint->pvid)) {
+		log_debug("Invalid hint device %d:%d %s pvid %s had hint pvid %s",
+			  major(hint->devt), minor(hint->devt), dev_name(dev),
+			  dev->pvid, hint->pvid);
+		vt->ret = 0;
+	}
+
+	vt->count++;
+
+	return true;
+}
+
 /*
  * Hints were used to reduce devs that were scanned.  After the reduced
  * scanning is done, this is called to check if the hints may have been
@@ -465,9 +518,12 @@ static int _dev_in_hint_hash(struct cmd_context *cmd, struct device *dev)
  */
 int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 {
+	struct visitor vt = {
+		.it.visit = _visit_validate_hints,
+		.cmd = cmd,
+		.hints = hints,
+	};
 	struct hint *hint;
-	struct dev_iter *iter;
-	struct device *dev;
 	int valid_hints = 0;
 	int ret = 1;
 
@@ -499,41 +555,10 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 	 * became stale somehow (e.g. manually copying devices with dd) and
 	 * need to be refreshed.
 	 */
-	if (!(iter = dev_iter_create(NULL, 0)))
-		return 0;
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (dm_list_empty(&dev->aliases))
-			continue;
-		if (!(hint = _find_hint_name(hints, dev_name(dev))))
-			continue;
-
-		/* The cmd hasn't needed this hint's dev so it's not been scanned. */
-		if (!hint->chosen)
-			continue;
-
-		/* 
-		 * label_scan was unable to read the dev so we don't know its pvid.
-		 * Since we are unable to verify the hint is correct, it's possible
-		 * that the PVID is actually found on a different device, so don't
-		 * depend on hints. (This would also fail the following pvid check.)
-		 */
-		if (dev->flags & DEV_SCAN_NOT_READ) {
-			log_debug("Uncertain hint for unread device %d:%d %s",
-				  major(hint->devt), minor(hint->devt), dev_name(dev));
-			ret = 0;
-			continue;
-		}
-
-		if (strcmp(dev->pvid, hint->pvid)) {
-			log_debug("Invalid hint device %d:%d %s pvid %s had hint pvid %s",
-				  major(hint->devt), minor(hint->devt), dev_name(dev),
-				  dev->pvid, hint->pvid);
-			ret = 0;
-		}
-
-		valid_hints++;
-	}
-	dev_iter_destroy(iter);
+	vt.ret = ret;
+	dev_cache_iterate(&vt.it);
+	ret = vt.ret;
+	valid_hints = vt.count;
 
 	/*
 	 * Check in lvmcache to see if the scan noticed any missing PVs
@@ -682,6 +707,33 @@ static void _filter_to_str(struct cmd_context *cmd, int filter_cfg, char **strp)
 	*strp = str;
 }
 
+static bool _visit_read_hint_file(struct radix_tree_iterator *it,
+				  const void *key, size_t keylen,
+				  union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct device *dev = v.ptr;
+	const char *devpath;
+
+	/*
+	 * This loop does two different things (for clarity this should be
+	 * two separate dev_iter loops, but one is used for efficiency).
+	 * 1. compute the hint hash from all relevant devs
+	 * 2. add PVs to the hint file
+	 */
+	if (vt->cmd->enable_devices_file && !get_du_for_dev(vt->cmd, dev))
+		return true;
+
+	if (!_dev_in_hint_hash(vt->cmd, dev))
+		return true;
+
+	devpath = dev_name(dev);
+	vt->hash = calc_crc(vt->hash, (const uint8_t *)devpath, strlen(devpath));
+	vt->count++;
+
+	return true;
+}
+
 /*
  * Return 1 and needs_refresh 0: the hints can be used
  * Return 1 and needs_refresh 1: the hints can't be used and should be updated
@@ -691,19 +743,19 @@ static void _filter_to_str(struct cmd_context *cmd, int filter_cfg, char **strp)
  */
 static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *needs_refresh)
 {
-	char devpath[PATH_MAX];
+	struct visitor vt = {
+		.it.visit = _visit_read_hint_file,
+		.cmd = cmd,
+		.hash = INITIAL_CRC,
+	};
 	FILE *fp;
-	struct dev_iter *iter;
 	struct dev_use *du;
 	struct hint hint;
 	struct hint *alloc_hint, *hp;
-	struct device *dev;
 	char *split[HINT_LINE_WORDS];
 	char *name, *pvid, *devn, *vgname, *p, *filter_str = NULL;
 	uint32_t read_hash = 0;
-	uint32_t calc_hash = INITIAL_CRC;
 	uint32_t read_count = 0;
-	uint32_t calc_count = 0;
 	int found = 0;
 	int keylen;
 	int hv_major, hv_minor;
@@ -877,25 +929,12 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 	/*
 	 * Calculate and compare hash of devices that may be scanned.
 	 */
-	if (!(iter = dev_iter_create(NULL, 0)))
-		return 0;
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (cmd->enable_devices_file && !get_du_for_dev(cmd, dev))
-			continue;
+	dev_cache_iterate(&vt.it);
 
-		if (!_dev_in_hint_hash(cmd, dev))
-			continue;
-
-		dm_strncpy(devpath, dev_name(dev), sizeof(devpath));
-		calc_hash = calc_crc(calc_hash, (const uint8_t *)devpath, strlen(devpath));
-		calc_count++;
-	}
-	dev_iter_destroy(iter);
-
-	if (read_hash && (read_hash != calc_hash)) {
+	if (read_hash && (read_hash != vt.hash)) {
 		/* The count is just informational. */
 		log_debug("ignore hints with read_hash %u count %u calc_hash %u count %u",
-			  read_hash, read_count, calc_hash, calc_count);
+			  read_hash, read_count, vt.hash, vt.count);
 		*needs_refresh = 1;
 		return 1;
 	}
@@ -928,6 +967,74 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 
 	log_debug("accept hints found %d", dm_list_size(hints));
 	return 1;
+}
+
+static bool _visit_write_hint_file(struct radix_tree_iterator *it,
+				   const void *key, size_t keylen,
+				   union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct device *dev = v.ptr;
+	const char *devpath;
+	const char *vgname;
+	struct lvmcache_info *info;
+
+	/*
+	 * This loop does two different things (for clarity this should be
+	 * two separate dev_iter loops, but one is used for efficiency).
+	 * 1. compute the hint hash from all relevant devs
+	 * 2. add PVs to the hint file
+	 */
+
+	if (vt->cmd->enable_devices_file && !get_du_for_dev(vt->cmd, dev))
+		return true;
+
+	if (!_dev_in_hint_hash(vt->cmd, dev)) {
+		if (dev->flags & DEV_SCAN_FOUND_LABEL) {
+			/* should never happen */
+			log_error("skip hint hash but found label %s.", dev_name(dev));
+		}
+		return true;
+	}
+
+	/*
+	 * Create a hash of all device names on the system so we can
+	 * detect when the devices on the system change, which
+	 * invalidates the existing hints.
+	 */
+	devpath = dev_name(dev);
+	vt->hash = calc_crc(vt->hash, (const uint8_t *)devpath, strlen(devpath));
+	vt->count++;
+
+	if (!(dev->flags & DEV_SCAN_FOUND_LABEL))
+		return true;
+
+	if (dev->flags & DEV_IS_MD_COMPONENT) {
+		log_debug_devs("exclude md component from hints %s.", dev_name(dev));
+		return true;
+	}
+
+	/*
+	 * No vgname will be found here for a PV with no mdas,
+	 * in which case the vgname hint will be incomplete.
+	 * (The label scan cannot associate nomda-pvs with the
+	 * correct vg in lvmcache; that is only done by vg_read.)
+	 * When using vgname hint we would always want to also
+	 * scan any PVs missing a vgname hint in case they are
+	 * part of the vg we are looking for.
+	 */
+	if ((info = lvmcache_info_from_pvid(dev->pvid, dev, 0)))
+		vgname = lvmcache_vgname_from_info(info);
+	else
+		vgname = NULL;
+
+	if (vgname && is_orphan_vg(vgname))
+		vgname = NULL;
+
+	fprintf(vt->fp, "scan:%s pvid:%s devn:%u:%u vg:%s\n", dev_name(dev),
+		dev->pvid, MAJOR(dev->dev), MINOR(dev->dev), vgname ?: "-");
+
+	return true;
 }
 
 /*
@@ -963,16 +1070,14 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 
 int write_hint_file(struct cmd_context *cmd, int newhints)
 {
-	char devpath[PATH_MAX];
+	struct visitor vt = {
+		.it.visit = _visit_write_hint_file,
+		.cmd = cmd,
+		.hash = INITIAL_CRC,
+	};
 	FILE *fp;
-	struct lvmcache_info *info;
-	struct dev_iter *iter;
-	struct device *dev;
-	const char *vgname;
 	char *filter_str = NULL;
 	const char *config_devices_file = NULL;
-	uint32_t hash = INITIAL_CRC;
-	uint32_t count = 0;
 	time_t t;
 	int ret = 1;
 
@@ -1048,79 +1153,16 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	 * iterate through all devs and write a line for each
 	 * dev flagged DEV_SCAN_FOUND_LABEL
 	 */
+	vt.fp = fp;
+	dev_cache_iterate(&vt.it);
 
-	if (!(iter = dev_iter_create(NULL, 0))) {
-		ret = 0;
-		goto out_close;
-	}
-
-	/*
-	 * This loop does two different things (for clarity this should be
-	 * two separate dev_iter loops, but one is used for efficiency).
-	 * 1. compute the hint hash from all relevant devs
-	 * 2. add PVs to the hint file
-	 */
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (cmd->enable_devices_file && !get_du_for_dev(cmd, dev))
-			continue;
-
-		if (!_dev_in_hint_hash(cmd, dev)) {
-			if (dev->flags & DEV_SCAN_FOUND_LABEL) {
-				/* should never happen */
-				log_error("skip hint hash but found label %s", dev_name(dev));
-			}
-			continue;
-		}
-
-		/*
-		 * Create a hash of all device names on the system so we can
-		 * detect when the devices on the system change, which
-		 * invalidates the existing hints.
-		 */
-		dm_strncpy(devpath, dev_name(dev), sizeof(devpath));
-		hash = calc_crc(hash, (const uint8_t *)devpath, strlen(devpath));
-		count++;
-
-		if (!(dev->flags & DEV_SCAN_FOUND_LABEL))
-			continue;
-
-		if (dev->flags & DEV_IS_MD_COMPONENT) {
-			log_debug("exclude md component from hints %s", dev_name(dev));
-			continue;
-		}
-
-		/*
-		 * No vgname will be found here for a PV with no mdas,
-		 * in which case the vgname hint will be incomplete.
-		 * (The label scan cannot associate nomda-pvs with the
-		 * correct vg in lvmcache; that is only done by vg_read.)
-		 * When using vgname hint we would always want to also
-		 * scan any PVs missing a vgname hint in case they are
-		 * part of the vg we are looking for.
-		 */
-		if ((info = lvmcache_info_from_pvid(dev->pvid, dev, 0)))
-			vgname = lvmcache_vgname_from_info(info);
-		else
-			vgname = NULL;
-
-		if (vgname && is_orphan_vg(vgname))
-			vgname = NULL;
-
-		fprintf(fp, "scan:%s pvid:%s devn:%d:%d vg:%s\n",
-			dev_name(dev),
-			dev->pvid,
-			major(dev->dev), minor(dev->dev),
-			vgname ?: "-");
-	}
-
-	fprintf(fp, "devs_hash: %u %u\n", hash, count);
-	dev_iter_destroy(iter);
+	fprintf(fp, "devs_hash: %u %u\n", vt.hash, vt.count);
 
  out_flush:
 	if (fflush(fp))
 		stack;
 
-	log_debug("Wrote hint file with devs_hash %u count %u", hash, count);
+	log_debug("Wrote hint file with devs_hash %u count %u", vt.hash, vt.count);
 
 	/*
 	 * We are writing refreshed hints because another command told us to by
@@ -1129,7 +1171,6 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	if (newhints == NEWHINTS_FILE)
 		_unlink_newhints();
 
- out_close:
 	if (fclose(fp))
 		log_debug("write_hint_file close errno %d", errno);
 

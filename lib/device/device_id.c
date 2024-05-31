@@ -13,6 +13,7 @@
  */
 
 #include "base/memory/zalloc.h"
+#include "base/data-struct/radix-tree.h"
 #include "lib/misc/lib.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/device/device.h"
@@ -2663,12 +2664,41 @@ void device_ids_match_device_list(struct cmd_context *cmd)
 	}
 }
 
+struct visitor {
+	struct radix_tree_iterator it;
+	struct cmd_context *cmd;
+	struct dev_use *du;
+	struct dm_list *serial_str_list;
+	struct dm_list *devs;
+	unsigned count;
+	uint32_t hash;
+};
+
+static bool _visit_device_ids_match(struct radix_tree_iterator *it,
+				    const void *key, size_t keylen,
+				    union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct device *dev = v.ptr;
+
+	/* skip a dev that's already matched to another entry */
+	if (dev->flags & DEV_MATCHED_USE_ID ||
+	    !_match_du_to_dev(vt->cmd, vt->du, dev))
+		return true; /* search next */
+
+	vt->count = 1;
+
+	return false; /* stop search */
+}
+
 void device_ids_match(struct cmd_context *cmd)
 {
-	struct dev_iter *iter;
+	struct visitor vt = {
+		.it.visit = _visit_device_ids_match,
+		.cmd = cmd,
+	};
 	struct dev_use *du;
 	struct device *dev;
-	int found;
 
 	if (cmd->enable_devices_list) {
 		device_ids_match_device_list(cmd);
@@ -2736,26 +2766,16 @@ void device_ids_match(struct cmd_context *cmd)
 		 * NULL filter is used because we are just setting up the
 		 * the du/dev pairs in preparation for using the filters.
 		 */
-		found = 0;
+		vt.du = du;
+		vt.count = 0;
+		dev_cache_iterate(&vt.it);
 
-		if (!(iter = dev_iter_create(NULL, 0)))
-			continue;
-		while ((dev = dev_iter_get(cmd, iter))) {
-			/* skip a dev that's already matched to another entry */
-			if (dev->flags & DEV_MATCHED_USE_ID)
-				continue;
-			if (_match_du_to_dev(cmd, du, dev)) {
-				log_debug("Match %s %s PVID %s: done %s",
-					  idtype_to_str(du->idtype), du->idname ?: ".", du->pvid ?: ".",
-					  dev_name(du->dev));
-				found = 1;
-				break;
-			}
-		}
-		dev_iter_destroy(iter);
-
-		if (!found)
-			log_debug("Match %s %s PVID %s: no device matches",
+		if (vt.count)
+			log_debug("Match %s %s PVID %s: done %s.",
+				  idtype_to_str(du->idtype), du->idname ?: ".", du->pvid ?: ".",
+				  dev_name(du->dev));
+                else
+			log_debug("Match %s %s PVID %s: no device matches.",
 				  idtype_to_str(du->idtype), du->idname ?: ".", du->pvid ?: ".");
 	}
 
@@ -2847,61 +2867,56 @@ void device_ids_match(struct cmd_context *cmd)
 	}
 }
 
-static void _get_devs_with_serial_numbers(struct cmd_context *cmd, struct dm_list *serial_str_list, struct dm_list *devs)
+static bool _visit_get_devs_with_serial_numbers(struct radix_tree_iterator *it,
+						const void *key, size_t keylen,
+						union radix_value v)
 {
-	struct dev_iter *iter;
-	struct device *dev;
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct cmd_context *cmd = vt->cmd;
+	struct device *dev = v.ptr;
 	struct device_list *devl;
 	struct dev_id *id;
 	const char *idname;
+	struct dev_filter *f = cmd->filter;
 
-	if (!(iter = dev_iter_create(NULL, 0)))
-		return;
-	while ((dev = dev_iter_get(cmd, iter))) {
-		/* if serial has already been read for this dev then use it */
-		dm_list_iterate_items(id, &dev->ids) {
-			if (id->idtype == DEV_ID_TYPE_SYS_SERIAL && id->idname) {
-				if (str_list_match_item(serial_str_list, id->idname)) {
-					if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
-						goto next_continue;
-					devl->dev = dev;
-					dm_list_add(devs, &devl->list);
-				}
-				goto next_continue;
-			}
-		}
-
-		/* just copying the no-data filters in similar device_ids_search */
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "sysfs"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "type"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "usable"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "mpath"))
-			continue;
-
-		if ((idname = device_id_system_read(cmd, dev, DEV_ID_TYPE_SYS_SERIAL))) {
-			if (str_list_match_item(serial_str_list, idname)) {
+	/* if serial has already been read for this dev then use it */
+	dm_list_iterate_items(id, &dev->ids)
+		if (id->idtype == DEV_ID_TYPE_SYS_SERIAL && id->idname) {
+			if (str_list_match_item(vt->serial_str_list, id->idname)) {
 				if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
-					goto next_free;
-				if (!(id = zalloc(sizeof(struct dev_id))))
-					goto next_free;
-				id->idtype = DEV_ID_TYPE_SYS_SERIAL;
-				id->idname = (char *)idname;
-				dm_list_add(&dev->ids, &id->list);
+					return true;
 				devl->dev = dev;
-				dm_list_add(devs, &devl->list);
-				idname = NULL;
+				dm_list_add(vt->devs, &devl->list);
 			}
+			return true;
 		}
- next_free:
-		if (idname)
-			free((char *)idname);
- next_continue:
-		continue;
+
+	/* just copying the no-data filters in similar device_ids_search */
+	if (!f->passes_filter(cmd, f, dev, "sysfs") ||
+	    !f->passes_filter(cmd, f, dev, "type") ||
+	    !f->passes_filter(cmd, f, dev, "usable") ||
+	    !f->passes_filter(cmd, f, dev, "mpath"))
+		return true;
+
+	if ((idname = device_id_system_read(cmd, dev, DEV_ID_TYPE_SYS_SERIAL)) &&
+	    str_list_match_item(vt->serial_str_list, idname)) {
+		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+			goto next_free;
+		if (!(id = zalloc(sizeof(struct dev_id))))
+			goto next_free;
+		id->idtype = DEV_ID_TYPE_SYS_SERIAL;
+		id->idname = (char *)idname;
+		dm_list_add(&dev->ids, &id->list);
+		devl->dev = dev;
+		dm_list_add(vt->devs, &devl->list);
+		idname = NULL;
 	}
-	dev_iter_destroy(iter);
+
+next_free:
+	if (idname)
+		free((char *)idname);
+
+	return true;
 }
 
 /*
@@ -3412,6 +3427,12 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 	int found;
 	int count;
 	int err;
+	struct visitor vt = {
+		.it.visit = _visit_get_devs_with_serial_numbers,
+		.cmd = cmd,
+		.serial_str_list = &cmd->device_ids_check_serial,
+		.devs = &devs_check,
+	};
 
 	dm_list_init(&dus_check);
 	dm_list_init(&devs_check);
@@ -3440,7 +3461,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 	 * devs that match the suspect serial numbers.
 	 */
 	log_debug("Finding all devs with suspect serial numbers.");
-	_get_devs_with_serial_numbers(cmd, &cmd->device_ids_check_serial, &devs_check);
+	dev_cache_iterate(&vt.it);
 
 	/*
 	 * Read the PVID from any devs_check entries that have not been scanned
@@ -3656,6 +3677,36 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		_device_ids_update_try(cmd);
 }
 
+static bool _visit_device_ids_search(struct radix_tree_iterator *it,
+				     const void *key, size_t keylen,
+				     union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct cmd_context *cmd = vt->cmd;
+	struct device *dev = v.ptr;
+	struct dev_filter *f = cmd->filter;
+	struct device_list *devl;           /* holds struct device */
+
+	if (dev->flags & DEV_MATCHED_USE_ID)
+		return true;
+
+	if (!f->passes_filter(cmd, f, dev, "sysfs") ||
+	    !f->passes_filter(cmd, f, dev, "type") ||
+	    !f->passes_filter(cmd, f, dev, "usable") ||
+	    !f->passes_filter(cmd, f, dev, "mpath"))
+		return true;
+
+	if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+		return true;
+
+	devl->dev = dev;
+	dm_list_add(vt->devs, &devl->list);
+	vt->count++;
+	vt->hash = calc_crc(vt->hash, (const uint8_t *)&dev->dev, sizeof(dev_t));
+
+	return true;
+}
+
 /*
  * Devices with IDNAME=devname that are mistakenly included by filter-deviceid
  * due to a devname change are fully scanned and added to lvmcache.
@@ -3683,7 +3734,6 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 	struct device *dev;
 	struct dev_use *du;
 	struct dev_id *id;
-	struct dev_iter *iter;
 	struct device_list *devl;           /* holds struct device */
 	struct device_id_list *dil, *dil2;  /* holds struct device + pvid */
 	struct dm_list search_pvids;        /* list of device_id_list */
@@ -3698,7 +3748,14 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 	int search_pvids_count = 0;
 	int search_devs_count = 0;
 	uint32_t search_pvids_hash = INITIAL_CRC;
-	uint32_t search_devs_hash = INITIAL_CRC;
+	uint32_t search_devs_hash;
+	struct visitor vt = {
+		.it.visit = _visit_device_ids_search,
+		.cmd = cmd,
+		.serial_str_list = &cmd->device_ids_check_serial,
+		.devs = &search_devs,
+		.hash = INITIAL_CRC,
+	};
 
 	dm_list_init(&search_pvids);
 	dm_list_init(&search_devs);
@@ -3794,27 +3851,9 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 	 * filter), in the process of doing this search outside the deviceid
 	 * filter.
 	 */
-	if (!(iter = dev_iter_create(NULL, 0)))
-		return;
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (dev->flags & DEV_MATCHED_USE_ID)
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "sysfs"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "type"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "usable"))
-			continue;
-		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "mpath"))
-			continue;
-		if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
-			continue;
-		devl->dev = dev;
-		dm_list_add(&search_devs, &devl->list);
-		search_devs_count++;
-		search_devs_hash = calc_crc(search_devs_hash, (const uint8_t *)&devl->dev->dev, sizeof(dev_t));
-	}
-	dev_iter_destroy(iter);
+	dev_cache_iterate(&vt.it);
+	search_devs_count = vt.count;
+	search_devs_hash = vt.hash;
 
 	/*
 	 * A previous command searched for devnames and found nothing, so it

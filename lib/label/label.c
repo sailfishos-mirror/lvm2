@@ -15,6 +15,7 @@
 
 #include "lib/misc/lib.h"
 #include "base/memory/zalloc.h"
+#include "base/data-struct/radix-tree.h"
 #include "lib/label/label.h"
 #include "lib/misc/crc.h"
 #include "lib/mm/xlate.h"
@@ -864,6 +865,49 @@ void prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_devs)
 #endif
 }
 
+struct visitor {
+	struct radix_tree_iterator it;
+	struct cmd_context *cmd;
+	struct device *dev;
+	const char *pvid;
+	struct dm_list *all_devs;
+};
+
+static bool _visit_label_scan_for_pvid(struct radix_tree_iterator *it,
+				       const void *key, size_t keylen,
+				       union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	char buf[LABEL_SIZE] __attribute__((aligned(8)));
+	const struct pv_header *pvh = (const struct pv_header *)(buf + 32);
+	struct device *dev = v.ptr;
+	struct dev_filter *f = vt->cmd->filter;
+
+	if (f) {
+		if (!(dev->flags & DEV_REGULAR) &&
+		    !f->passes_filter(vt->cmd, f, dev, NULL))
+			return true; /* next */
+	} else if (!(dev->flags & DEV_REGULAR))
+		return true;	/* next */
+
+	if (!label_scan_open(dev))
+		return true;	/* next */
+
+	if (!dev_read_bytes(dev, 512, LABEL_SIZE, buf)) {
+		_scan_dev_close(dev);
+		return false;
+	}
+
+	_scan_dev_close(dev);
+
+	if (memcmp(pvh->pv_uuid, vt->pvid, ID_LEN))
+		return true;	/* next */
+
+	vt->dev = dev;
+
+	return false;		/* stop search */
+}
+
 /*
  * Currently the only caller is pvck which probably doesn't need
  * deferred filters checked after the read... it wants to know if
@@ -872,15 +916,11 @@ void prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_devs)
 
 int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out)
 {
-	char buf[LABEL_SIZE] __attribute__((aligned(8)));
-	struct dm_list devs;
-	struct dev_iter *iter;
-	struct device_list *devl, *devl2;
-	struct device *dev;
-	struct pv_header *pvh;
-	int ret = 0;
-
-	dm_list_init(&devs);
+	struct visitor vt = {
+		.it.visit = _visit_label_scan_for_pvid,
+		.cmd = cmd,
+		.pvid = pvid,
+	};
 
 	/*
 	 * Creates a list of available devices, does not open or read any,
@@ -891,62 +931,21 @@ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev
 		return 0;
 	}
 
+	if (!label_scan_setup_bcache())
+		return_0;
+
+	log_debug_devs("Filtering devices to scan.");
+
 	/*
 	 * Iterating over all available devices with cmd->filter filters
 	 * devices; those returned from dev_iter_get are the devs that
 	 * pass filters, and are those we can use.
 	 */
+	cmd->filter->use_count++;
+	dev_cache_iterate(&vt.it);
+	cmd->filter->use_count--;
 
-	if (!(iter = dev_iter_create(cmd->filter, 0))) {
-		log_error("Scanning failed to get devices.");
-		return 0;
-	}
-
-	log_debug_devs("Filtering devices to scan");
-
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (!(devl = zalloc(sizeof(*devl))))
-			continue;
-		devl->dev = dev;
-		dm_list_add(&devs, &devl->list);
-	};
-	dev_iter_destroy(iter);
-
-	if (!label_scan_setup_bcache())
-		goto_out;
-
-	log_debug_devs("Reading labels for pvid");
-
-	dm_list_iterate_items(devl, &devs) {
-		dev = devl->dev;
-
-		memset(buf, 0, sizeof(buf));
-
-		if (!label_scan_open(dev))
-			continue;
-
-		if (!dev_read_bytes(dev, 512, LABEL_SIZE, buf)) {
-			_scan_dev_close(dev);
-			goto out;
-		}
-
-		pvh = (struct pv_header *)(buf + 32);
-
-		if (!memcmp(pvh->pv_uuid, pvid, ID_LEN)) {
-			*dev_out = devl->dev;
-			_scan_dev_close(dev);
-			break;
-		}
-
-		_scan_dev_close(dev);
-	}
-	ret = 1;
- out:
-	dm_list_iterate_items_safe(devl, devl2, &devs) {
-		dm_list_del(&devl->list);
-		free(devl);
-	}
-	return ret;
+	return ((*dev_out = vt.dev)) ? 1 : 0;
 }
 
 /*
@@ -1239,6 +1238,28 @@ bad:
 	return 0;
 }
 
+static bool _visit_label_scan(struct radix_tree_iterator *it,
+			      const void *key, size_t keylen,
+			      union radix_value v)
+{
+	struct visitor *vt = container_of(it, struct visitor, it);
+	struct device *dev = v.ptr;
+	struct device_list *devl;
+
+	if (!(devl = zalloc(sizeof(*devl))))
+		return true;
+	devl->dev = dev;
+	dm_list_add(vt->all_devs, &devl->list);
+
+	/*
+	 * label_scan should not generally be called a second time,
+	 * so this will usually do nothing.
+	 */
+	label_scan_invalidate(dev);
+
+	return true;
+}
+
 /*
  * Scan devices on the system to discover which are LVM devices.
  * Info about the LVM devices (PVs) is saved in lvmcache in a
@@ -1253,13 +1274,17 @@ int label_scan(struct cmd_context *cmd)
 	struct dm_list filtered_devs;
 	struct dm_list scan_devs;
 	struct dm_list hints_list;
-	struct dev_iter *iter;
 	struct device_list *devl, *devl2;
 	struct device *dev;
 	uint64_t max_metadata_size_bytes;
 	int using_hints;
 	int create_hints = 0; /* NEWHINTS_NONE */
 	unsigned devs_features = 0;
+	struct visitor vt = {
+		.it.visit = _visit_label_scan,
+		.cmd = cmd,
+		.all_devs = &all_devs,
+	};
 
 	log_debug_devs("Finding devices to scan");
 
@@ -1313,23 +1338,7 @@ int label_scan(struct cmd_context *cmd)
 	 * Invalidate bcache data for all devs (there will usually be no bcache
 	 * data to invalidate.)
 	 */
-	if (!(iter = dev_iter_create(NULL, 0))) {
-		log_error("Failed to get device list.");
-		return 0;
-	}
-	while ((dev = dev_iter_get(cmd, iter))) {
-		if (!(devl = zalloc(sizeof(*devl))))
-			continue;
-		devl->dev = dev;
-		dm_list_add(&all_devs, &devl->list);
-
-		/*
-		 * label_scan should not generally be called a second time,
-		 * so this will usually do nothing.
-		 */
-		label_scan_invalidate(dev);
-	}
-	dev_iter_destroy(iter);
+	dev_cache_iterate(&vt.it);
 
 	/*
 	 * Exclude devices that fail nodata filters. (Those filters that can be
