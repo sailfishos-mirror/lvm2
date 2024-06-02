@@ -14,6 +14,7 @@
  */
 
 #include "base/memory/zalloc.h"
+#include "base/data-struct/radix-tree.h"
 #include "device_mapper/misc/dmlib.h"
 #include "device_mapper/misc/dm-ioctl.h"
 #include "device_mapper/ioctl/libdm-targets.h"
@@ -786,7 +787,7 @@ struct dm_device_list {
 	struct dm_list list;
 	unsigned count;
 	unsigned features;
-	struct dm_hash_table *uuids;
+	struct radix_tree *uuids;
 	/* As last element (sized according to count), pointers to individual dm_devs */
 	struct dm_active_device *sorted[]; /* For bsearch() devs sorted by device node */
 };
@@ -871,7 +872,7 @@ int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
 		dm_new_dev = _align_ptr((char*)(dm_dev + 1) + len);
 		if (_check_has_event_nr()) {
 			/* Hash for UUIDs with some more bits to reduce colision count */
-			if (!devs->uuids && !(devs->uuids = dm_hash_create(cnt * 8))) {
+			if (!devs->uuids && !(devs->uuids = radix_tree_create(NULL, NULL))) {
 				free(devs);
 				return_0;
 			}
@@ -887,7 +888,7 @@ int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
 				len = strlen(uuid_ptr) + 1;
 				dm_new_dev = _align_ptr((char*)dm_new_dev + len);
 				memcpy(dm_dev->uuid, uuid_ptr, len);
-				if (!dm_hash_insert(devs->uuids, dm_dev->uuid, dm_dev))
+				if (!radix_tree_insert_ptr(devs->uuids, dm_dev->uuid, strlen(dm_dev->uuid), dm_dev))
 					return_0; // FIXME
 #if 0
 				log_debug("Active %s (%s) %u:%u event:%u",
@@ -924,7 +925,7 @@ int dm_device_list_find_by_uuid(const struct dm_list *devs_list, const char *uui
 	const struct dm_active_device *dm_dev;
 
 	if (devs->uuids &&
-	    (dm_dev = dm_hash_lookup(devs->uuids, uuid))) {
+	    (dm_dev = radix_tree_lookup_ptr(devs->uuids, uuid, strlen(uuid)))) {
 		if (dev)
 			*dev = dm_dev;
 		return 1;
@@ -976,7 +977,7 @@ void dm_device_list_destroy(struct dm_list **devs_list)
 
 	if (devs) {
 		if (devs->uuids)
-			dm_hash_destroy(devs->uuids);
+			radix_tree_destroy(devs->uuids);
 
 		free(devs);
 		*devs_list = NULL;
