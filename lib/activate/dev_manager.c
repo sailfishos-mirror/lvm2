@@ -880,13 +880,15 @@ int device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_usa
 	return r;
 }
 
-/* Read UUID from a given DM device into  buf_uuid */
-int device_get_uuid(struct cmd_context *cmd, int major, int minor,
-		    char *uuid_buf, size_t uuid_buf_size)
+/* Read UUID from a given DM device into uuid_buf. */
+
+int devn_dm_uuid(struct cmd_context *cmd, int major, int minor,
+		 char *uuid_buf, size_t uuid_buf_size)
 {
 	struct dm_task *dmt;
 	struct dm_info info;
 	const char *uuid;
+
 	int r = 0;
 
 	if (cmd->cache_dm_devs) {
@@ -894,8 +896,12 @@ int device_get_uuid(struct cmd_context *cmd, int major, int minor,
 			dm_strncpy(uuid_buf, uuid, uuid_buf_size);
 			return 1;
 		}
-		uuid_buf[0] = 0;
-		return 0;
+
+		if (major != cmd->dev_types->device_mapper_major) {
+			/* This function is not expected to be used for non-dm devs. */
+			uuid_buf[0] = 0;
+			return 0;
+		}
 	}
 
 	if (!(dmt = _setup_task_run(DM_DEVICE_INFO, &info, NULL, NULL, NULL,
@@ -907,7 +913,18 @@ int device_get_uuid(struct cmd_context *cmd, int major, int minor,
 
 	dm_task_destroy(dmt);
 
+	if (r && cmd->cache_dm_devs)
+		log_debug("WARNING: dm uuid cache failed for %d:%d %s",
+			 major, minor, uuid_buf);
+
 	return r;
+}
+
+int dev_dm_uuid(struct cmd_context *cmd, struct device *dev,
+		    char *uuid_buf, size_t uuid_buf_size)
+{
+	return devn_dm_uuid(cmd, MAJOR(dev->dev), MINOR(dev->dev),
+			    uuid_buf, uuid_buf_size);
 }
 
 /*

@@ -563,7 +563,7 @@ static int _get_vgid_and_lvid_for_dev(struct cmd_context *cmd, struct device *de
 	char uuid[DM_UUID_LEN];
 	size_t uuid_len;
 
-	if (!device_get_uuid(cmd, MAJOR(dev->dev), MINOR(dev->dev), uuid, sizeof(uuid)))
+	if (!dev_dm_uuid(cmd, dev, uuid, sizeof(uuid)))
 		return_0;
 
 	uuid_len = strlen(uuid);

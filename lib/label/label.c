@@ -1259,7 +1259,6 @@ int label_scan(struct cmd_context *cmd)
 	uint64_t max_metadata_size_bytes;
 	int using_hints;
 	int create_hints = 0; /* NEWHINTS_NONE */
-	unsigned devs_features = 0;
 
 	log_debug_devs("Finding devices to scan");
 
@@ -1271,14 +1270,22 @@ int label_scan(struct cmd_context *cmd)
 	if (!label_scan_setup_bcache())
 		return_0;
 
-	/* Initialize device_list cache early so
-	 * 'Hints' file processing can also use it */
-	dm_device_list_destroy(&cmd->cache_dm_devs);
-	if (get_device_list(NULL, &cmd->cache_dm_devs, &devs_features))
-		if (!(devs_features & DM_DEVICE_LIST_HAS_UUID))
-			/* Using older kernels without UUIDs in LIST,
-			 * -> cannot use cache */
-			dm_device_list_destroy(&cmd->cache_dm_devs);
+	/*
+	 * Initialize cache of dm device uuids here so that hints file
+	 * processing can use it.  It's ok if the cache cannot be
+	 * created, a dm uuid will simply be read directly if/when it's
+	 * needed when the cache doesn't exist.
+	 *
+	 * This cache mechanism is not simple, and is implemented in
+	 * libdm, not in lvm itself.  This introduces a lot of complexity
+	 * for little benefit; in fact for the large majority of cases,
+	 * this extra code/complexity will have a negative effect.
+	 *
+	 * create_dm_uuid_cache() ->
+	 * dev_manager_get_device_list() ->
+	 * dm_task_get_device_list() which is a very complex function.
+	 */
+	create_dm_uuid_cache(&cmd->cache_dm_devs);
 
 	/*
 	 * Creates a list of available devices, does not open or read any,

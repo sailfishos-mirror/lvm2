@@ -672,13 +672,23 @@ int target_present(struct cmd_context *cmd, const char *target_name,
 				      &maj, &min, &patchlevel);
 }
 
-int get_device_list(const struct volume_group *vg, struct dm_list **devs,
-		    unsigned *devs_features)
+void create_dm_uuid_cache(struct dm_list **devs)
 {
-	if (!activation())
-		return 0;
+	unsigned devs_features = 0;
 
-	return dev_manager_get_device_list(NULL, devs, devs_features);
+	if (!activation())
+		return;
+
+	dm_device_list_destroy(devs);
+
+	if (!dev_manager_get_device_list(NULL, devs, &devs_features))
+		return;
+
+	if (!(devs_features & DM_DEVICE_LIST_HAS_UUID)) {
+		/* Using older kernels without UUIDs in LIST,
+		 * -> cannot use cache */
+		dm_device_list_destroy(devs);
+	}
 }
 
 /*
