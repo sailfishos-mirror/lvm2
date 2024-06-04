@@ -224,6 +224,7 @@ struct cmd_context {
 	 */
 	struct dev_filter *filter;
 	struct dm_list use_devices;		/* struct dev_use for each entry in devices file */
+	struct radix_tree *use_devices_index;	/* devname-based index of use_devices entries for fast lookup */
 	const char *md_component_checks;
 	const char *search_for_devnames;	/* config file setting */
 	struct dm_list device_ids_check_serial;

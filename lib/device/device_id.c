@@ -27,6 +27,7 @@
 #include "lib/metadata/metadata-exported.h"
 #include "lib/activate/activate.h"
 #include "device_mapper/misc/dm-ioctl.h"
+#include "base/data-struct/radix-tree.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -337,6 +338,16 @@ void free_dus(struct dm_list *dus)
 	dm_list_iterate_items_safe(du, safe, dus) {
 		dm_list_del(&du->list);
 		free_du(du);
+	}
+}
+
+void free_use_devices(struct cmd_context *cmd)
+{
+	free_dus(&cmd->use_devices);
+
+	if (cmd->use_devices_index) {
+		radix_tree_destroy(cmd->use_devices_index);
+		cmd->use_devices_index = NULL;
 	}
 }
 
@@ -1142,6 +1153,17 @@ static void _copy_idline_str(char *src, char *dst, int len)
 	dst[len-1] = '\0';
 }
 
+static void _create_du_index(struct cmd_context *cmd)
+{
+	struct dev_use *du;
+
+	if (!(cmd->use_devices_index = radix_tree_create(NULL, NULL)))
+		return;
+
+	dm_list_iterate_items(du, &cmd->use_devices)
+		radix_tree_insert_ptr(cmd->use_devices_index, du->devname, strlen(du->devname), du);
+}
+
 int device_ids_read(struct cmd_context *cmd)
 {
 	char line[PATH_MAX];
@@ -1152,6 +1174,7 @@ int device_ids_read(struct cmd_context *cmd)
 	FILE *fp;
 	uint32_t comment_hash = 0;
 	uint32_t hash = INITIAL_CRC;
+	int use_count = 0;
 	int ignore_hash = 0;
 	int line_error;
 	int product_uuid_found = 0;
@@ -1320,6 +1343,7 @@ int device_ids_read(struct cmd_context *cmd)
 		}
 
 		dm_list_add(&cmd->use_devices, &du->list);
+		use_count++;
 	}
 	if (fclose(fp))
 		stack;
@@ -1339,6 +1363,13 @@ int device_ids_read(struct cmd_context *cmd)
 		cmd->device_ids_refresh_trigger = 1;
 		log_debug("Devices file refresh: missing product_uuid and hostname");
 	}
+
+	/*
+	 * For many (32?) devices, create an index data structure that can be
+	 * used to look up a du by devname.
+	 */
+	if (use_count > 31)
+		_create_du_index(cmd);
 
 	return ret;
 }
@@ -1569,7 +1600,7 @@ int device_ids_write(struct cmd_context *cmd)
 		/* If any PVs were seen during scan then don't create a new devices file. */
 		if (lvmcache_vg_info_count()) {
 			log_print_unless_silent("Not creating system devices file due to existing VGs.");
-			free_dus(&cmd->use_devices);
+			free_use_devices(cmd);
 			return 1;
 		}
 		log_print_unless_silent("Creating devices file %s", cmd->devices_file_path);
@@ -1856,13 +1887,17 @@ struct dev_use *get_du_for_devno(struct cmd_context *cmd, dev_t devno)
 
 struct dev_use *get_du_for_dev(struct cmd_context *cmd, struct device *dev)
 {
+#if 0
 	struct dev_use *du;
-
 	dm_list_iterate_items(du, &cmd->use_devices) {
-		if (du->dev == dev)
-			return du;
+		if (du->dev == dev) {
+			if (du != dev->du) {
+				log_error("");
+			}
+		}
 	}
-	return NULL;
+#endif
+	return dev->du;
 }
 
 struct dev_use *get_du_for_pvid(struct cmd_context *cmd, const char *pvid)
@@ -1881,6 +1916,9 @@ struct dev_use *get_du_for_pvid(struct cmd_context *cmd, const char *pvid)
 struct dev_use *get_du_for_devname(struct cmd_context *cmd, const char *devname)
 {
 	struct dev_use *du;
+
+	if (cmd->use_devices_index)
+		return radix_tree_lookup_ptr(cmd->use_devices_index, devname, strlen(devname));
 
 	dm_list_iterate_items(du, &cmd->use_devices) {
 		if (!du->devname)
@@ -2177,6 +2215,7 @@ id_done:
 	du->idname = strdup(id->idname);
 	du->devname = strdup(dev_name(dev));
 	du->dev = dev;
+	dev->du = du;
 	du->pvid = strdup_pvid(pvid);
 
 	dev_get_partition_number(dev, &du->part);
@@ -2187,6 +2226,9 @@ id_done:
 	}
 
 	dm_list_add(&cmd->use_devices, &du->list);
+
+	if (cmd->use_devices_index)
+		radix_tree_insert_ptr(cmd->use_devices_index, du->devname, strlen(du->devname), du);
 
 	return 1;
 }
@@ -2213,7 +2255,6 @@ void device_id_pvremove(struct cmd_context *cmd, struct device *dev)
 		du->pvid = NULL;
 	}
 }
-
 
 /*
  * Remove LVMLV_UUID entries from system.devices for LVs that were removed.
@@ -2246,7 +2287,7 @@ void device_id_lvremove(struct cmd_context *cmd, struct dm_list *removed_uuids)
 	 * representation of system.devices, since another command may have
 	 * changed system.devices after this command read and unlocked it.
 	 */
-	free_dus(&cmd->use_devices);
+	free_use_devices(cmd);
 
 	/*
 	 * Reread system.devices, recreating cmd->use_devices.
@@ -2476,6 +2517,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 			id->idname = strdup(du->idname);
 			dm_list_add(&dev->ids, &id->list);
 			du->dev = dev;
+			dev->du = du;
 			dev->id = id;
 			dev->flags |= DEV_MATCHED_USE_ID;
 			log_debug("Match %s %s to %s",
@@ -2523,6 +2565,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 		if (id->idtype == du->idtype) {
 			if (!strcmp(id->idname, du_idname)) {
 				du->dev = dev;
+				dev->du = du;
 				dev->id = id;
 				dev->flags |= DEV_MATCHED_USE_ID;
 				log_debug("Match %s %s to %s",
@@ -2550,6 +2593,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 
 	if (idname && !strcmp(idname, du_idname)) {
 		du->dev = dev;
+		dev->du = du;
 		dev->id = id;
 		dev->flags |= DEV_MATCHED_USE_ID;
 		log_debug("Match %s %s to %s",
@@ -2587,6 +2631,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 				id->idname = strdup(dw->id);
 				dm_list_add(&dev->ids, &id->list);
 				du->dev = dev;
+				dev->du = du;
 				dev->id = id;
 				dev->flags |= DEV_MATCHED_USE_ID;
 				log_debug("Match %s %s to %s: using vpd_pg83 %s %s",
@@ -2659,6 +2704,7 @@ void device_ids_match_device_list(struct cmd_context *cmd)
 		} else {
 			/* Should we set dev->id?  Which idtype?  Use --deviceidtype? */
 			du->dev->flags |= DEV_MATCHED_USE_ID;
+			du->dev->du = du;
 		}
 	}
 }
@@ -3137,6 +3183,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs, 
 			}
 			du->dev->flags &= ~DEV_MATCHED_USE_ID;
 			du->dev->id = NULL;
+			du->dev->du = NULL;
 			du->dev = NULL;
 		}
 
@@ -3176,6 +3223,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs, 
 			du->devname = dup_devname2;
 			id->idname = dup_devname3;
 			du->dev = dev;
+			dev->du = du;
 			dev->id = id;
 			dev->flags |= DEV_MATCHED_USE_ID;
 			dm_list_add(&dev->ids, &id->list);
@@ -3506,6 +3554,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		memcpy(dil->pvid, du->pvid, ID_LEN);
 		dm_list_add(&prev_devs, &dil->list);
 		du->dev->flags &= ~DEV_MATCHED_USE_ID;
+		dev->du = NULL;
 		du->dev = NULL;
 	}
 
@@ -3524,6 +3573,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 				du = dul->du;
 				dev = devl->dev;
 				du->dev = dev;
+				dev->du = du;
 				dev->flags |= DEV_MATCHED_USE_ID;
 
 				log_debug("Match suspect serial device id %s PVID %s to %s",
@@ -3584,6 +3634,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		free(du->pvid);
 		du->pvid = tmpdup;
 		du->dev = dev;
+		dev->du = du;
 		dev->flags |= DEV_MATCHED_USE_ID;
 		update_file = 1;
 	}
@@ -3992,6 +4043,7 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 		du->idname = new_idname;
 		du->devname = new_devname;
 		du->dev = dev;
+		dev->du = du;
 		id->idtype = new_idtype;
 		id->idname = new_idname2;
 		dev->id = id;
@@ -4273,7 +4325,7 @@ void devices_file_exit(struct cmd_context *cmd)
 {
 	if (!cmd->enable_devices_file)
 		return;
-	free_dus(&cmd->use_devices);
+	free_use_devices(cmd);
 	if (_devices_fd == -1)
 		return;
 	unlock_devices_file(cmd);

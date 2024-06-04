@@ -20,6 +20,7 @@ void free_du(struct dev_use *du);
 void free_dus(struct dm_list *list);
 void free_did(struct dev_id *did);
 void free_dids(struct dm_list *list);
+void free_use_devices(struct cmd_context *cmd);
 const char *idtype_to_str(uint16_t idtype);
 uint16_t idtype_from_str(const char *str);
 const char *dev_idtype_for_metadata(struct cmd_context *cmd, struct device *dev);

@@ -969,8 +969,10 @@ static void _clear_scan_state(struct cmd_context *cmd, struct dm_list *devs)
 		dev->flags &= ~DEV_MATCHED_USE_ID;
 		dev->id = NULL;
 
-		if ((du = get_du_for_dev(cmd, dev)))
+		if ((du = get_du_for_dev(cmd, dev))) {
+			dev->du = NULL;
 			du->dev = NULL;
+		}
 
 		lvmcache_del_dev(dev);
 
