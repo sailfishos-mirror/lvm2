@@ -1,3 +1,8 @@
+Version 2.03.26 - 
+==================
+  Fix unreleased memory pools on RAID's lvextend.
+
+
 Version 2.03.25 - 
 ==================
   Revert Don't import DM_UDEV_DISABLE_OTHER_RULES_FLAG in LVM rules, DM rules cover it.
