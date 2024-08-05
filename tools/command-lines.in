@@ -843,7 +843,7 @@ FLAGS: SECONDARY_SYNTAX
 ---
 
 lvconvert --raidintegrity Bool LV_raid
-OO: --raidintegritymode String, --raidintegrityblocksize Number, OO_LVCONVERT
+OO: --raidintegritymode String, --raidintegrityblocksize Number, --raidintegrityjournalsize SizeMB, OO_LVCONVERT
 OP: PV ...
 ID: lvconvert_integrity
 DESC: Add or remove data integrity checksums to raid images.
@@ -869,7 +869,7 @@ OO_LVCREATE_VDO: --compression Bool, --deduplication Bool, --vdosettings String
 OO_LVCREATE_THINPOOL: --discards Discards, --errorwhenfull Bool, --pooldatavdo Bool, OO_LVCREATE_VDO, OO_LVCREATE_POOL
 
 OO_LVCREATE_RAID: --regionsize RegionSize, --minrecoveryrate SizeKB, --maxrecoveryrate SizeKB,
---raidintegrity Bool, --raidintegritymode String, --raidintegrityblocksize Number
+--raidintegrity Bool, --raidintegritymode String, --raidintegrityblocksize Number, --raidintegrityjournalsize SizeMB
 
 ---
 

@@ -50,7 +50,8 @@ int lv_is_integrity_origin(const struct logical_volume *lv)
  * plus some initial space for journals.
  * (again from trial and error testing.)
  */
-static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes)
+static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes, uint32_t journal_sectors,
+						       uint32_t extent_size)
 {
 	uint64_t meta_bytes;
 	uint64_t initial_bytes;
@@ -58,8 +59,16 @@ static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes)
 	/* Every 500M of data needs 4M of metadata. */
 	meta_bytes = ((lv_size_bytes / (500 * ONE_MB_IN_BYTES)) + 1) * (4 * ONE_MB_IN_BYTES);
 
+	if (journal_sectors) {
+		/* for calculating the metadata LV size for the specified
+		   journal size, round the specified journal size up to the
+		   nearest extent.  extent_size is in sectors. */
+		initial_bytes = dm_round_up(journal_sectors, extent_size) * 512;
+		goto out;
+	}
+
 	/*
-	 * initial space used for journals
+	 * initial space used for journals (when journal size is not specified):
 	 * lv_size <= 512M -> 4M
 	 * lv_size <= 1G   -> 8M
 	 * lv_size <= 4G   -> 32M
@@ -73,7 +82,10 @@ static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes)
 		initial_bytes = 32 * ONE_MB_IN_BYTES;
 	else if (lv_size_bytes > (4ULL * ONE_GB_IN_BYTES))
 		initial_bytes = 64 * ONE_MB_IN_BYTES;
-
+ out:
+	log_debug("integrity_meta_bytes %llu from lv_size_bytes %llu meta_bytes %llu initial_bytes %llu journal_sectors %u",
+		  (unsigned long long)(meta_bytes+initial_bytes), (unsigned long long)lv_size_bytes,
+		  (unsigned long long)meta_bytes, (unsigned long long)initial_bytes, journal_sectors);
 	return meta_bytes + initial_bytes;
 }
 
@@ -84,6 +96,7 @@ static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes)
 static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 				struct volume_group *vg,
 				struct lvcreate_params *lp,
+				struct integrity_settings *settings,
 				struct logical_volume **meta_lv)
 {
 	char metaname[NAME_LEN] = { 0 };
@@ -115,7 +128,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 	lp_meta.pvh = lp->pvh;
 
 	lv_size_bytes = (uint64_t)lp->extents * (uint64_t)vg->extent_size * 512;
-	meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes);
+	meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, settings->journal_sectors, vg->extent_size);
 	meta_sectors = meta_bytes / 512;
 	lp_meta.extents = meta_sectors / vg->extent_size;
 
@@ -181,12 +194,17 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
 		}
 
 		lv_size_bytes = lv_iorig->size * 512;
-		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes);
+		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, 0);
 		meta_sectors = meta_bytes / 512;
 		meta_extents = meta_sectors / vg->extent_size;
 
 		prev_meta_sectors = lv_imeta->size;
 		prev_meta_extents = prev_meta_sectors / vg->extent_size;
+
+		/*
+		 * FIXME: allow --raidintegrityjournalsize to be used with
+		 * lvextend to override the default journal size calculation.
+		 */
 
 		if (meta_extents <= prev_meta_extents) {
 			log_debug("extend not needed for imeta LV %s", lv_imeta->name);
@@ -319,6 +337,18 @@ int integrity_mode_set(const char *mode, struct integrity_settings *settings)
 		log_error("Invalid raid integrity mode (use \"bitmap\" or \"journal\")");
 		return 0;
 	}
+	return 1;
+}
+
+int integrity_journal_set(int num_sectors, struct integrity_settings *settings)
+{
+	int size_mb = num_sectors / 2048;
+	if (size_mb < 4 || size_mb > 1024) {
+		log_error("Invalid raid integrity journal size %d MiB (use 4-1024 MiB).", size_mb);
+		return 0;
+	}
+	settings->journal_sectors = num_sectors;
+	settings->journal_sectors_set = 1;
 	return 1;
 }
 
@@ -597,7 +627,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
 		lp.pvh = use_pvh;
 		lp.extents = lv_image->size / vg->extent_size;
 
-		if (!_lv_create_integrity_metadata(cmd, vg, &lp, &meta_lv))
+		if (!_lv_create_integrity_metadata(cmd, vg, &lp, settings, &meta_lv))
 			goto_bad;
 
 		revert_meta_lvs++;

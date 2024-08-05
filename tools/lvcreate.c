@@ -609,10 +609,18 @@ static int _read_raid_params(struct cmd_context *cmd,
 
 	if (arg_int_value(cmd, raidintegrity_ARG, 0)) {
 		lp->raidintegrity = 1;
+		log_debug("raid integrity enabled blocksize %d journalsize %d mode %s",
+			 arg_int_value(cmd, raidintegrityblocksize_ARG, 0),
+			 arg_int_value(cmd, raidintegrityjournalsize_ARG, 0),
+			 arg_str_value(cmd, raidintegritymode_ARG, NULL) ?: "none");
 		if (arg_is_set(cmd, raidintegrityblocksize_ARG))
 			lp->integrity_settings.block_size = arg_int_value(cmd, raidintegrityblocksize_ARG, 0);
 		if (arg_is_set(cmd, raidintegritymode_ARG)) {
 			if (!integrity_mode_set(arg_str_value(cmd, raidintegritymode_ARG, NULL), &lp->integrity_settings))
+				return_0;
+		}
+		if (arg_is_set(cmd, raidintegrityjournalsize_ARG)) {
+			if (!integrity_journal_set(arg_int_value(cmd, raidintegrityjournalsize_ARG, 0), &lp->integrity_settings))
 				return_0;
 		}
 	}
@@ -936,7 +944,8 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	raidminrecoveryrate_ARG, \
 	raidintegrity_ARG, \
 	raidintegritymode_ARG, \
-	raidintegrityblocksize_ARG
+	raidintegrityblocksize_ARG, \
+	raidintegrityjournalsize_ARG
 
 #define SIZE_ARGS \
 	extents_ARG,\

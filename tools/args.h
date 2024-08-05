@@ -670,6 +670,9 @@ arg(raidintegritymode_ARG, '\0', "raidintegritymode", string_VAL, 0, 0,
     "bitmap mode can in theory achieve full write throughput of the device,\n"
     "but would not benefit from the potential scattered write optimization.\n")
 
+arg(raidintegrityjournalsize_ARG, '\0', "raidintegrityjournalsize", sizemb_VAL, 0, 0,
+    "The size of integrity journal.\n")
+
 arg(readonly_ARG, '\0', "readonly", 0, 0, 0,
     "Prevent the command from making changes, including activation and\n"
     "metadata updates.\n")

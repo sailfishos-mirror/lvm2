@@ -6522,6 +6522,9 @@ static int _lvconvert_integrity_single(struct cmd_context *cmd,
 	if (!integrity_mode_set(arg_str_value(cmd, raidintegritymode_ARG, NULL), &settings))
 		return_ECMD_FAILED;
 
+	if (!integrity_journal_set(arg_int_value(cmd, raidintegrityjournalsize_ARG, 0), &settings))
+		return_ECMD_FAILED;
+
 	if (arg_is_set(cmd, raidintegrityblocksize_ARG))
 		settings.block_size = arg_int_value(cmd, raidintegrityblocksize_ARG, 0);
 
