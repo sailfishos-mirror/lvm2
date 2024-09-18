@@ -9569,8 +9569,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 	if (seg_is_raid(lp) && lp->raidintegrity) {
 		log_debug("Adding integrity to new LV");
 
-		if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL))
+		if (!lv_add_integrity_to_raid(lv, &lp->integrity_settings, lp->pvh, NULL)) {
+			stack;
 			goto revert_new_lv;
+		}
 	}
 
 	/* Do not scan this LV until properly zeroed/wiped. */
@@ -9643,6 +9645,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 					first_seg(pool_lv)->transaction_id = seg->transaction_id;
 					first_seg(lv)->device_id = 0; /* no delete of never existing thin device */
 				}
+				stack;
 				goto revert_new_lv;
 			}
 			/* At this point remove pool messages, snapshot is active */
@@ -9798,6 +9801,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 					return_NULL;
 			}
 
+			stack;
 			goto deactivate_and_revert_new_lv;
 		}
 	} else if (lp->snapshot) {
@@ -9819,8 +9823,10 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		if (lp->virtual_extents &&
 		    !(origin_lv = _create_virtual_origin(cmd, vg, lv->name,
 							 (lp->permission & ~LVM_WRITE),
-							 lp->virtual_extents)))
+							 lp->virtual_extents))) {
+			stack;
 			goto revert_new_lv;
+		}
 
 		/* Reset permission after zeroing */
 		if (!(lp->permission & LVM_WRITE))
@@ -9862,9 +9868,12 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		}
 	}
 out:
+	if (!lv)
+		log_debug("No LV created.");
 	return lv;
 
 deactivate_and_revert_new_lv:
+	log_debug("Deactivate and revert new lv");
 	if (!sync_local_dev_names(lv->vg->cmd))
 		log_error("Failed to sync local devices before reverting %s.",
 			  display_lvname(lv));
@@ -9875,6 +9884,7 @@ deactivate_and_revert_new_lv:
 	}
 
 revert_new_lv:
+	log_debug("Revert new lv");
 	if (!lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
 		log_warn("WARNING: Failed to unlock %s.", display_lvname(lv));
 	lockd_free_lv(vg->cmd, vg, lv->name, &lv->lvid.id[1], lv->lock_args);

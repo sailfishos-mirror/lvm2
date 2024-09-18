@@ -1387,6 +1387,13 @@ cfg(global_io_memory_size_CFG, "io_memory_size", global_CFG_SECTION, CFG_DEFAULT
 	"This value should usually not be decreased from the default; setting\n"
 	"it too low can result in lvm failing to read VGs.\n")
 
+cfg(global_vg_copy_internal_CFG, "vg_copy_internal", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_VG_COPY_INTERNAL, vsn(2, 3, 27), NULL, 0, NULL,
+	"The method that lvm uses for internal VG structure copying.\n"
+	"\"binary\" copies between binary structures to improve performance\n"
+	"with large metadata (experimental.) \"text\" exports a binary\n"
+	"struct to text format, and reimports text to a new binary\n"
+	"structure (traditional.)\n")
+	
 cfg(activation_udev_sync_CFG, "udev_sync", activation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_UDEV_SYNC, vsn(2, 2, 51), NULL, 0, NULL,
 	"Use udev notifications to synchronize udev and LVM.\n"
 	"The --noudevsync option overrides this setting.\n"

@@ -659,6 +659,7 @@ static int _process_config(struct cmd_context *cmd)
 	mode_t old_umask;
 	const char *dev_ext_info_src = NULL;
 	const char *read_ahead;
+	const char *str;
 	struct stat st;
 	const struct dm_config_node *cn;
 	const struct dm_config_value *cv;
@@ -815,6 +816,12 @@ static int _process_config(struct cmd_context *cmd)
 
 	cmd->check_pv_dev_sizes = find_config_tree_bool(cmd, metadata_check_pv_device_sizes_CFG, NULL);
 	cmd->event_activation = find_config_tree_bool(cmd, global_event_activation_CFG, NULL);
+
+
+	if ((str = find_config_tree_str(cmd, global_vg_copy_internal_CFG, NULL))) {
+		if (!strcmp(str, "binary"))
+			cmd->vg_copy_binary = 1;
+	}
 
 	if (!process_profilable_config(cmd))
 		return_0;

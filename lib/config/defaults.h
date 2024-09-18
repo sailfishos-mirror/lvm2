@@ -344,4 +344,6 @@
 
 #define DEFAULT_DEVICESFILE_BACKUP_LIMIT 50
 
+#define DEFAULT_VG_COPY_INTERNAL "text"
+
 #endif				/* _LVM_DEFAULTS_H */

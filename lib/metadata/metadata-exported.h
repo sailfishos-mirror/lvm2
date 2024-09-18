@@ -1439,6 +1439,21 @@ char *top_level_lv_name(struct volume_group *vg, const char *lv_name);
 struct generic_logical_volume *get_or_create_glv(struct dm_pool *mem, struct logical_volume *lv, int *glv_created);
 struct glv_list *get_or_create_glvl(struct dm_pool *mem, struct logical_volume *lv, int *glv_created);
 
+struct logical_volume *get_data_from_pool(struct logical_volume *pool_lv);
+struct logical_volume *get_meta_from_pool(struct logical_volume *pool_lv);
+struct logical_volume *get_pool_from_thin(struct logical_volume *thin_lv);
+struct logical_volume *get_pool_from_cache(struct logical_volume *cache_lv);
+struct logical_volume *get_pool_from_vdo(struct logical_volume *vdo_lv);
+struct logical_volume *get_origin_from_cache(struct logical_volume *cache_lv);
+struct logical_volume *get_origin_from_writecache(struct logical_volume *writecache_lv);
+struct logical_volume *get_origin_from_integrity(struct logical_volume *integrity_lv);
+struct logical_volume *get_origin_from_thin(struct logical_volume *thin_lv);
+struct logical_volume *get_merge_lv_from_thin(struct logical_volume *thin_lv);
+struct logical_volume *get_external_lv_from_thin(struct logical_volume *thin_lv);
+struct logical_volume *get_origin_from_snap(struct logical_volume *snap_lv);
+struct logical_volume *get_cow_from_snap(struct logical_volume *snap_lv);
+struct logical_volume *get_fast_from_writecache(struct logical_volume *writecache_lv);
+
 /*
 * Begin skeleton for external LVM library
 */
@@ -1513,5 +1528,9 @@ int lv_integrity_mismatches(struct cmd_context *cmd, const struct logical_volume
 int lv_raid_integrity_total_mismatches(struct cmd_context *cmd, const struct logical_volume *lv, uint64_t *mismatches);
 
 int setting_str_list_add(const char *field, uint64_t val, char *val_str, struct dm_list *result, struct dm_pool *mem);
+
+struct volume_group *vg_copy_struct(struct volume_group *vgo);
+
+void insert_segment(struct logical_volume *lv, struct lv_segment *seg);
 
 #endif
