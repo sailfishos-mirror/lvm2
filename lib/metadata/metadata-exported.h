@@ -1514,4 +1514,6 @@ int lv_raid_integrity_total_mismatches(struct cmd_context *cmd, const struct log
 
 int setting_str_list_add(const char *field, uint64_t val, char *val_str, struct dm_list *result, struct dm_pool *mem);
 
+struct volume_group *vg_copy_struct(struct volume_group *vgo);
+
 #endif

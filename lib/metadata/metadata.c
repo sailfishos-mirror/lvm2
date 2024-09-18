@@ -4346,6 +4346,8 @@ const struct logical_volume *lv_committed(const struct logical_volume *lv)
 		found_lv = lv; /* Use uncommitted LV as best effort */
 	}
 
+	log_debug("lv_committed %s from vg_committed %p", display_lvname(found_lv), vg);
+
 	return found_lv;
 }
 

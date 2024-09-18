@@ -573,6 +573,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 	bool overlap;
 	int found = 0;
 	int r = 0;
+	int verify_vg_text = 0; /* FIXME: from config setting */
 
 	/*
 	 * old_start/old_last/new_start/new_last are relative to the
@@ -647,15 +648,27 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 		 *
 		 * 'Lazy' creation of such VG might improve performance, but we
 		 * lose important validation that written metadata can be parsed. */
-		if (!(cft = config_tree_from_string_without_dup_node_check(write_buf))) {
-			log_error("Error parsing metadata for VG %s.", vg->name);
-			goto out;
-		}
+
 		release_vg(vg->vg_precommitted);
-		vg->vg_precommitted = import_vg_from_config_tree(vg->cmd, vg->fid, cft);
-		dm_config_destroy(cft);
-		if (!vg->vg_precommitted)
+		vg->vg_precommitted = NULL;
+
+		if (verify_vg_text) {
+			if (!(cft = config_tree_from_string_without_dup_node_check(write_buf))) {
+				log_error("Error parsing metadata for VG %s.", vg->name);
+				goto out;
+			}
+			vg->vg_precommitted = import_vg_from_config_tree(vg->cmd, vg->fid, cft);
+			dm_config_destroy(cft);
+		} else {
+			release_vg(vg->vg_precommitted);
+			vg->vg_precommitted = vg_copy_struct(vg);
+		}
+		if (!vg->vg_precommitted) {
+			log_error("Failed to copy vg struct.");
 			goto_out;
+		}
+
+		log_debug("Saved vg struct %p as precommitted", vg->vg_precommitted);
 
 		fidtc->checksum = checksum = calc_crc(INITIAL_CRC, (uint8_t *)write_buf, new_size);
 	}

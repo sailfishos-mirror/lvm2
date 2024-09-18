@@ -15,10 +15,14 @@
 
 #include "lib/misc/lib.h"
 #include "lib/metadata/metadata.h"
+#include "lib/metadata/lv_alloc.h"
+#include "lib/metadata/segtype.h"
+#include "lib/metadata/pv_alloc.h"
 #include "lib/display/display.h"
 #include "lib/activate/activate.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/format_text/archiver.h"
+#include "lib/datastruct/str_list.h"
 
 struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
 			      const char *vg_name)
@@ -764,3 +768,840 @@ void vg_backup_if_needed(struct volume_group *vg)
 	vg->needs_backup = 0;
 	backup(vg->vg_committed);
 }
+
+void insert_segment(struct logical_volume *lv, struct lv_segment *seg)
+{                                    
+        struct lv_segment *comp;     
+                
+        dm_list_iterate_items(comp, &lv->segments) {
+                if (comp->le > seg->le) {
+                        dm_list_add(&comp->list, &seg->list);
+                        return;
+                }
+        }       
+ 
+        lv->le_count += seg->len;
+        dm_list_add(&lv->segments, &seg->list);
+}           
+
+struct logical_volume *get_data_from_pool(struct logical_volume *pool_lv)
+{
+	/* works for cache pool, thin pool, vdo pool */
+	/* first_seg() = dm_list_first_entry(&lv->segments) */
+	/* seg_lv(seg, n) = seg->areas[n].u.lv.lv */
+	return seg_lv(first_seg(pool_lv), 0);
+}
+
+struct logical_volume *get_meta_from_pool(struct logical_volume *pool_lv)
+{
+	/* works for cache pool, thin pool, vdo pool */
+	/* first_seg() = dm_list_first_entry(&lv->segments) */
+	/* seg_lv(seg, n) = seg->areas[n].u.lv.lv */
+	return first_seg(pool_lv)->metadata_lv;
+}
+
+struct logical_volume *get_pool_from_thin(struct logical_volume *thin_lv)
+{
+	return first_seg(thin_lv)->pool_lv;
+}
+
+struct logical_volume *get_pool_from_cache(struct logical_volume *cache_lv)
+{
+	return first_seg(cache_lv)->pool_lv;
+}
+
+struct logical_volume *get_pool_from_vdo(struct logical_volume *vdo_lv)
+{
+	return first_seg(vdo_lv)->pool_lv;
+}
+
+struct logical_volume *get_origin_from_cache(struct logical_volume *cache_lv)
+{
+	return seg_lv(first_seg(cache_lv), 0);
+}
+
+struct logical_volume *get_origin_from_writecache(struct logical_volume *writecache_lv)
+{
+	return seg_lv(first_seg(writecache_lv), 0);
+}
+
+struct logical_volume *get_origin_from_integrity(struct logical_volume *integrity_lv)
+{
+	return seg_lv(first_seg(integrity_lv), 0);
+}
+
+struct logical_volume *get_origin_from_thin(struct logical_volume *thin_lv)
+{
+	return first_seg(thin_lv)->origin;
+}
+
+struct logical_volume *get_merge_lv_from_thin(struct logical_volume *thin_lv)
+{
+	return first_seg(thin_lv)->merge_lv;
+}
+
+struct logical_volume *get_external_lv_from_thin(struct logical_volume *thin_lv)
+{
+	return first_seg(thin_lv)->external_lv;
+}
+
+struct logical_volume *get_origin_from_snap(struct logical_volume *snap_lv)
+{
+	return first_seg(snap_lv)->origin;
+}
+
+struct logical_volume *get_cow_from_snap(struct logical_volume *snap_lv)
+{
+	return first_seg(snap_lv)->cow;
+}
+
+struct logical_volume *get_fast_from_writecache(struct logical_volume *writecache_lv)
+{
+	return first_seg(writecache_lv)->writecache;
+}
+
+int areas_copy_struct(struct volume_group *vg,
+		      struct logical_volume *lv,
+		      struct lv_segment *seg,
+		      struct volume_group *vgo,
+		      struct logical_volume *lvo,
+		      struct lv_segment *sego,
+		      struct dm_hash_table *pv_hash,
+		      struct dm_hash_table *lv_hash)
+{
+	uint32_t s;
+
+	/* text_import_areas */
+
+	for (s = 0; s < sego->area_count; s++) {
+		seg->areas[s].type = sego->areas[s].type;
+
+		if (sego->areas[s].type == AREA_PV) {
+			/*
+			 * When reading from text:
+			 * - pv comes from looking up the "pv0" key in pv_hash
+			 * - pe comes from text field
+			 * - pv and pe are passed to set_lv_segment_area_pv() to
+			 *   create the pv_segment structs, and connect them to
+			 *   the lv_segment.
+			 *
+			 * When copying the struct:
+			 * - pv comes from looking up the pv id in vg->pvs
+			 * - pe comes from the original pvseg struct
+			 * - pv and pe are passed to set_lv_segment_area_pv() to
+			 *   create the pv_segment structs, and connect them to
+			 *   the lv_segment (same as when reading from text.)
+			 * 
+			 * set_lv_segment_area_pv(struct lv_segment *seg, uint32_t s,
+			 *                        struct physical_volume *pv, uint32_t pe);
+			 * does:
+			 *
+			 * seg_pvseg(seg, s) =
+			 * 	assign_peg_to_lvseg(pv, pe, seg->area_len, seg, s);
+			 *
+			 * does:
+			 *
+			 * seg->areas[s].u.pv.pvseg =
+			 * 	assign_peg_to_lvseg(pv, pe, area_len, seg, s);
+			 *
+			 * struct pv_segment *assign_peg_to_lvseg(struct physical_volume *pv,
+			 * 				uint32_t pe, uint32_t area_len,
+			 * 				struct lv_segment *seg, uint32_t s);
+			 *
+			 * This does multiple things:
+			 * 1. creates pv_segment and connects it to lv_segment
+			 * 2. creates pv->segments list of all pv_segments on the pv
+			 * 3. updates pv->pe_alloc_count, vg->free_count
+			 */
+
+			/*
+			 * TODO: use pv_hash with pv uuid when copying struct.
+			 * (It's usually indexed with the "pv0" style names.)
+			 */
+
+			struct physical_volume *area_pvo;
+			struct pv_list *area_pvl;
+
+			if (!(area_pvo = sego->areas[s].u.pv.pvseg->pv))
+				goto_bad;
+			if (!(area_pvl = find_pv_in_vg_by_uuid(vg, &area_pvo->id)))
+				goto_bad;
+			if (!set_lv_segment_area_pv(seg, s, area_pvl->pv, sego->areas[s].u.pv.pvseg->pe))
+				goto_bad;
+
+		} else if (sego->areas[s].type == AREA_LV) {
+			struct logical_volume *area_lvo;
+			struct logical_volume *area_lv;
+
+			if (!(area_lvo = sego->areas[s].u.lv.lv))
+				goto_bad;
+			if (!(area_lv = dm_hash_lookup(lv_hash, area_lvo->name)))
+				goto_bad;
+			if (!set_lv_segment_area_lv(seg, s, area_lv, sego->areas[s].u.lv.le, 0))
+				goto_bad;
+		}
+	}
+
+	return 1;
+bad:
+	return 0;
+}
+
+int thin_messages_copy_struct(struct volume_group *vgo, struct volume_group *vg,
+			      struct logical_volume *lvo, struct logical_volume *lv,
+			      struct lv_segment *sego, struct lv_segment *seg,
+			      struct dm_hash_table *lv_hash)
+{
+	struct lv_thin_message *mso;
+	struct lv_thin_message *ms;
+	struct logical_volume *ms_lvo;
+	struct logical_volume *ms_lv;
+
+        if (dm_list_empty(&sego->thin_messages))
+		return 1;
+
+	dm_list_iterate_items(mso, &sego->thin_messages) {
+		if (!(ms = dm_pool_alloc(vg->vgmem, sizeof(*ms))))
+			goto_bad;
+
+		ms->type = mso->type;
+
+		switch (ms->type) {
+		case DM_THIN_MESSAGE_CREATE_SNAP:
+		case DM_THIN_MESSAGE_CREATE_THIN:
+			if (!(ms_lvo = mso->u.lv))
+				goto_bad;
+			if (!(ms_lv = dm_hash_lookup(lv_hash, ms_lvo->name)))
+				goto_bad;
+			ms->u.lv = ms_lv;
+			break;
+		case DM_THIN_MESSAGE_DELETE:
+			ms->u.delete_id = mso->u.delete_id;
+                        break;
+                default:
+                        break;
+                }
+
+		dm_list_add(&seg->thin_messages, &ms->list);
+	}
+	return 1;
+bad:
+	return 0;
+}
+
+struct lv_segment *seg_copy_struct(struct volume_group *vg,
+				   struct logical_volume *lv,
+				   struct volume_group *vgo,
+				   struct logical_volume *lvo,
+				   struct lv_segment *sego,
+				   struct dm_hash_table *pv_hash,
+				   struct dm_hash_table *lv_hash)
+{
+	struct dm_pool *mem = vg->vgmem;
+	struct lv_segment *seg;
+	uint32_t s;
+
+	if (!(seg = dm_pool_zalloc(mem, sizeof(*seg))))
+		return_NULL;
+
+	if (sego->area_count && sego->areas &&
+	    !(seg->areas = dm_pool_zalloc(mem, sego->area_count * sizeof(*seg->areas))))
+		return_NULL;
+
+	if (sego->area_count && sego->meta_areas &&
+	    !(seg->meta_areas = dm_pool_zalloc(mem, sego->area_count * sizeof(*seg->areas))))
+		return_NULL;
+
+	/* see _read_segment, alloc_lv_segment */
+
+	dm_list_init(&seg->tags);
+	dm_list_init(&seg->origin_list);
+	dm_list_init(&seg->thin_messages);
+
+	seg->segtype = sego->segtype;
+	seg->lv = lv;
+	seg->le = sego->le;
+	seg->len = sego->len;
+	seg->status = sego->status;
+	seg->area_count = sego->area_count;
+	seg->area_len = sego->area_len;
+
+	if (!dm_list_empty(&seg->tags) && !str_list_dup(mem, &seg->tags, &sego->tags))
+		goto_bad;
+
+	/*
+	 * _read_segment, ->text_import(), i.e. _foo_text_import()
+	 */
+
+	if (lv_is_striped(lvo)) {
+
+		/* see _striped_text_import */
+
+		seg->stripe_size = sego->stripe_size;
+
+		if (!areas_copy_struct(vg, lv, seg, vgo, lvo, sego, pv_hash, lv_hash))
+			goto_bad;
+
+	} else if (lv_is_cache_pool(lvo)) {
+		struct logical_volume *data_lvo;
+		struct logical_volume *meta_lvo;
+		struct logical_volume *data_lv;
+		struct logical_volume *meta_lv;
+
+		/* see _cache_pool_text_import */
+
+		seg->cache_metadata_format = sego->cache_metadata_format;
+		seg->cache_mode = sego->cache_mode;
+		if (sego->policy_name)
+			seg->policy_name = dm_pool_strdup(mem, sego->policy_name);
+		if (sego->policy_settings)
+			seg->policy_settings = dm_config_clone_node_with_mem(mem, sego->policy_settings, 0);
+
+		if (!(data_lvo = get_data_from_pool(lvo)))
+			goto_bad;
+		if (!(meta_lvo = get_meta_from_pool(lvo)))
+			goto_bad;
+		if (!(data_lv = dm_hash_lookup(lv_hash, data_lvo->name)))
+			goto_bad;
+		if (!(meta_lv = dm_hash_lookup(lv_hash, meta_lvo->name)))
+			goto_bad;
+		if (!attach_pool_data_lv(seg, data_lv))
+			goto_bad;
+		if (!attach_pool_metadata_lv(seg, meta_lv))
+			goto_bad;
+
+	} else if (lv_is_cache(lvo)) {
+		struct logical_volume *pool_lvo;
+		struct logical_volume *origin_lvo;
+		struct logical_volume *pool_lv;
+		struct logical_volume *origin_lv;
+		
+		/* see _cache_text_import */
+
+		seg->cache_metadata_format = sego->cache_metadata_format;
+		seg->cache_mode = sego->cache_mode;
+		if (sego->policy_name)
+			seg->policy_name = dm_pool_strdup(mem, sego->policy_name);
+		if (sego->policy_settings)
+			seg->policy_settings = dm_config_clone_node_with_mem(mem, sego->policy_settings, 0);
+
+		seg->cleaner_policy = sego->cleaner_policy;
+		seg->metadata_start = sego->metadata_start;
+		seg->metadata_len = sego->metadata_start;
+		seg->data_start = sego->data_start;
+		seg->data_len = sego->data_len;
+
+		if (sego->metadata_id) {
+			if (!(seg->metadata_id = dm_pool_zalloc(mem, sizeof(struct id))))
+				goto_bad;
+			memcpy(seg->metadata_id, sego->metadata_id, sizeof(struct id));
+		}
+		if (sego->data_id) {
+			if (!(seg->data_id = dm_pool_zalloc(mem, sizeof(struct id))))
+				goto_bad;
+			memcpy(seg->data_id, sego->data_id, sizeof(struct id));
+		}
+
+		if (!(pool_lvo = get_pool_from_cache(lvo)))
+			goto_bad;
+		if (!(origin_lvo = get_origin_from_cache(lvo)))
+			goto_bad;
+		if (!(pool_lv = dm_hash_lookup(lv_hash, pool_lvo->name)))
+			goto_bad;
+		if (!(origin_lv = dm_hash_lookup(lv_hash, origin_lvo->name)))
+			goto_bad;
+		if (!set_lv_segment_area_lv(seg, 0, origin_lv, 0, 0))
+			goto_bad;
+		if (!attach_pool_lv(seg, pool_lv, NULL, NULL, NULL))
+			goto_bad;
+
+	} else if (lv_is_integrity(lvo)) {
+		struct logical_volume *origin_lvo;
+		struct logical_volume *origin_lv;
+		struct logical_volume *meta_lvo;
+		struct logical_volume *meta_lv;
+		const char *hash;
+
+		/* see _integrity_text_import */
+
+		if (!(origin_lvo = get_origin_from_integrity(lvo)))
+			goto_bad;
+		if (!(origin_lv = dm_hash_lookup(lv_hash, origin_lvo->name)))
+			goto_bad;
+		if (!set_lv_segment_area_lv(seg, 0, origin_lv, 0, 0))
+			goto_bad;
+		seg->origin = origin_lv;
+
+		if ((meta_lvo = sego->integrity_meta_dev)) {
+			if (!(meta_lv = dm_hash_lookup(lv_hash, meta_lvo->name)))
+				goto_bad;
+			seg->integrity_meta_dev = meta_lv;
+			if (!add_seg_to_segs_using_this_lv(meta_lv, seg))
+				goto_bad;
+		}
+
+		seg->integrity_data_sectors = sego->integrity_data_sectors;
+		seg->integrity_recalculate = sego->integrity_recalculate;
+
+		memcpy(&seg->integrity_settings, &sego->integrity_settings, sizeof(seg->integrity_settings));
+
+		if ((hash = sego->integrity_settings.internal_hash)) {
+			if (!(seg->integrity_settings.internal_hash = dm_pool_strdup(mem, hash)))
+				goto_bad;
+		}
+
+	} else if (lv_is_mirror(lvo)) {
+		struct logical_volume *log_lv;
+
+		/* see _mirrored_text_import */
+
+		seg->extents_copied = sego->extents_copied;
+		seg->region_size = sego->region_size;
+
+		if (sego->log_lv) {
+			if (!(log_lv = dm_hash_lookup(lv_hash, sego->log_lv->name)))
+				goto_bad;
+			seg->log_lv = log_lv;
+		}
+
+		if (!areas_copy_struct(vg, lv, seg, vgo, lvo, sego, pv_hash, lv_hash))
+			goto_bad;
+
+	} else if (lv_is_thin_pool(lvo)) {
+		struct logical_volume *data_lvo;
+		struct logical_volume *meta_lvo;
+		struct logical_volume *data_lv;
+		struct logical_volume *meta_lv;
+
+		/* see _thin_pool_text_import */
+
+		if (!(data_lvo = get_data_from_pool(lvo)))
+			goto_bad;
+		if (!(meta_lvo = get_meta_from_pool(lvo)))
+			goto_bad;
+		if (!(data_lv = dm_hash_lookup(lv_hash, data_lvo->name)))
+			goto_bad;
+		if (!(meta_lv = dm_hash_lookup(lv_hash, meta_lvo->name)))
+			goto_bad;
+		if (!attach_pool_data_lv(seg, data_lv))
+			goto_bad;
+		if (!attach_pool_metadata_lv(seg, meta_lv))
+			goto_bad;
+		seg->transaction_id = sego->transaction_id;
+		seg->chunk_size = sego->chunk_size;
+		seg->discards = sego->discards;
+		seg->zero_new_blocks = sego->zero_new_blocks;
+		seg->crop_metadata = sego->crop_metadata;
+
+		if (!thin_messages_copy_struct(vgo, vg, lvo, lv, sego, seg, lv_hash))
+			goto_bad;
+
+	} else if (lv_is_thin_volume(lvo)) {
+		struct logical_volume *pool_lvo;
+		struct logical_volume *origin_lvo;
+		struct logical_volume *merge_lvo;
+		struct logical_volume *external_lvo;
+		struct logical_volume *pool_lv = NULL;
+		struct logical_volume *origin_lv = NULL;
+		struct logical_volume *merge_lv = NULL;
+		struct logical_volume *external_lv = NULL;
+
+		/* see _thin_text_import */
+
+		if (!(pool_lvo = get_pool_from_thin(lvo)))
+			goto_bad;
+		if (!(pool_lv = dm_hash_lookup(lv_hash, pool_lvo->name)))
+			goto_bad;
+
+		if ((origin_lvo = get_origin_from_thin(lvo))) {
+			if (!(origin_lv = dm_hash_lookup(lv_hash, origin_lvo->name)))
+				goto_bad;
+		}
+		if ((merge_lvo = get_merge_lv_from_thin(lvo))) {
+			if (!(merge_lv = dm_hash_lookup(lv_hash, merge_lvo->name)))
+				goto_bad;
+		}
+		if ((external_lvo = get_external_lv_from_thin(lvo))) {
+			if (!(external_lv = dm_hash_lookup(lv_hash, external_lvo->name)))
+				goto_bad;
+		}
+		if (!attach_pool_lv(seg, pool_lv, origin_lv, NULL, merge_lv))
+			goto_bad;
+		if (!attach_thin_external_origin(seg, external_lv))
+			goto_bad;
+
+		seg->transaction_id = sego->transaction_id;
+		seg->device_id = sego->device_id;
+
+	} else if (lv_is_snapshot(lvo)) {
+		struct logical_volume *origin_lvo;
+		struct logical_volume *cow_lvo;
+		struct logical_volume *origin_lv;
+		struct logical_volume *cow_lv;
+
+		/* see _snap_text_import */
+
+		if (!(origin_lvo = get_origin_from_snap(lvo)))
+			goto_bad;
+		if (!(cow_lvo = get_cow_from_snap(lvo)))
+			goto_bad;
+		if  (!(origin_lv = dm_hash_lookup(lv_hash, origin_lvo->name)))
+			goto_bad;
+		if  (!(cow_lv = dm_hash_lookup(lv_hash, cow_lvo->name)))
+			goto_bad;
+
+		init_snapshot_seg(seg, origin_lv, cow_lv, sego->chunk_size,
+				  (sego->status & MERGING) ? 1 : 0);
+
+	} else if (lv_is_writecache(lvo)) {
+		struct logical_volume *origin_lvo;
+		struct logical_volume *fast_lvo;
+		struct logical_volume *origin_lv;
+		struct logical_volume *fast_lv;
+
+		/* see _writecache_text_import */
+
+		if (!(origin_lvo = get_origin_from_writecache(lvo)))
+			goto_bad;
+		if (!(fast_lvo = get_fast_from_writecache(lvo)))
+			goto_bad;
+		if  (!(origin_lv = dm_hash_lookup(lv_hash, origin_lvo->name)))
+			goto_bad;
+		if  (!(fast_lv = dm_hash_lookup(lv_hash, fast_lvo->name)))
+			goto_bad;
+
+		if (!set_lv_segment_area_lv(seg, 0, origin_lv, 0, 0))
+			return_0;
+
+		seg->writecache_block_size = sego->writecache_block_size;
+
+		seg->origin = origin_lv;
+		seg->writecache = fast_lv;
+
+		if (!add_seg_to_segs_using_this_lv(fast_lv, seg))
+			return_0;
+
+		memcpy(&seg->writecache_settings, &sego->writecache_settings, sizeof(seg->writecache_settings));
+
+		if (sego->writecache_settings.new_key &&
+		    !(seg->writecache_settings.new_key = dm_pool_strdup(vg->vgmem, sego->writecache_settings.new_key)))
+			goto_bad;
+		if (sego->writecache_settings.new_val &&
+		    !(seg->writecache_settings.new_val = dm_pool_strdup(vg->vgmem, sego->writecache_settings.new_val)))
+			goto_bad;
+
+	} else if (lv_is_raid_type(lvo)) {
+		struct logical_volume *area_lvo;
+		struct logical_volume *area_lv;
+
+		/* see _raid_text_import_areas */
+
+		seg->region_size = sego->region_size;
+		seg->stripe_size = sego->stripe_size;
+		seg->data_copies = sego->data_copies;
+		seg->writebehind = sego->writebehind;
+		seg->min_recovery_rate = sego->min_recovery_rate;
+		seg->max_recovery_rate = sego->max_recovery_rate;
+		seg->data_offset = sego->data_offset;
+		seg->reshape_len = sego->reshape_len;
+
+		for (s = 0; s < sego->area_count; s++) {
+			if (!(area_lvo = sego->areas[s].u.lv.lv))
+				goto_bad;
+			if (!(area_lv = dm_hash_lookup(lv_hash, area_lvo->name)))
+				goto_bad;
+			if (!set_lv_segment_area_lv(seg, s, area_lv, 0, RAID_IMAGE))
+				goto_bad;
+			if (!(area_lvo = sego->meta_areas[s].u.lv.lv))
+				goto_bad;
+			if (!(area_lv = dm_hash_lookup(lv_hash, area_lvo->name)))
+				goto_bad;
+			if (!set_lv_segment_area_lv(seg, s, area_lv, 0, RAID_META))
+				goto_bad;
+		}
+
+	} else if (lv_is_vdo_pool(lvo)) {
+		struct logical_volume *data_lvo;
+		struct logical_volume *data_lv;
+
+		if (!(data_lvo = get_data_from_pool(lvo)))
+			goto_bad;
+		if (!(data_lv = dm_hash_lookup(lv_hash, data_lvo->name)))
+			goto_bad;
+
+		seg->vdo_pool_header_size = sego->vdo_pool_header_size;
+		seg->vdo_pool_virtual_extents = sego->vdo_pool_virtual_extents;
+		memcpy(&seg->vdo_params, &sego->vdo_params, sizeof(seg->vdo_params));
+
+		if (!set_lv_segment_area_lv(seg, 0, data_lv, 0, LV_VDO_POOL_DATA))
+			goto_bad;
+
+	} else if (lv_is_vdo(lvo)) {
+		struct logical_volume *pool_lvo;
+		struct logical_volume *pool_lv;
+		uint32_t vdo_offset;
+
+		if (!(pool_lvo = get_pool_from_vdo(lvo)))
+			goto_bad;
+		if (!(pool_lv = dm_hash_lookup(lv_hash, pool_lvo->name)))
+			goto_bad;
+		vdo_offset = sego->areas[0].u.lv.le; /* or seg_le(seg, 0)) */
+
+		if (!set_lv_segment_area_lv(seg, 0, pool_lv, vdo_offset, LV_VDO_POOL))
+			goto_bad;
+
+	} else {
+		log_error("Missing copy for lv %s.", display_lvname(lvo));
+		goto_bad;
+	}
+
+	return seg;
+
+bad:
+	return NULL;
+}
+
+/* _read_lvsegs, _read_segments, _read_segment, alloc_lv_segment, ->text_import */
+
+int lvsegs_copy_struct(struct volume_group *vg,
+		       struct logical_volume *lv,
+		       struct volume_group *vgo,
+		       struct logical_volume *lvo,
+		       struct dm_hash_table *pv_hash,
+		       struct dm_hash_table *lv_hash)
+{
+	struct lv_segment *sego;
+	struct lv_segment *seg;
+
+	/* see _read_segment */
+
+	dm_list_iterate_items(sego, &lvo->segments) {
+		/* see _read_segment */
+		if (!(seg = seg_copy_struct(vg, lv, vgo, lvo, sego, pv_hash, lv_hash)))
+			goto_bad;
+
+		/* last step in _read_segment */
+		/* adds seg to lv->segments and sets lv->le_count */
+		insert_segment(lv, seg);
+	}
+
+	return 1;
+bad:
+	return 0;
+}
+
+struct logical_volume *lv_copy_struct(struct volume_group *vg,
+				      struct volume_group *vgo,
+				      struct logical_volume *lvo,
+				      struct dm_hash_table *pv_hash,
+				      struct dm_hash_table *lv_hash)
+{
+	struct dm_pool *mem = vg->vgmem;
+	struct logical_volume *lv;
+
+	if (!(lv = alloc_lv(mem)))
+		return NULL;
+	if (!(lv->name = dm_pool_strdup(mem, lvo->name)))
+		goto_bad;
+	if (lvo->profile && !(lv->profile = add_profile(lvo->vg->cmd, lvo->profile->name, CONFIG_PROFILE_METADATA)))
+		goto_bad;
+	if (lvo->hostname && !(lv->hostname = dm_pool_strdup(mem, lvo->hostname)))
+		goto_bad;
+	if (lvo->lock_args && !(lv->lock_args = dm_pool_strdup(mem, lvo->lock_args)))
+		goto_bad;
+	if (!dm_list_empty(&lvo->tags) && !str_list_dup(mem, &lv->tags, &lvo->tags))
+		goto_bad;
+
+	lv->lvid = lvo->lvid;
+	lv->vg = vg;
+	lv->status = lvo->status;
+	lv->alloc = lvo->alloc;
+	lv->read_ahead = lvo->read_ahead;
+	lv->major = lvo->major;
+	lv->minor = lvo->minor;
+	lv->size = lvo->size;
+	/* lv->le_count = lvo->le_count; */ /* set by calls to insert_segment() */
+	lv->origin_count = lvo->origin_count;
+	lv->external_count = lvo->external_count;
+	lv->timestamp = lvo->timestamp;
+
+	if (!dm_hash_insert(lv_hash, lv->name, lv))
+		goto_bad;
+	return lv;
+bad:
+	return NULL;
+}
+
+/* _read_pv */
+
+struct physical_volume *pv_copy_struct(struct volume_group *vg, struct volume_group *vgo,
+				      struct physical_volume *pvo, struct dm_hash_table *pv_hash)
+{
+	struct dm_pool *mem = vg->vgmem;
+	struct physical_volume *pv;
+
+	if (!(pv = dm_pool_zalloc(mem, sizeof(*pv))))
+		return_NULL;
+
+	/* TODO: add pv to pv_hash by pv->id */
+
+	if (!(pv->vg_name = dm_pool_strdup(mem, vg->name)))
+		goto_bad;
+	pv->is_labelled = pvo->is_labelled;
+	memcpy(&pv->id, &pvo->id, sizeof(struct id));
+	memcpy(&pv->vg_id, &vgo->id, sizeof(struct id));
+	pv->status = pvo->status;
+	pv->size = pvo->size;
+
+	if (pvo->device_hint && !(pv->device_hint = dm_pool_strdup(mem, pvo->device_hint)))
+		goto_bad;
+	if (pvo->device_id && !(pv->device_id = dm_pool_strdup(mem, pvo->device_id)))
+		goto_bad;
+	if (pvo->device_id_type && !(pv->device_id_type = dm_pool_strdup(mem, pvo->device_id_type)))
+		goto_bad;
+
+	pv->pe_start = pvo->pe_start;
+	pv->pe_count = pvo->pe_count;
+	pv->ba_start = pvo->ba_start;
+	pv->ba_size = pvo->ba_size;
+
+	dm_list_init(&pv->tags);
+	dm_list_init(&pv->segments);
+
+	if (!dm_list_empty(&pvo->tags) && !str_list_dup(mem, &pv->tags, &pvo->tags))
+		goto_bad;
+
+	pv->pe_size = vg->extent_size;
+	pv->pe_alloc_count = 0;
+	pv->pe_align = 0;
+
+	return pv;
+bad:
+	return NULL;
+}
+
+/*
+ * We only need to copy things that are exported to metadata text.
+ * This struct copy is an alternative to text export+import, so the
+ * the reference for what to copy are the text export and import
+ * functions.
+ *
+ * There are two parts to copying the struct:
+ * 1. Setting the values, e.g. new->field = old->field.
+ * 2. Creating the linkages (pointers/lists) among all of
+ *    the new structs.
+ *
+ * Creating the linkages is the complex part, and for that we use
+ * most of the same functions that text import uses.
+ *
+ * In some cases, the functions creating linkage also set values.
+ * This is not common, but in those cases we need to be careful.
+ *
+ * Many parts of the vg struct are not used by the activation code,
+ * but it's difficult to know exactly what is or isn't used, so we
+ * try to copy everything, except in cases where we know it's not
+ * used and implementing it would be complicated.
+ */
+
+struct volume_group *vg_copy_struct(struct volume_group *vgo)
+{
+	struct volume_group *vg;
+	struct logical_volume *lv;
+	struct pv_list *pvlo;
+	struct pv_list *pvl;
+	struct lv_list *lvlo;
+	struct lv_list *lvl;
+	struct dm_hash_table *pv_hash = NULL;
+	struct dm_hash_table *lv_hash = NULL;
+
+	if (!(vg = alloc_vg("read_vg", vgo->cmd, vgo->name)))
+		return NULL;
+
+	log_debug("Copying vg struct %p to %p", vgo, vg);
+
+	/*
+	 * TODO: put hash tables in vg struct, and also use for text import.
+	 * TODO: until then, use different numbers from _read_vg
+	 */
+	if (!(pv_hash = dm_hash_create(59)))
+		goto_bad;
+	if (!(lv_hash = dm_hash_create(1023)))
+		goto_bad;
+
+	vg->seqno = vgo->seqno;
+	vg->alloc = vgo->alloc;
+	vg->status = vgo->status;
+	vg->id = vgo->id;
+	vg->extent_size = vgo->extent_size;
+	vg->max_lv = vgo->max_lv;
+	vg->max_pv = vgo->max_pv;
+	vg->pv_count = vgo->pv_count;
+	vg->open_mode = vgo->open_mode;
+	vg->mda_copies = vgo->mda_copies;
+
+	if (vgo->profile && !(vg->profile = add_profile(vgo->cmd, vgo->profile->name, CONFIG_PROFILE_METADATA)))
+		goto_bad;
+	if (vgo->system_id && !(vg->system_id = dm_pool_strdup(vg->vgmem, vgo->system_id)))
+		goto_bad;
+	if (vgo->lock_type && !(vg->lock_type = dm_pool_strdup(vg->vgmem, vgo->lock_type)))
+		goto_bad;
+	if (vgo->lock_args && !(vg->lock_args = dm_pool_strdup(vg->vgmem, vgo->lock_args)))
+		goto_bad;
+	if (!dm_list_empty(&vgo->tags) && !str_list_dup(vg->vgmem, &vg->tags, &vgo->tags))
+		goto_bad;
+
+	dm_list_iterate_items(pvlo, &vgo->pvs) {
+		if (!(pvl = dm_pool_zalloc(vg->vgmem, sizeof(struct pv_list))))
+			goto_bad;
+		if (!(pvl->pv = pv_copy_struct(vg, vgo, pvlo->pv, pv_hash)))
+			goto_bad;
+		if (!alloc_pv_segment_whole_pv(vg->vgmem, pvl->pv))
+			goto_bad;
+		vg->extent_count += pvl->pv->pe_count;
+		vg->free_count += pvl->pv->pe_count;
+		add_pvl_to_vgs(vg, pvl);
+	}
+
+	dm_list_iterate_items(lvlo, &vgo->lvs) {
+		if (!(lvl = dm_pool_zalloc(vg->vgmem, sizeof(struct lv_list))))
+			goto_bad;
+		if (!(lvl->lv = lv_copy_struct(vg, vgo, lvlo->lv, pv_hash, lv_hash)))
+			goto_bad;
+		dm_list_add(&vg->lvs, &lvl->list);
+	}
+
+	if (vgo->pool_metadata_spare_lv &&
+	    !(vg->pool_metadata_spare_lv = dm_hash_lookup(lv_hash, vgo->pool_metadata_spare_lv->name)))
+		goto_bad;
+
+	if (vgo->sanlock_lv &&
+	    !(vg->sanlock_lv = dm_hash_lookup(lv_hash, vgo->sanlock_lv->name)))
+		goto_bad;
+
+	dm_list_iterate_items(lvlo, &vgo->lvs) {
+		if (!(lv = dm_hash_lookup(lv_hash, lvlo->lv->name)))
+			goto_bad;
+		if (!lvsegs_copy_struct(vg, lv, vgo, lvlo->lv, pv_hash, lv_hash))
+			goto_bad;
+	}
+
+	/* sanity check */
+	if ((vg->free_count != vgo->free_count) || (vg->extent_count != vgo->extent_count)) {
+		log_error("vg copy wrong free_count %u %u extent_count %u %u",
+			    vgo->free_count, vg->free_count, vgo->extent_count, vg->extent_count);
+		goto_bad;
+	}
+
+	set_pv_devices(vgo->fid, vg);
+
+	dm_hash_destroy(pv_hash);
+	dm_hash_destroy(lv_hash);
+	return vg;
+
+bad:
+	dm_hash_destroy(pv_hash);
+	dm_hash_destroy(lv_hash);
+	release_vg(vg);
+	return NULL;
+}
+
