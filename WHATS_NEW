@@ -157,6 +157,7 @@ Version 2.03.17 - 10th November 2022
   Switch to use mallinfo2 and use it only with glibc.
   Error out in lvm shell if using a cmd argument not supported in the shell.
   Fix lvm shell's lastlog command to report previous pre-command failures.
+  Keep libaio locked in memory in critical section.
   Extend VDO and VDOPOOL without flushing and locking fs.
   Add --valuesonly option to lvmconfig to print only values without keys.
   Updates configure with recent autoconf tooling.
