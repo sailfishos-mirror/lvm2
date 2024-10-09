@@ -899,16 +899,19 @@ static void _get_token(struct parser *p, int tok_prev)
 static void _eat_space(struct parser *p)
 {
 	while (p->tb != p->fe) {
-		if (*p->te == '#')
+		if (!isspace(*p->te)) {
+			if (*p->te != '#')
+				break;
+
 			while ((p->te != p->fe) && (*p->te != '\n') && (*p->te))
 				++p->te;
+		}
 
-		else if (!isspace(*p->te))
-			break;
-
-		while ((p->te != p->fe) && isspace(*p->te)) {
+		while (p->te != p->fe) {
 			if (*p->te == '\n')
 				++p->line;
+			else if (!isspace(*p->te))
+				break;
 			++p->te;
 		}
 
