@@ -1085,7 +1085,7 @@ static struct volume_group *_read_vg(struct cmd_context *cmd,
 	 * The lv hash memorizes the lv section names -> lv
 	 * structures.
 	 */
-	if (!(lv_hash = dm_hash_create(1023))) {
+	if (!(lv_hash = dm_hash_create(8181))) {
 		log_error("Couldn't create lv hash table.");
 		goto bad;
 	}
