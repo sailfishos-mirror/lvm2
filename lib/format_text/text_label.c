@@ -323,7 +323,8 @@ static int _text_initialise_label(struct labeller *l __attribute__((unused)),
 static int _read_mda_header_and_metadata(const struct format_type *fmt,
 					 struct metadata_area *mda,
 					 struct lvmcache_vgsummary *vgsummary,
-					 uint32_t *bad_fields)
+					 uint32_t *bad_fields,
+					 struct dm_config_tree **vg_cft)
 {
 	struct mda_context *mdac = (struct mda_context *) mda->metadata_locn;
 	struct mda_header *mdah;
@@ -353,7 +354,7 @@ static int _read_mda_header_and_metadata(const struct format_type *fmt,
 	}
 
 	if (!read_metadata_location_summary(fmt, mda, mdah, mda_is_primary(mda), &mdac->area,
-					    vgsummary, &mdac->free_sectors)) {
+					    vgsummary, &mdac->free_sectors, vg_cft)) {
 		if (vgsummary->zero_offset)
 			return 1;
 
@@ -420,6 +421,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 	struct metadata_area *mda1 = NULL;
 	struct metadata_area *mda2 = NULL;
 	struct disk_locn *dlocn_xl;
+	struct dm_config_tree *vg_cft = NULL;
 	uint64_t offset;
 	uint32_t ext_version;
 	uint32_t bad_fields;
@@ -541,7 +543,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 		bad_fields = 0;
 		vgsummary.mda_num = 1;
 
-		rv1 = _read_mda_header_and_metadata(fmt, mda1, &vgsummary, &bad_fields);
+		rv1 = _read_mda_header_and_metadata(fmt, mda1, &vgsummary, &bad_fields, &vg_cft);
 
 		if (rv1 && !vgsummary.zero_offset && !vgsummary.mda_ignored) {
 			if (!lvmcache_update_vgname_and_id(cmd, info, &vgsummary)) {
@@ -564,6 +566,9 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 			} else {
 				/* The normal success path */
 				log_debug("Found metadata seqno %u in mda1 on %s", vgsummary.seqno, dev_name(dev));
+
+				if (vg_cft && !lvmcache_save_cft(info, vgsummary.mda_checksum, vgsummary.mda_size, vg_cft))
+					config_destroy(vg_cft);
 				good_mda_count++;
 			}
 		}
@@ -592,7 +597,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 		bad_fields = 0;
 		vgsummary.mda_num = 2;
 
-		rv2 = _read_mda_header_and_metadata(fmt, mda2, &vgsummary, &bad_fields);
+		rv2 = _read_mda_header_and_metadata(fmt, mda2, &vgsummary, &bad_fields, NULL);
 
 		if (rv2 && !vgsummary.zero_offset && !vgsummary.mda_ignored) {
 			if (!lvmcache_update_vgname_and_id(cmd, info, &vgsummary)) {

@@ -82,15 +82,16 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 				       off_t offset, uint32_t size,
 				       off_t offset2, uint32_t size2,
 				       checksum_fn_t checksum_fn,
-				       uint32_t checksum,
+				       uint32_t mda_header_checksum,
 				       time_t *when, char **desc);
 
 int text_read_metadata_summary(const struct format_type *fmt,
-		       struct device *dev, dev_io_reason_t reason,
+		       struct device *dev,
 		       off_t offset, uint32_t size,
 		       off_t offset2, uint32_t size2,
 		       checksum_fn_t checksum_fn,
 		       int checksum_only,
-		       struct lvmcache_vgsummary *vgsummary);
+		       struct lvmcache_vgsummary *vgsummary,
+		       struct dm_config_tree **cft_out);
 
 #endif

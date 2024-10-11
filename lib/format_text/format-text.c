@@ -1451,7 +1451,8 @@ static int _vg_remove_file(struct format_instance *fid __attribute__((unused)),
 int read_metadata_location_summary(const struct format_type *fmt,
 		    struct metadata_area *mda,
 		    struct mda_header *mdah, int primary_mda, struct device_area *dev_area,
-		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors)
+		    struct lvmcache_vgsummary *vgsummary, uint64_t *mda_free_sectors,
+		    struct dm_config_tree **vg_cft)
 {
 	struct raw_locn *rlocn;
 	uint32_t wrap = 0;
@@ -1552,12 +1553,12 @@ int read_metadata_location_summary(const struct format_type *fmt,
 		goto out;
 	}
 
-	if (!text_read_metadata_summary(fmt, dev_area->dev, MDA_CONTENT_REASON(primary_mda),
+	if (!text_read_metadata_summary(fmt, dev_area->dev,
 				(off_t) (dev_area->start + rlocn->offset),
 				(uint32_t) (rlocn->size - wrap),
 				(off_t) (dev_area->start + MDA_HEADER_SIZE),
 				wrap, calc_crc, vgsummary->vgname ? 1 : 0,
-				vgsummary)) {
+				vgsummary, vg_cft)) {
 		log_warn("WARNING: metadata on %s at %llu has invalid summary for VG.",
 			  dev_name(dev_area->dev),
 			  (unsigned long long)(dev_area->start + rlocn->offset));

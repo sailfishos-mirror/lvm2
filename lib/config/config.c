@@ -480,10 +480,12 @@ int override_config_tree_from_profile(struct cmd_context *cmd,
  * and function avoids parsing of mda into config tree which
  * remains unmodified and should not be used.
  */
-int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_reason_t reason,
+int config_file_read_fd(struct dm_config_tree *cft, struct device *dev,
 			off_t offset, size_t size, off_t offset2, size_t size2,
-			checksum_fn_t checksum_fn, uint32_t checksum,
-			int checksum_only, int no_dup_node_check)
+			checksum_fn_t checksum_fn,
+			uint32_t mda_header_checksum, uint32_t scan_meta_checksum,
+			int checksum_only, int skip_cft_if_scan_matches, int no_dup_node_check,
+			int *scan_matches)
 {
 	char namebuf[NAME_LEN + 1] __attribute__((aligned(8)));
 	int namelen = 0;
@@ -494,6 +496,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
 	char *buf = NULL;
 	struct config_source *cs = dm_config_get_custom(cft);
 	size_t rsize;
+	uint32_t new_checksum;
 
 	if (!_is_file_based_config_source(cs->type)) {
 		log_error(INTERNAL_ERROR "config_file_read_fd: expected file, special file "
@@ -560,11 +563,21 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
 	 * FIXME: handle case where mda_header checksum is bad,
 	 * but the checksum calculated here is correct.
 	 */
-	if (checksum_fn && checksum !=
-	    (checksum_fn(checksum_fn(INITIAL_CRC, (const uint8_t *)fb, size),
-			 (const uint8_t *)(fb + size), size2))) {
-		log_warn("WARNING: Checksum error on %s at offset %llu.", dev_name(dev), (unsigned long long)offset);
-		goto out;
+
+	if (checksum_fn) {
+		new_checksum = checksum_fn(checksum_fn(INITIAL_CRC, (const uint8_t *)fb, size),
+			                   (const uint8_t *)(fb + size), size2);
+
+		if (new_checksum != mda_header_checksum) {
+			log_warn("WARNING: Checksum error on %s at offset %llu.", dev_name(dev), (unsigned long long)offset);
+			goto out;
+		}
+
+		if ((new_checksum == scan_meta_checksum) && skip_cft_if_scan_matches) {
+			*scan_matches = 1;
+			r = 1;
+			goto out;
+		}
 	}
 
 	if (bad_name)
@@ -634,8 +647,8 @@ int config_file_read_from_file(struct dm_config_tree *cft)
 	fake_dev.fd = fd;
 	cf->dev = &fake_dev;
 
-	r = config_file_read_fd(cft, cf->dev, DEV_IO_MDA_CONTENT, 0, (size_t) info.st_size, 0, 0,
-				(checksum_fn_t) NULL, 0, 0, 0);
+	r = config_file_read_fd(cft, cf->dev, 0, (size_t) info.st_size, 0, 0,
+				(checksum_fn_t) NULL, 0, 0, 0, 0, 0, NULL);
 
 	free((void*)alias->str);
 	free((void*)alias);
