@@ -5175,9 +5175,11 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
 			goto out;
 		}
 
-		if (!(vg->vg_committed = import_vg_from_config_tree(cmd, vg->fid, vg->committed_cft))) {
-			log_error("Failed to import written VG.");
-			goto out;
+		if (!(vg->vg_committed = vg_copy_struct(vg))) {
+			if (!(vg->vg_committed = import_vg_from_config_tree(cmd, vg->fid, vg->committed_cft))) {
+				log_error("Failed to import written VG.");
+				goto out;
+			}
 		}
 	} else {
 		if (vg->vg_precommitted)
