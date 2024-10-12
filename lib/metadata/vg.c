@@ -19,6 +19,7 @@
 #include "lib/activate/activate.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/format_text/archiver.h"
+#include "base/data-struct/radix-tree.h"
 
 struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
 			      const char *vg_name)
@@ -76,6 +77,13 @@ static void _free_vg(struct volume_group *vg)
 
 	if (vg->committed_cft)
 		config_destroy(vg->committed_cft);
+
+	if (vg->lv_names)
+		radix_tree_destroy(vg->lv_names);
+
+	if (vg->pv_names)
+		radix_tree_destroy(vg->pv_names);
+
 	dm_pool_destroy(vg->vgmem);
 }
 
@@ -113,6 +121,11 @@ int link_lv_to_vg(struct volume_group *vg, struct logical_volume *lv)
 
 	lvl->lv = lv;
 	lv->vg = vg;
+	if (vg->lv_names &&
+	    !radix_tree_insert_ptr(vg->lv_names, lv->name, strlen(lv->name), lv)) {
+		log_error("Cannot insert to lv_names LV %s", lv->name);
+		return_0;
+	}
 	dm_list_add(&vg->lvs, &lvl->list);
 	lv->status &= ~LV_REMOVED;
 
@@ -125,6 +138,10 @@ int unlink_lv_from_vg(struct logical_volume *lv)
 
 	if (!(lvl = find_lv_in_vg(lv->vg, lv->name)))
 		return_0;
+
+	if (lv->vg->lv_names &&
+	    !radix_tree_remove(lv->vg->lv_names, lv->name, strlen(lv->name)))
+		stack;
 
 	dm_list_move(&lv->vg->removed_lvs, &lvl->list);
 	lv->status |= LV_REMOVED;

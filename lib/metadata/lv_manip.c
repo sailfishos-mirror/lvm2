@@ -32,6 +32,7 @@
 #include "lib/label/label.h"
 #include "lib/misc/lvm-signal.h"
 #include "lib/device/filesystem.h"
+#include "base/data-struct/radix-tree.h"
 
 #ifdef HAVE_BLKZEROOUT
 #include <sys/ioctl.h>
@@ -7308,9 +7309,6 @@ struct logical_volume *lv_create_empty(const char *name,
 	struct logical_volume *lv;
 	char dname[NAME_LEN];
 	int historical;
-
-	if (vg_max_lv_reached(vg))
-		stack;
 
 	if (strstr(name, "%d") &&
 	    !(name = generate_lv_name(vg, name, dname, sizeof(dname)))) {
