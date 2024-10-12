@@ -593,6 +593,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 	struct dm_config_node *root;
 	struct dm_config_value *value;
 	char *str;
+	size_t len;
 
 	if (p->t == TOK_STRING_ESCAPED) {
 		if (!(str = _dup_string_tok(p)))
@@ -606,9 +607,16 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 
 		match(TOK_STRING);
 	} else {
-		if (!(str = _dup_tok(p)))
-			return_NULL;
-
+		len = p->te - p->tb;
+		if (len < 16384) {
+			/* Use stack for smaller string */
+			str = alloca(len + 1);
+			memcpy(str, p->tb, len);
+			str[len] = '\0';
+		} else {
+			if (!(str = _dup_tok(p)))
+				return_NULL;
+		}
 		match(TOK_IDENTIFIER);
 	}
 
