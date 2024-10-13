@@ -1324,6 +1324,12 @@ static struct volume_group *_read_vg(struct cmd_context *cmd,
 		vg->pv_names = NULL; /* PV names are no longer valid outside of _read_vg() */
 	}
 
+	if (0 && vg->lv_names) {
+		/* TODO: update also rename function to keep lv_names always valid and usable */
+		radix_tree_destroy(vg->lv_names);
+		vg->lv_names = NULL;
+	}
+
 	/*
 	 * Finished.
 	 */
