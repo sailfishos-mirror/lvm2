@@ -375,7 +375,7 @@ static int _read_segment(struct cmd_context *cmd,
 	uint32_t area_count = 0u;
 	struct lv_segment *seg;
 	const struct dm_config_node *sn_child = sn->child;
-	const struct dm_config_value *cv;
+	const struct dm_config_value *cv = NULL;
 	uint32_t area_extents, start_extent, extent_count, reshape_count, data_copies;
 	struct segment_type *segtype;
 	const char *segtype_str;
@@ -385,7 +385,7 @@ static int _read_segment(struct cmd_context *cmd,
 		log_error("Empty segment section.");
 		return 0;
 	}
-
+#if 0
 	if (!_read_int32(sn_child, "start_extent", &start_extent)) {
 		log_error("Couldn't read 'start_extent' for segment '%s' "
 			  "of logical volume %s.", sn->key, lv->name);
@@ -423,6 +423,41 @@ static int _read_segment(struct cmd_context *cmd,
 	       return 0;
 	}
 
+	/* Optional tags */
+	dm_config_get_list(sn_child, "tags", &cv);
+#else
+	segtype_str = SEG_TYPE_NAME_STRIPED;
+	reshape_count = 0;
+	data_copies = 1;
+
+	struct config_values v[] = {
+		{ "data_copies",	CONFIG_VALUE_UINT32,	&data_copies },
+		{ "extent_count",	CONFIG_VALUE_UINT32,	&extent_count,  1 },
+		{ "reshape_count",	CONFIG_VALUE_UINT32,	&reshape_count },
+		{ "start_extent",	CONFIG_VALUE_UINT32,	&start_extent,  1 },
+		{ "tags",		CONFIG_VALUE_LIST,	&cv },
+		{ "type",		CONFIG_VALUE_STRING,	&segtype_str },
+	};
+
+	if (!text_import_values(sn_child, DM_ARRAY_SIZE(v), v)) {
+		log_error("Could not read segment values for %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+        /* Locally duplicate to parse out status flag bits */
+	if (!(segtype_with_flags = dm_pool_strdup(mem, segtype_str))) {
+		log_error("Cannot duplicate segtype string.");
+		return 0;
+	}
+
+	if (!read_segtype_lvflags(&lv->status, segtype_with_flags)) {
+		log_error("Couldn't read segtype for logical volume %s.",
+			  display_lvname(lv));
+	       return 0;
+	}
+
+#endif
 	if (!(segtype = get_segtype_from_string(cmd, segtype_with_flags)))
 		return_0;
 
@@ -447,13 +482,11 @@ static int _read_segment(struct cmd_context *cmd,
 		return_0;
 
 	/* Optional tags */
-	if (dm_config_get_list(sn_child, "tags", &cv) &&
-	    !(_read_str_list(mem, &seg->tags, cv))) {
+	if (cv && !(_read_str_list(mem, &seg->tags, cv))) {
 		log_error("Couldn't read tags for a segment of %s/%s.",
 			  lv->vg->name, lv->name);
 		return 0;
 	}
-
 	/*
 	 * Insert into correct part of segment list.
 	 */
@@ -536,6 +569,60 @@ int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 			  "for segment '%s'.", seg_name);
 		return 0;
 	}
+
+	return 1;
+}
+
+static int _compare_config_values_s(const void *a, const void *b)
+{
+	return strcmp(((const struct config_values*)a)->path,
+		      ((const struct config_values*)b)->path);
+}
+
+/*
+ * Read set of values out of config tree nodes
+ *
+ * config_values are expected to be in Alphabetic order for use with bsearch!!
+ */
+int text_import_values(const struct dm_config_node *cn,
+		       size_t values_count, struct config_values *values)
+{
+	struct config_values *found;
+	unsigned i;
+
+	while (cn) {
+		struct config_values findme = { .path = cn->key };
+
+		found = bsearch(&findme, values, values_count,
+				sizeof(struct config_values),
+				_compare_config_values_s);
+
+		if (found) {
+			switch (found->type) {
+			case CONFIG_VALUE_STRING:
+				*(const char**)(found->result) = cn->v->v.str;
+				break;
+			case CONFIG_VALUE_UINT64:
+				*(uint64_t*)(found->result) = (uint64_t)cn->v->v.i;
+				break;
+			case CONFIG_VALUE_UINT32:
+				*(uint32_t*)(found->result) = (uint32_t)cn->v->v.i;
+				break;
+			case CONFIG_VALUE_LIST:
+				*(struct dm_config_value**)(found->result) = cn->v;
+				break;
+			}
+			--(found->mandatory);
+		}
+
+		cn = cn->sib;
+	}
+
+	for (i = 0 ; i < values_count; ++i)
+		if (values[i].mandatory > 0) {
+			log_error("Required option %s is missing!", values[i].path);
+			return 0;
+		}
 
 	return 1;
 }
