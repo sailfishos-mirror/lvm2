@@ -95,7 +95,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 	}
 
       out:
-	config_destroy(cft);
+	vgsummary->cft = cft;
 	return r;
 }
 
@@ -117,6 +117,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 {
 	struct volume_group *vg = NULL;
 	struct dm_config_tree *cft;
+	struct dm_config_tree *cft_summary = NULL;
 	const struct text_vg_version_ops **vsn;
 	int skip_parse;
 
@@ -150,6 +151,16 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 
 
 	if (dev) {
+		/* FIXME: also pass mda_size to get_cft to compare */
+		if ((cft_summary = lvmcache_get_cft(dev, checksum))) {
+			log_debug("vg cft used from scan summary checksum %x", checksum);
+			config_destroy(cft);
+			cft = cft_summary;
+			goto parse_cft;
+		} else {
+			log_debug("vg cft not used from scan summary");
+		}
+
 		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
 				   dev_name(dev), (unsigned long long)offset,
 				   size, size2);
@@ -166,6 +177,8 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 			goto out;
 		}
 	}
+
+ parse_cft:
 
 	if (skip_parse) {
 		if (use_previous_vg)
@@ -200,7 +213,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 		*use_previous_vg = 0;
 
       out:
-	if (cft)
+	if (cft && !cft_summary)
 		config_destroy(cft);
 	return vg;
 }

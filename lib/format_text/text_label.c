@@ -564,6 +564,10 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 			} else {
 				/* The normal success path */
 				log_debug("Found metadata seqno %u in mda1 on %s", vgsummary.seqno, dev_name(dev));
+				if (!lvmcache_save_cft(info, vgsummary.cft)) {
+					config_destroy(vgsummary.cft);
+					vgsummary.cft = NULL;
+				}
 				good_mda_count++;
 			}
 		}
@@ -614,6 +618,10 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 			} else {
 				/* The normal success path */
 				log_debug("Found metadata seqno %u in mda2 on %s", vgsummary.seqno, dev_name(dev));
+				if (!lvmcache_save_cft(info, vgsummary.cft)) {
+					config_destroy(vgsummary.cft);
+					vgsummary.cft = NULL;
+				}
 				good_mda_count++;
 			}
 		}

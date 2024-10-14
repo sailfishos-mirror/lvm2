@@ -60,6 +60,7 @@ struct lvmcache_vgsummary {
 	unsigned zero_offset:1;
 	unsigned mismatch:1; /* lvmcache sets if this summary differs from previous values */
 	struct dm_list pvsummaries;
+	struct dm_config_tree *cft;
 };
 
 int lvmcache_init(struct cmd_context *cmd);
@@ -227,5 +228,9 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd);
 unsigned int lvmcache_vg_info_count(void);
 
 int lvmcache_pvsummary_count(const char *vgname);
+
+int lvmcache_save_cft(struct lvmcache_info *info, struct dm_config_tree *cft);
+struct dm_config_tree *lvmcache_get_cft(struct device *dev, uint32_t checksum);
+void lvmcache_forget_cft(const char *vg_name, struct id *vg_id);
 
 #endif

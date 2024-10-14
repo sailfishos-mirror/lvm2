@@ -23,6 +23,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/format_text/archiver.h"
 #include "lib/datastruct/str_list.h"
+#include "lib/cache/lvmcache.h"
 
 struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
 			      const char *vg_name)
@@ -77,8 +78,10 @@ static void _free_vg(struct volume_group *vg)
 
 	log_debug_mem("Freeing VG %s at %p.", vg->name ? : "<no name>", (void *)vg);
 
-	if (vg->committed_cft)
+	if (vg->committed_cft) {
 		config_destroy(vg->committed_cft);
+		lvmcache_forget_cft(vg->name, &vg->id);
+	}
 	dm_pool_destroy(vg->vgmem);
 }
 

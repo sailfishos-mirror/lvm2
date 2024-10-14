@@ -55,6 +55,7 @@ struct lvmcache_vginfo {
 	struct dm_list infos;	/* List head for lvmcache_infos */
 	struct dm_list outdated_infos; /* vg_read moves info from infos to outdated_infos */
 	struct dm_list pvsummaries; /* pv_list taken directly from vgsummary */
+	struct dm_config_tree *cft;
 	const struct format_type *fmt;
 	char *vgname;		/* "" == orphan */
 	uint32_t status;
@@ -1747,6 +1748,8 @@ int lvmcache_pvid_in_unused_duplicates(const char *pvid)
 
 static void _free_vginfo(struct lvmcache_vginfo *vginfo)
 {
+	if (vginfo->cft)
+		config_destroy(vginfo->cft);
 	free(vginfo->vgname);
 	free(vginfo->system_id);
 	free(vginfo->creation_host);
@@ -3056,6 +3059,40 @@ bool lvmcache_scan_mismatch(struct cmd_context *cmd, const char *vgname, const c
 		return vginfo->scan_summary_mismatch;
 
 	return true;
+}
+
+int lvmcache_save_cft(struct lvmcache_info *info, struct dm_config_tree *cft)
+{
+	if (info->vginfo && !info->vginfo->cft) {
+		info->vginfo->cft = cft;
+		return 1;
+	}
+	return 0;
+}
+
+void lvmcache_forget_cft(const char *vg_name, struct id *vg_id)
+{
+	struct lvmcache_vginfo *vginfo;
+
+	char vgid[ID_LEN+1] = { 0 };
+
+	memcpy(&vgid, vg_id, ID_LEN);
+
+	if ((vginfo = lvmcache_vginfo_from_vgname(vg_name, vgid)))
+		vginfo->cft = NULL;
+}
+
+struct dm_config_tree *lvmcache_get_cft(struct device *dev, uint32_t checksum)
+{
+	struct lvmcache_info *info;
+
+	if (!(info = lvmcache_info_from_pvid(dev->pvid, NULL, 0)))
+		return NULL;
+
+	if (info->vginfo && info->vginfo->mda_checksum == checksum)
+		return info->vginfo->cft;
+
+	return NULL;
 }
 
 static uint64_t _max_metadata_size;
