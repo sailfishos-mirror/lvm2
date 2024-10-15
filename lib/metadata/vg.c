@@ -121,11 +121,6 @@ int link_lv_to_vg(struct volume_group *vg, struct logical_volume *lv)
 
 	lvl->lv = lv;
 	lv->vg = vg;
-	if (vg->lv_names &&
-	    !radix_tree_insert_ptr(vg->lv_names, lv->name, strlen(lv->name), lv)) {
-		log_error("Cannot insert to lv_names LV %s", lv->name);
-		return_0;
-	}
 	dm_list_add(&vg->lvs, &lvl->list);
 	lv->status &= ~LV_REMOVED;
 
@@ -138,10 +133,6 @@ int unlink_lv_from_vg(struct logical_volume *lv)
 
 	if (!(lvl = find_lv_in_vg(lv->vg, lv->name)))
 		return_0;
-
-	if (lv->vg->lv_names &&
-	    !radix_tree_remove(lv->vg->lv_names, lv->name, strlen(lv->name)))
-		stack;
 
 	dm_list_move(&lv->vg->removed_lvs, &lvl->list);
 	lv->status |= LV_REMOVED;

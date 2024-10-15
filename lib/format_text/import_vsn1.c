@@ -619,10 +619,11 @@ static int _read_lvnames(struct cmd_context *cmd,
 	if (!(lv = alloc_lv(mem)))
 		return_0;
 
-	if (!(lv->name = dm_pool_strdup(mem, lvn->key)))
+	if (!link_lv_to_vg(vg, lv))
 		return_0;
 
-	if (!link_lv_to_vg(vg, lv))
+	if (!(str = dm_pool_strdup(mem, lvn->key)) ||
+	    !lv_set_name(lv, str))
 		return_0;
 
 	log_debug_metadata("Importing logical volume %s.", lv->name);
