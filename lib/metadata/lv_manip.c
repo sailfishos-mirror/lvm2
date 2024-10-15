@@ -4655,7 +4655,8 @@ static int _rename_single_lv(struct logical_volume *lv, char *new_name)
 		return 0;
 	}
 
-	lv->name = new_name;
+	if (!lv_set_name(lv, new_name))
+		return_0;
 
 	return 1;
 }
@@ -4878,7 +4879,8 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
 			return_0;
 
 		/* rename main LV */
-		lv->name = lv_names.new;
+		if (!lv_set_name(lv, lv_names.new))
+			return_0;
 
 		if (lv_is_cow(lv))
 			lv = origin_from_cow(lv);
@@ -7308,6 +7310,7 @@ struct logical_volume *lv_create_empty(const char *name,
 	struct format_instance *fi = vg->fid;
 	struct logical_volume *lv;
 	char dname[NAME_LEN];
+	const char *lv_name;
 	int historical;
 
 	if (strstr(name, "%d") &&
@@ -7329,7 +7332,11 @@ struct logical_volume *lv_create_empty(const char *name,
 	if (!(lv = alloc_lv(vg->vgmem)))
 		return_NULL;
 
-	if (!(lv->name = dm_pool_strdup(vg->vgmem, name)))
+	if (!link_lv_to_vg(vg, lv))
+		goto_bad;
+
+	if (!(lv_name = dm_pool_strdup(vg->vgmem, name)) ||
+	    !lv_set_name(lv, lv_name))
 		goto_bad;
 
 	lv->status = status;
@@ -7342,9 +7349,6 @@ struct logical_volume *lv_create_empty(const char *name,
 
 	if (lvid)
 		lv->lvid = *lvid;
-
-	if (!link_lv_to_vg(vg, lv))
-		goto_bad;
 
 	if (!lv_set_creation(lv, NULL, 0))
 		goto_bad;

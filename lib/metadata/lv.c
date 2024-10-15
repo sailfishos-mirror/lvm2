@@ -21,6 +21,7 @@
 #include "lib/metadata/segtype.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/locking/lvmlockd.h"
+#include "base/data-struct/radix-tree.h"
 
 #include <time.h>
 #include <sys/utsname.h>
@@ -1573,6 +1574,29 @@ int lv_set_creation(struct logical_volume *lv,
 		lv->hostname = dm_pool_strdup(lv->vg->vgmem, hostname);
 
 	lv->timestamp = timestamp ? : (uint64_t) time(NULL);
+
+	return 1;
+}
+
+/*
+ * As we keep now vg->lv_names for quick looking of an LV by name
+ * when the LV name is changed, we need to also update our lookup tree
+ */
+int lv_set_name(struct logical_volume *lv, const char *lv_name)
+{
+	if (lv->vg->lv_names && lv->name &&
+	    !radix_tree_remove(lv->vg->lv_names, lv->name, strlen(lv->name))) {
+		log_error("Cannot remove from lv_names LV %s", lv->name);
+		return 0;
+	}
+
+	lv->name = lv_name; /* NULL -> LV is removed from tree */
+
+	if (lv->vg->lv_names && lv->name &&
+	    !radix_tree_insert_ptr(lv->vg->lv_names, lv->name, strlen(lv->name), lv)) {
+		log_error("Cannot insert to lv_names LV %s", lv->name);
+		return 0;
+	}
 
 	return 1;
 }
