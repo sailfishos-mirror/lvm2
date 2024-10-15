@@ -4634,6 +4634,26 @@ out:
 	return r;
 }
 
+static int _rename_single_lv_names(struct logical_volume *lv, const char *new_name)
+{
+
+	if (lv->vg->lv_names &&
+	    !radix_tree_remove(lv->vg->lv_names, lv->name, strlen(lv->name))) {
+		log_error("Cannot remove from lv_names LV %s", lv->name);
+		return 0;
+	}
+
+	lv->name = new_name;
+
+	if (lv->vg->lv_names &&
+	    !radix_tree_insert_ptr(lv->vg->lv_names, lv->name, strlen(lv->name), lv)) {
+		log_error("Cannot insert to lv_names LV %s", lv->name);
+		return 0;
+	}
+
+	return 1;
+}
+
 /*
  * Minimal LV renaming function.
  * Metadata transaction should be made by caller.
@@ -4656,7 +4676,8 @@ static int _rename_single_lv(struct logical_volume *lv, char *new_name)
 		return 0;
 	}
 
-	lv->name = new_name;
+	if (!_rename_single_lv_names(lv, new_name))
+		return_0;
 
 	return 1;
 }
@@ -4879,7 +4900,8 @@ int lv_rename_update(struct cmd_context *cmd, struct logical_volume *lv,
 			return_0;
 
 		/* rename main LV */
-		lv->name = lv_names.new;
+		if (!_rename_single_lv_names(lv, lv_names.new))
+			return_0;
 
 		if (lv_is_cow(lv))
 			lv = origin_from_cow(lv);
