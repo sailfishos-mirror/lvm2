@@ -647,7 +647,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 		 *
 		 * 'Lazy' creation of such VG might improve performance, but we
 		 * lose important validation that written metadata can be parsed. */
-		if (!(cft = config_tree_from_string_without_dup_node_check(write_buf))) {
+		if (!(cft = config_tree_from_string_without_dup_node_check(write_buf, new_size - 1))) {
 			log_error("Error parsing metadata for VG %s.", vg->name);
 			goto out;
 		}
