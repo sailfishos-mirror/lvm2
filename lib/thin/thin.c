@@ -81,29 +81,17 @@ static int _thin_pool_add_message(struct lv_segment *seg,
 static int _thin_pool_text_import(struct lv_segment *seg,
 				  const struct dm_config_node *sn)
 {
-	const char *lv_name;
+	const char *lv_name, *meta_name;
 	struct logical_volume *pool_data_lv, *pool_metadata_lv;
 	const char *discards_str = NULL;
 	uint32_t zero = 0;
-	uint32_t crop = 0;
+	uint32_t crop = UINT32_MAX;
 
-	if (!dm_config_get_str(sn, "metadata", &lv_name))
+	if (!dm_config_get_str(sn, "metadata", &meta_name))
 		return SEG_LOG_ERROR("Metadata must be a string in");
-
-	if (!(pool_metadata_lv = find_lv(seg->lv->vg, lv_name)))
-		return SEG_LOG_ERROR("Unknown metadata %s in", lv_name);
 
 	if (!dm_config_get_str(sn, "pool", &lv_name))
 		return SEG_LOG_ERROR("Pool must be a string in");
-
-	if (!(pool_data_lv = find_lv(seg->lv->vg, lv_name)))
-		return SEG_LOG_ERROR("Unknown pool %s in", lv_name);
-
-	if (!attach_pool_data_lv(seg, pool_data_lv))
-		return_0;
-
-	if (!attach_pool_metadata_lv(seg, pool_metadata_lv))
-		return_0;
 
 	if (!dm_config_get_uint64(sn, "transaction_id", &seg->transaction_id))
 		return SEG_LOG_ERROR("Could not read transaction_id for");
@@ -115,6 +103,21 @@ static int _thin_pool_text_import(struct lv_segment *seg,
 	    !dm_config_get_str(sn, "discards", &discards_str))
 		return SEG_LOG_ERROR("Could not read discards for");
 
+	if (dm_config_has_node(sn, "zero_new_blocks") &&
+	    !dm_config_get_uint32(sn, "zero_new_blocks", &zero))
+		return SEG_LOG_ERROR("Could not read zero_new_blocks for");
+
+	if (dm_config_has_node(sn, "crop_metadata")) {
+		if (!dm_config_get_uint32(sn, "crop_metadata", &crop))
+			return SEG_LOG_ERROR("Could not read crop_metadata for");
+	}
+
+	if (!(pool_data_lv = find_lv(seg->lv->vg, lv_name)))
+		return SEG_LOG_ERROR("Unknown pool %s in", lv_name);
+
+	if (!(pool_metadata_lv = find_lv(seg->lv->vg, meta_name)))
+		return SEG_LOG_ERROR("Unknown metadata %s in", lv_name);
+
 	if (!discards_str)
 		seg->discards = THIN_DISCARDS_IGNORE;
 	else if (!set_pool_discards(&seg->discards, discards_str))
@@ -123,20 +126,20 @@ static int _thin_pool_text_import(struct lv_segment *seg,
 	if ((seg->chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE) ||
 	    (seg->chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE))
 		return SEG_LOG_ERROR("Unsupported value %u for chunk_size",
-				     seg->device_id);
+				     seg->chunk_size);
 
-	if (dm_config_has_node(sn, "zero_new_blocks") &&
-	    !dm_config_get_uint32(sn, "zero_new_blocks", &zero))
-		return SEG_LOG_ERROR("Could not read zero_new_blocks for");
-
-	seg->zero_new_blocks = (zero) ? THIN_ZERO_YES : THIN_ZERO_NO;
-
-	if (dm_config_has_node(sn, "crop_metadata")) {
-		if (!dm_config_get_uint32(sn, "crop_metadata", &crop))
-			return SEG_LOG_ERROR("Could not read crop_metadata for");
+	if (crop != UINT32_MAX) {
 		seg->crop_metadata = (crop) ? THIN_CROP_METADATA_YES : THIN_CROP_METADATA_NO;
 		seg->lv->status |= LV_CROP_METADATA;
 	}
+
+	seg->zero_new_blocks = (zero) ? THIN_ZERO_YES : THIN_ZERO_NO;
+
+	if (!attach_pool_data_lv(seg, pool_data_lv))
+		return_0;
+
+	if (!attach_pool_metadata_lv(seg, pool_metadata_lv))
+		return_0;
 
 	/* Read messages */
 	for (; sn; sn = sn->sib)
