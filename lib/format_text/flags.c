@@ -38,9 +38,9 @@ static const struct flag _vg_flags[] = {
 	{NOAUTOACTIVATE, "NOAUTOACTIVATE", COMPATIBLE_FLAG},
 	{CLUSTERED, "CLUSTERED", STATUS_FLAG},
 	{SHARED, "SHARED", STATUS_FLAG},
-	{PARTIAL_VG, NULL, 0},
-	{PRECOMMITTED, NULL, 0},
-	{ARCHIVED_VG, NULL, 0},
+	{(PARTIAL_VG |
+	  PRECOMMITTED |
+	  ARCHIVED_VG), NULL, 0},
 	{0, NULL, 0}
 };
 
@@ -49,8 +49,8 @@ static const struct flag _pv_flags[] = {
 	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
 	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
 	{MISSING_PV, "MISSING", STATUS_FLAG},
-	{PV_MOVED_VG, NULL, 0},
-	{UNLABELLED_PV, NULL, 0},
+	{(PV_MOVED_VG |
+	  UNLABELLED_PV), NULL, 0},
 	{0, NULL, 0}
 };
 
@@ -77,40 +77,40 @@ static const struct flag _lv_flags[] = {
 	{LV_CROP_METADATA, "CROP_METADATA", SEGTYPE_FLAG},
 	{LV_CACHE_VOL, "CACHE_VOL", COMPATIBLE_FLAG},
 	{LV_CACHE_USES_CACHEVOL, "CACHE_USES_CACHEVOL", SEGTYPE_FLAG},
-	{LV_NOSCAN, NULL, 0},
-	{LV_TEMPORARY, NULL, 0},
-	{POOL_METADATA_SPARE, NULL, 0},
-	{LOCKD_SANLOCK_LV, NULL, 0},
-	{RAID, NULL, 0},
-	{RAID_META, NULL, 0},
-	{RAID_IMAGE, NULL, 0},
-	{MIRROR, NULL, 0},
-	{MIRROR_IMAGE, NULL, 0},
-	{MIRROR_LOG, NULL, 0},
-	{MIRRORED, NULL, 0},
-	{VIRTUAL, NULL, 0},
-	{SNAPSHOT, NULL, 0},
-	{MERGING, NULL, 0},
-	{CONVERTING, NULL, 0},
-	{PARTIAL_LV, NULL, 0},
-	{POSTORDER_FLAG, NULL, 0},
-	{VIRTUAL_ORIGIN, NULL, 0},
-	{THIN_VOLUME, NULL, 0},
-	{THIN_POOL, NULL, 0},
-	{THIN_POOL_DATA, NULL, 0},
-	{THIN_POOL_METADATA, NULL, 0},
-	{CACHE, NULL, 0},
-	{CACHE_POOL, NULL, 0},
-	{CACHE_POOL_DATA, NULL, 0},
-	{CACHE_POOL_METADATA, NULL, 0},
-	{LV_VDO, NULL, 0},
-	{LV_VDO_POOL, NULL, 0},
-	{LV_VDO_POOL_DATA, NULL, 0},
-	{WRITECACHE, NULL, 0},
-	{INTEGRITY, NULL, 0},
-	{INTEGRITY_METADATA, NULL, 0},
-	{LV_PENDING_DELETE, NULL, 0}, /* FIXME Display like COMPATIBLE_FLAG */
-	{LV_REMOVED, NULL, 0},
+	{(LV_NOSCAN |
+	  LV_TEMPORARY |
+	  POOL_METADATA_SPARE |
+	  LOCKD_SANLOCK_LV |
+	  RAID |
+	  RAID_META |
+	  RAID_IMAGE |
+	  MIRROR |
+	  MIRROR_IMAGE |
+	  MIRROR_LOG |
+	  MIRRORED |
+	  VIRTUAL |
+	  SNAPSHOT |
+	  MERGING |
+	  CONVERTING |
+	  PARTIAL_LV |
+	  POSTORDER_FLAG |
+	  VIRTUAL_ORIGIN |
+	  THIN_VOLUME |
+	  THIN_POOL |
+	  THIN_POOL_DATA |
+	  THIN_POOL_METADATA |
+	  CACHE |
+	  CACHE_POOL |
+	  CACHE_POOL_DATA |
+	  CACHE_POOL_METADATA |
+	  LV_VDO |
+	  LV_VDO_POOL |
+	  LV_VDO_POOL_DATA |
+	  WRITECACHE |
+	  INTEGRITY |
+	  INTEGRITY_METADATA |
+	  LV_PENDING_DELETE |  /* FIXME Display like COMPATIBLE_FLAG */
+	  LV_REMOVED), NULL, 0},
 	{0, NULL, 0}
 };
 
@@ -147,7 +147,7 @@ int print_flags(char *buffer, size_t size, enum pv_vg_lv_e type, int mask, uint6
 	if (!emit_to_buffer(&buffer, &size, "["))
 		return_0;
 
-	for (f = 0; flags[f].mask; f++) {
+	for (f = 0; status && flags[f].mask; f++) {
 		if (status & flags[f].mask) {
 			status &= ~flags[f].mask;
 
@@ -293,12 +293,14 @@ int print_segtype_lvflags(char *buffer, size_t size, uint64_t status)
 	const struct flag *flags = _lv_flags;
 
 	buffer[0] = 0;
-	for (i = 0; flags[i].mask; i++)
+	for (i = 0; status && flags[i].mask; i++) {
 		if ((flags[i].kind & SEGTYPE_FLAG) &&
 		    (status & flags[i].mask) &&
 		    !emit_to_buffer(&buffer, &size, "+%s",
 				    flags[i].description))
 			return 0;
+		status &= ~flags[i].mask;
+	}
 
 	return 1;
 }
