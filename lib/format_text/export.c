@@ -1059,22 +1059,19 @@ size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf,
 	return r;
 }
 
-static size_t _export_vg_to_buffer(struct volume_group *vg, char **buf)
-{
-	return text_vg_export_raw(vg, "", buf, NULL);
-}
-
 struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg)
 {
 	char *buf = NULL;
+	uint32_t buf_size = 0;
 	struct dm_config_tree *vg_cft;
 
-	if (!_export_vg_to_buffer(vg, &buf)) {
+        /* export vg to bufffer */
+	if (!text_vg_export_raw(vg, "", &buf, &buf_size)) {
 		log_error("Could not format metadata for VG %s.", vg->name);
 		return NULL;
 	}
 
-	if (!(vg_cft = config_tree_from_string_without_dup_node_check(buf))) {
+	if (!(vg_cft = config_tree_from_string_without_dup_node_check(buf, buf_size))) {
 		log_error("Error parsing metadata for VG %s.", vg->name);
 		free(buf);
 		return NULL;
