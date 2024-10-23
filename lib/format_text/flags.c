@@ -24,107 +24,109 @@
  * converted into arrays of strings.
  */
 struct flag {
+	const char description[32];
 	const uint64_t mask;
-	const char *description;
 	int kind;
 };
 
 static const struct flag _vg_flags[] = {
-	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
-	{RESIZEABLE_VG, "RESIZEABLE", STATUS_FLAG},
-	{PVMOVE, "PVMOVE", STATUS_FLAG},
-	{LVM_READ, "READ", STATUS_FLAG},
-	{LVM_WRITE, "WRITE", STATUS_FLAG},
-	{LVM_WRITE_LOCKED, "WRITE_LOCKED", COMPATIBLE_FLAG},
-	{NOAUTOACTIVATE, "NOAUTOACTIVATE", COMPATIBLE_FLAG},
-	{CLUSTERED, "CLUSTERED", STATUS_FLAG},
-	{SHARED, "SHARED", STATUS_FLAG},
-	{(PARTIAL_VG |
-	  PRECOMMITTED |
-	  ARCHIVED_VG), NULL, 0},
-	{0, NULL, 0}
+	/* Alphabetically sorted by description! */
+	{"CLUSTERED", CLUSTERED, STATUS_FLAG},
+	{"EXPORTED", EXPORTED_VG, STATUS_FLAG},
+	{"NOAUTOACTIVATE", NOAUTOACTIVATE, COMPATIBLE_FLAG},
+	{"PVMOVE", PVMOVE, STATUS_FLAG},
+	{"READ", LVM_READ, STATUS_FLAG},
+	{"RESIZEABLE", RESIZEABLE_VG, STATUS_FLAG},
+	{"SHARED", SHARED, STATUS_FLAG},
+	{"WRITE", LVM_WRITE, STATUS_FLAG},
+	{"WRITE_LOCKED", LVM_WRITE_LOCKED, COMPATIBLE_FLAG},
+	{"", (PARTIAL_VG |
+	      PRECOMMITTED |
+	      ARCHIVED_VG), 0},
 };
 
 static const struct flag _pv_flags[] = {
-	{ALLOCATABLE_PV, "ALLOCATABLE", STATUS_FLAG},
-	{EXPORTED_VG, "EXPORTED", STATUS_FLAG},
-	{MISSING_PV, "MISSING", COMPATIBLE_FLAG},
-	{MISSING_PV, "MISSING", STATUS_FLAG},
-	{(PV_MOVED_VG |
-	  UNLABELLED_PV), NULL, 0},
-	{0, NULL, 0}
+	/* Alphabetically sorted by description! */
+	{"ALLOCATABLE", ALLOCATABLE_PV, STATUS_FLAG},
+	{"EXPORTED", EXPORTED_VG, STATUS_FLAG},
+	{"MISSING", MISSING_PV, COMPATIBLE_FLAG | STATUS_FLAG}, /* 1st. */
+	{"", (PV_MOVED_VG |
+	      UNLABELLED_PV), 0},
 };
 
 static const struct flag _lv_flags[] = {
-	{LVM_READ, "READ", STATUS_FLAG},
-	{LVM_WRITE, "WRITE", STATUS_FLAG},
-	{LVM_WRITE_LOCKED, "WRITE_LOCKED", COMPATIBLE_FLAG},
-	{FIXED_MINOR, "FIXED_MINOR", STATUS_FLAG},
-	{VISIBLE_LV, "VISIBLE", STATUS_FLAG},
-	{PVMOVE, "PVMOVE", STATUS_FLAG},
-	{LOCKED, "LOCKED", STATUS_FLAG},
-	{LV_NOTSYNCED, "NOTSYNCED", STATUS_FLAG},
-	{LV_REBUILD, "REBUILD", STATUS_FLAG},
-	{LV_RESHAPE, "RESHAPE", SEGTYPE_FLAG},
-	{LV_RESHAPE_DATA_OFFSET, "RESHAPE_DATA_OFFSET", SEGTYPE_FLAG},
-	{LV_RESHAPE_DELTA_DISKS_PLUS, "RESHAPE_DELTA_DISKS_PLUS", SEGTYPE_FLAG},
-	{LV_RESHAPE_DELTA_DISKS_MINUS, "RESHAPE_DELTA_DISKS_MINUS", SEGTYPE_FLAG},
-	{LV_REMOVE_AFTER_RESHAPE, "REMOVE_AFTER_RESHAPE", SEGTYPE_FLAG},
-	{LV_WRITEMOSTLY, "WRITEMOSTLY", STATUS_FLAG},
-	{LV_ACTIVATION_SKIP, "ACTIVATION_SKIP", COMPATIBLE_FLAG},
-	{LV_NOAUTOACTIVATE, "NOAUTOACTIVATE", COMPATIBLE_FLAG},
-	{LV_ERROR_WHEN_FULL, "ERROR_WHEN_FULL", COMPATIBLE_FLAG},
-	{LV_METADATA_FORMAT, "METADATA_FORMAT", SEGTYPE_FLAG},
-	{LV_CROP_METADATA, "CROP_METADATA", SEGTYPE_FLAG},
-	{LV_CACHE_VOL, "CACHE_VOL", COMPATIBLE_FLAG},
-	{LV_CACHE_USES_CACHEVOL, "CACHE_USES_CACHEVOL", SEGTYPE_FLAG},
-	{(LV_NOSCAN |
-	  LV_TEMPORARY |
-	  POOL_METADATA_SPARE |
-	  LOCKD_SANLOCK_LV |
-	  RAID |
-	  RAID_META |
-	  RAID_IMAGE |
-	  MIRROR |
-	  MIRROR_IMAGE |
-	  MIRROR_LOG |
-	  MIRRORED |
-	  VIRTUAL |
-	  SNAPSHOT |
-	  MERGING |
-	  CONVERTING |
-	  PARTIAL_LV |
-	  POSTORDER_FLAG |
-	  VIRTUAL_ORIGIN |
-	  THIN_VOLUME |
-	  THIN_POOL |
-	  THIN_POOL_DATA |
-	  THIN_POOL_METADATA |
-	  CACHE |
-	  CACHE_POOL |
-	  CACHE_POOL_DATA |
-	  CACHE_POOL_METADATA |
-	  LV_VDO |
-	  LV_VDO_POOL |
-	  LV_VDO_POOL_DATA |
-	  WRITECACHE |
-	  INTEGRITY |
-	  INTEGRITY_METADATA |
-	  LV_PENDING_DELETE |  /* FIXME Display like COMPATIBLE_FLAG */
-	  LV_REMOVED), NULL, 0},
-	{0, NULL, 0}
+	/* Alphabetically sorted by description! */
+	{"ACTIVATION_SKIP", LV_ACTIVATION_SKIP, COMPATIBLE_FLAG},
+	{"CACHE_USES_CACHEVOL", LV_CACHE_USES_CACHEVOL, SEGTYPE_FLAG},
+	{"CACHE_VOL", LV_CACHE_VOL, COMPATIBLE_FLAG},
+	{"CROP_METADATA", LV_CROP_METADATA, SEGTYPE_FLAG},
+	{"ERROR_WHEN_FULL", LV_ERROR_WHEN_FULL, COMPATIBLE_FLAG},
+	{"FIXED_MINOR", FIXED_MINOR, STATUS_FLAG},
+	{"LOCKED", LOCKED, STATUS_FLAG},
+	{"METADATA_FORMAT", LV_METADATA_FORMAT, SEGTYPE_FLAG},
+	{"NOAUTOACTIVATE", LV_NOAUTOACTIVATE, COMPATIBLE_FLAG},
+	{"NOTSYNCED", LV_NOTSYNCED, STATUS_FLAG},
+	{"PVMOVE", PVMOVE, STATUS_FLAG},
+	{"READ", LVM_READ, STATUS_FLAG},
+	{"REBUILD", LV_REBUILD, STATUS_FLAG},
+	{"REMOVE_AFTER_RESHAPE", LV_REMOVE_AFTER_RESHAPE, SEGTYPE_FLAG},
+	{"RESHAPE", LV_RESHAPE, SEGTYPE_FLAG},
+	{"RESHAPE_DATA_OFFSET", LV_RESHAPE_DATA_OFFSET, SEGTYPE_FLAG},
+	{"RESHAPE_DELTA_DISKS_MINUS", LV_RESHAPE_DELTA_DISKS_MINUS, SEGTYPE_FLAG},
+	{"RESHAPE_DELTA_DISKS_PLUS", LV_RESHAPE_DELTA_DISKS_PLUS, SEGTYPE_FLAG},
+	{"VISIBLE", VISIBLE_LV, STATUS_FLAG},
+	{"WRITE", LVM_WRITE, STATUS_FLAG},
+	{"WRITEMOSTLY", LV_WRITEMOSTLY, STATUS_FLAG},
+	{"WRITE_LOCKED", LVM_WRITE_LOCKED, COMPATIBLE_FLAG},
+	{"", (LV_NOSCAN |
+	      LV_TEMPORARY |
+	      POOL_METADATA_SPARE |
+	      LOCKD_SANLOCK_LV |
+	      RAID |
+	      RAID_META |
+	      RAID_IMAGE |
+	      MIRROR |
+	      MIRROR_IMAGE |
+	      MIRROR_LOG |
+	      MIRRORED |
+	      VIRTUAL |
+	      SNAPSHOT |
+	      MERGING |
+	      CONVERTING |
+	      PARTIAL_LV |
+	      POSTORDER_FLAG |
+	      VIRTUAL_ORIGIN |
+	      THIN_VOLUME |
+	      THIN_POOL |
+	      THIN_POOL_DATA |
+	      THIN_POOL_METADATA |
+	      CACHE |
+	      CACHE_POOL |
+	      CACHE_POOL_DATA |
+	      CACHE_POOL_METADATA |
+	      LV_VDO |
+	      LV_VDO_POOL |
+	      LV_VDO_POOL_DATA |
+	      WRITECACHE |
+	      INTEGRITY |
+	      INTEGRITY_METADATA |
+	      LV_PENDING_DELETE |  /* FIXME Display like COMPATIBLE_FLAG */
+	      LV_REMOVED), 0},
 };
 
-static const struct flag *_get_flags(enum pv_vg_lv_e type)
+static const struct flag *_get_flags(enum pv_vg_lv_e type, size_t *flags_count)
 {
 	switch (type) {
 	case VG_FLAGS:
+                *flags_count = DM_ARRAY_SIZE(_vg_flags) - 1;
 		return _vg_flags;
 
 	case PV_FLAGS:
+                *flags_count = DM_ARRAY_SIZE(_pv_flags) - 1;
 		return _pv_flags;
 
 	case LV_FLAGS:
+                *flags_count = DM_ARRAY_SIZE(_lv_flags) - 1;
 		return _lv_flags;
 	}
 
@@ -141,22 +143,23 @@ int print_flags(char *buffer, size_t size, enum pv_vg_lv_e type, int mask, uint6
 {
 	int f, first = 1;
 	const struct flag *flags;
+	size_t flags_count;
 
-	if (!(flags = _get_flags(type)))
+	if (!(flags = _get_flags(type, &flags_count)))
 		return_0;
 
 	if (size)
 		buffer[0] = 0;
 
-	for (f = 0; status && flags[f].mask; f++) {
+	for (f = 0; status && f <= flags_count; f++) {
 		if (status & flags[f].mask) {
 			status &= ~flags[f].mask;
 
-			if (mask != flags[f].kind)
+			if (!(mask & flags[f].kind))
 				continue;
 
 			/* Internal-only flag? */
-			if (!flags[f].description)
+			if (!flags[f].kind)
 				continue;
 
 			if (!emit_to_buffer(&buffer, &size, "%s\"%s\"",
@@ -174,13 +177,20 @@ int print_flags(char *buffer, size_t size, enum pv_vg_lv_e type, int mask, uint6
 	return 1;
 }
 
+static int _compare_flags_s(const void *a, const void *b)
+{
+	return strcmp(((const struct flag*)a)->description,
+		      ((const struct flag*)b)->description);
+}
+
 int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm_config_value *cv)
 {
 	unsigned f;
 	uint64_t s = UINT64_C(0);
 	const struct flag *flags;
+	size_t flags_count;
 
-	if (!(flags = _get_flags(type)))
+	if (!(flags = _get_flags(type, &flags_count)))
 		return_0;
 
 	if (cv->type == DM_CFG_EMPTY_ARRAY)
@@ -191,7 +201,7 @@ int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm
 			log_error("Status value is not a string.");
 			return 0;
 		}
-
+#if 0
 		/*
 		 * For a short time CACHE_VOL was a STATUS_FLAG, then it
 		 * was changed to COMPATIBLE_FLAG, so we want to read it
@@ -199,15 +209,13 @@ int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm
 		 */
 		if (type == LV_FLAGS && !strcmp(cv->v.str, "CACHE_VOL"))
 			mask = (STATUS_FLAG | COMPATIBLE_FLAG);
-
-		for (f = 0; flags[f].description; f++) {
+		for (f = 0; f <= flags_count; f++) {
 			if ((flags[f].kind & mask) &&
 			    !strcmp(flags[f].description, cv->v.str)) {
 				s |= flags[f].mask;
 				break;
 			}
 		}
-
 		if (type == VG_FLAGS && !strcmp(cv->v.str, "PARTIAL")) {
 			/*
 			 * Exception: We no longer write this flag out, but it
@@ -217,11 +225,41 @@ int read_flags(uint64_t *status, enum pv_vg_lv_e type, int mask, const struct dm
 			 * by this case.
 			 */
 			s |= PARTIAL_VG;
-		} else if (!flags[f].description && (mask & STATUS_FLAG)) {
+		} else if (!flags[f].kind && (mask & STATUS_FLAG)) {
 			log_error("Unknown status flag '%s'.", cv->v.str);
 			return 0;
 		}
+#else
+		struct flag *found;
 
+		/* v.str is a string and 'struct flag' also starts with string */
+		if ((found = bsearch((struct flag*)cv->v.str, flags, flags_count,
+				     sizeof(struct flag), _compare_flags_s))) {
+			if ((type == LV_FLAGS) && (found->mask & LV_CACHE_VOL))
+				/*
+				 * For a short time CACHE_VOL was a STATUS_FLAG, then it
+				 * was changed to COMPATIBLE_FLAG, so we want to read it
+				 * from either place.
+				 */
+				mask = (STATUS_FLAG | COMPATIBLE_FLAG);
+			if (found->kind & mask)
+				s |= found->mask;
+		} else {
+			if ((type == VG_FLAGS) && !strcmp(cv->v.str, "PARTIAL")) {
+			/*
+			 * Exception: We no longer write this flag out, but it
+			 * might be encountered in old backup files, so restore
+			 * it in that case. It is never part of live metadata
+			 * though, so only vgcfgrestore needs to be concerned
+			 * by this case.
+			 */
+				s |= PARTIAL_VG;
+			} else if (mask & STATUS_FLAG) {
+				log_error("Unknown status flag '%s'.", cv->v.str);
+				return 0;
+			}
+		}
+#endif
 	} while ((cv = cv->next));
 
       out:
@@ -275,7 +313,7 @@ int print_segtype_lvflags(char *buffer, size_t size, uint64_t status)
 	const struct flag *flags = _lv_flags;
 
 	buffer[0] = 0;
-	for (i = 0; status && flags[i].mask; i++) {
+	for (i = 0; status && flags[i].kind; i++) {
 		if ((flags[i].kind & SEGTYPE_FLAG) &&
 		    (status & flags[i].mask) &&
 		    !emit_to_buffer(&buffer, &size, "+%s",
