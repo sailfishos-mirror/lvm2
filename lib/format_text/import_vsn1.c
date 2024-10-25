@@ -27,6 +27,7 @@
 #include "lib/config/defaults.h"
 #include "lib/datastruct/str_list.h"
 #include "base/data-struct/radix-tree.h"
+#include "lib/misc/lvm-signal.h"
 
 typedef int (*section_fn) (struct cmd_context *cmd,
 			   struct format_type *fmt,
@@ -1120,6 +1121,10 @@ static int _read_sections(struct cmd_context *cmd,
 	}
 
 	for (n = n->child; n; n = n->sib) {
+		if (sigint_caught()) {
+			log_error("Interrupted reading of metadata section.");
+			return 0;
+		}
 		if (!fn(cmd, (struct format_type *)fmt, fid, mem, vg, vgsummary, n, vgn))
 			return_0;
 	}
