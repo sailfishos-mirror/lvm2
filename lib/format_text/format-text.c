@@ -29,6 +29,7 @@
 #include "lib/label/label.h"
 #include "lib/cache/lvmcache.h"
 #include "libdaemon/client/config-util.h"
+#include "lib/misc/lvm-signal.h"
 
 #include <unistd.h>
 #include <limits.h>
@@ -464,6 +465,8 @@ static struct volume_group *_vg_read_raw(struct cmd_context *cmd,
 	struct volume_group *vg;
 
 	vg = _vg_read_raw_area(cmd, fid, vgname, &mdac->area, vg_fmtdata, use_previous_vg, 0, mda_is_primary(mda));
+	if (sigint_caught())
+		return_NULL;
 
 	if (!vg && use_previous_vg && !*use_previous_vg) {
 		/*
