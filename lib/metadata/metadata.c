@@ -35,6 +35,7 @@
 #include "lib/locking/lvmlockd.h"
 #include "lib/notify/lvmnotify.h"
 #include "base/data-struct/radix-tree.h"
+#include "lib/misc/lvm-signal.h"
 
 #include <time.h>
 #include <math.h>
@@ -4855,7 +4856,18 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 			log_debug_metadata("Reading VG %s metadata from %s %llu",
 				 vgname, dev_name(mda_dev), (unsigned long long)mda->header_start);
 
+			if (!vg_write_lock_held()) /* read-only */
+				sigint_allow();
+
 			vg = mda->ops->vg_read(cmd, fid, vgname, mda, &vg_fmtdata, &use_previous_vg);
+
+			if (!vg_write_lock_held()) {
+				sigint_restore();
+				if (!vg && sigint_caught()) {
+					_destroy_fid(&fid);
+					return_NULL;
+				}
+			}
 
 			if (!vg && !use_previous_vg) {
 				log_warn("WARNING: Reading VG %s on %s failed.", vgname, dev_name(mda_dev));
