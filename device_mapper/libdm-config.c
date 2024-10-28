@@ -518,6 +518,60 @@ static char *_dup_string_tok(struct parser *p)
 	return str;
 }
 
+static int _key_compare(const void *s1, const void *s2, void *match)
+{
+	const char * const *a = s1;
+	const char * const *b = s2;
+	int r = strcmp(*a, *b);
+
+	if (!r)
+		*(unsigned *)match = 1;
+
+	return r;
+}
+
+static int _dup_node_check(struct dm_config_node *cn)
+{
+	struct cn_stack_s {
+		struct dm_config_node *cn;
+		unsigned count;
+		const char *keys[50000];
+	} cn_stack[10];
+	unsigned i = 0;
+
+	cn_stack[0].count = 0;
+
+	while (cn) {
+		//log_print("CTR  %s   %u  cnt:%u", cn->key, i, cn_stack[i].count);
+		cn_stack[i].keys[cn_stack[i].count++] = cn->key;
+
+		if (cn->child) {
+			cn_stack[i++].cn = cn;
+			cn = cn->child;
+			memset(cn_stack[i].keys, 0, 50000 * sizeof(const char*));
+			cn_stack[i].count = 0;
+			continue;
+		}
+
+		while (!(cn = cn->sib) && (i > 0)) {
+			unsigned match = 0;
+			//for (unsigned j = 0; j < 10 && j < cn_stack[i].count; ++j)
+			//	log_print("BEFORE %u - %u : %s", i, j, cn_stack[i].keys[j]);
+			qsort_r(cn_stack[i].keys, cn_stack[i].count,
+				sizeof(const char*), _key_compare, &match);
+			//log_print("sorted %u", cn_stack[i].count);
+			if (match)
+				log_warn("WARNING");
+			//for (unsigned j = 0; j < 10 && j < cn_stack[i].count; ++j)
+			//	log_print("%u - %u : %s", i, j, cn_stack[i].keys[j]);
+			cn = cn_stack[--i].cn;
+			//log_print("-->  %s", cn->key);
+		}
+	}
+
+	return 1;
+}
+
 static struct dm_config_node *_file(struct parser *p)
 {
 	struct dm_config_node root = { 0 };
@@ -526,6 +580,10 @@ static struct dm_config_node *_file(struct parser *p)
 	while (p->t != TOK_EOF)
 		if (!_section(p, &root))
 			return_NULL;
+
+	if (0 && p->no_dup_node_check)
+		_dup_node_check(&root);
+
 	return root.child;
 }
 
@@ -568,9 +626,11 @@ static struct dm_config_node *_find_or_make_node(struct dm_pool *mem,
 		/* hunt for the node */
 		cn_found = NULL;
 
-		if (!no_dup_node_check) {
+		if (!no_dup_node_check /*&& !mem*/) {
+			//log_print("+++++++++++++++++++ %p  %s", mem, path);
 			while (cn) {
-				if (_tok_match(cn->key, path, e)) {
+				//log_print("TTTTT  %p  %s    %s", mem, cn->key,  path);
+				if (!mem && _tok_match(cn->key, path, e)) {
 					/* Inefficient */
 					if (!cn_found)
 						cn_found = cn;
@@ -644,8 +704,12 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 	if (!(root = _find_or_make_node(p->mem, parent, str, p->no_dup_node_check)))
 		return_NULL;
 
+	root->id = p->tb - p->fb;
+	//if (!strncmp(str, "type", 4))
+	//	log_print("TYPE  %.30s", p->tb);
+
 	if (p->t == TOK_SECTION_B) {
-		if (p->stop_after_section)
+		//if (p->stop_after_section)
 			++p->section_indent;
 		match(TOK_SECTION_B);
 		while (p->t != TOK_SECTION_E) {
@@ -653,7 +717,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 				return_NULL;
 		}
 		match(TOK_SECTION_E);
-		if (p->stop_after_section && (--p->section_indent == 1)) {
+		if ((--p->section_indent == 1) && p->stop_after_section) {
 			if (!strcmp(str, p->stop_after_section)) {
 				/* Found stopping section name -> parsing is finished.
 				 * Now try to find the sequence "\n}\n" from end of b
