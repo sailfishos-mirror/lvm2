@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.  
- * Copyright (C) 2004-2005 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2024 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -24,5 +24,30 @@ struct dm_config_node;
 
 int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 		      const struct dm_config_value *cv, uint64_t status);
+
+typedef enum {
+	CONFIG_VALUE_STRING,    /* const char * */
+	CONFIG_VALUE_UINT64,    /* uint64_t * */
+	CONFIG_VALUE_UINT32,    /* uint32_t * */
+	CONFIG_VALUE_LIST,      /* struct dm_config_value * */
+} config_value_t;
+
+struct config_value {
+	const char *name;	/* config value name/path to look for */
+	void *result;		/* where to store resulting value of expected type */
+	config_value_t type;	/* expected value type */
+	int mandatory;		/* fail import if this value is missing in config node */
+};
+
+/*
+ * Parses config values out of config node out of sorted array like this
+ *
+ * struct config_value values[] = {
+ *	{ "value1", &uint_value1, CONFIG_VALUE_UINT32, 1 },
+ *	{ "value2", &list_value2, CONFIG_VALUE_LIST,     },
+ * };
+ */
+int text_import_values(const struct dm_config_node *cn,
+		       struct config_value *values, size_t values_count);
 
 #endif
