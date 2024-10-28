@@ -547,6 +547,96 @@ int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 	return 1;
 }
 
+/* Ensure config_value has matching type before copy */
+static int _copy_config_value(const struct dm_config_node *cn,
+			      const struct config_value *cv)
+{
+	const char *err = "list";
+
+	if (cn->v) {
+		switch (cv->type) {
+		case CONFIG_VALUE_STRING:
+			if (cn->v->type != DM_CFG_STRING) {
+				err = "string";
+				break;
+			}
+			*(const char**)(cv->result) = cn->v->v.str;
+			return 1;
+		case CONFIG_VALUE_UINT64:
+			if (cn->v->type != DM_CFG_INT) {
+				err = "number";
+				break;
+			}
+			*(uint64_t*)(cv->result) = (uint64_t)cn->v->v.i;
+			return 1;
+		case CONFIG_VALUE_UINT32:
+			if (cn->v->type != DM_CFG_INT) {
+				err = "number";
+				break;
+			}
+			*(uint32_t*)(cv->result) = (uint32_t)cn->v->v.i;
+			return 1;
+		case CONFIG_VALUE_LIST:
+			*(struct dm_config_value**)(cv->result) = cn->v;
+			return 1;
+		}
+	}
+
+	if (cv->mandatory) {
+		/* For mandatory value mismatching type fails parsing. */
+		log_error("Value for %s is not a %s.", cv->name, err);
+		return 0;
+	}
+
+	/* For non-mandatory value warn user and continue with parsing. */
+	log_warn("WARNING: Ignoring non %s value for %s.", err, cv->name);
+
+	return -1;
+}
+
+static int _compare_config_values_s(const void *a, const void *b)
+{
+	return strcmp(((const struct config_value*)a)->name,
+		      ((const struct config_value*)b)->name);
+}
+
+/*
+ * Read set of values out of config tree nodes
+ *
+ * config_values are expected to be in Alphabetic order for use with bsearch!!
+ */
+int text_import_values(const struct dm_config_node *cn,
+		       struct config_value *values, size_t values_count)
+{
+	struct config_value *found;
+	struct config_value findme;
+	unsigned i;
+	int ret = 1;
+
+	while (cn) {
+		findme.name = cn->key;
+
+		if ((found = bsearch(&findme, values, values_count,
+				     sizeof(*found),
+				     _compare_config_values_s))) {
+			if (!_copy_config_value(cn, found))
+				return_0;
+
+			--(found->mandatory);
+		}
+
+		cn = cn->sib;
+	}
+
+	for (i = 0 ; i < values_count; ++i)
+		if (values[i].mandatory > 0) {
+			log_error("Required option %s is missing!", values[i].name);
+			ret = 0;
+		}
+
+	return ret;
+}
+
 static int _read_segments(struct cmd_context *cmd,
 			  struct format_type *fmt,
 			  struct format_instance *fid,
