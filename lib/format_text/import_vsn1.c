@@ -679,20 +679,16 @@ static int _read_segments(struct cmd_context *cmd,
 	return 1;
 }
 
-static int _read_lvnames(struct cmd_context *cmd,
-			 struct format_type *fmt,
-			 struct format_instance *fid __attribute__((unused)),
-			 struct dm_pool *mem,
-			 struct volume_group *vg,
-			 struct lvmcache_vgsummary *vgsummary,
-			 const struct dm_config_node *lvn,
-			 const struct dm_config_node *vgn __attribute__((unused)))
+static int _read_lv_section(struct cmd_context *cmd,
+			    struct format_type *fmt,
+			    struct dm_pool *mem,
+			    struct volume_group *vg,
+			    struct logical_volume *lv,
+			    const struct dm_config_node *lvn)
 {
-	struct logical_volume *lv;
-	const char *str;
 	const struct dm_config_value *tags_cv = NULL;
 	const char *hostname = NULL;
-	uint64_t timestamp = 0, lvstatus = 0;
+	uint64_t timestamp = 0, lvstatus = lv->status;
 	const char *alloc = NULL, *profile = NULL, *lock_args = NULL;
 	unsigned seg_count = 0;
 	uint32_t read_ahead = UINT32_C(-2);
@@ -715,25 +711,6 @@ static int _read_lvnames(struct cmd_context *cmd,
 		{ "status",	       &status_cv,  CONFIG_VALUE_LIST,   1 },
 		{ "tags",	       &tags_cv,    CONFIG_VALUE_LIST,     },
 	};
-
-	if (!(str = dm_pool_strdup(mem, lvn->key)))
-		return_0;
-
-	if (!(lvn = lvn->child)) {
-		log_error("Empty logical volume section for %s.", str);
-		return 0;
-	}
-
-	if (!(lv = alloc_lv(mem)))
-		return_0;
-
-	if (!link_lv_to_vg(vg, lv))
-		return_0;
-
-	if (!lv_set_name(lv, str))
-		return_0;
-
-	log_debug_metadata("Importing logical volume %s.", lv->name);
 
 	if (!text_import_values(lvn, values, DM_ARRAY_SIZE(values))) {
 		log_error("Could not import values for logical volume %s.",
@@ -884,6 +861,43 @@ static int _read_lvnames(struct cmd_context *cmd,
 	}
 
 	lv->size = seg_count; /* Use temporarily to store seg_count for validation */
+
+	return 1;
+}
+
+static int _read_lvnames(struct cmd_context *cmd,
+			 struct format_type *fmt,
+			 struct format_instance *fid __attribute__((unused)),
+			 struct dm_pool *mem,
+			 struct volume_group *vg,
+			 struct lvmcache_vgsummary *vgsummary,
+			 const struct dm_config_node *lvn,
+			 const struct dm_config_node *vgn __attribute__((unused)))
+{
+	struct logical_volume *lv;
+	const char *str;
+
+	if (!(str = dm_pool_strdup(mem, lvn->key)))
+		return_0;
+
+	if (!(lvn = lvn->child)) {
+		log_error("Empty logical volume section for %s.", str);
+		return 0;
+	}
+
+	if (!(lv = alloc_lv(mem)))
+		return_0;
+
+	if (!link_lv_to_vg(vg, lv))
+		return_0;
+
+	if (!lv_set_name(lv, str))
+		return_0;
+
+	log_debug_metadata("Importing logical volume %s.", lv->name);
+
+	if (!_read_lv_section(cmd, fmt, mem, vg, lv, lvn))
+		return_0;
 
 	return 1;
 }
