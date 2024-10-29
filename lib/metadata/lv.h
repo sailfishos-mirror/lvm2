@@ -37,6 +37,7 @@ struct logical_volume {
 	struct profile *profile;
 	uint64_t status;
 	uint64_t size;		/* Sectors visible */
+				/* During parsing temporarily keeps seg_count */
 	uint32_t le_count;	/* Logical extents visible */
 	alloc_policy_t alloc;
 	uint32_t read_ahead;
