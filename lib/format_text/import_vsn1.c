@@ -395,8 +395,9 @@ static int _read_segment(struct cmd_context *cmd,
 	uint32_t area_count = 0u;
 	struct lv_segment *seg;
 	const struct dm_config_node *sn_child = sn->child;
-	const struct dm_config_value *cv;
-	uint32_t area_extents, start_extent, extent_count, reshape_count, data_copies;
+	const struct dm_config_value *cv = NULL;
+	uint32_t area_extents, start_extent, extent_count;
+	uint32_t reshape_count = 0, data_copies = 1;
 	struct segment_type *segtype;
 	const char *segtype_str;
 
@@ -405,28 +406,20 @@ static int _read_segment(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (!_read_int32(sn_child, "start_extent", &start_extent)) {
-		log_error("Couldn't read 'start_extent' for segment '%s' "
-			  "of logical volume %s.", sn->key, lv->name);
-		return 0;
-	}
-
-	if (!_read_int32(sn_child, "extent_count", &extent_count)) {
-		log_error("Couldn't read 'extent_count' for segment '%s' "
-			  "of logical volume %s.", sn->key, lv->name);
-		return 0;
-	}
-
-	if (!_read_int32(sn_child, "reshape_count", &reshape_count))
-		reshape_count = 0;
-
-	if (!_read_int32(sn_child, "data_copies", &data_copies))
-		data_copies = 1;
-
 	segtype_str = SEG_TYPE_NAME_STRIPED;
 
-	if (!dm_config_get_str(sn_child, "type", &segtype_str)) {
-		log_error("Segment type must be a string.");
+	struct config_value values[] = { /* sorted! */
+		{ "data_copies",   &data_copies,   CONFIG_VALUE_UINT32    },
+		{ "extent_count",  &extent_count,  CONFIG_VALUE_UINT32, 1 },
+		{ "reshape_count", &reshape_count, CONFIG_VALUE_UINT32,   },
+		{ "start_extent",  &start_extent,  CONFIG_VALUE_UINT32, 1 },
+		{ "tags",	   &cv,		   CONFIG_VALUE_LIST,     },
+		{ "type",	   &segtype_str,   CONFIG_VALUE_STRING, 1 },
+	};
+
+	if (!text_import_values(sn_child, values, DM_ARRAY_SIZE(values))) {
+		log_error("Could not import values for logical volume %s.",
+			  display_lvname(lv));
 		return 0;
 	}
 
@@ -454,8 +447,7 @@ static int _read_segment(struct cmd_context *cmd,
 		return_0;
 
 	/* Optional tags */
-	if (dm_config_get_list(sn_child, "tags", &cv) &&
-	    !(_read_str_list(mem, &seg->tags, cv))) {
+	if (cv && !(_read_str_list(mem, &seg->tags, cv))) {
 		log_error("Couldn't read tags for a segment of %s/%s.",
 			  lv->vg->name, lv->name);
 		return 0;
@@ -703,6 +695,25 @@ static int _read_lvnames(struct cmd_context *cmd,
 	const char *alloc = NULL, *profile = NULL, *lock_args = NULL;
 	unsigned seg_count = 0;
 	uint32_t read_ahead = UINT32_C(-2);
+	const struct dm_config_value *status_cv = NULL, *flags_cv = NULL;
+	const char *uuid = NULL;
+	int major = -1, minor = -1;
+
+	struct config_value values[] = { /* sorted! */
+		{ "allocation_policy", &alloc,	    CONFIG_VALUE_STRING,   },
+		{ "creation_host",     &hostname,   CONFIG_VALUE_STRING,   },
+		{ "creation_time",     &timestamp,  CONFIG_VALUE_UINT64,   },
+		{ "flags",	       &flags_cv,   CONFIG_VALUE_LIST,     },
+		{ "id",		       &uuid,	    CONFIG_VALUE_STRING, 1 },
+		{ "lock_args",	       &lock_args,  CONFIG_VALUE_STRING,   },
+		{ "major",	       &major,	    CONFIG_VALUE_UINT32,   },
+		{ "minor",	       &minor,	    CONFIG_VALUE_UINT32,   },
+		{ "profile",	       &profile,    CONFIG_VALUE_STRING,   },
+		{ "read_ahead",	       &read_ahead, CONFIG_VALUE_UINT32,   },
+		{ "segment_count",     &seg_count,  CONFIG_VALUE_UINT32, 1 },
+		{ "status",	       &status_cv,  CONFIG_VALUE_LIST,   1 },
+		{ "tags",	       &tags_cv,    CONFIG_VALUE_LIST,     },
+	};
 
 	if (!(str = dm_pool_strdup(mem, lvn->key)))
 		return_0;
@@ -723,33 +734,32 @@ static int _read_lvnames(struct cmd_context *cmd,
 
 	log_debug_metadata("Importing logical volume %s.", lv->name);
 
+	if (!text_import_values(lvn, values, DM_ARRAY_SIZE(values))) {
+		log_error("Could not import values for logical volume %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
 	memcpy(&lv->lvid.id[0], &lv->vg->id, sizeof(lv->lvid.id[0]));
-	/* FIXME: read full lvid */
-	if (!_read_id(&lv->lvid.id[1], lvn, "id")) {
-		log_error("Couldn't read uuid for logical volume %s.",
+
+	if (!uuid || !id_read_format(&lv->lvid.id[1], uuid)) {
+		log_error("Can not use invalid uuid %s for logical volume %s.",
+			  ((uuid) ? : ""), display_lvname(lv));
+		return 0;
+	}
+
+	/* For backward compatible metadata accept both type of flags */
+	if (!status_cv || !(read_flags(&lvstatus, LV_FLAGS, STATUS_FLAG | SEGTYPE_FLAG, status_cv))) {
+		log_error("Could not read status flags for logical volume %s.",
 			  display_lvname(lv));
 		return 0;
 	}
 
-	if (!dm_config_get_uint32(lvn, "segment_count", &seg_count)) {
-		log_error("Couldn't read segment count for logical volume %s.",
-			  lv->name);
-		return 0;
-	}
-
-	if (!_read_flag_config(lvn, &lvstatus, LV_FLAGS)) {
-		log_error("Couldn't read status flags for logical volume %s.",
+	if (flags_cv && !(read_flags(&lvstatus, LV_FLAGS, COMPATIBLE_FLAG, flags_cv))) {
+		log_error("Could not read flags for logical volume %s.",
 			  display_lvname(lv));
 		return 0;
 	}
-
-	dm_config_get_str(lvn, "allocation_policy", &alloc);
-	dm_config_get_str(lvn, "creation_host", &hostname);
-	dm_config_get_uint64(lvn, "creation_time", &timestamp);
-	dm_config_get_str(lvn, "lock_args", &lock_args);
-	dm_config_get_str(lvn, "profile", &profile);
-	dm_config_get_uint32(lvn, "read_ahead", &read_ahead);
-	dm_config_get_list(lvn, "tags", &tags_cv);
 
 	if (lvstatus & LVM_WRITE_LOCKED) {
 		lvstatus |= LVM_WRITE;
@@ -854,26 +864,22 @@ static int _read_lvnames(struct cmd_context *cmd,
 	}
 
 	if (lv->status & FIXED_MINOR) {
-		if (!_read_int32(lvn, "minor", &lv->minor)) {
+		if (minor == -1) {
 			log_error("Couldn't read minor number for logical volume %s.",
 				  display_lvname(lv));
 			return 0;
 		}
 
-		if (!dm_config_has_node(lvn, "major"))
+		if (major == -1)
 			/* If major is missing, pick default */
 			lv->major = cmd->dev_types->device_mapper_major;
-		else if (!_read_int32(lvn, "major", &lv->major)) {
-			log_warn("WARNING: Couldn't read major number for logical "
-				 "volume %s.", display_lvname(lv));
-			lv->major = cmd->dev_types->device_mapper_major;
-		}
 
-		if (!validate_major_minor(cmd, fmt, lv->major, lv->minor)) {
+		if (validate_major_minor(cmd, fmt, major, minor)) {
+			lv->major = major;
+			lv->minor = minor;
+		} else
 			log_warn("WARNING: Ignoring invalid major, minor number for "
 				 "logical volume %s.", display_lvname(lv));
-			lv->major = lv->minor = -1;
-		}
 	}
 
 	lv->size = seg_count; /* Use temporarily to store seg_count for validation */
