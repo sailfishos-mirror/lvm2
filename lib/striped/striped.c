@@ -71,19 +71,27 @@ static int _striped_text_import_area_count(const struct dm_config_node *sn, uint
 
 static int _striped_text_import(struct lv_segment *seg, const struct dm_config_node *sn)
 {
-	const struct dm_config_value *cv;
+	const struct dm_config_value *cv = NULL;
+	uint32_t stripe_size = 0;
 
-	if ((seg->area_count != 1) &&
-	    !dm_config_get_uint32(sn, "stripe_size", &seg->stripe_size)) {
-		log_error("Couldn't read stripe_size for segment %s "
-			  "of logical volume %s.", dm_config_parent_name(sn), seg->lv->name);
+	struct config_value values[] = { /* sorted! */
+		{ "stripe_size", &stripe_size, CONFIG_VALUE_UINT32,   },
+		{ "stripes",	 &cv,	       CONFIG_VALUE_LIST,   1 },
+	};
+
+	if (!text_import_values(sn, values, DM_ARRAY_SIZE(values))) {
+		log_error("Could not read segment values for %s",
+			  display_lvname(seg->lv));
 		return 0;
 	}
 
-	if (!dm_config_get_list(sn, "stripes", &cv)) {
-		log_error("Couldn't find stripes array for segment %s "
-			  "of logical volume %s.", dm_config_parent_name(sn), seg->lv->name);
-		return 0;
+	if (seg->area_count != 1) {
+		if (!stripe_size) {
+			log_error("Couldn't read stripe_size for segment %s "
+				  "of logical volume %s.", dm_config_parent_name(sn), seg->lv->name);
+			return 0;
+		}
+		seg->stripe_size = stripe_size;
 	}
 
 	seg->area_len /= seg->area_count;

@@ -21,6 +21,7 @@
 #include "lib/config/config.h"
 #include "lib/activate/activate.h"
 #include "lib/datastruct/str_list.h"
+#include "lib/format_text/text_import.h"
 
 /* Dm kernel module name for thin provisioning */
 static const char _thin_pool_module[] = "thin-pool";
@@ -87,30 +88,18 @@ static int _thin_pool_text_import(struct lv_segment *seg,
 	uint32_t zero = 0;
 	uint32_t crop = UINT32_MAX;
 
-	if (!dm_config_get_str(sn, "metadata", &meta_name))
-		return SEG_LOG_ERROR("Metadata must be a string in");
+	struct config_value values[] = { /* sorted! */
+		{ "chunk_size",	     &seg->chunk_size,	   CONFIG_VALUE_UINT32, 1 },
+		{ "crop_metadata",   &crop,		   CONFIG_VALUE_UINT32,   },
+		{ "discards",	     &discards_str,	   CONFIG_VALUE_STRING,   },
+		{ "metadata",	     &meta_name,	   CONFIG_VALUE_STRING, 1 },
+		{ "pool",	     &lv_name,		   CONFIG_VALUE_STRING, 1 },
+		{ "transaction_id",  &seg->transaction_id, CONFIG_VALUE_UINT64, 1 },
+		{ "zero_new_blocks", &zero,		   CONFIG_VALUE_UINT32,	  },
+	};
 
-	if (!dm_config_get_str(sn, "pool", &lv_name))
-		return SEG_LOG_ERROR("Pool must be a string in");
-
-	if (!dm_config_get_uint64(sn, "transaction_id", &seg->transaction_id))
-		return SEG_LOG_ERROR("Could not read transaction_id for");
-
-	if (!dm_config_get_uint32(sn, "chunk_size", &seg->chunk_size))
-		return SEG_LOG_ERROR("Could not read chunk_size");
-
-	if (dm_config_has_node(sn, "discards") &&
-	    !dm_config_get_str(sn, "discards", &discards_str))
-		return SEG_LOG_ERROR("Could not read discards for");
-
-	if (dm_config_has_node(sn, "zero_new_blocks") &&
-	    !dm_config_get_uint32(sn, "zero_new_blocks", &zero))
-		return SEG_LOG_ERROR("Could not read zero_new_blocks for");
-
-	if (dm_config_has_node(sn, "crop_metadata")) {
-		if (!dm_config_get_uint32(sn, "crop_metadata", &crop))
-			return SEG_LOG_ERROR("Could not read crop_metadata for");
-	}
+	if (!text_import_values(sn, values, DM_ARRAY_SIZE(values)))
+		return SEG_LOG_ERROR("Could not read segment values for");
 
 	if (!(pool_data_lv = find_lv(seg->lv->vg, lv_name)))
 		return SEG_LOG_ERROR("Unknown pool %s in", lv_name);
@@ -471,50 +460,44 @@ static void _thin_display(const struct lv_segment *seg)
 static int _thin_text_import(struct lv_segment *seg,
 			     const struct dm_config_node *sn)
 {
-	const char *lv_name;
-	struct logical_volume *pool_lv, *origin = NULL, *external_lv = NULL, *merge_lv = NULL;
+	const char *pool_name = NULL, *origin_name = NULL, *external_name = NULL, *merge_name = NULL;
+	struct logical_volume *pool_lv, *origin_lv = NULL, *external_lv = NULL, *merge_lv = NULL;
 	struct generic_logical_volume *indirect_origin = NULL;
 
-	if (!dm_config_get_str(sn, "thin_pool", &lv_name))
-		return SEG_LOG_ERROR("Thin pool must be a string in");
+	struct config_value values[] = { /* sorted! */
+		{ "device_id",	     &seg->device_id,	   CONFIG_VALUE_UINT64, 1 },
+		{ "external_origin", &external_name,	   CONFIG_VALUE_STRING,   },
+		{ "merge",	     &merge_name,	   CONFIG_VALUE_STRING,   },
+		{ "origin",	     &origin_name,	   CONFIG_VALUE_STRING,   },
+		{ "thin_pool",	     &pool_name,	   CONFIG_VALUE_STRING, 1 },
+		{ "transaction_id",  &seg->transaction_id, CONFIG_VALUE_UINT64, 1 },
+	};
 
-	if (!(pool_lv = find_lv(seg->lv->vg, lv_name)))
-		return SEG_LOG_ERROR("Unknown thin pool %s in", lv_name);
-
-	if (!dm_config_get_uint64(sn, "transaction_id", &seg->transaction_id))
-		return SEG_LOG_ERROR("Could not read transaction_id for");
-
-	if (dm_config_has_node(sn, "origin")) {
-		if (!dm_config_get_str(sn, "origin", &lv_name))
-			return SEG_LOG_ERROR("Origin must be a string in");
-
-		if (!(origin = find_lv(seg->lv->vg, lv_name)))
-			return SEG_LOG_ERROR("Unknown origin %s in", lv_name);
-	}
-
-	if (dm_config_has_node(sn, "merge")) {
-		if (!dm_config_get_str(sn, "merge", &lv_name))
-			return SEG_LOG_ERROR("Merge lv must be a string in");
-		if (!(merge_lv = find_lv(seg->lv->vg, lv_name)))
-			return SEG_LOG_ERROR("Unknown merge lv %s in", lv_name);
-	}
-
-	if (!dm_config_get_uint32(sn, "device_id", &seg->device_id))
-		return SEG_LOG_ERROR("Could not read device_id for");
+	if (!text_import_values(sn, values, DM_ARRAY_SIZE(values)))
+		return SEG_LOG_ERROR("Could not read segment values for");
 
 	if (seg->device_id > DM_THIN_MAX_DEVICE_ID)
 		return SEG_LOG_ERROR("Unsupported value %u for device_id",
 				     seg->device_id);
+	if (!pool_name)
+		return SEG_LOG_ERROR("Thin pool must be a string in");
 
-	if (dm_config_has_node(sn, "external_origin")) {
-		if (!dm_config_get_str(sn, "external_origin", &lv_name))
-			return SEG_LOG_ERROR("External origin must be a string in");
+	if (!(pool_lv = find_lv(seg->lv->vg, pool_name)))
+		return SEG_LOG_ERROR("Unknown thin pool %s in", pool_name);
 
-		if (!(external_lv = find_lv(seg->lv->vg, lv_name)))
-			return SEG_LOG_ERROR("Unknown external origin %s in", lv_name);
-	}
+	if (origin_name &&
+	    !(origin_lv = find_lv(seg->lv->vg, origin_name)))
+		return SEG_LOG_ERROR("Unknown origin %s in", origin_name);
 
-	if (!attach_pool_lv(seg, pool_lv, origin, indirect_origin, merge_lv))
+	if (merge_name &&
+	    !(merge_lv = find_lv(seg->lv->vg, merge_name)))
+		return SEG_LOG_ERROR("Unknown merge lv %s in", merge_name);
+
+	if (external_name &&
+	    !(external_lv = find_lv(seg->lv->vg, external_name)))
+		return SEG_LOG_ERROR("Unknown external origin %s in", external_name);
+
+	if (!attach_pool_lv(seg, pool_lv, origin_lv, indirect_origin, merge_lv))
 		return_0;
 
 	if (!attach_thin_external_origin(seg, external_lv))
