@@ -58,6 +58,11 @@ struct radix_tree_iterator {
 void radix_tree_iterate(struct radix_tree *rt, const void *key, size_t keylen,
 			struct radix_tree_iterator *it);
 
+// Non-recursive traversal of all radix_tree nodes.
+struct radix_tree_iter;
+struct radix_tree_iter *radix_tree_iter_init(struct radix_tree *rt, const void *key, size_t keylen);
+bool radix_tree_iter_next(struct radix_tree_iter *it, union radix_value *value);
+
 // Alternative traversing radix_tree.
 // Builds whole set all radix_tree  nr_values values.
 // After use, free(values).

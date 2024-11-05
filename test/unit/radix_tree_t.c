@@ -492,6 +492,61 @@ static void test_iterate_vary_middle(void *fixture)
 	}
 }
 
+static void test_iter(void *fixture)
+{
+	struct radix_tree *rt = fixture;
+	struct radix_tree_iter *it;
+	const unsigned max = 2104;
+	unsigned i;
+	uint8_t k[6] = { 0 };
+	union radix_value v;
+	unsigned count = 0;
+	uint16_t arr[max];
+
+	memset(arr, 0, sizeof(arr));
+
+	// for checking also VALUE_CHAIN
+	k[0] = 'a';
+	v.n = 'a';
+	radix_tree_insert(rt, &k, 1, v);
+
+	k[0] = 'b';
+	v.n = 'b';
+	radix_tree_insert(rt, &k, 1, v);
+
+	for (i = 0; i < max; i++) {
+		k[1] = i & 0xff;
+		k[2] = (i >> 8) & 0xff;
+		v.n = i;
+		T_ASSERT(radix_tree_insert(rt, &k, sizeof(k), v));
+	}
+
+	T_ASSERT(radix_tree_is_well_formed(rt));
+	//radix_tree_dump(rt, stdout);
+
+	T_ASSERT((it = radix_tree_iter_init(rt, NULL, 0)));
+
+	while (radix_tree_iter_next(it, &v)) {
+		if (count++ > (max + 1))
+			break; // too many iterations already...
+		if (v.n > max)
+			break; // too large value ???
+		arr[v.n]++;
+	}
+
+	T_ASSERT_EQUAL(count, max + 2);
+	for (i = 0; i < max; i++)
+		switch (i) {
+		case 'a':
+		case 'b':
+			T_ASSERT_EQUAL(arr[i], 2);
+			break;
+		default:
+			T_ASSERT_EQUAL(arr[i], 1);
+			break;
+		}
+}
+
 //----------------------------------------------------------------
 
 #define DTR_COUNT 100
@@ -872,6 +927,7 @@ void radix_tree_tests(struct dm_list *all_tests)
 	T("iterate-subset", "iterate a subset of entries in tree", test_iterate_subset);
 	T("iterate-single", "iterate a subset that contains a single entry", test_iterate_single);
 	T("iterate-vary-middle", "iterate keys that vary in the middle", test_iterate_vary_middle);
+	T("non-recursive-iterate-all", "non-recursively iterate keys", test_iter);
 	T("remove-calls-dtr", "remove should call the dtr for the value", test_remove_calls_dtr);
 	T("destroy-calls-dtr", "destroy should call the dtr for all values", test_destroy_calls_dtr);
 	T("bcache-scenario", "A specific series of keys from a bcache scenario", test_bcache_scenario);

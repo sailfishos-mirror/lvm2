@@ -74,24 +74,37 @@ struct node256 {
 	struct value values[256];
 };
 
+struct radix_tree_iter_node {
+	const struct value *v;
+	unsigned i;
+};
+
+struct radix_tree_iter {
+	struct radix_tree_iter_node *nodes;
+	unsigned depth;
+	unsigned max_depth;
+};
+
 struct radix_tree {
 	unsigned nr_entries;
+	unsigned max_keylen;
 	struct value root;
 	radix_value_dtr dtr;
 	void *dtr_context;
+	struct radix_tree_iter it;
 };
 
 //----------------------------------------------------------------
 
 struct radix_tree *radix_tree_create(radix_value_dtr dtr, void *dtr_context)
 {
-	struct radix_tree *rt = malloc(sizeof(*rt));
+	struct radix_tree *rt;
 
-	if (rt) {
-		rt->nr_entries = 0;
+	if ((rt = zalloc(sizeof(*rt)))) {
 		rt->root.type = UNSET;
 		rt->dtr = dtr;
 		rt->dtr_context = dtr_context;
+		rt->max_keylen = 1;
 	}
 
 	return rt;
@@ -171,6 +184,7 @@ static unsigned _free_node(struct radix_tree *rt, struct value v)
 void radix_tree_destroy(struct radix_tree *rt)
 {
 	_free_node(rt, rt->root);
+	free(rt->it.nodes);
 	free(rt);
 }
 
@@ -561,7 +575,14 @@ bool radix_tree_insert(struct radix_tree *rt, const void *key, size_t keylen, un
 	const uint8_t *kb = key;
 	const uint8_t *ke = kb + keylen;
 	struct lookup_result lr = _lookup_prefix(&rt->root, kb, ke);
-	return _insert(rt, lr.v, lr.kb, ke, rv);
+	if (!_insert(rt, lr.v, lr.kb, ke, rv))
+		return false;
+
+	if (keylen > rt->max_keylen)
+		/* For non recursive iterator remember maximal keylen */
+		rt->max_keylen = keylen;
+
+	return true;
 }
 
 int radix_tree_uniq_insert(struct radix_tree *rt, const void *key, size_t keylen, union radix_value rv)
@@ -1052,6 +1073,124 @@ void radix_tree_iterate(struct radix_tree *rt, const void *key, size_t keylen,
 	struct lookup_result lr = _lookup_prefix(&rt->root, kb, ke);
 	if (lr.kb == ke || _prefix_chain_matches(&lr, ke))
 		(void) _iterate(it, lr.v);
+}
+
+// Instead of recursive function call, keep existing value node stacked and stack
+// a 'new/next' value node for _next() processing.
+// Once this stacked node is processed, it can get backtracked to the previous one */
+static void _n_iter_next(struct radix_tree_iter *it, const struct value *next,
+			 unsigned i, unsigned nr_entries)
+{
+	if (i >= nr_entries) {
+		it->depth--;	// Last entry, backtrack
+
+	} else if (it->depth > it->max_depth) {
+		it->depth = 0;	// Maybe someone added nodes while iterating ??
+		free(it->nodes);
+		it->nodes = NULL; // Eventually can recognized, if needed...
+
+	} else {
+		it->depth++;	// Stack node for next iteration
+		it->nodes[it->depth].v = next;
+		it->nodes[it->depth].i = 0;
+	}
+}
+
+// Non-recursive iteration over all tree nodes
+bool radix_tree_iter_next(struct radix_tree_iter *it, union radix_value *value)
+{
+	unsigned i;
+	const struct value *v;
+	const struct node4 *n4;
+	const struct node16 *n16;
+	const struct node48 *n48;
+	const struct node256 *n256;
+	const struct value_chain *vc;
+	const struct prefix_chain *pc;
+
+	while (it->depth) {
+		if (!(v = it->nodes[it->depth].v)) {
+			it->depth = 0;	// can't happen
+			continue;
+		}
+
+		switch (v->type) {
+		case UNSET:
+			it->depth--;	// can't happen
+			break;
+
+		case VALUE:
+			it->depth--;
+			*value = v->value;
+			return true;
+
+		case VALUE_CHAIN:
+			vc = v->value.ptr;
+			it->nodes[it->depth].v = &vc->child;
+			*value = vc->value;
+			return true;
+
+		case PREFIX_CHAIN:
+			pc = v->value.ptr;
+			it->nodes[it->depth].v = &pc->child;
+			break;
+
+		case NODE4:
+			n4 = v->value.ptr;
+			i = it->nodes[it->depth].i++;
+			_n_iter_next(it, n4->values + i, i, n4->nr_entries);
+			break;
+
+		case NODE16:
+			n16 = v->value.ptr;
+			i = it->nodes[it->depth].i++;
+			_n_iter_next(it, n16->values + i, i, n16->nr_entries);
+			break;
+
+		case NODE48:
+			n48 = v->value.ptr;
+			i = it->nodes[it->depth].i++;
+			_n_iter_next(it, n48->values + i, i, n48->nr_entries);
+			break;
+
+		case NODE256:
+			n256 = v->value.ptr;
+			// skipping all UNSET elements
+			while ((i = it->nodes[it->depth].i++) < 256)
+				if (n256->values[i].type != UNSET)
+					break;
+			_n_iter_next(it, n256->values + i, i, 256);
+			break;
+		}
+	}
+
+	return false;
+}
+
+// Currently iterator keeps everything within the radix_tree structure itself.
+//
+// TODO: Maybe allocate individual iterator structure, but this would need _destroy().
+// ATM lvm2 code does not need this...
+struct radix_tree_iter *radix_tree_iter_init(struct radix_tree *rt, const void *key, size_t keylen)
+{
+	const uint8_t *kb = key;
+	const uint8_t *ke = kb + keylen;
+	struct lookup_result lr = _lookup_prefix(&rt->root, kb, ke);
+	struct radix_tree_iter *it = &rt->it;
+
+	it->max_depth = rt->max_keylen;
+	it->depth = 0;
+	free(it->nodes);
+	if (!(it->nodes = calloc(sizeof(struct radix_tree_iter_node), it->max_depth + 1)))
+		return NULL;
+
+	if (lr.kb == ke || _prefix_chain_matches(&lr, ke)) {
+		it->nodes[1].v = lr.v;
+		it->nodes[1].i = 0;
+		it->depth = 1;
+	}
+
+	return it;
 }
 
 //----------------------------------------------------------------
