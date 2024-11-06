@@ -1474,7 +1474,8 @@ static int _lv_activate_lv(const struct logical_volume *lv, struct lv_activate_o
 	 *
 	 * Has to be wired up in the "lvconvert --repair ... $RaidLV" code.
 	 */
-	if (seg_is_raid_with_meta(first_seg(lv))) {
+	if (strcmp(lv->vg->cmd->name, "lvcreate") &&
+	    seg_is_raid_with_meta(first_seg(lv))) {
 		uint32_t failed_cnt;
 		struct lv_segment *raid_seg = first_seg(lv);
 
@@ -1483,7 +1484,7 @@ static int _lv_activate_lv(const struct logical_volume *lv, struct lv_activate_o
 
 		if (failed_cnt) {
 			if (failed_cnt > raid_seg->segtype->parity_devs) {
-				log_error("%s has %u failed device%s which is more than the allowed %u",
+				log_error("Can't activate as %s has %u failed device%s which is more than the allowed %u",
 					  display_lvname(lv), failed_cnt, failed_cnt > 1 ? "s" :"",
 					  raid_seg->segtype->parity_devs);
 				return 0;

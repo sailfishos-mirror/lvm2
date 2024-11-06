@@ -3239,7 +3239,7 @@ static int _sublv_is_degraded(const struct logical_volume *slv)
 	return !slv || lv_is_partial(slv) || lv_is_virtual(slv);
 }
 
-/* Return failed component SubLV count for @lv. */
+/* Return failed component SubLV pair count for @lv. */
 static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv)
 {
 	uint32_t r = 0, s;
@@ -7455,19 +7455,22 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 			const char *str;
 
 			if (!failed_sublvs)
-				str = "now fully operational";
+				str = "fully operational";
 			else if (failed_sublvs <= raid_seg->segtype->parity_devs)
-				str = "now degraded";
+				str = "degraded";
 			else
 				str = "still failed";
 
 			/* FIXME: log amount of actually cleared devices in superblock! */
-			log_print_unless_silent("%u transiently failed devices back online for %s %s. Please check content.",
-					        failed_cnt - failed_sublvs, str, display_lvname(lv));
+			log_print_unless_silent("%u transiently failed devices back online for %s %s.%s",
+					        failed_cnt - failed_sublvs, str, display_lvname(lv),
+						failed_cnt > raid_seg->segtype->parity_devs ? " Please check content." : "");
 		}
 
-	} else if (failed_devices)
-		*failed_devices = min(failed_sublvs, failed_cnt);
+	}
+
+	if (failed_devices)
+		*failed_devices = max(failed_sublvs, raid_seg->segtype->parity_devs);
 
 	return 1;
 }
