@@ -7259,13 +7259,13 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 }
 
 /*
- * Supprt counting number of failed devices bits in dm-raid superblock bit arrays or clear them out.
+ * Support counting number of failed device bits in dm-raid superblock bit arrays or clear them out.
  */
 /* Copied/derived from kernel's drivers/md/dm-raid.c so this is prone to out-of-sync (factor out to header file?). */
-#define	MAX_RAID_DEVICES	253 /* md-raid kernel limit? */
-#define UINT64_BITS	 (sizeof(uint64_t) * 8)
-#define DISKS_ARRAY_ELEMS ((MAX_RAID_DEVICES + (UINT64_BITS - 1)) / UINT64_BITS)
-#define DM_RAID_SB_MAGIC	0x446D5264 /* "DmRd" */
+#define	MAX_RAID_DEVICES		253 /* md-raid kernel limit? */
+#define UINT64_BITS			(sizeof(uint64_t) * 8)
+#define DISKS_ARRAY_ELEMS		((MAX_RAID_DEVICES + (UINT64_BITS - 1)) / UINT64_BITS)
+#define DM_RAID_SB_MAGIC		0x446D5264 /* "DmRd" */
 #define	FEATURE_FLAG_SUPPORTS_V190	0x1 /* Supports extended superblock */
 
 /* RAID superblock at beginning of rmeta SubLVs trimmed down to mandatory members. */
@@ -7291,7 +7291,7 @@ struct dm_raid_superblock {
 } __packed;
 /* END: Copied from ... */
 
-/* Cope with 4K native devices... */
+/* Superblock I/O buffer size to be able to Cope with 4K native devices... */
 #define	SB_BUFSZ	4096
 
 static size_t _get_sb_size(const struct dm_raid_superblock *sb)
