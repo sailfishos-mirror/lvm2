@@ -7413,8 +7413,9 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 	uint32_t cleared[DISKS_ARRAY_ELEMS] = { 0 }, failed_cnt, failed_sublvs = 0, s;
 	struct lv_segment *raid_seg = first_seg(lv);
 
+	/* Prevent bogus use. */
 	if (!seg_is_raid_with_meta(raid_seg)) {
-		log_error("%s is a no RaidLV with metadata.", display_lvname(lv));
+		log_error("%s is not a RaidLV with metadata.", display_lvname(lv));
 		return 0;
 	}
 
