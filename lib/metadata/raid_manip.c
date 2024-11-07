@@ -7411,7 +7411,6 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 		return 0;
 	}
 
-	/* FIXME: pay attention to allowed failed_sublvs as of level! */
 	failed_sublvs = _lv_get_nr_failed_components(lv);
 	if (clear && failed_sublvs > raid_seg->segtype->parity_devs) {
 		log_error("Won't clear transiently failed devices on still failed %s.", display_lvname(lv));
