@@ -7396,8 +7396,6 @@ static int _count_or_clear_failed_devices_bits(struct logical_volume *meta_lv, u
 		goto out;
 	}
 
-	sync_local_dev_names(meta_lv->vg->cmd);
-
 	r = _count_or_clear_failed_devices(meta_lv, cleared, clear);
 out:
 	if (!deactivate_lv(meta_lv->vg->cmd, meta_lv))
@@ -7422,7 +7420,7 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 	/* FIXME: pay attention to allowed failed_sublvs as of level! */
 	failed_sublvs = _lv_get_nr_failed_components(lv);
 	if (clear && failed_sublvs > raid_seg->segtype->parity_devs) {
-		log_error("Can't clear transiently failed devices on still failed %s.", display_lvname(lv));
+		log_error("Won't clear transiently failed devices on still failed %s.", display_lvname(lv));
 		return 0;
 	}
 
