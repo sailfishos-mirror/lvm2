@@ -7258,6 +7258,9 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 	return 1;
 }
 
+/*
+ * Supprt counting number of failed devices bits in dm-raid superblock bit arrays or clear them out.
+ */
 /* Copied/derived from kernel's drivers/md/dm-raid.c so this is prone to out-of-sync (factor out to header file?). */
 #define	MAX_RAID_DEVICES	253 /* md-raid kernel limit? */
 #define UINT64_BITS	 (sizeof(uint64_t) * 8)
@@ -7410,13 +7413,6 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 	uint32_t cleared[DISKS_ARRAY_ELEMS] = { 0 }, failed_cnt, failed_sublvs = 0, s;
 	struct lv_segment *raid_seg = first_seg(lv);
 
-#if 0
-	if (clear) {
-		log_print("Not clearing failed devices on %s!", display_lvname(lv));
-		return 1;
-	}
-#endif
-
 	if (!seg_is_raid_with_meta(raid_seg)) {
 		log_error("%s is a no RaidLV with metadata.", display_lvname(lv));
 		return 0;
@@ -7490,6 +7486,7 @@ int lv_raid_count_failed_devices(const struct logical_volume *lv, uint32_t *fail
 {
 	return _raid_count_or_clear_failed_devices(lv, false, failed_cnt);
 }
+/* End: supprt counting number of failed devices bits in dm-raid superblock bit arrays or clear them out. */
 
 /* Return 1 if a partial raid LV can be activated redundantly */
 static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
