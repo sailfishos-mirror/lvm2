@@ -7335,7 +7335,6 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv, 
 			if (nr_failed_tmp > nr_failed)
 				nr_failed = nr_failed_tmp;
 		}
-log_print("%s[%u] nr_failed=%u clear=%u", __func__, __LINE__, nr_failed, clear);
 
 	} else {
 		log_error("Missing meta areas on %s!", display_lvname(lv));

@@ -62,18 +62,13 @@ static uint32_t _hweight64(__le64 v)
 
 static uint32_t _hweight_failed(struct dm_raid_superblock *sb)
 {
-	size_t sz = _get_sb_size(sb);
 	uint32_t r = _hweight64(sb->failed_devices);
 
-	if (sz == sizeof(*sb)) {
-		int i = sizeof(sb->extended_failed_devices) / sizeof(*sb->extended_failed_devices);
+	if (_get_sb_size(sb) == sizeof(*sb)) {
+		int i = DM_ARRAY_SIZE(sb->extended_failed_devices);
 
-		while (i--) {
-			uint32_t hw =  _hweight64(sb->extended_failed_devices[i]);
-
-			if (hw > r)
-				r = hw;
-		}
+		while (i--)
+			r = max(r, _hweight64(sb->extended_failed_devices[i]));
 	}
 	
 	return r;
@@ -81,16 +76,11 @@ static uint32_t _hweight_failed(struct dm_raid_superblock *sb)
 
 static void _clear_failed_devices(struct dm_raid_superblock *sb)
 {
-	size_t sz = _get_sb_size(sb);
 
 	sb->failed_devices = 0;
 
-	if (sz == sizeof(*sb)) {
-		int i = sizeof(sb->extended_failed_devices) / sizeof(*sb->extended_failed_devices);
-
-		while (i--)
-			sb->extended_failed_devices[i] = 0;
-	}
+	if (_get_sb_size(sb) == sizeof(*sb))
+		memset(sb->extended_failed_devices, 0, sizeof(sb->extended_failed_devices));
 }
 
 static int _count_or_clear_failed_devices(const char *dev_path, bool clear, uint32_t *nr_failed)
@@ -123,10 +113,7 @@ static int _count_or_clear_failed_devices(const char *dev_path, bool clear, uint
 		}
 
 		if (nr_failed)
-{
 			*nr_failed = _hweight_failed(sb);
-log_print("%s[%u] nr_failed=%u", __func__, __LINE__, *nr_failed);
-}
 
 		if (clear) {
 			r = (lseek(fd, 0, SEEK_SET) < 0) ? 0 : 1;
