@@ -1481,7 +1481,7 @@ static int _lv_activate_lv(const struct logical_volume *lv, struct lv_activate_o
 
 		if (!lv_raid_count_failed_devices(lv, &failed_cnt))
 			return_0;
-
+log_print("%s[%u] failed_cnt=%u parity_devs=%u", __func__, __LINE__, failed_cnt, raid_seg->segtype->parity_devs);
 		if (failed_cnt) {
 			if (failed_cnt > raid_seg->segtype->parity_devs) {
 				log_error("Can't activate as %s has %u failed device%s which is more than the allowed %u",
