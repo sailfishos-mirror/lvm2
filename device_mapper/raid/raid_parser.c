@@ -70,7 +70,7 @@ static uint32_t _hweight_failed(struct dm_raid_superblock *sb)
 		while (i--)
 			r = max(r, _hweight64(sb->extended_failed_devices[i]));
 	}
-	
+
 	return r;
 }
 
