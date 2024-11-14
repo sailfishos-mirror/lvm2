@@ -92,6 +92,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists);
 int lockd_stop_vg(struct cmd_context *cmd, struct volume_group *vg);
 int lockd_start_wait(struct cmd_context *cmd);
+int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32_t *cur_gen);
 
 /* locking */
 
@@ -203,6 +204,11 @@ static inline int lockd_stop_vg(struct cmd_context *cmd, struct volume_group *vg
 }
 
 static inline int lockd_start_wait(struct cmd_context *cmd)
+{
+	return 0;
+}
+
+static inline int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32_t *cur_gen)
 {
 	return 0;
 }

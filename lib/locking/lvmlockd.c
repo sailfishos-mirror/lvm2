@@ -16,6 +16,7 @@
 #include "lib/locking/lvmlockd.h"
 #include "lib/cache/lvmcache.h"
 #include "lib/display/display.h"
+#include "lib/device/persist.h"
 #include "daemons/lvmlockd/lvmlockd-client.h"
 
 #include <mntent.h>
@@ -1411,7 +1412,9 @@ void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
 	switch (get_lock_type_from_string(vg->lock_type)) {
 	case LOCK_TYPE_NONE:
 	case LOCK_TYPE_CLVM:
+		break;
 	case LOCK_TYPE_SANLOCK:
+		persist_key_file_remove(cmd, vg);
 		break;
 	case LOCK_TYPE_DLM:
 		_free_vg_dlm(cmd, vg);
@@ -1571,6 +1574,24 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 		break;
 	default:
 		log_error("VG %s start failed: %d", vg->name, result);
+	}
+
+	/*
+	 * Update persistent reservation key with the correct
+	 * host generation number (from sanlock) if necessary.
+	 * lockstart is async, so when lvmlockd processes the
+	 * start_vg, it can read the previous generation number
+	 * and return that, knowing that the generation number
+	 * used in the in-progress start will be +1.  We want
+	 * to use the current generation number in the PR key.
+	 */
+	if (!result && vg->lock_type && !strcmp(vg->lock_type, "sanlock")) {
+		uint32_t prev_gen = (uint32_t)daemon_reply_int(reply, "prev_generation", 0);
+		log_debug("lockd start update pr key with prev_gen %u", prev_gen);
+		if (!persist_key_update(cmd, vg, prev_gen)) {
+			lockd_stop_vg(cmd, vg);
+			ret = 0;
+		}
 	}
 
 	daemon_reply_destroy(reply);
@@ -2618,6 +2639,47 @@ int lockd_vg_update(struct volume_group *vg)
 		ret = (result < 0) ? 0 : 1;
 	}
 
+	daemon_reply_destroy(reply);
+	return ret;
+}
+
+int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32_t *cur_gen)
+{
+	daemon_reply reply;
+	struct owner owner = { 0 };
+	int result;
+	int ret = 0;
+
+	if (!_use_lvmlockd)
+		return 0;
+	if (!_lvmlockd_connected)
+		return 0;
+	if (!vg_is_shared(vg))
+		return 0;
+
+	log_debug("lockd_vg_status %s", vg->name);
+
+	reply = _lockd_send("vg_status",
+				"pid = " FMTd64, (int64_t) getpid(),
+				"vg_name = %s", vg->name,
+				NULL);
+
+	if (!_lockd_result(vg->cmd, "vg_status", reply, &result, NULL, &owner)) {
+		log_debug("lockd_vg_status %s no result", vg->name);
+		goto out;
+	}
+
+	if (result < 0) {
+		log_debug("lockd_vg_status %s result error %d", vg->name, result);
+		goto out;
+	}
+
+	log_debug("lockd_vg_status %s host_id %u gen %u",
+		  vg->name, owner.host_id, owner.generation);
+
+	*cur_gen = owner.generation;
+	ret = 1;
+ out:
 	daemon_reply_destroy(reply);
 	return ret;
 }
