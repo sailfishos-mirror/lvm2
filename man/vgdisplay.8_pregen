@@ -145,6 +145,41 @@ the "unknown" value which denotes that the value could not be determined).
 .br
 Generate colon separated output for easier parsing in scripts or programs.
 Also see \fBvgs\fP(8) which provides considerably more control over the output.
+The values are:
+.br
+  \[bu] volume group name
+.br
+  \[bu] volume group access
+.br
+  \[bu] volume group status
+.br
+  \[bu] internal volume group number
+.br
+  \[bu] maximum number of logical volumes
+.br
+  \[bu] current number of logical volumes
+.br
+  \[bu] open count of all logical volumes in this volume group
+.br
+  \[bu] maximum logical volume size
+.br
+  \[bu] maximum number of physical volumes
+.br
+  \[bu] current number of physical volumes
+.br
+  \[bu] actual number of physical volumes
+.br
+  \[bu] size of volume group in kilobytes
+.br
+  \[bu] physical extent size
+.br
+  \[bu] total number of physical extents for this volume group
+.br
+  \[bu] allocated number of physical extents for this volume group
+.br
+  \[bu] free number of physical extents for this volume group
+.br
+  \[bu] uuid of volume group
 .
 .HP
 \fB-C\fP|\fB--columns\fP
