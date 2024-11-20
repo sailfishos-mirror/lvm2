@@ -1200,12 +1200,78 @@ arg(clustered_ARG, 'c', "clustered", bool_VAL, 0, 0,
     "the --shared option with \\fBlvmlockd\\fP(8).\n")
 
 arg(colon_ARG, 'c', "colon", 0, 0, 0,
+    "Generate colon separated output for easier parsing in scripts or programs.\n")
+
+arg(colon_lvs_ARG, colon_ARG, "colon_lvs", 0, ARG_MAN_ALIAS_OPT, 0,
     "Generate colon separated output for easier parsing in scripts or programs.\n"
-    "Also see \\fBvgs\\fP(8) which provides considerably more control over the output.\n")
+    "Also see \\fBlvs\\fP(8) which provides considerably more control over the output.\n"
+    "The values are:\n"
+    ".br\n  \\[bu] logical volume name\n"
+    ".br\n  \\[bu] volume group name\n"
+    ".br\n  \\[bu] logical volume access\n"
+    ".br\n  \\[bu] logical volume status\n"
+    ".br\n  \\[bu] internal logical volume number\n"
+    ".br\n  \\[bu] open count of logical volume\n"
+    ".br\n  \\[bu] logical volume size in sectors\n"
+    ".br\n  \\[bu] current logical extents associated to logical volume\n"
+    ".br\n  \\[bu] allocated logical extents of logical volume\n"
+    ".br\n  \\[bu] allocation policy of logical volume\n"
+    ".br\n  \\[bu] read ahead sectors of logical volume\n"
+    ".br\n  \\[bu] major device number of logical volume\n"
+    ".br\n  \\[bu] minor device number of logical volume\n")
+
+arg(colon_vgs_ARG, colon_ARG, "colon_vgs", 0, ARG_MAN_ALIAS_OPT, 0,
+    "Generate colon separated output for easier parsing in scripts or programs.\n"
+    "Also see \\fBvgs\\fP(8) which provides considerably more control over the output.\n"
+    "The values are:\n"
+    ".br\n  \\[bu] volume group name\n"
+    ".br\n  \\[bu] volume group access\n"
+    ".br\n  \\[bu] volume group status\n"
+    ".br\n  \\[bu] internal volume group number\n"
+    ".br\n  \\[bu] maximum number of logical volumes\n"
+    ".br\n  \\[bu] current number of logical volumes\n"
+    ".br\n  \\[bu] open count of all logical volumes in this volume group\n"
+    ".br\n  \\[bu] maximum logical volume size\n"
+    ".br\n  \\[bu] maximum number of physical volumes\n"
+    ".br\n  \\[bu] current number of physical volumes\n"
+    ".br\n  \\[bu] actual number of physical volumes\n"
+    ".br\n  \\[bu] size of volume group in kilobytes\n"
+    ".br\n  \\[bu] physical extent size\n"
+    ".br\n  \\[bu] total number of physical extents for this volume group\n"
+    ".br\n  \\[bu] allocated number of physical extents for this volume group\n"
+    ".br\n  \\[bu] free number of physical extents for this volume group\n"
+    ".br\n  \\[bu] uuid of volume group\n")
+
+arg(colon_pvs_ARG, colon_ARG, "colon_pvs", 0, ARG_MAN_ALIAS_OPT, 0,
+    "Generate colon separated output for easier parsing in scripts or programs.\n"
+    "Also see \\fBpvs\\fP(8) which provides considerably more control over the output.\n"
+    "The values are:\n"
+    ".br\n  \\[bu] physical volume device name\n"
+    ".br\n  \\[bu] volume group name\n"
+    ".br\n  \\[bu] physical volume size in sectors\n"
+    ".br\n  \\[bu] internal physical volume number (obsolete)\n"
+    ".br\n  \\[bu] physical volume status\n"
+    ".br\n  \\[bu] physical volume (not) allocatable\n"
+    ".br\n  \\[bu] current number of logical volumes on this physical volume\n"
+    ".br\n  \\[bu] physical extent size in kilobytes\n"
+    ".br\n  \\[bu] total number of physical extents\n"
+    ".br\n  \\[bu] free number of physical extents\n"
+    ".br\n  \\[bu] allocated number of physical extents\n")
 
 arg(columns_ARG, 'C', "columns", 0, 0, 0,
+    "Display output in columns.\n")
+
+arg(columns_lvs_ARG, columns_ARG, "columns_lvs", 0, ARG_MAN_ALIAS_OPT, 0,
+    "Display output in columns, the equivalent of \\fBlvs\\fP(8).\n"
+    "Options listed are the same as options given in \\fBlvs\\fP(8).\n")
+
+arg(columns_vgs_ARG, columns_ARG, "columns_vgs", 0, ARG_MAN_ALIAS_OPT, 0,
     "Display output in columns, the equivalent of \\fBvgs\\fP(8).\n"
     "Options listed are the same as options given in \\fBvgs\\fP(8).\n")
+
+arg(columns_pvs_ARG, columns_ARG, "columns_pvs", 0, ARG_MAN_ALIAS_OPT, 0,
+    "Display output in columns, the equivalent of \\fBpvs\\fP(8).\n"
+    "Options listed are the same as options given in \\fBpvs\\fP(8).\n")
 
 arg(contiguous_ARG, 'C', "contiguous", bool_VAL, 0, 0,
     "Sets or resets the contiguous allocation policy for LVs.\n"

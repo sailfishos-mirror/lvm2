@@ -1387,7 +1387,7 @@ DESC: new LV to type writecache.
 ---
 
 lvdisplay
-OO: --aligned, --all, --binary, --colon, --columns,
+OO: --aligned, --all, --binary, --colon_lvs, --columns_lvs,
 --configreport ConfigReport, --foreign, --history, --ignorelockingfailure,
 --logonly, --maps, --noheadings,
 --nosuffix, --options String, --sort String, --readonly,
@@ -1623,7 +1623,7 @@ RULE: --bootloaderareasize not --restorefile
 ---
 
 pvdisplay
-OO: --aligned, --all, --binary, --colon, --columns, --configreport ConfigReport,
+OO: --aligned, --all, --binary, --colon_pvs, --columns_pvs, --configreport ConfigReport,
 --foreign, --ignorelockingfailure,
 --logonly, --maps, --noheadings, --nosuffix, --options String,
 --readonly, --reportformat ReportFmt, --select String, --separator String, --shared,
@@ -1846,7 +1846,7 @@ ID: vgcreate_general
 ---
 
 vgdisplay
-OO: --activevolumegroups, --aligned, --binary, --colon, --columns,
+OO: --activevolumegroups, --aligned, --binary, --colon_vgs, --columns_vgs,
 --configreport ConfigReport, --foreign, --ignorelockingfailure,
 --logonly, --noheadings, --nosuffix,
 --options String, --readonly, --select String,
