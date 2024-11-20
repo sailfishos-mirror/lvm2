@@ -62,6 +62,7 @@
 #define ARG_GROUPABLE 0x00000002	/* E.g. --addtag */
 #define ARG_NONINTERACTIVE 0x00000004	/* only for use in noninteractive mode  */
 #define ARG_LONG_OPT  0x00000008	/* arg has long format option  */
+#define ARG_MAN_ALIAS_OPT 0x00000010    /* option is a man alias for another option */
 
 struct arg_values {
 	char *value;

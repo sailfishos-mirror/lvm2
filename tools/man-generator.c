@@ -61,6 +61,7 @@ static void *dm_pool_alloc(void *p, size_t size)
 #define ARG_GROUPABLE 0x00000002
 #define ARG_NONINTERACTIVE 0x00000004
 #define ARG_LONG_OPT  0x00000008
+#define ARG_MAN_ALIAS_OPT  0x00000010
 struct arg_values;
 
 /* needed to include vals.h */
@@ -349,6 +350,11 @@ static const char *_man_long_opt_name(const char *cmdname, int opt_enum)
 static void _print_man_option(const char *name, int opt_enum, int indent)
 {
 	int short_opt = opt_names[opt_enum].short_opt;
+
+	if (opt_names[opt_enum].flags & ARG_MAN_ALIAS_OPT) {
+		opt_enum = short_opt;
+		short_opt = opt_names[short_opt].short_opt;
+	}
 
 	if (short_opt)
 		printf("\\fB-%c\\fP|", short_opt);

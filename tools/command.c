@@ -256,6 +256,10 @@ static int _opt_str_to_num(struct command *cmd, const char *str)
 			 * check left & right side for possible match
 			 */
 			for (i = middle;;) {
+#ifndef MAN_PAGE_GENERATOR
+				if (!p && (opt_names_alpha[i]->flags & ARG_MAN_ALIAS_OPT))
+					return opt_names_alpha[i]->short_opt; /* alias for man only */
+#endif
 				if ((!p && !(opt_names_alpha[i]->flags & ARG_LONG_OPT)) ||
 				    (p && !opt_names_alpha[i]->short_opt))
 					return opt_names_alpha[i]->opt_enum; /* Found */
@@ -268,6 +272,10 @@ static int _opt_str_to_num(struct command *cmd, const char *str)
 			for (i = middle + 1; i <= last; ++i) {
 				if (strcmp(opt_names_alpha[i]->long_opt, long_name))
 					break;
+#ifndef MAN_PAGE_GENERATOR
+				if (!p && (opt_names_alpha[i]->flags & ARG_MAN_ALIAS_OPT))
+					return opt_names_alpha[i]->short_opt; /* alias for man only */
+#endif
 				if ((!p && !(opt_names_alpha[i]->flags & ARG_LONG_OPT)) ||
 				    (p && !opt_names_alpha[i]->short_opt))
 					return opt_names_alpha[i]->opt_enum; /* Found */

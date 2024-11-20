@@ -227,9 +227,9 @@ struct command {
 
 struct opt_name {
 	const char *desc;
-	const char long_opt[27];/* --foo */
-	const char short_opt;   /* -f */
-	uint16_t opt_enum;      /* foo_ARG */
+	const char long_opt[26];/* --foo */
+	uint16_t short_opt;	/* -f */
+	uint16_t opt_enum;	/* foo_ARG */
 	uint16_t val_enum;	/* xyz_VAL when --foo takes a val like "--foo xyz" */
 	uint16_t flags;
 	uint16_t prio;
