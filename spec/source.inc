@@ -67,7 +67,7 @@
    %global enable_lvmlockd_sanlock 1
  %endif
  %global sanlock_version 3.7.0-1
- %if %{rhel} <= 9
+ %if %{rhel} >= 7 && %{rhel} <= 9
    %global enable_lvmlockd_dlm 1
  %endif
  # FIXME: Check these conditions against RHEL builds!
