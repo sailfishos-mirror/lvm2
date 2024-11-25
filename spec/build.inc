@@ -32,6 +32,9 @@
 %enableif %{enable_editline} editline
 
 %build
+%if 10 <= 9
+echo "10 <= 9"; exit 1
+%endif
 
 %configure %{configure_flags}
 
