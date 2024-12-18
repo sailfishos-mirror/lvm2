@@ -885,9 +885,11 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
 				return strdup(dw->id);
 		}
 		return NULL;
-	case DEV_ID_TYPE_NVME_EUI64:
-	case DEV_ID_TYPE_NVME_NGUID:
-	case DEV_ID_TYPE_NVME_UUID:
+	}
+
+	else if (idtype == DEV_ID_TYPE_NVME_EUI64 ||
+		 idtype == DEV_ID_TYPE_NVME_NGUID ||
+		 idtype == DEV_ID_TYPE_NVME_UUID) {
 		if (!(dev->flags & DEV_ADDED_NVME_WWIDS))
 			dev_read_nvme_wwids(dev);
 		dm_list_iterate_items(dw, &dev->wwids) {
