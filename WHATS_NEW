@@ -1,3 +1,7 @@
+Version 2.03.30 - 
+==================
+  lvconvert detects early volume in use when converting it to a pool.
+
 Version 2.03.29 - 
 ==================
   Fix renaming of raid sub LVs when converting a volume to raid (2.03.28).
