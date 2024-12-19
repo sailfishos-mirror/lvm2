@@ -193,6 +193,9 @@ BuildRequires: pkgconfig
 # TODO: Should these be conditional?
 BuildRequires: libaio-devel
 BuildRequires: libblkid-devel
+%if %{rhel} >= 9 || %{fedora} >= 41
+BuildRequires: libnvme-devel
+%endif
 
 # Expands to nothing unless at least 2 arguments are given
 %define maybe() \
