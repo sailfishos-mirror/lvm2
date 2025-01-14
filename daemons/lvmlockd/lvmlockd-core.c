@@ -511,14 +511,16 @@ static struct client *alloc_client(void)
 	return cl;
 }
 
-static struct resource *alloc_resource(void)
+static struct resource *alloc_resource(char *name)
 {
 	struct resource *r;
 
 	pthread_mutex_lock(&unused_struct_mutex);
 	if (!unused_resource_count || alloc_new_structs) {
+		log_debug("alloc_r new %s", name ?: "");
 		r = malloc(sizeof(struct resource) + resource_lm_data_size);
 	} else {
+		log_debug("alloc_r used %s", name ?: "");
 		r = list_first_entry(&unused_resource, struct resource, list);
 		list_del(&r->list);
 		unused_resource_count--;
@@ -587,8 +589,10 @@ static void free_resource(struct resource *r)
 {
 	pthread_mutex_lock(&unused_struct_mutex);
 	if (unused_resource_count >= MAX_UNUSED_RESOURCE) {
+		log_debug("free_r %s", r->name);
 		free(r);
 	} else {
+		log_debug("free_r save %s", r->name);
 		list_add_tail(&r->list, &unused_resource);
 		unused_resource_count++;
 	}
@@ -648,7 +652,7 @@ static int setup_structs(void)
 	}
 
 	for (i = 0; i < MAX_UNUSED_RESOURCE/2; i++) {
-		if (!(r = alloc_resource()))
+		if (!(r = alloc_resource(NULL)))
 			goto fail;
 		free_resource(r);
 	}
@@ -754,7 +758,7 @@ static const char *rt_str(int x)
 	case LD_RT_LV:
 		return "lv";
 	default:
-		return ".";
+		return "";
 	};
 }
 
@@ -991,7 +995,7 @@ static int read_adopt_file(struct list_head *vg_lockd)
 			list_add(&ls->list, vg_lockd);
 
 		} else if (!strncmp(adopt_line, "LV:", 3)) {
-			if (!(r = alloc_resource()))
+			if (!(r = alloc_resource(NULL)))
 				goto fail;
 
 			r->type = LD_RT_LV;
@@ -2225,6 +2229,18 @@ static void res_process(struct lockspace *ls, struct resource *r,
 		}
 	}
 
+	/* FIXME: free_lv currently requires finding an existing resource struct,
+	 * and this will prevent that.  If we free the resource struct whan
+	 * unlocked, would we then need to create a new resource struct for
+	 * free_lv?  i.e. free and then immediately recreate?
+	 * Maybe do a combined unlock+free for LVs? */
+
+	/*
+	if ((r->type == LD_RT_LV) && (r->mode == LD_LK_UN) &&
+	     list_empty(&r->locks) && list_empty(&r->actions))
+		goto r_free;
+	*/
+
 	return;
 
 r_free:
@@ -2379,7 +2395,7 @@ static struct resource *find_resource_act(struct lockspace *ls,
 	if (nocreate)
 		return NULL;
 
-	if (!(r = alloc_resource()))
+	if (!(r = alloc_resource((act->rt == LD_RT_LV) ? act->lv_uuid : NULL)))
 		return NULL;
 
 	r->type = act->rt;
@@ -3049,7 +3065,7 @@ static int add_lockspace_thread(const char *ls_name,
 	if (act)
 		ls->host_id = act->host_id;
 
-	if (!(r = alloc_resource())) {
+	if (!(r = alloc_resource(R_NAME_VG))) {
 		free(ls);
 		return -ENOMEM;
 	}
@@ -4061,9 +4077,9 @@ static int client_send_result(struct client *cl, struct action *act)
 		if (act->lv_args[0])
 			lv_args = act->lv_args;
 
-		log_debug("send %s[%d] cl %u %s %s rv %d vg_args %s lv_args %s",
+		log_debug("send %s[%d][%u] %s%s%s result %d vg_args %s lv_args %s",
 			  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
-			  op_str(act->op), rt_str(act->rt),
+			  op_str(act->op), act->rt ? "_" : "", rt_str(act->rt),
 			  act->result, vg_args ? vg_args : "", lv_args ? lv_args : "");
 
 		res = daemon_reply_simple("OK",
@@ -4077,9 +4093,9 @@ static int client_send_result(struct client *cl, struct action *act)
 
 	} else if (act->op == LD_OP_QUERY_LOCK) {
 
-		log_debug("send %s[%d] cl %u %s %s rv %d mode %d",
+		log_debug("send %s[%d][%u] %s%s%s result %d mode %d",
 			  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
-			  op_str(act->op), rt_str(act->rt),
+			  op_str(act->op), act->rt ? "_" : "", rt_str(act->rt),
 			  act->result, act->mode);
 
 		res = daemon_reply_simple("OK",
@@ -4107,7 +4123,7 @@ static int client_send_result(struct client *cl, struct action *act)
 		else
 			act->result = -EINVAL;
 
-		log_debug("send %s[%d] cl %u dump result %d dump_len %d",
+		log_debug("send %s[%d][%u] dump result %d dump_len %d",
 			  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
 			  act->result, dump_len);
 
@@ -4120,9 +4136,9 @@ static int client_send_result(struct client *cl, struct action *act)
 		 * A normal reply.
 		 */
 
-		log_debug("send %s[%d] cl %u %s %s rv %d %s %s",
+		log_debug("send %s[%d][%u] %s%s%s result %d %s %s",
 			  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
-			  op_mode_str(act->op, act->mode), rt_str(act->rt),
+			  op_mode_str(act->op, act->mode), act->rt ? "_" : "", rt_str(act->rt),
 			  act->result, (act->result == -ENOLS) ? "ENOLS" : "", result_flags);
 
 		res = daemon_reply_simple("OK",
@@ -5054,9 +5070,16 @@ skip_pvs_path:
 	dm_config_destroy(req.cft);
 	buffer_destroy(&req.buffer);
 
-	log_debug("recv %s[%d] cl %u %s %s \"%s\" flags %x",
+	log_debug("recv %s[%d][%u] %s%s%s %s%s %s%s%s%s opts=%x",
 		  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
-		  op_mode_str(act->op, act->mode), rt_str(act->rt), act->vg_name, opts);
+		  op_mode_str(act->op, act->mode), act->rt ? "_" : "", rt_str(act->rt),
+		  act->vg_name[0] ? "vg=" : "",
+		  act->vg_name,
+		  act->lv_name[0] || act->lv_uuid[0] ? "lv=" : "",
+		  act->lv_name[0] ? act->lv_name : "",
+		  act->lv_uuid[0] ? ":" : "",
+		  act->lv_uuid[0] ? act->lv_uuid : "",
+		  opts);
 
 	if (lm == LD_LM_DLM && !lm_support_dlm()) {
 		log_debug("dlm not supported");
