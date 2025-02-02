@@ -1,11 +1,24 @@
 /*
+ * Copyright (C) 2024 Red Hat, Inc. All rights reserved.
+ *
+ * This file is part of the device-mapper userspace tools.
+ *
+ * This copyrighted material is made available to anyone wishing to use,
+ * modify, copy, or redistribute it subject to the terms and conditions
+ * of the GNU Lesser General Public License v.2.1.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
+/*
  * Support counting number of failed device bits in dm-raid superblock bit arrays or clear them out.
  */
 
 #include "device_mapper/misc/dmlib.h"
 #include "device_mapper/all.h"
 #include "device_mapper/raid/target.h"
-#include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -65,7 +78,7 @@ static uint32_t _hweight_failed(struct dm_raid_superblock *sb)
 	uint32_t r = _hweight64(sb->failed_devices);
 
 	if (_get_sb_size(sb) == sizeof(*sb)) {
-		int i = DM_ARRAY_SIZE(sb->extended_failed_devices);
+		size_t i = DM_ARRAY_SIZE(sb->extended_failed_devices);
 
 		while (i--)
 			r = max(r, _hweight64(sb->extended_failed_devices[i]));
@@ -85,52 +98,58 @@ static void _clear_failed_devices(struct dm_raid_superblock *sb)
 
 static int _count_or_clear_failed_devices(const char *dev_path, bool clear, uint32_t *nr_failed)
 {
-	int fd, r;
 	struct dm_raid_superblock *sb = NULL;
+	size_t sz;
+	int fd, r = 0;
 
 	if (posix_memalign((void *) &sb, SB_BUFSZ, SB_BUFSZ)) {
-		log_error("Failed to allocate RAID superblock buffer for %s", dev_path);
+		log_sys_error("Failed to allocate RAID superblock buffer", dev_path);
 		return 0;
 	}
 
-	fd = open(dev_path, O_EXCL | O_RDWR | O_DIRECT);
+	fd = open(dev_path, O_EXCL | ((clear) ?  O_RDWR : O_RDONLY) | O_DIRECT);
 	if (fd < 0) {
-		if (clear) {
-			log_error("Failed to open hidden RAID metadata SubLV %s", dev_path);
-			r = 0;
-		} else
-			r = 1;
-
+		log_sys_error("Failed to open RAID metadata volume", dev_path);
 		goto out;
 	}
 
-	if (read(fd, sb, SB_BUFSZ) == SB_BUFSZ) {
-		/* FIXME: big endian??? */
-		if (sb->magic != htobe32(DM_RAID_SB_MAGIC)) {
-			log_error("No RAID signature on %s", dev_path);
-			r = 0;
+	if (read(fd, sb, SB_BUFSZ) != SB_BUFSZ) {
+		log_sys_error("Failed to read RAID metadata volume", dev_path);
+		goto out;
+	}
+
+	/* FIXME: big endian??? */
+	if (sb->magic != htobe32(DM_RAID_SB_MAGIC)) {
+		log_error("No RAID signature on %s.", dev_path);
+		goto out;
+	}
+
+	if (nr_failed)
+		*nr_failed = _hweight_failed(sb);
+
+	if (clear) {
+		if (lseek(fd, 0, SEEK_SET) < 0) {
+			log_sys_error("Failed to seek RAID metadata volume", dev_path);
 			goto out;
 		}
 
-		if (nr_failed)
-			*nr_failed = _hweight_failed(sb);
+		sz = _get_sb_size(sb);
+		memset((void *)((char *) sb + sz), 0, SB_BUFSZ - sz);
+		_clear_failed_devices(sb);
+		if (write(fd, sb, SB_BUFSZ) != SB_BUFSZ) {
+			log_sys_error("Failed to clear RAID metadata volume", dev_path);
+			goto out;
+		}
+	}
 
-		if (clear) {
-			r = (lseek(fd, 0, SEEK_SET) < 0) ? 0 : 1;
-			if (r) {
-				size_t sz = _get_sb_size(sb);
+	r = 1;
 
-				memset((void *)((char *) sb + sz), 0, SB_BUFSZ - sz);
-				_clear_failed_devices(sb);
-				r = write(fd, sb, SB_BUFSZ) == SB_BUFSZ;
-			}
-		} else
-			r = 1;
-	} else
-		r = !clear;
 out:
+	if (fd >= 0)
+		close(fd);
+
 	free(sb);
-	close(fd);
+
 	return r;
 }
 
@@ -143,4 +162,3 @@ int dm_raid_clear_failed_devices(const char *dev_path, uint32_t *nr_failed)
 {
 	return _count_or_clear_failed_devices(dev_path, true, nr_failed);
 }
-//----------------------------------------------------------------
