@@ -1060,6 +1060,8 @@ int device_ids_write(struct cmd_context *cmd)
 
 	if (fflush(fp))
 		stack;
+	if (fsync(fileno(fp)) < 0)
+		stack;
 	if (fclose(fp))
 		stack;
 
