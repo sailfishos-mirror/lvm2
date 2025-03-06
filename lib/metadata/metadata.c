@@ -34,6 +34,7 @@
 #include "lib/config/defaults.h"
 #include "lib/locking/lvmlockd.h"
 #include "lib/notify/lvmnotify.h"
+#include "lib/device/device_id.h"
 #include "base/data-struct/radix-tree.h"
 
 #include <time.h>
@@ -644,8 +645,14 @@ void vg_remove_pvs(struct volume_group *vg)
 
 int vg_remove_direct(struct volume_group *vg)
 {
+	struct cmd_context *cmd = vg->cmd;
 	struct physical_volume *pv;
 	struct pv_list *pvl;
+	char pvid_old[ID_LEN + 1] __attribute__((aligned(8)));
+	char pvid_new[ID_LEN + 1] __attribute__((aligned(8)));
+	char *pvid_new_dup;
+	struct dev_use *du;
+	int df_update = 0;
 	int ret = 1;
 
 	if (!vg_remove_mdas(vg)) {
@@ -664,6 +671,37 @@ int vg_remove_direct(struct volume_group *vg)
 		pv->vg_name = vg->fid->fmt->orphan_vg_name;
 		pv->status &= ~ALLOCATABLE_PV;
 
+		du = NULL;
+		pvid_new_dup = NULL;
+		memset(pvid_old, 0, sizeof(pvid_old));
+		memset(pvid_new, 0, sizeof(pvid_old));
+
+		if (!cmd->keep_old_pvid) {
+			memcpy(pvid_old, &pv->id.uuid, ID_LEN);
+
+			du = get_du_for_pvid(cmd, pvid_old);
+
+			if (!id_create(&pv->id)) {
+				ret = 0;
+				continue;
+			}
+
+			memcpy(pvid_new, pv->id.uuid, ID_LEN);
+
+			if (!(pvid_new_dup = strdup_pvid(pvid_new))) {
+				stack;
+				ret = 0;
+				continue;
+			}
+
+			/*
+			 * pv_write uses old_id to do some tricks to update
+			 * lvmcache so it can use lvmcache infos for writing
+			 * the pv areas.
+			 */
+			memcpy(&pv->old_id, &pvid_old, ID_LEN);
+		}
+
 		if (!dev_get_size(pv_dev(pv), &pv->size)) {
 			log_error("%s: Couldn't get size.", pv_dev_name(pv));
 			ret = 0;
@@ -671,19 +709,31 @@ int vg_remove_direct(struct volume_group *vg)
 		}
 
 		/* FIXME Write to same sector label was read from */
-		if (!pv_write(vg->cmd, pv, 0)) {
+		if (!pv_write(cmd, pv, 0)) {
 			log_error("Failed to remove physical volume \"%s\""
 				  " from volume group \"%s\"",
 				  pv_dev_name(pv), vg->name);
 			ret = 0;
 		}
+
+		if (du && pvid_new_dup) {
+			free(du->pvid);
+			du->pvid = pvid_new_dup;
+			df_update = 1;
+		}
+	}
+
+	if (df_update) {
+		if (!device_ids_write(cmd))
+			log_warn("Failed to update devices file.");
+		unlock_devices_file(cmd);
 	}
 
 	lockd_vg_update(vg);
 
-	set_vg_notify(vg->cmd);
+	set_vg_notify(cmd);
 
-	if (!backup_remove(vg->cmd, vg->name))
+	if (!backup_remove(cmd, vg->name))
 		stack;
 
 	if (ret)

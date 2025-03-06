@@ -104,8 +104,9 @@ int vgremove(struct cmd_context *cmd, int argc, char **argv)
 	clear_hint_file(cmd);
 
 	cmd->wipe_outdated_pvs = 1;
-
 	cmd->handles_missing_pvs = 1;
+	cmd->edit_devices_file = !cmd->keep_old_pvid;
+
 	ret = process_each_vg(cmd, argc, argv, NULL, NULL,
 			      READ_FOR_UPDATE, 0,
 			      NULL, &_vgremove_single);

@@ -225,6 +225,7 @@ struct cmd_context {
 	unsigned device_ids_auto_import:1;
 	unsigned get_vgname_from_options:1;     /* used by lvconvert */
 	unsigned vg_write_validates_vg:1;
+	unsigned keep_old_pvid:1;		/* set if vgremove should not change pvids */
 
 	/*
 	 * Devices and filtering.
