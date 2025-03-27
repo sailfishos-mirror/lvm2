@@ -331,9 +331,11 @@ $SHOULD grep "not in-sync" out
 
 lvconvert $vg/$lv1 # wait
 
+# FIXME: If previous convert passed, dev1 is already removed, should this fail?
 lvconvert -m-1 $vg/$lv1 "$dev1"
+# TODO: This tests mirror legs are only on listed devices, not that the devices really contain mirror legs. Do we need to test that assumption?
 check mirror_images_on $vg $lv1 "$dev2" "$dev4"
-lvconvert -m-1 $vg/$lv1 "$dev2"
+$SHOULD lvconvert -m-1 $vg/$lv1 "$dev2"
 check linear $vg $lv1
 check lv_on $vg $lv1 "$dev4"
 lvremove -ff $vg
