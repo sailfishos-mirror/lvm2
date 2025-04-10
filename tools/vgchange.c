@@ -15,6 +15,7 @@
 
 #include "tools.h"
 #include "lib/device/device_id.h"
+#include "lib/device/persist.h"
 #include "lib/label/hints.h"
 
 struct vgchange_params {
@@ -232,6 +233,9 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 		}
 	}
 
+	if (do_activate && !persist_start_include(cmd, vg, (activate == CHANGE_AAY), 0))
+		return 0;
+ 
 	/*
 	 * Safe, since we never write out new metadata here. Required for
 	 * partial activation to work.
@@ -674,6 +678,14 @@ static int _vgchange_lock_start(struct cmd_context *cmd, struct volume_group *vg
 	}
 
 do_start:
+	if (!persist_start_include(cmd, vg, 0, auto_opt))
+		return 0;
+
+	if (vg->pr && !persist_is_started(cmd, vg)) {
+		log_error("VG %s PR should be started before locking (vgchange --persist start)", vg->name);
+		return 0;
+	}
+
 	r = lockd_start_vg(cmd, vg, &exists);
 
 	if (r)
@@ -1552,6 +1564,193 @@ int vgchange_systemid_cmd(struct cmd_context *cmd, int argc, char **argv)
 		cmd->handles_missing_pvs = 1;
 
 	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_UPDATE, 0, handle, &_vgchange_systemid_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+
+static int _vgchange_persist_single(struct cmd_context *cmd, const char *vg_name,
+			             struct volume_group *vg,
+			             struct processing_handle *handle)
+{
+	const char *op = arg_str_value(cmd, persist_ARG, NULL);
+	const char *remkey = arg_str_value(cmd, removekey_ARG, NULL);
+	char *local_key = (char *)find_config_tree_str(cmd, local_pr_key_CFG, NULL);
+	int local_host_id = find_config_tree_int(cmd, local_host_id_CFG, NULL);
+	int ret = 1;
+
+	if (!op)
+		return ECMD_FAILED;
+
+	if (!strncmp(op, "check", 5)) {
+		ret = persist_check(cmd, vg, op, local_key, local_host_id);
+
+	} else if (!strcmp(op, "read")) {
+		ret = persist_read(cmd, vg);
+
+	} else if (!strcmp(op, "start")) {
+		ret = persist_start(cmd, vg, 0, local_key, local_host_id, remkey);
+
+	} else if (!strcmp(op, "stop")) {
+		if (!arg_is_set(cmd, force_ARG) && lvs_in_vg_activated(vg)) {
+			log_error("Deactivate LVs before stopping persistent reservation.");
+			return ECMD_FAILED;
+		}
+		ret = persist_stop(cmd, vg);
+
+	} else if (!strcmp(op, "remove")) {
+		ret = persist_remove(cmd, vg, local_key, local_host_id, remkey);
+
+	} else if (!strcmp(op, "clear")) {
+		if (!arg_is_set(cmd, yes_ARG) &&
+		    yes_no_prompt("WARNING: clearing PR will stop all device access. Continue? [y/n]: ") == 'n') {
+			log_error("PR not cleared.");
+			return ECMD_FAILED;
+		}
+		ret = persist_clear(cmd, vg, local_key, local_host_id);
+
+	} else if (!strcmp(op, "autostart")) {
+		/* start if auto was enabled via --setpersist y|autostart */
+		if (vg->pr & VG_PR_AUTOSTART)
+			ret = persist_start(cmd, vg, 0, local_key, local_host_id, NULL);
+
+	} else {
+		log_error("Unknown persist action.");
+		ret = 0;
+	}
+
+	if (!ret)
+		return ECMD_FAILED;
+	return ECMD_PROCESSED;
+}
+
+int vgchange_persist_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	if (arg_is_set(cmd, majoritypvs_ARG))
+		cmd->handles_missing_pvs = 1;
+
+	/*
+	 * PR comes before locking (with sanlock, locking
+	 * involves reading/writing shared storage.)
+	 * So, we either can't, or it doesn't make a lot
+	 * of sense, to acquire an lvmlockd lock around
+	 * PR operations.
+	 *
+	 * TODO: do we want/need to handle the case of
+	 * vgextend/vgreduce changing the set of devices
+	 * in a VG while there's a concurrent persist
+	 * command doing a PR operations on all PVs?
+	 */
+	cmd->lockd_vg_disable = 1;
+
+	/*
+	 * READ_FOR_PERSIST: makes vg_read() acquire an ex local lock
+	 * on the VG to avoid concurrent PR operations from commands.
+	 */
+	ret = process_each_vg(cmd, argc, argv, NULL, NULL, READ_FOR_PERSIST, 0, handle, &_vgchange_persist_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+
+static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_name,
+			             struct volume_group *vg,
+			             struct processing_handle *handle)
+{
+	const char *set = arg_str_value(cmd, setpersist_ARG, NULL);
+	const char *op = arg_str_value(cmd, persist_ARG, NULL);
+	char *root_dm_uuid = NULL;
+	char *local_key;
+	int local_host_id;
+	int start_done = 0;
+	int on;
+
+	if (!set)
+		return_ECMD_FAILED;
+
+	on = !strcmp(set, "y") || !strcmp(set, "require") || !strcmp(set, "autostart");
+
+	if (on) {
+		local_key = (char *)find_config_tree_str(cmd, local_pr_key_CFG, NULL);
+		local_host_id = find_config_tree_int(cmd, local_host_id_CFG, NULL);
+
+		if (!local_key && !local_host_id) {
+			log_error("A local pr_key or host_id is required to use PR (see lvmlocal.conf).");
+			return ECMD_FAILED;
+		}
+
+		_get_rootvg_dev(cmd, &root_dm_uuid);
+		if (root_dm_uuid && !memcmp(root_dm_uuid + 4, &vg->id, ID_LEN)) {
+			log_error("PR cannot be automated or required for root VG.");
+			return ECMD_FAILED;
+		}
+	}
+
+	/* 
+	 * vgchange --setpersist y|require|autostart --persist start 
+	 * will start PR before changing VG.
+	 */
+	if (on && op && strcmp(op, "start")) {
+		if (!persist_start(cmd, vg, 0, local_key, local_host_id, NULL)) {
+			log_error("Failed to start PR, VG not changed.");
+			return_ECMD_FAILED;
+		}
+		start_done = 1;
+	}
+
+	if (!strcmp(set, "y"))
+		vg->pr = VG_PR_AUTOSTART | VG_PR_REQUIRE;
+	else if (!strcmp(set, "n"))
+		vg->pr = 0;
+	else if (!strcmp(set, "require"))
+		vg->pr |= VG_PR_REQUIRE;
+	else if (!strcmp(set, "norequire"))
+		vg->pr &= ~VG_PR_REQUIRE;
+	else if (!strcmp(set, "autostart"))
+		vg->pr |= VG_PR_AUTOSTART;
+	else if (!strcmp(set, "noautostart"))
+		vg->pr &= ~VG_PR_AUTOSTART;
+	else {
+		log_error("Invalid setpersist value.");
+		return_ECMD_FAILED;
+	}
+
+	if (!vg_write(vg) || !vg_commit(vg)) {
+		if (start_done) {
+			if (!persist_stop(cmd, vg))
+				log_error("PR stop failed.");
+		}
+		return_ECMD_FAILED;
+	}
+
+	log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
+
+	return ECMD_PROCESSED;
+}
+
+int vgchange_setpersist_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	uint32_t flags = READ_FOR_UPDATE;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	if (arg_is_set(cmd, persist_ARG))
+		flags |= READ_FOR_PERSIST;
+
+	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, 0, handle, &_vgchange_setpersist_single);
 
 	destroy_processing_handle(cmd, handle);
 	return ret;
