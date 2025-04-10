@@ -1812,7 +1812,7 @@ DESC: Start or stop processing LV conversions.
 vgchange --activate Active
 OO: --activationmode ActivationMode, --ignoreactivationskip, --partial, --sysinit,
 --readonly, --ignorelockingfailure, --monitor Bool, --poll Bool,
---autoactivation String, OO_VGCHANGE
+--autoactivation String, --persist String, OO_VGCHANGE
 OP: VG|Tag|Select ...
 IO: --ignoreskippedcluster
 ID: vgchange_activate
@@ -1830,8 +1830,18 @@ OO: --select String, --majoritypvs
 ID: vgchange_systemid
 DESC: Change the system ID of a VG.
 
+vgchange --setpersist String VG|Tag|Select
+OO: --select String, --persist String
+ID: vgchange_setpersist
+DESC: Set or clear flags to control persistent reservation behavior.
+
+vgchange --persist String VG|Tag|Select
+OO: --select String, --prkey String, --majoritypvs, --force
+ID: vgchange_persist
+DESC: Perform persistent reservation commands on devices.
+
 vgchange --lockstart
-OO: --select String
+OO: --select String, --persist String
 OP: VG|Tag|Select ...
 ID: vgchange_lockstart
 DESC: Start the lockspace of a shared VG in lvmlockd.

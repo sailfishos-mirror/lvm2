@@ -284,6 +284,17 @@ static int _ignore_vg(struct cmd_context *cmd,
 		}
 	}
 
+	if (read_error & FAILED_PR_REQUIRED) {
+		if (arg_vgnames && str_list_match_item(arg_vgnames, vg_name)) {
+			log_error("Cannot access VG %s without persistent reservation.", vg_name);
+			return 1;
+		} else {
+			read_error &= ~FAILED_PR_REQUIRED; /* Check for other errors */
+			log_verbose("Skipping volume group %s without pr", vg_name);
+			*skip = 1;
+		}
+	}
+
 	if (read_error != SUCCESS) {
 		*skip = 0;
 		if (is_orphan_vg(vg_name))

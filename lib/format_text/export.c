@@ -471,6 +471,15 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
 			outf(f, "lock_args = \"%s\"", vg->lock_args);
 	}
 
+	if (vg->pr) {
+		if ((vg->pr & VG_PR_REQUIRE) && (vg->pr & VG_PR_AUTOSTART))
+			outf(f, "pr = [ \"require\", \"autostart\" ]");
+		else if (vg->pr & VG_PR_REQUIRE)
+			outf(f, "pr = [ \"require\" ]");
+		else if (vg->pr & VG_PR_AUTOSTART)
+			outf(f, "pr = [ \"autostart\" ]");
+	}
+
 	outsize(f, (uint64_t) vg->extent_size, "extent_size = %u",
 		vg->extent_size);
 	outf(f, "max_lv = %u", vg->max_lv);
