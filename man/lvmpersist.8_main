@@ -1,0 +1,267 @@
+.TH "LVMPERSIST" "8" "LVM TOOLS #VERSION#" "Red Hat, Inc"
+.
+.SH NAME
+.
+lvmpersist - manage persistent reservations on a group of devices
+.
+.SH DESCRIPTION
+.
+lvmpersist is a low level utility used by LVM to manage persistent
+reservations (PR) on the devices in a Volume Group (VG).  LVM also
+provides a higher level PR management interface through the standard LVM
+command interface, e.g. vgchange --setpersist and vgchange --persist.
+Information here describes both the lvmpersist utility, and the higher
+level LVM interface.
+.P
+lvmpersist is a script that does not implement the common LVM command line
+syntax, options, or capabilities.  The script uses sg_persist and
+mpathpersist commands to perform PR operations on individual devices.
+Higher level LVM commands (e.g. vgchange) run the lvmpersist script.
+.P
+lvmpersist requires either the names of specific devices, each specified
+as --device /dev/name, or the name of a VG, specified with --vg VGNAME.
+When a VG is specified, with no individual devices, lvmpersist runs PR
+commands on each PV in the VG.  When devices are specified, and a VG is
+also provided with --vg, then the VG name is simply used in log messages
+to identify the set of devices as a whole.  When lvmpersist is run by
+higher level LVM commands, each device is specified with --device, and the
+VG name is specified with --vg.
+.P
+.SS Device types
+.P
+SCSI and dm-multipath devices are currently supported.  When multipath
+devices are used, multipath.conf must be configured with "reservation_key
+file".  (Run mpathconf --option reservation_key:file, and restart
+multipathd.)
+.P
+.SS Persistent reservation types
+.P
+Abbreviations for the types are used in the command interface and
+messages:
+.P
+.B WE
+Write Exclusive
+.br
+.B EA
+Exclusive Access
+.br
+.B WERO
+Write Exclusive – registrants only
+.br
+.B EARO
+Exclusive Access – registrants only
+.br
+.B WEAR
+Write Exclusive – all registrants
+.br
+.B EAAR
+Exclusive Access – all registrants
+.P
+When LVM commands use lvmpersist, WE is used for local VGs and WEAR is
+used for shared VGs.
+.P
+.SS Persistent reservation keys
+.P
+PR keys are up 8 bytes long, and are specified as 16 hex characters, with
+an optional prefix of "0x".
+.P
+Each host using shared devices must use a unique PR key.
+.P
+.SH USAGE
+.P
+.nf
+lvmpersist start --ourkey KEY --prtype PRTYPE DEST
+.fi
+"start" registers the local key and reserves devices.
+.P
+.nf
+lvmpersist stop --ourkey KEY DEST
+.fi
+"stop" unregisters the local key, which also removes a local reservation.
+.P
+.nf
+lvmpersist remove --ourkey KEY --removekey REMKEY DEST
+.fi
+"remove" removes another host's key and reservation when using WEAR
+(shared VGs.)  The other host loses the ability to write to the devices.
+.P
+.nf
+lvmpersist start --ourkey KEY --prtype PRTYPE --removekey REMKEY DEST
+.fi
+"start with remove" registers the local key and takes the reservation from
+another host (using preempt-abort) when using WE (local VGs.)  The other
+host loses the ability to write to the devices.
+.P
+.nf
+lvmpersist clear --ourkey KEY DEST
+.fi
+"clear" removes all keys and reservations from the devices.  Any
+registered host loses the ability to write to the devices.
+.P
+.SS Options
+.P
+--ourkey KEY
+.br
+--removekey REMKEY
+.br
+--prtype PRTYPE
+.P
+DEST may be one of three variations:
+.P
+--device PATH ...
+.br
+One or more devices to operate on.
+.P
+--vg VGNAME
+.br
+One VG to operate on (all PVs in the VG.)
+.P
+--vg VGNAME --device PATH ...
+.br
+One or more devices to operate on, and a VG name to use as an identifier
+for the set of devices.
+.P
+.SH LVM USAGE
+.P
+PR should generally be configured and operated through the higher level
+commands as shown below, rather than through the lower level lvmpersist
+utility.
+.P
+.SS Configuation
+.P
+vgchange --setpersist <arg> VG
+.P
+The --setpersist option is used to configure the automation and
+enforcement of PR in relation to the broader use of the VG.  The
+configuration is stored in the VG metadata.
+.P
+vgchange --setpersist y|n
+.P
+Enable or disable default automation and enforcement of PR for the VG,
+setting or clearing both "autostart" and "require" PR settings.
+.P
+When "autostart" is set, autoactivation and auto-lockstart commands
+(vgchange -aay, vgchange --lockstart --lockopt auto) will first start PR
+on the VG.  If PR start fails, these commands stop and not attempt
+activation or lockstart.
+.P
+When "require" is set, lvm commands that write or activate a VG require PR
+to be started before attempting to write or activate.
+.P
+vgchange --setpersist autostart|noautostart
+.P
+Sets or clears only autostart PR setting.
+.P
+vgchange --setpersist require|norequire
+.P
+Sets or clears only the require PR setting.
+.P
+.SS Operation
+.P
+vgchange --persist <arg> [options] VG
+.P
+The --persist option is used to perfom PR actions on the VG's devices.
+.P
+vgchange --persist start VG
+.P
+Starts PR on VG devices.
+.P
+vgchange --persist stop VG
+.P
+Stops PR on VG devices.
+.P
+vgchange --persist remove --removekey remkey VG
+.P
+Removes PR key of another host from a shared VG, immediatley disabling the
+ability of the other host to write to the devices.
+.P
+vgchange --persist start --removekey remkey VG
+.P
+Starts PR on VG devices, while at the same time as removing another host's
+key and reservation from the VG devices, disabling the ability of the
+other host to write to the devices.
+.P
+vgchange --persist check VG
+.P
+Check if PR is started.  The command exits with success if PR is started
+on all VG devices.
+.P
+vgchange --persist clear VG
+.P
+Clear all PR keys and reservations on the VG devices, disabling the
+ability of any previously started hosts from writing.to the VG devices.
+.P
+vgchange --persist autostart VG
+.P
+Start PR on VG devices if the autostart is set.  This is meant to be used
+by system automation, like autoactivation and auto-lockstart.
+.P
+.SS Supplementary PR start
+.P
+The --persist start option can be added to other commands so that these
+commands will first attempt to start PR (regardless of the autostart
+setting.)
+.P
+vgchange -ay --persist start
+.br
+vgchange -aay --persist start
+.br
+vgchange --lockstart --persist start
+.br
+vgchange --setpersist y|require|autostart --persist start
+.br
+.SS Local VG usage
+.P
+When using a local VG, only one host is started at a time, and holds a WE
+(Write Exclusive) reservation.
+.P
+Using PR with local VGs protects VG devices from being written to in error
+by another host with access to the same devices.  It is complementary to
+using the VG system ID to control the intended owner of a VG, but adds
+enforced device-level protection, in case another host is not using or
+following the LVM system ID feature.
+.P
+If one host would like to forcibly take over a local VG that is currently
+in use by another host, it can use vgchange --persist start --removekey
+remkey VG, where "remkey" is the PR key of the currently started host.
+.P
+.SS Shared VG usage
+.P
+When using a shared VG, all hosts using the VG are started, and a WEAR
+(Write Exclusive - all registrants) reservation is held (the reservation
+is not held by a specific key.)
+.P
+Currently, only the sanlock shared lock_type is compatible with PR.
+.P
+If one host would like to forcibly stop another host from writing to the
+shared VG devices, it can use vgchange --persist remove --removekey remkey
+where "remkey" is the PR key of the other host.
+.P
+.SS Local Settings
+.P
+Each host using PR is required to have a PR key that is unique among all
+hosts using the same VG.  There are two approaches to setting a key value:
+.P
+local/pr_key
+
+The value set in pr_key will be used directly.
+
+local/host_id
+
+If no pr_key is set, a key will be created based on the host_id.
+
+For a local VG, the host_id based key will be in the form:
+
+0x100000000000XXXX where XXXX are the hex digits for the host_id value.
+
+For a shared VG, the host_id based key will also include a generation
+number (taken from the sanlock lease) in addition to the host_id, and
+follows the form:
+
+0x100000YYYYYYXXXX where XXXX are the hex digits for the host_id value,
+and YYYYYY are the hex digits for the generation number.
+
+The sanlock generation number increases in value each time the host starts
+the VG, so a host will use a new key each time it starts.
+
+
