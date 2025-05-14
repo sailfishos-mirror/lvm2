@@ -2,25 +2,29 @@
 .
 .SH NAME
 .
-lvmpersist - manage persistent reservations on a group of devices
+lvmpersist - manage persistent reservations on a group of block devices
 .
 .SH DESCRIPTION
 .
-lvmpersist is a low level utility used by LVM to manage persistent
-reservations (PR) on the devices in a Volume Group (VG).  LVM also
-provides a higher level PR management interface through the standard LVM
-command interface, e.g. vgchange --setpersist and vgchange --persist.
+lvmpersist is a low-level utility to manage Persistent Reservations (PRs)
+on block devices which allow multiple initiators \(em typically in SAN
+or clustered environments \(em to coordinate access to shared storage.
+
+LVM also provides a higher level PR management interface for PR compatible
+Physical Volumes (PVs) through the standard LVM command interface,
+e.g.  vgchange --setpersist and vgchange --persist.
+
 Information here describes both the lvmpersist utility, and the higher
 level LVM interface.
 .P
 lvmpersist is a script that does not implement the common LVM command line
 syntax, options, or capabilities.  The script uses sg_persist and
-mpathpersist commands to perform PR operations on individual devices.
+mpathpersist commands to perform PR operations on individual block devices.
 Higher level LVM commands (e.g. vgchange) run the lvmpersist script.
 .P
 lvmpersist requires either the names of specific devices, each specified
 as --device /dev/name, or the name of a VG, specified with --vg VGNAME.
-When a VG is specified, with no individual devices, lvmpersist runs PR
+When a VG is specified, with no individual block devices, lvmpersist runs PR
 commands on each PV in the VG.  When devices are specified, and a VG is
 also provided with --vg, then the VG name is simply used in log messages
 to identify the set of devices as a whole.  When lvmpersist is run by
@@ -29,10 +33,12 @@ VG name is specified with --vg.
 .P
 .SS Device types
 .P
-SCSI and dm-multipath devices are currently supported.  When multipath
-devices are used, multipath.conf must be configured with "reservation_key
-file".  (Run mpathconf --option reservation_key:file, and restart
-multipathd.)
+SCSI or SCSI-like (e.g., iSCSI, SAS, Fibre Channel) and dm-multipath devices
+are currently supported.  PRs were introduced with the SCSI Primary Commands
+Version 3 standard (SPC-3).
+
+When multipath devices are used, multipath.conf must be configured with "reservation_key
+file".  (Run mpathconf --option reservation_key:file, and restart multipathd.)
 .P
 .SS Persistent reservation types
 .P
