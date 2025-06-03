@@ -22,6 +22,8 @@ LVs allocated on it.
 .br
 .RS 4
 .ad l
+[ \fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP ]
+.br
 [    \fB--setphysicalvolumesize\fP \fISize\fP[m|UNIT] ]
 .br
 [    \fB--reportformat\fP \fBbasic\fP|\fBjson\fP|\fBjson_std\fP ]
@@ -74,6 +76,12 @@ Common options for lvm:
 .
 .SH OPTIONS
 .
+.
+.HP
+\fB-A\fP|\fB--autobackup\fP \fBy\fP|\fBn\fP
+.br
+Specifies if metadata should be backed up automatically after a change.
+Enabling this is strongly advised! See \fBvgcfgbackup\fP(8) for more information.
 .
 .HP
 \fB--commandprofile\fP \fIString\fP
