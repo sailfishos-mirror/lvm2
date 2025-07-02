@@ -286,11 +286,11 @@ function _test
 	aux wait_for_sync $vg $lv 0
 
 	# Delay its first 'PV' so that size can be evaluated before reshape finished too quick.
-	aux delay_dev "$dev1" $ms 0
+	aux delay_dev "$dev1" $ms 0 "$(( $(get first_extent_sector "$dev1") + 2048 ))"
 
 	# Reshape it to one more stripe and 256K stripe size
 	_reshape_layout $raid_type $(($data_stripes + 1)) $vg $lv 0 0 --stripesize 256K
-	[ $(_check_size $vg $lv $(($data_stripes + 1))) -ne 0 ] || die "LV size should still be small"
+	[ $(_check_size $vg $lv $data_stripes) -eq 0 ] || die "LV size should still be small"
 	fsck -fy "$DM_DEV_DIR/$vg/$lv"
 
 	# Reset delay
