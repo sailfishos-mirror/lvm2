@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (C) 2024 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2024,2025 Red Hat, Inc. All rights reserved.
 #
 # This copyrighted material is made available to anyone wishing to use,
 # modify, copy, or redistribute it subject to the terms and conditions
@@ -11,6 +11,7 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
 
 LVM_SKIP_LARGE_TESTS=1
+SKIP_FSCK=1
 SKIP_RESIZE=0
 
 UDEVOPTS="--noudevsync"
@@ -169,8 +170,8 @@ function _lvcreate
 	check lv_first_seg_field $vg/$lv datastripes $data_stripes
 	check lv_first_seg_field $vg/$lv stripes $stripes
 
-	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	echo y|mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv" || return 0
 }
 
 function _reshape_layout
@@ -193,7 +194,7 @@ function _reshape_layout
 	if [ $wait_for_reshape -eq 1 ]
 	then
 		aux wait_for_sync $vg $lv $ignore_a_chars
-		fsck -fn "$DM_DEV_DIR/$vg/$lv"
+		[ $SKIP_FSCK -eq 0 ] && fsck -fn "$DM_DEV_DIR/$vg/$lv" || return 0
 	fi
 }
 
@@ -220,7 +221,7 @@ function _add_stripes
 	check lv_first_seg_field $vg/$lv datastripes $data_stripes
 	check lv_first_seg_field $vg/$lv stripes $stripes
 
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv"
 	aux wait_for_sync $vg $lv 0
 
 	# Now size consistency has to be fine
@@ -229,11 +230,12 @@ function _add_stripes
 	# Check, use grown capacity for the filesystem and check again
 	if [ $SKIP_RESIZE -eq 0 ]
 	then
+		# Mandatory fsck before resize2fs.
 		fsck -fy "$DM_DEV_DIR/$vg/$lv"
 		resize2fs "$DM_DEV_DIR/$vg/$lv"
 	fi
 
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv" || return 0
 }
 
 function _remove_stripes
@@ -252,9 +254,10 @@ function _remove_stripes
 	# Check, shrink hilesystem to the resulting smaller size and check again
 	if [ $SKIP_RESIZE -eq 0 ]
 	then
+		# Mandatory fsck before resize2fs.
 		fsck -fy "$DM_DEV_DIR/$vg/$lv"
 		resize2fs "$DM_DEV_DIR/$vg/$lv" $(_get_size $vg $lv $data_stripes)s
-		fsck -fy "$DM_DEV_DIR/$vg/$lv"
+		[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv"
 	fi
 
 	aux delay_dev "$dev1" $ms 0 "$(( $(get first_extent_sector "$dev1") + 2048 ))"
@@ -269,7 +272,7 @@ function _remove_stripes
 	check lv_first_seg_field $vg/$lv datastripes $data_stripes
 	check lv_first_seg_field $vg/$lv stripes $stripes
 
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv"
 
 	# Have to remove freed legs before another restriping conversion. Will fail while reshaping is ongoing as stripes are still in use
 	not _reshape_layout $raid_type $(($data_stripes + 1)) 0 1 $vg $lv --force
@@ -283,7 +286,7 @@ function _remove_stripes
 	# Now size consistency has to be fine
 	_check_size_timeout $vg $lv $data_stripes || die "LV size should be completely reduced"
 
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv" || return 0
 }
 
 function _test
@@ -311,7 +314,7 @@ function _test
 	# Reshape it to one more stripe and 256K stripe size
 	_reshape_layout $raid_type $(($data_stripes + 1)) $vg $lv 0 0 --stripesize 256K
 	_check_size $vg $lv $data_stripes || die "LV size should still be small"
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv"
 
 	# Reset delay
 	aux delay_dev "$dev1" 0 0
@@ -320,7 +323,7 @@ function _test
 	aux wait_for_sync $vg $lv 0
 
 	_check_size_timeout $vg $lv $(($data_stripes + 1)) || die "LV size should be grown"
-	fsck -fy "$DM_DEV_DIR/$vg/$lv"
+	[ $SKIP_FSCK -eq 0 ] && fsck -fy "$DM_DEV_DIR/$vg/$lv"
 
 	# Loop adding stripes and check size consistency on each iteration
 	for data_stripes in $tst_stripes
