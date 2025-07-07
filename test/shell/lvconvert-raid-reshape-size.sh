@@ -9,6 +9,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software Foundation,
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA2110-1301 USA
+#
+
+#
+# Due to MD constraints, three issues must be considered when modifying stripe counts that alter the RAID-mapped device size:
+# - on a stripe adding reshape, the initial size remains until after the end when the device capacity is increased
+# - on a stripe removing reshape, the initial size is reduced before the reshape is allowed to start
+# - size changes are being reported asynchronously by the kernel, which requires polling for it for split seconds
+#
 
 LVM_SKIP_LARGE_TESTS=1
 SKIP_FSCK=1
