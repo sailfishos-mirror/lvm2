@@ -1,3 +1,7 @@
+Version 2.03.34 - 
+==================
+  Fix autoactivation on top of loop dev PVs to trigger once for change uevents.
+
 Version 2.03.33 - 27th June 2025
 ================================
   Various spelling, grammar, formatting, test, and build script improvements.
