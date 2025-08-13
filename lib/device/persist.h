@@ -62,9 +62,13 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg);
 
 int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_key, int local_host_id,
 			   uint32_t set_flags, struct dm_list *devs);
-int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags);
+int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags,
+			    uint64_t *our_key_ret);
 
-int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail);
+int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_t *our_key_held);
+int persist_upgrade_stop(struct cmd_context *cmd, struct volume_group *vg, uint64_t our_key_val);
+
+int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail, uint64_t *our_key);
 
 int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t prev_gen);
 

@@ -117,6 +117,62 @@ void lvmlockd_disconnect(void)
 	_lvmlockd_connected = 0;
 }
 
+#define MAX_LOCKARGS 8
+
+/* parse lock_args string for values that may appear in command line --setlockargs */
+
+int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
+{
+	char buf[PATH_MAX];
+	char *argv[MAX_LOCKARGS];
+	int argc;
+	int i;
+
+	if (!str)
+		return 0;
+ 
+	dm_strncpy(buf, str, sizeof(buf));
+
+	split_line(buf, &argc, argv, MAX_LOCKARGS, ',');
+
+	for (i = 0; i < argc; i++) {
+		if (!strcmp(argv[i], "persist"))
+			*flags |= LOCKARGS_PERSIST;
+		else if (!strcmp(argv[i], "nopersist"))
+			*flags |= LOCKARGS_NOPERSIST;
+		else if (!strcmp(argv[i], "timeout"))
+			*flags |= LOCKARGS_TIMEOUT;
+		else if (!strcmp(argv[i], "notimeout"))
+			*flags |= LOCKARGS_NOTIMEOUT;
+		else {
+			log_error("Unknown lockargs option value: %s", argv[i]);
+			return 0;
+		}
+	} 
+
+	if (((*flags & LOCKARGS_PERSIST) && (*flags & LOCKARGS_NOPERSIST)) ||
+	    ((*flags & LOCKARGS_TIMEOUT) && (*flags & LOCKARGS_NOTIMEOUT))) {
+		log_error("Invalid setlockargs option combination: %s", str);
+		return 0;
+	}
+
+	/*
+	 * . nopersist and timeout: default
+	 * . persist and notimeout: permitted with setlockargs
+	 *
+	 * FIXME: when tested, allow
+	 * . nopersist and notimeout: requires manual set host dead
+	 * . persist and timeout: watchdog still resets host when PR is used
+	 */
+	if (((*flags & LOCKARGS_PERSIST) && !(*flags & LOCKARGS_NOTIMEOUT)) ||
+	    ((*flags & LOCKARGS_NOTIMEOUT) && !(*flags & LOCKARGS_PERSIST))) {
+		log_error("setlockargs persist and notimeout are currently required together.");
+		return 0;
+	}
+
+	return 1;
+}
+
 /* Translate the result strings from lvmlockd to bit flags. */
 static void _flags_str_to_lockd_flags(const char *flags_str, uint32_t *lockd_flags)
 {
@@ -169,7 +225,7 @@ static char *_owner_str(struct owner *owner)
 #define NO_LOCKD_RESULT (-1000)
 
 static int _lockd_result(struct cmd_context *cmd, const char *req_name, daemon_reply reply,
-			 int *result, uint32_t *lockd_flags, struct owner *owner)
+			 int *result, uint32_t *lockd_flags, struct owner *owner, uint64_t *our_generation)
 {
 	int reply_result;
 	const char *str;
@@ -205,6 +261,9 @@ static int _lockd_result(struct cmd_context *cmd, const char *req_name, daemon_r
 		if ((str = daemon_reply_str(reply, "owner_name", "none")))
 			owner->name = dm_pool_strdup(cmd->mem, str);
 	}
+
+	if (our_generation)
+		*our_generation = (uint64_t)daemon_reply_int(reply, "our_generation", 0);
 
 	log_debug("lockd %s result: %d", req_name, reply_result);
 	return 1;
@@ -420,7 +479,8 @@ static int _lockd_request(struct cmd_context *cmd,
 			  const struct lvmlockd_pvs *lock_pvs,
 		          int *result,
 		          uint32_t *lockd_flags,
-			  struct owner *owner)
+			  struct owner *owner,
+			  uint64_t *our_generation)
 {
 	const char *cmd_name = get_cmd_name();
 	daemon_reply reply;
@@ -457,7 +517,7 @@ static int _lockd_request(struct cmd_context *cmd,
 					"lv_lock_args = %s", lv_lock_args ?: "none",
 					NULL);
 
-		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner))
+		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner, our_generation))
 			goto fail;
 
 		/*
@@ -477,7 +537,7 @@ static int _lockd_request(struct cmd_context *cmd,
 					"vg_lock_args = %s", vg_lock_args ?: "none",
 					NULL);
 
-		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner))
+		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner, our_generation))
 			goto fail;
 
 		/*
@@ -495,7 +555,7 @@ static int _lockd_request(struct cmd_context *cmd,
 					"vg_lock_type = %s", vg_lock_type ?: "none",
 					NULL);
 
-		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner))
+		if (!_lockd_result(cmd, req_name, reply, result, lockd_flags, owner, our_generation))
 			goto fail;
 
 		log_debug("lockd %s %s result %d %x",
@@ -766,7 +826,7 @@ static int _handle_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
 			"lv_size_bytes = " FMTd64, (int64_t) lv_size_bytes,
 			NULL);
 
-	if (!_lockd_result(cmd, "find_free_lock", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "find_free_lock", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -821,7 +881,7 @@ static int _init_vg(struct cmd_context *cmd, struct volume_group *vg,
 				"vg_lock_type = %s", lock_type,
 				NULL);
 
-	if (!_lockd_result(cmd, "init_vg", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "init_vg", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 		result = -ELOCKD;
 	} else {
@@ -892,7 +952,7 @@ static int _init_vg_idm(struct cmd_context *cmd, struct volume_group *vg)
 	return _init_vg(cmd, vg, "idm");
 }
 
-static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, int lv_lock_count)
+static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, int lv_lock_count, const char *set_args)
 {
 	daemon_reply reply;
 	const char *reply_str;
@@ -908,9 +968,9 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
 	int ret;
 
 	if (!_use_lvmlockd)
-		return 0;
+		return_0;
 	if (!_lvmlockd_connected)
-		return 0;
+		return_0;
 
 	/*
 	 * We need the sector size to know what size to create the LV,
@@ -1014,11 +1074,12 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
 				"vg_name = %s", vg->name,
 				"vg_lock_type = %s", "sanlock",
 				"vg_lock_args = %s", vg->sanlock_lv->name,
+				"set_lock_args = %s", set_args ?: "none",
 				"align_mb = " FMTd64, (int64_t) align_size,
 				"opts = %s", opts ?: "none",
 				NULL);
 
-	if (!_lockd_result(cmd, "init_vg", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "init_vg", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 		result = -ELOCKD;
 	} else {
@@ -1120,7 +1181,7 @@ static int _free_vg(struct cmd_context *cmd, struct volume_group *vg)
 				"vg_lock_args = %s", vg->lock_args,
 				NULL);
 
-	if (!_lockd_result(cmd, "free_vg", reply, &result, &lockd_flags, NULL)) {
+	if (!_lockd_result(cmd, "free_vg", reply, &result, &lockd_flags, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -1181,7 +1242,7 @@ int lockd_vg_is_busy(struct cmd_context *cmd, struct volume_group *vg)
 				"vg_lock_args = %s", vg->lock_args,
 				NULL);
 
-	if (!_lockd_result(cmd, "busy_vg", reply, &result, &lockd_flags, NULL)) {
+	if (!_lockd_result(cmd, "busy_vg", reply, &result, &lockd_flags, NULL, NULL)) {
 		ret = 1;
 		goto out;
 	}
@@ -1244,7 +1305,7 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 				"vg_lock_args = %s", vg->lock_args,
 				NULL);
 
-	if (!_lockd_result(cmd, "free_vg", reply, &result, &lockd_flags, NULL)) {
+	if (!_lockd_result(cmd, "free_vg", reply, &result, &lockd_flags, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -1301,7 +1362,7 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 /* vgcreate */
 
 int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg,
-		  const char *lock_type, int lv_lock_count)
+		  const char *lock_type, int lv_lock_count, const char *set_args)
 {
 	switch (get_lock_type_from_string(lock_type)) {
 	case LOCK_TYPE_NONE:
@@ -1311,7 +1372,7 @@ int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg,
 	case LOCK_TYPE_DLM:
 		return _init_vg_dlm(cmd, vg);
 	case LOCK_TYPE_SANLOCK:
-		return _init_vg_sanlock(cmd, vg, lv_lock_count);
+		return _init_vg_sanlock(cmd, vg, lv_lock_count, set_args);
 	case LOCK_TYPE_IDM:
 		return _init_vg_idm(cmd, vg);
 	default:
@@ -1437,7 +1498,7 @@ void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
  * lock the vg, read/use/write the vg, unlock the vg.
  */
 
-int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists)
+int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, uint64_t our_key, int *exists)
 {
 	char uuid[64] __attribute__((aligned(8)));
 	const char *opts = NULL;
@@ -1515,6 +1576,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 				"vg_uuid = %s", uuid[0] ? uuid : "none",
 				"version = " FMTd64, (int64_t) vg->seqno,
 				"host_id = " FMTd64, (int64_t) host_id,
+				"our_key = " FMTd64, (int64_t) our_key,
 				"opts = %s", opts ?:  "none",
 				NULL);
 		_lockd_free_pv_list(&lock_pvs);
@@ -1528,11 +1590,12 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 				"vg_uuid = %s", uuid[0] ? uuid : "none",
 				"version = " FMTd64, (int64_t) vg->seqno,
 				"host_id = " FMTd64, (int64_t) host_id,
+				"our_key = " FMTd64, (int64_t) our_key,
 				"opts = %s", opts ?:  "none",
 				NULL);
 	}
 
-	if (!_lockd_result(cmd, "start_vg", reply, &result, &lockd_flags, NULL)) {
+	if (!_lockd_result(cmd, "start_vg", reply, &result, &lockd_flags, NULL, NULL)) {
 		ret = 0;
 		result = -ELOCKD;
 	} else {
@@ -1622,7 +1685,7 @@ int lockd_stop_vg(struct cmd_context *cmd, struct volume_group *vg)
 			"vg_name = %s", vg->name,
 			NULL);
 
-	if (!_lockd_result(cmd, "stop_vg", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "stop_vg", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -1668,7 +1731,7 @@ int lockd_start_wait(struct cmd_context *cmd)
 			"pid = " FMTd64, (int64_t) getpid(),
 			NULL);
 
-	if (!_lockd_result(cmd, "start_wait", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "start_wait", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -1787,7 +1850,7 @@ int lockd_global_create(struct cmd_context *cmd, const char *def_mode, const cha
  req:
 	if (!_lockd_request(cmd, "lock_gl",
 			      NULL, vg_lock_type, NULL, NULL, NULL, NULL, mode, NULL,
-			      NULL, &result, &lockd_flags, &owner)) {
+			      NULL, &result, &lockd_flags, &owner, NULL)) {
 		/* No result from lvmlockd, it is probably not running. */
 		log_error("Global lock failed: check that lvmlockd is running.");
 		return 0;
@@ -2051,7 +2114,7 @@ int lockd_global(struct cmd_context *cmd, const char *def_mode)
 
 	if (!_lockd_request(cmd, "lock_gl",
 			    NULL, NULL, NULL, NULL, NULL, NULL, mode, opts,
-			    NULL, &result, &lockd_flags, &owner)) {
+			    NULL, &result, &lockd_flags, &owner, NULL)) {
 		/* No result from lvmlockd, it is probably not running. */
 
 		/* We don't care if an unlock fails. */
@@ -2288,6 +2351,7 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
 	     uint32_t flags, uint32_t *lockd_state)
 {
 	struct owner owner = { 0 };
+	uint64_t our_generation = 0;
 	char opt_buf[64] = {};
 	const char *mode = NULL;
 	const char *opts = NULL;
@@ -2402,7 +2466,7 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
 
 	if (!_lockd_request(cmd, "lock_vg",
 			      vg_name, NULL, NULL, NULL, NULL, NULL, mode, opts,
-			      NULL, &result, &lockd_flags, &owner)) {
+			      NULL, &result, &lockd_flags, &owner, &our_generation)) {
 		/*
 		 * No result from lvmlockd, it is probably not running.
 		 * Decide if it is ok to continue without a lock in
@@ -2615,7 +2679,7 @@ out:
 	 */
 	if ((lockd_flags & LD_RF_DUP_GL_LS) && strcmp(mode, "un"))
 		log_warn("Duplicate sanlock global lock in VG %s", vg_name);
- 
+
 	return ret;
 }
 
@@ -2660,7 +2724,7 @@ int lockd_vg_update(struct volume_group *vg)
 				"version = " FMTd64, (int64_t) vg->seqno,
 				NULL);
 
-	if (!_lockd_result(vg->cmd, "vg_update", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(vg->cmd, "vg_update", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -2674,6 +2738,7 @@ int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32
 {
 	daemon_reply reply;
 	struct owner owner = { 0 };
+	uint64_t our_generation = 0;
 	int result;
 	int ret = 0;
 
@@ -2691,7 +2756,7 @@ int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32
 				"vg_name = %s", vg->name,
 				NULL);
 
-	if (!_lockd_result(vg->cmd, "vg_status", reply, &result, NULL, &owner)) {
+	if (!_lockd_result(vg->cmd, "vg_status", reply, &result, NULL, &owner, &our_generation)) {
 		log_debug("lockd_vg_status %s no result", vg->name);
 		goto out;
 	}
@@ -2699,6 +2764,16 @@ int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32
 	if (result < 0) {
 		log_debug("lockd_vg_status %s result error %d", vg->name, result);
 		goto out;
+	}
+
+	/*
+	 * The local host generation number is returned
+	 * in both fields, they should always match.
+	 */
+	if (our_generation && owner.generation &&
+	    ((uint32_t)our_generation != owner.generation)) {
+		log_warn("WARNING: lvmlockd local host generation mismatch %llu vs %u",
+			 (unsigned long long)our_generation, owner.generation);
 	}
 
 	log_debug("lockd_vg_status %s host_id %u gen %u",
@@ -2734,7 +2809,7 @@ static int _query_lv(struct cmd_context *cmd, struct volume_group *vg,
 				"lv_lock_args = %s", lock_args ?: "none",
 				NULL);
 
-	if (!_lockd_result(cmd, "query_lock_lv", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "query_lock_lv", reply, &result, NULL, NULL, NULL)) {
 		/* No result from lvmlockd, it is probably not running. */
 		log_error("Lock query failed for LV %s/%s", vg->name, lv_name);
 		return 0;
@@ -2807,6 +2882,7 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 	const char *opts = NULL;
 	const char *mode = NULL;
 	uint32_t lockd_flags;
+	uint64_t our_generation = 0;
 	int refreshed = 0;
 	int result;
 	struct lvmlockd_pvs lock_pvs;
@@ -2905,7 +2981,7 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 		if (!_lockd_request(cmd, "lock_lv",
 				       vg->name, vg->lock_type, vg->lock_args,
 				       lv_name, lv_uuid, lock_args, mode, opts,
-				       &lock_pvs, &result, &lockd_flags, NULL)) {
+				       &lock_pvs, &result, &lockd_flags, NULL, NULL)) {
 			_lockd_free_pv_list(&lock_pvs);
 			/* No result from lvmlockd, it is probably not running. */
 			log_error("Locking failed for LV %s/%s", vg->name, lv_name);
@@ -2916,7 +2992,7 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 		if (!_lockd_request(cmd, "lock_lv",
 				       vg->name, vg->lock_type, vg->lock_args,
 				       lv_name, lv_uuid, lock_args, mode, opts,
-				       NULL, &result, &lockd_flags, &owner)) {
+				       NULL, &result, &lockd_flags, &owner, &our_generation)) {
 			/* No result from lvmlockd, it is probably not running. */
 			log_error("Locking failed for LV %s/%s", vg->name, lv_name);
 			return 0;
@@ -3846,7 +3922,7 @@ static int _init_lv_sanlock(struct cmd_context *cmd, struct volume_group *vg,
 				"vg_lock_args = %s", vg->lock_args,
 				NULL);
 
-	if (!_lockd_result(cmd, "init_lv", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "init_lv", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -3921,7 +3997,7 @@ static int _free_lv(struct cmd_context *cmd, struct volume_group *vg,
 				"lv_lock_args = %s", lock_args ?: "none",
 				NULL);
 
-	if (!_lockd_result(cmd, "free_lv", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "free_lv", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -4186,7 +4262,7 @@ int lockd_rename_vg_before(struct cmd_context *cmd, struct volume_group *vg)
 			"vg_lock_args = %s", vg->lock_args,
 			NULL);
 
-	if (!_lockd_result(cmd, "rename_vg_before", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "rename_vg_before", reply, &result, NULL, NULL, NULL)) {
 		ret = 0;
 	} else {
 		ret = (result < 0) ? 0 : 1;
@@ -4231,7 +4307,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 		 * Depending on the problem that caused the rename to
 		 * fail, it may make sense to not restart the VG here.
 		 */
-		if (!lockd_start_vg(cmd, vg, NULL))
+		if (!lockd_start_vg(cmd, vg, 0, NULL))
 			log_error("Failed to restart VG %s lockspace.", vg->name);
 		return 1;
 	}
@@ -4251,7 +4327,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 				"vg_lock_args = %s", vg->lock_args,
 				NULL);
 
-		if (!_lockd_result(cmd, "rename_vg_final", reply, &result, NULL, NULL)) {
+		if (!_lockd_result(cmd, "rename_vg_final", reply, &result, NULL, NULL, NULL)) {
 			ret = 0;
 		} else {
 			ret = (result < 0) ? 0 : 1;
@@ -4271,7 +4347,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 		}
 	}
 
-	if (!lockd_start_vg(cmd, vg, NULL))
+	if (!lockd_start_vg(cmd, vg, 0, NULL))
 		log_error("Failed to start VG %s lockspace.", vg->name);
 
 	return 1;
@@ -4292,7 +4368,7 @@ const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple
 			"pid = " FMTd64, (int64_t) getpid(),
 			NULL);
 
-	if (!_lockd_result(cmd, "running_lm", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "running_lm", reply, &result, NULL, NULL, NULL)) {
 		log_error("Failed to get result from lvmlockd");
 		goto out;
 	}
@@ -4413,7 +4489,7 @@ int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_params *lp)
 				"path = %s", path,
 				NULL);
 
-	if (!_lockd_result(cmd, "refresh_lv", reply, &result, NULL, NULL)) {
+	if (!_lockd_result(cmd, "refresh_lv", reply, &result, NULL, NULL, NULL)) {
 		/* No result from lvmlockd, it is probably not running. */
 		log_error("LV refresh failed for LV %s", path);
 		return 0;
@@ -4487,3 +4563,171 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
 			log_warn("Ignoring unknown lockopt value: %s", argv[i]);
 	}
 }
+
+int lockd_setlockargs(struct cmd_context *cmd, struct volume_group *vg, const char *set_args, uint64_t *our_key_held)
+{
+	daemon_reply reply;
+	const char *reply_str;
+	const char *vg_lock_args = NULL;
+	uint32_t lockd_flags = 0;
+	uint32_t lock_args_flags = 0;
+	int result;
+	int ret;
+
+	if (!_use_lvmlockd) {
+		log_error("lvmlockd is not in use.");
+		return 0;
+	}
+	if (!_lvmlockd_connected) {
+		log_error("lvmlockd is not connected.");
+		return 0;
+	}
+
+	if (!vg->lock_type || strcmp(vg->lock_type, "sanlock")) {
+		log_error("setlockargs is only supported for lock type sanlock.");
+		return 0;
+	}
+
+	if (!set_args)
+		return_0;
+
+	if (!lockd_lockargs_get_user_flags(set_args, &lock_args_flags))
+		return_0;
+
+	if ((lock_args_flags & LOCKARGS_PERSIST) && !(vg->pr & VG_PR_REQUIRE)) {
+		log_error("lockargs \"persist\" requires persistent reservation setting \"require\".");
+		return 0;
+	}
+
+	/*
+	 * Check if other PR keys are registered, which would
+	 * cause the persist_upgrade_ex below to fail.
+	 */
+	if (vg->pr & (VG_PR_REQUIRE | VG_PR_AUTOSTART)) {
+		struct pv_list *pvl;
+		struct device *dev;
+		int key_count;
+
+		dm_list_iterate_items(pvl, &vg->pvs) {
+			if (!(dev = pvl->pv->dev))
+				continue;
+			if (dm_list_empty(&dev->aliases))
+				continue;
+			if (!dev_find_key(cmd, dev, 0, 0, NULL, 0, NULL, 1, &key_count, NULL)) {
+				/* Shouldn't happen if persist_is_started already passed. */
+				log_error("No PR key found on %s.", dev_name(dev));
+				return 0;
+			}
+			if (key_count != 1) {
+				log_error("Found %d PR keys on %s, stop PR and lockspace on other hosts.", key_count, dev_name(dev));
+				log_error("(See vgchange --lockstop --persist stop.)");
+				return 0;
+			}
+		}
+	}
+
+	/*
+	 * setlockargs_before checks that sanlock version supports
+	 * the new set_lock_args, checks that no LV locks are held,
+	 * checks we are the only host in the lockspace, and stops
+	 * the lockspace.
+	 */
+
+	log_debug("lockd setlockargs_vg_before %s", vg->name);
+
+	reply = _lockd_send("setlockargs_vg_before",
+				"pid = " FMTd64, (int64_t) getpid(),
+				"vg_name = %s", vg->name,
+				"vg_lock_type = %s", vg->lock_type,
+				"vg_lock_args = %s", vg->lock_args,
+				"set_lock_args = %s", set_args,
+				NULL);
+
+	if (!_lockd_result(cmd, "setlockargs_vg_before", reply, &result, &lockd_flags, NULL, NULL)) {
+		ret = 0;
+		goto out;
+	}
+
+	if (result == -EBUSY) {
+		log_error("Lockspace for \"%s\" not stopped on other hosts", vg->name);
+		ret = 0;
+		goto out;
+	} else if (result < 0) {
+		log_error("Lockspace setlockargs error %d for \"%s\"", result, vg->name);
+		ret = 0;
+		goto out;
+	}
+
+	daemon_reply_destroy(reply);
+
+	/*
+	 * When the VG has the ability to use PR, change the
+	 * current PR to an exclusive mode (WE), using a key
+	 * with our host_id and gen 0.  The exclusive PR protects
+	 * the VG from other hosts while the locking parameters
+	 * are being changed (since locking can't be used while
+	 * the locking is being changed.)  The lockspace is stopped
+	 * while it's being changed.  At the end of the vgchange
+	 * setlockargs command, persist_ugprade_stop() releases
+	 * the exclusive PR.  After this, any host can do a normal
+	 * start of PR/locking using the new lockargs.
+	 */
+	if (vg->pr & (VG_PR_REQUIRE | VG_PR_AUTOSTART)) {
+		if (!persist_upgrade_ex(cmd, vg, our_key_held)) {
+			log_error("Failed to upgrade to exclusive PR.");
+			log_error("Restart PR and locking to retry setlockargs.");
+			return 0;
+		}
+	}
+
+	/*
+	 * setlockargs_final reformats sanlock leases on the lvmlock LV.
+	 * The host generation numbers will all be reset back to 0, and
+	 * the PR keys containing the gen will start over from gen 1.
+	 * lvmlockd returns a new lock_args string that this command
+	 * writes in VG metadata.
+	 */
+
+ retry_final:
+	log_debug("lockd setlockargs_vg_final %s", vg->name);
+
+	reply = _lockd_send("setlockargs_vg_final",
+				"pid = " FMTd64, (int64_t) getpid(),
+				"vg_name = %s", vg->name,
+				"vg_lock_type = %s", vg->lock_type,
+				"vg_lock_args = %s", vg->lock_args,
+				"set_lock_args = %s", set_args,
+				NULL);
+
+	if (!_lockd_result(cmd, "setlockargs_vg_final", reply, &result, &lockd_flags, NULL, NULL)) {
+		ret = 0;
+		goto out;
+	}
+
+	if (result == -EAGAIN) {
+		daemon_reply_destroy(reply);
+		sleep(1);
+		goto retry_final;
+	}
+
+	if (!(reply_str = daemon_reply_str(reply, "vg_lock_args", NULL))) {
+		log_error("VG %s setlockargs failed: result %d new lock_args not returned", vg->name, result);
+		ret = 0;
+		goto out;
+	}
+
+	if (!(vg_lock_args = dm_pool_strdup(cmd->mem, reply_str))) {
+		ret = 0;
+		goto out;
+	}
+
+	log_debug("lockd setlockargs_vg %s result %d new lock_args %s", vg->name, result, vg_lock_args);
+
+	vg->lock_args = vg_lock_args;
+	ret = 1;
+
+out:
+	daemon_reply_destroy(reply);
+	return ret;
+}
+
