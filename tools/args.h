@@ -649,6 +649,20 @@ arg(setpersist_ARG, '\0', "setpersist", string_VAL, 0, 0,
     "lvmlocal.conf pr_key or host_id must be configured to use PR.\n"
     "For local VGs, enabling system_id is also recommended.\n")
 
+arg(setlockargs_ARG, '\0', "setlockargs", string_VAL, 0, 0,
+    "Add or remove lock_args settings for a shared VG.\n"
+    "The lock_args determine lock manager behavior for the VG.\n"
+    "These settings are only allowed for lock_type sanlock.\n"
+    "persist: use persistent reservations for lock recovery.\n"
+    "lvmlockd will preempt-abort the persistent reservation of a failed\n"
+    "lock owner so that the lock can be acquired.\n"
+    "notimeout: use locks that do not time out when the owner fails.\n"
+    "In this case, a lock owned by a failed host can only be acquired\n"
+    "using the persist feature.\n"
+    "nopersist: do not use the persist feature.\n"
+    "timeout: do not use the notimeout feature.\n"
+    "The default behavior with no settings configured is: nopersist and timeout.\n")
+
 arg(removekey_ARG, '\0', "removekey", string_VAL, 0, 0,
     "A persistent reservation key to remove.\n")
 
