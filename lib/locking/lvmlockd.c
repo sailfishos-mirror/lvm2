@@ -117,6 +117,41 @@ void lvmlockd_disconnect(void)
 	_lvmlockd_connected = 0;
 }
 
+#define MAX_LOCKARGS 8
+
+/* parse lock_args string for values that may appear in command line --setlockargs */
+
+int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
+{
+	char buf[PATH_MAX];
+	char *argv[MAX_LOCKARGS];
+	int argc;
+	int i;
+
+	if (!str)
+		return 0;
+ 
+	dm_strncpy(buf, str, sizeof(buf));
+
+	split_line(buf, &argc, argv, MAX_LOCKARGS, ',');
+
+	for (i = 0; i < argc; i++) {
+		if (!strcmp(argv[i], "persist"))
+			*flags |= LOCKARGS_PERSIST;
+		else if (!strcmp(argv[i], "nopersist"))
+			*flags |= LOCKARGS_NOPERSIST;
+		else if (!strcmp(argv[i], "timeout"))
+			*flags |= LOCKARGS_TIMEOUT;
+		else if (!strcmp(argv[i], "notimeout"))
+			*flags |= LOCKARGS_NOTIMEOUT;
+		else {
+			log_error("Unknown lockargs option value: %s", argv[i]);
+			return 0;
+		}
+	} 
+	return 1;
+}
+
 /* Translate the result strings from lvmlockd to bit flags. */
 static void _flags_str_to_lockd_flags(const char *flags_str, uint32_t *lockd_flags)
 {
@@ -892,7 +927,7 @@ static int _init_vg_idm(struct cmd_context *cmd, struct volume_group *vg)
 	return _init_vg(cmd, vg, "idm");
 }
 
-static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, int lv_lock_count)
+static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, int lv_lock_count, const char *set_args)
 {
 	daemon_reply reply;
 	const char *reply_str;
@@ -908,9 +943,9 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
 	int ret;
 
 	if (!_use_lvmlockd)
-		return 0;
+		return_0;
 	if (!_lvmlockd_connected)
-		return 0;
+		return_0;
 
 	/*
 	 * We need the sector size to know what size to create the LV,
@@ -1014,6 +1049,7 @@ static int _init_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg, in
 				"vg_name = %s", vg->name,
 				"vg_lock_type = %s", "sanlock",
 				"vg_lock_args = %s", vg->sanlock_lv->name,
+				"set_lock_args = %s", set_args ?: "none",
 				"align_mb = " FMTd64, (int64_t) align_size,
 				"opts = %s", opts ?: "none",
 				NULL);
@@ -1301,7 +1337,7 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 /* vgcreate */
 
 int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg,
-		  const char *lock_type, int lv_lock_count)
+		  const char *lock_type, int lv_lock_count, const char *set_args)
 {
 	switch (get_lock_type_from_string(lock_type)) {
 	case LOCK_TYPE_NONE:
@@ -1311,7 +1347,7 @@ int lockd_init_vg(struct cmd_context *cmd, struct volume_group *vg,
 	case LOCK_TYPE_DLM:
 		return _init_vg_dlm(cmd, vg);
 	case LOCK_TYPE_SANLOCK:
-		return _init_vg_sanlock(cmd, vg, lv_lock_count);
+		return _init_vg_sanlock(cmd, vg, lv_lock_count, set_args);
 	case LOCK_TYPE_IDM:
 		return _init_vg_idm(cmd, vg);
 	default:
@@ -1437,7 +1473,7 @@ void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
  * lock the vg, read/use/write the vg, unlock the vg.
  */
 
-int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists)
+int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, uint64_t our_key, int *exists)
 {
 	char uuid[64] __attribute__((aligned(8)));
 	const char *opts = NULL;
@@ -1515,6 +1551,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 				"vg_uuid = %s", uuid[0] ? uuid : "none",
 				"version = " FMTd64, (int64_t) vg->seqno,
 				"host_id = " FMTd64, (int64_t) host_id,
+				"our_key = " FMTd64, (int64_t) our_key,
 				"opts = %s", opts ?:  "none",
 				NULL);
 		_lockd_free_pv_list(&lock_pvs);
@@ -1528,6 +1565,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 				"vg_uuid = %s", uuid[0] ? uuid : "none",
 				"version = " FMTd64, (int64_t) vg->seqno,
 				"host_id = " FMTd64, (int64_t) host_id,
+				"our_key = " FMTd64, (int64_t) our_key,
 				"opts = %s", opts ?:  "none",
 				NULL);
 	}
@@ -4231,7 +4269,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 		 * Depending on the problem that caused the rename to
 		 * fail, it may make sense to not restart the VG here.
 		 */
-		if (!lockd_start_vg(cmd, vg, NULL))
+		if (!lockd_start_vg(cmd, vg, 0, NULL))
 			log_error("Failed to restart VG %s lockspace.", vg->name);
 		return 1;
 	}
@@ -4271,7 +4309,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 		}
 	}
 
-	if (!lockd_start_vg(cmd, vg, NULL))
+	if (!lockd_start_vg(cmd, vg, 0, NULL))
 		log_error("Failed to start VG %s lockspace.", vg->name);
 
 	return 1;
@@ -4487,3 +4525,171 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
 			log_warn("Ignoring unknown lockopt value: %s", argv[i]);
 	}
 }
+
+int lockd_setlockargs(struct cmd_context *cmd, struct volume_group *vg, const char *set_args, uint64_t *our_key_held)
+{
+	daemon_reply reply;
+	const char *reply_str;
+	const char *vg_lock_args = NULL;
+	uint32_t lockd_flags = 0;
+	uint32_t lock_args_flags = 0;
+	int result;
+	int ret;
+
+	if (!_use_lvmlockd) {
+		log_error("lvmlockd is not in use.");
+		return 0;
+	}
+	if (!_lvmlockd_connected) {
+		log_error("lvmlockd is not connected.");
+		return 0;
+	}
+
+	if (!vg->lock_type || strcmp(vg->lock_type, "sanlock")) {
+		log_error("setlockargs is only supported for lock type sanlock.");
+		return 0;
+	}
+
+	if (!set_args)
+		return_0;
+
+	if (!lockd_lockargs_get_user_flags(set_args, &lock_args_flags))
+		return_0;
+
+	if ((lock_args_flags & LOCKARGS_PERSIST) && !(vg->pr & VG_PR_REQUIRE)) {
+		log_error("lockargs \"persist\" requires persistent reservation setting \"require\".");
+		return 0;
+	}
+
+	/*
+	 * Check if other PR keys are registered, which would
+	 * cause the persist_upgrade_ex below to fail.
+	 */
+	if (vg->pr & (VG_PR_REQUIRE | VG_PR_AUTOSTART)) {
+		struct pv_list *pvl;
+		struct device *dev;
+		int key_count;
+
+		dm_list_iterate_items(pvl, &vg->pvs) {
+			if (!(dev = pvl->pv->dev))
+				continue;
+			if (dm_list_empty(&dev->aliases))
+				continue;
+			if (!dev_find_key(cmd, dev, 0, 0, NULL, 0, NULL, 1, &key_count, NULL)) {
+				/* Shouldn't happen if persist_is_started already passed. */
+				log_error("No PR key found on %s.", dev_name(dev));
+				return 0;
+			}
+			if (key_count != 1) {
+				log_error("Found %d PR keys on %s, stop PR and lockspace on other hosts.", key_count, dev_name(dev));
+				log_error("(See vgchange --lockstop --persist stop.)");
+				return 0;
+			}
+		}
+	}
+
+	/*
+	 * setlockargs_before checks that sanlock version supports
+	 * the new set_lock_args, checks that no LV locks are held,
+	 * checks we are the only host in the lockspace, and stops
+	 * the lockspace.
+	 */
+
+	log_debug("lockd setlockargs_vg_before %s", vg->name);
+
+	reply = _lockd_send("setlockargs_vg_before",
+				"pid = " FMTd64, (int64_t) getpid(),
+				"vg_name = %s", vg->name,
+				"vg_lock_type = %s", vg->lock_type,
+				"vg_lock_args = %s", vg->lock_args,
+				"set_lock_args = %s", set_args,
+				NULL);
+
+	if (!_lockd_result(cmd, "setlockargs_vg_before", reply, &result, &lockd_flags, NULL)) {
+		ret = 0;
+		goto out;
+	}
+
+	if (result == -EBUSY) {
+		log_error("Lockspace for \"%s\" not stopped on other hosts", vg->name);
+		ret = 0;
+		goto out;
+	} else if (result < 0) {
+		log_error("Lockspace setlockargs error %d for \"%s\"", result, vg->name);
+		ret = 0;
+		goto out;
+	}
+
+	daemon_reply_destroy(reply);
+
+	/*
+	 * When the VG has the ability to use PR, change the
+	 * current PR to an exclusive mode (WE), using a key
+	 * with our host_id and gen 0.  The exclusive PR protects
+	 * the VG from other hosts while the locking parameters
+	 * are being changed (since locking can't be used while
+	 * the locking is being changed.)  The lockspace is stopped
+	 * while it's being changed.  At the end of the vgchange
+	 * setlockargs command, persist_ugprade_stop() releases
+	 * the exclusive PR.  After this, any host can do a normal
+	 * start of PR/locking using the new lockargs.
+	 */
+	if (vg->pr & (VG_PR_REQUIRE | VG_PR_AUTOSTART)) {
+		if (!persist_upgrade_ex(cmd, vg, our_key_held)) {
+			log_error("Failed to upgrade to exclusive PR.");
+			log_error("Restart PR and locking to retry setlockargs.");
+			return 0;
+		}
+	}
+
+	/*
+	 * setlockargs_final reformats sanlock leases on the lvmlock LV.
+	 * The host generation numbers will all be reset back to 0, and
+	 * the PR keys containing the gen will start over from gen 1.
+	 * lvmlockd returns a new lock_args string that this command
+	 * writes in VG metadata.
+	 */
+
+ retry_final:
+	log_debug("lockd setlockargs_vg_final %s", vg->name);
+
+	reply = _lockd_send("setlockargs_vg_final",
+				"pid = " FMTd64, (int64_t) getpid(),
+				"vg_name = %s", vg->name,
+				"vg_lock_type = %s", vg->lock_type,
+				"vg_lock_args = %s", vg->lock_args,
+				"set_lock_args = %s", set_args,
+				NULL);
+
+	if (!_lockd_result(cmd, "setlockargs_vg_final", reply, &result, &lockd_flags, NULL)) {
+		ret = 0;
+		goto out;
+	}
+
+	if (result == -EAGAIN) {
+		daemon_reply_destroy(reply);
+		sleep(1);
+		goto retry_final;
+	}
+
+	if (!(reply_str = daemon_reply_str(reply, "vg_lock_args", NULL))) {
+		log_error("VG %s setlockargs failed: result %d new lock_args not returned", vg->name, result);
+		ret = 0;
+		goto out;
+	}
+
+	if (!(vg_lock_args = dm_pool_strdup(cmd->mem, reply_str))) {
+		ret = 0;
+		goto out;
+	}
+
+	log_debug("lockd setlockargs_vg %s result %d new lock_args %s", vg->name, result, vg_lock_args);
+
+	vg->lock_args = vg_lock_args;
+	ret = 1;
+
+out:
+	daemon_reply_destroy(reply);
+	return ret;
+}
+

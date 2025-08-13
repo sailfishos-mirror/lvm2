@@ -655,6 +655,7 @@ static int _passes_lock_start_filter(struct cmd_context *cmd,
 static int _vgchange_lock_start(struct cmd_context *cmd, struct volume_group *vg,
 				struct vgchange_params *vp)
 {
+	uint64_t our_key = 0;
 	int auto_opt = 0;
 	int exists = 0;
 	int r;
@@ -685,12 +686,12 @@ do_start:
 	if (!persist_start_include(cmd, vg, 0, auto_opt, NULL))
 		return 0;
 
-	if ((vg->pr & (VG_PR_REQUIRE|VG_PR_AUTOSTART)) && !persist_is_started(cmd, vg, 0)) {
+	if ((vg->pr & (VG_PR_REQUIRE|VG_PR_AUTOSTART)) && !persist_is_started(cmd, vg, 0, &our_key)) {
 		log_error("VG %s PR should be started before locking (vgchange --persist start)", vg->name);
 		return 0;
 	}
 
-	r = lockd_start_vg(cmd, vg, &exists);
+	r = lockd_start_vg(cmd, vg, our_key, &exists);
 
 	if (r)
 		vp->lock_start_count++;
@@ -1284,7 +1285,7 @@ static int _vgchange_locktype(struct cmd_context *cmd, struct volume_group *vg, 
 
 		vg->system_id = NULL;
 
-		if (!lockd_init_vg(cmd, vg, lock_type, lv_lock_count)) {
+		if (!lockd_init_vg(cmd, vg, lock_type, lv_lock_count, arg_str_value(cmd, setlockargs_ARG, NULL))) {
 			log_error("Failed to initialize lock args for lock type %s", lock_type);
 			return 0;
 		}
@@ -1824,7 +1825,7 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
 	 * enabling/starting PR, otherwise enabling/starting PR will
 	 * cause i/o to begin failing on those other hosts.
 	 */
-	if (on && vg_is_shared(vg) && !persist_is_started(cmd, vg, 1) &&
+	if (on && vg_is_shared(vg) && !persist_is_started(cmd, vg, 1, NULL) &&
 	    lockd_vg_is_started(cmd, vg, NULL) && lockd_vg_is_busy(cmd, vg)) {
 		log_error("VG lockspace should be stopped on all hosts (vgchange --lockstop) before enabling PR.");
 		return ECMD_FAILED;
@@ -1889,6 +1890,54 @@ int vgchange_setpersist_cmd(struct cmd_context *cmd, int argc, char **argv)
 		flags |= READ_FOR_PERSIST;
 
 	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, 0, handle, &_vgchange_setpersist_single);
+
+	destroy_processing_handle(cmd, handle);
+	return ret;
+}
+
+static int _vgchange_setlockargs_single(struct cmd_context *cmd, const char *vg_name,
+			             struct volume_group *vg,
+			             struct processing_handle *handle)
+{
+	const char *set = arg_str_value(cmd, setlockargs_ARG, NULL);
+	uint64_t our_key_held = 0;
+
+	if (!set)
+		return_ECMD_FAILED;
+
+	/*
+	 * lockd_setlockargs gets exclusive PR (if the VG is using PR),
+	 * stops the lockspace, and sets new vg->lock_args that are
+	 * written below.  If lockd_setlockargs got the ex PR, then
+	 * persist_upgrade_stop releases the PR.
+	 */
+	if (!lockd_setlockargs(cmd, vg, set, &our_key_held))
+		return_ECMD_FAILED;
+
+	if (!vg_write(vg) || !vg_commit(vg))
+		return_ECMD_FAILED;
+
+	if (our_key_held && !persist_upgrade_stop(cmd, vg, our_key_held))
+		log_warn("Failed to stop PR.");
+	persist_key_file_remove(cmd, vg);
+
+	log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
+
+	return ECMD_PROCESSED;
+}
+
+int vgchange_setlockargs_cmd(struct cmd_context *cmd, int argc, char **argv)
+{
+	struct processing_handle *handle;
+	uint32_t flags = READ_FOR_UPDATE;
+	int ret;
+
+	if (!(handle = init_processing_handle(cmd, NULL))) {
+		log_error("Failed to initialize processing handle.");
+		return ECMD_FAILED;
+	}
+
+	ret = process_each_vg(cmd, argc, argv, NULL, NULL, flags, 0, handle, &_vgchange_setlockargs_single);
 
 	destroy_processing_handle(cmd, handle);
 	return ret;

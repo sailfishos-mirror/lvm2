@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
 #include <sys/ioctl.h>
 #include <scsi/sg.h>
 
@@ -174,28 +175,69 @@ static int parse_prkey(const char *ptr, uint64_t *prkey)
 	return 1;
 }
 
-void persist_key_file_remove(struct cmd_context *cmd, const char *vg_name)
+/*
+ * If there was previously a different VG with the same name (and unknown vgid),
+ * remove the key file that it used.
+ */
+void persist_key_file_remove_name(struct cmd_context *cmd, const char *vg_name)
+{
+	DIR *dir;
+	struct dirent *de;
+	char path[PATH_MAX] = { 0 };
+	char name[PATH_MAX] = { 0 };
+	int namelen;
+
+	if (dm_snprintf(name, sizeof(name), "persist_key_%s", vg_name) < 0)
+		return;
+	namelen = strlen(name);
+
+	if (!(dir = opendir("/var/lib/lvm")))
+		return;
+
+	while ((de = readdir(dir))) {
+		if (de->d_name[0] == '.')
+			continue;
+		if (!strncmp(de->d_name, name, namelen)) {
+			if (dm_snprintf(path, sizeof(path), "/var/lib/lvm/%s", de->d_name) < 0)
+				continue;
+			if (unlink(path))
+				log_sys_debug("unlink", path);
+		}
+	}
+
+	(void) closedir(dir);
+}
+
+static void create_persist_key_path(struct volume_group *vg, const char *vg_name, char *path)
+{
+	char vgid[ID_LEN + 1] __attribute__((aligned(8)));
+
+	vgid[ID_LEN] = 0;
+	memcpy(vgid, &vg->id.uuid, ID_LEN);
+
+	(void) dm_snprintf(path, PATH_MAX, "/var/lib/lvm/persist_key_%s_%s", vg_name, vgid);
+}
+
+void persist_key_file_remove(struct cmd_context *cmd, struct volume_group *vg)
 {
 	char path[PATH_MAX] = { 0 };
 
-	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", vg_name) < 0)
-		return;
+	create_persist_key_path(vg, vg->name, path);
 
 	if (unlink(path))
 		log_sys_debug("unlink", path);
 }
 
-void persist_key_file_rename(const char *old_name, const char *new_name)
+void persist_key_file_rename(struct volume_group *vg, const char *old_name, const char *new_name)
 {
 	char old_path[PATH_MAX] = { 0 };
 	char new_path[PATH_MAX] = { 0 };
 	struct stat info;
 
-	if (dm_snprintf(old_path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", old_name) < 0)
-		return;
+	create_persist_key_path(vg, old_name, old_path);
+	create_persist_key_path(vg, new_name, new_path);
+
 	if (stat(old_path, &info))
-		return;
-	if (dm_snprintf(new_path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", new_name) < 0)
 		return;
 	if (rename(old_path, new_path) < 0)
 		log_warn("WARNING: Failed to rename %s", old_path);
@@ -206,8 +248,7 @@ static int key_file_exists(struct cmd_context *cmd, struct volume_group *vg)
 	char path[PATH_MAX] = { 0 };
 	struct stat info;
 
-	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", vg->name) < 0)
-		return 0;
+	create_persist_key_path(vg, vg->name, path);
 
 	if (!stat(path, &info))
 		return 1;
@@ -228,8 +269,7 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 	uint32_t found_gen = 0;
 	FILE *fp;
 
-	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", vg->name) < 0)
-		return 0;
+	create_persist_key_path(vg, vg->name, path);
 
 	if (!(fp = fopen(path, "r"))) {
 		log_debug("key_file: cannot open %s", path);
@@ -290,13 +330,12 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 	return 1;
 }
 
-static int write_key_file(struct cmd_context *cmd, const char *vg_name, uint64_t key)
+static int write_key_file(struct cmd_context *cmd, struct volume_group *vg, uint64_t key)
 {
 	char path[PATH_MAX] = { 0 };
 	FILE *fp;
 
-	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/persist_key_%s", vg_name) < 0)
-		return 0;
+	create_persist_key_path(vg, vg->name, path);
 
 	if (!(fp = fopen(path, "w"))) {
 		log_debug("Failed to create key file");
@@ -774,7 +813,7 @@ int vg_is_registered(struct cmd_context *cmd, struct volume_group *vg, uint64_t 
 	}
 }
 
-int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail)
+int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail, uint64_t *our_key_ret)
 {
 	struct pv_list *pvl;
 	struct device *dev;
@@ -786,6 +825,9 @@ int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may
 
 	if (!vg_is_registered(cmd, vg, &our_key_val, &partial))
 		goto out;
+
+	if (our_key_ret)
+		*our_key_ret = our_key_val;
 
 	if (partial) {
 		log_debug("PR is started: partial");
@@ -856,7 +898,7 @@ static int get_our_key(struct cmd_context *cmd, struct volume_group *vg,
 
 		if (last_host_id != local_host_id) {
 			log_debug("last key from file: wrong host_id %d vs local %d", last_host_id, local_host_id);
-			persist_key_file_remove(cmd, vg->name);
+			persist_key_file_remove(cmd, vg);
 			goto read_keys;
 		}
 
@@ -963,7 +1005,7 @@ static int get_our_key_sanlock_start(struct cmd_context *cmd, struct volume_grou
 
 	if (last_host_id != local_host_id) {
 		log_debug("last key from file: wrong host_id %d vs local %d", last_host_id, local_host_id);
-		persist_key_file_remove(cmd, vg->name);
+		persist_key_file_remove(cmd, vg);
 		goto read_keys;
 	}
 
@@ -1126,6 +1168,8 @@ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_
 		log_error("Failed to update persistent reservation key to %s.", new_key_buf);
 		return 0;
 	}
+
+	/* TODO: send new key to lvmlockd, e.g. call lockd_vg_is_started() and have that include our key */
 
 	log_debug("persist_key_update: updated 0x%llx to %s", (unsigned long long)our_key_val, new_key_buf);
 	return 1;
@@ -1480,7 +1524,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg,
 	if (!read_key_file(cmd, vg, NULL, &file_key, NULL, NULL) || (file_key != our_key_val)) {
 		log_print_unless_silent("updating incorrect key file value 0x%llx to 0x%llx",
 					(unsigned long long)file_key, (unsigned long long)our_key_val);
-		if (!write_key_file(cmd, vg->name, our_key_val))
+		if (!write_key_file(cmd, vg, our_key_val))
 			log_warn("WARNING: Failed to update key file.");
 	}
 
@@ -1570,7 +1614,7 @@ int persist_stop_prepare(struct cmd_context *cmd, struct volume_group *vg, struc
 int persist_stop_run(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char *key)
 {
 	if (!_run_stop(cmd, vg, devs, key, 0))
-		return 0;
+		return_0;
 	return 1;
 }
 
@@ -1719,6 +1763,117 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 	return error ? 0 : 1;
 }
 
+int persist_upgrade_stop(struct cmd_context *cmd, struct volume_group *vg, uint64_t our_key_val)
+{
+	DM_LIST_INIT(devs);
+	char our_key_buf[PR_KEY_BUF_SIZE] = { 0 };
+
+	if (!pv_list_to_dev_list(cmd->mem, &vg->pvs, &devs))
+		return_0;
+
+	if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val) < 0)
+		return_0;
+
+	if (!_run_stop(cmd, vg, &devs, our_key_buf, 0))
+		return_0;
+
+	return 1;
+}
+
+/*
+ * Host currently holds a normal sh access PR on shared VG,
+ * and wants to switch to an ex access PR on that VG
+ * (to prevent other hosts from using it while it's making
+ * changes.)
+ */
+
+int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_t *our_key_held)
+{
+	DM_LIST_INIT(devs);
+	struct device_list *devl;
+	char *local_key = (char *)find_config_tree_str(cmd, local_pr_key_CFG, NULL);
+	int local_host_id = find_config_tree_int(cmd, local_host_id_CFG, NULL);
+	char our_key_buf[PR_KEY_BUF_SIZE] = { 0 };
+	char new_key_buf[PR_KEY_BUF_SIZE] = { 0 };
+	uint64_t our_key_val = 0;
+	uint64_t new_key_val = 0;
+	const char *devname;
+	const char **argv;
+	int pv_count;
+	int args;
+	int status;
+
+	if (!local_key && !local_host_id)
+		return 1;
+
+	if (!get_our_key(cmd, vg, local_key, local_host_id, our_key_buf, &our_key_val))
+		return_0;
+
+	if (!pv_list_to_dev_list(cmd->mem, &vg->pvs, &devs))
+		return_0;
+
+	log_debug("persist_upgrade_ex stop PR %s", our_key_buf);
+
+	if (!_run_stop(cmd, vg, &devs, our_key_buf, 0))
+		return_0;
+
+	if (local_key) {
+		new_key_val = our_key_val;
+		memcpy(new_key_buf, our_key_buf, PR_KEY_BUF_SIZE);
+	} else if (local_host_id) {
+		if (dm_snprintf(new_key_buf, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d", local_host_id);
+			return 0;
+		}
+		if (!parse_prkey(new_key_buf, &new_key_val)) {
+			log_error("Failed to parse generated key %s", new_key_buf);
+			return 0;
+		}
+	}
+
+	pv_count = dm_list_size(&devs);
+
+	log_debug("persist_upgrade_ex start PR on %d devs with local key %llx", pv_count, (unsigned long long)new_key_val);
+
+	args = 9 + pv_count*2;
+	if (vg->pr & VG_PR_PTPL)
+		args += 1;
+
+	if (!(argv = dm_pool_alloc(cmd->mem, args * sizeof(char *))))
+		return_0;
+
+	args = 0;
+	argv[0] = LVMPERSIST_PATH;
+	argv[++args] = "start";
+	argv[++args] = "--ourkey";
+	argv[++args] = new_key_buf;
+	argv[++args] = "--access";
+	argv[++args] = "ex";
+	argv[++args] = "--vg";
+	argv[++args] = vg->name;
+	if (vg->pr & VG_PR_PTPL)
+		argv[++args] = "--ptpl";
+
+	dm_list_iterate_items(devl, &devs) {
+		if (!(devname = dm_pool_strdup(cmd->mem, dev_name(devl->dev))))
+			return_0;
+		argv[++args] = "--device";
+		argv[++args] = devname;
+	}
+
+	argv[++args] = NULL;
+
+	if (!exec_cmd(cmd, argv, &status, 1)) {
+		log_error("persistent reservation exclusive start failed: lvmpersist command error.");
+		log_error("(Use vgchange --persist stop to stop PR on other hosts.");
+		return 0;
+	}
+
+	*our_key_held = new_key_val;
+
+	return 1;
+}
+
 /*
  * Start PR on devices that are being used for vgcreate.
  * This is somewhat awkward because it happens early in
@@ -1742,7 +1897,7 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
 	int args;
 	int status;
 
-	persist_key_file_remove(cmd, vg_name);
+	persist_key_file_remove_name(cmd, vg_name);
 
 	if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val)) {
@@ -1915,7 +2070,7 @@ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, ui
 	}
 
 	/* key file is an optimization, not an error condition */
-	if (!write_key_file(cmd, vg->name, our_key_val))
+	if (!write_key_file(cmd, vg, our_key_val))
 		stack;
 
 	return 1;
@@ -2302,7 +2457,7 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 	}
 
 	/* key file is an optimization, not an error condition */
-	if (!write_key_file(cmd, vg->name, our_key_val))
+	if (!write_key_file(cmd, vg, our_key_val))
 		stack;
 
 	return 1;

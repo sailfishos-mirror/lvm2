@@ -51,7 +51,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	if (!vgcreate_params_set_defaults(cmd, &vp_def, NULL))
 		return EINVALID_CMD_LINE;
 	vp_def.vg_name = vg_name;
-	if (!vgcreate_params_set_from_args(cmd, &vp_new, &vp_def))
+	if (!vgcreate_params_set_from_args(cmd, &vp_new, &vp_def, &pp))
 		return EINVALID_CMD_LINE;
 
 	if (!vgcreate_params_validate(cmd, &vp_new))
@@ -160,7 +160,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	 * a local VG.  lockd_init_vg() then writes the VG a second time with
 	 * both lock_type and lock_args set.
 	 */
-	if (!lockd_init_vg(cmd, vg, vp_new.lock_type, 0)) {
+	if (!lockd_init_vg(cmd, vg, vp_new.lock_type, 0, arg_str_value(cmd, setlockargs_ARG, NULL))) {
 		log_error("Failed to initialize lock args for lock type %s",
 			  vp_new.lock_type);
 		vg_remove_pvs(vg);
@@ -187,7 +187,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 			goto out;
 		}
 
-		if (!lockd_start_vg(cmd, vg, NULL)) {
+		if (!lockd_start_vg(cmd, vg, 0, NULL)) {
 			log_error("Failed to start locking");
 			goto out;
 		}
