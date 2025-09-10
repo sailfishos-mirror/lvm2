@@ -14,6 +14,7 @@
  */
 
 #include "tools.h"
+#include "lib/device/persist.h"
 
 int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 {
@@ -43,10 +44,8 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 
 	pp.pv_count = argc;
 	pp.pv_names = argv;
-
-	/* Don't create a new PV on top of an existing PV like pvcreate does. */
-	pp.preserve_existing = 1;
-
+	pp.vg_name = vg_name;
+	pp.preserve_existing = 1; /* Don't create a new PV on top of an existing PV like pvcreate does. */
 	pp.check_consistent_block_size = 1;
 
 	if (!vgcreate_params_set_defaults(cmd, &vp_def, NULL))
@@ -118,6 +117,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	    !vg_set_max_pv(vg, vp_new.max_pv) ||
 	    !vg_set_alloc_policy(vg, vp_new.alloc) ||
 	    !vg_set_system_id(vg, vp_new.system_id) ||
+	    !vg_set_persist(vg, pp.setpersist_flags) ||
 	    !vg_set_mda_copies(vg, vp_new.vgmetadatacopies))
 		goto_bad;
 
@@ -181,6 +181,12 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	 * read without locks until the lockspace is done starting.)
 	 */
 	if (vg_is_shared(vg)) {
+		if (pp.setpersist_flags &&
+		    !persist_vgcreate_update(cmd, vg, pp.setpersist_flags)) {
+			log_error("Failed to start PR");
+			goto out;
+		}
+
 		if (!lockd_start_vg(cmd, vg, NULL)) {
 			log_error("Failed to start locking");
 			goto out;
