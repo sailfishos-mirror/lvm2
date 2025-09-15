@@ -1231,23 +1231,9 @@ static void _print_cmd_usage_option(const struct command_name *cname,
 	_print_man_all_positions_desc(cname);
 }
 
-static int _print_man(char *name, char *des_file, int secondary)
+static void _print_header(const char *name, unsigned section)
 {
-	const struct command_name *cname;
-	const struct command_name_args *cna = NULL;
-	struct command *cmd, *prev_cmd = NULL;
-	char *lvmname = name;
-	int i, sep = 0;
-
-	if (!strncmp(name, "lvm-", 4)) {
-		name[3] = ' ';
-		name += 4;
-	}
-
-	cname = find_command_name(name);
-
-	printf(".TH %s 8 \"LVM TOOLS #VERSION#\" \"Red Hat, Inc.\"\n.\n",
-	       _upper_command_name(lvmname));
+	printf(".TH %s %u \"LVM TOOLS #VERSION#\" \"Red Hat, Inc.\"\n.\n", name, section);
 
 	/* Postscript rendering is using tabulator with '.ta'
 	 * This works only in 'copy-in' mode otherwise \t does NOT work
@@ -1286,6 +1272,24 @@ static int _print_man(char *name, char *des_file, int secondary)
 	       "\\&\n"
 	       "..\n"
 	       ".\n");
+}
+
+static int _print_man(char *name, char *des_file, int secondary)
+{
+	const struct command_name *cname;
+	const struct command_name_args *cna = NULL;
+	struct command *cmd, *prev_cmd = NULL;
+	char *lvmname = name;
+	int i, sep = 0;
+
+	if (!strncmp(name, "lvm-", 4)) {
+		name[3] = ' ';
+		name += 4;
+	}
+
+	cname = find_command_name(name);
+
+	_print_header(_upper_command_name(lvmname), 8);
 
 	for (i = 0; i < COMMAND_COUNT; i++) {
 
