@@ -1,3 +1,6 @@
 dm_device_list_destroy
 dm_device_list_equal
 dm_task_get_device_list
+dm_get_status_writecache
+dm_tree_node_add_writecache_target
+dm_tree_node_add_cachevol_target

@@ -394,6 +394,16 @@ struct dm_status_cache {
 int dm_get_status_cache(struct dm_pool *mem, const char *params,
 			struct dm_status_cache **status);
 
+struct dm_status_writecache {
+	uint64_t error;
+	uint64_t total_blocks;
+	uint64_t free_blocks;
+	uint64_t writeback_blocks;
+};
+
+int dm_get_status_writecache(struct dm_pool *mem, const char *params,
+                             struct dm_status_writecache **status);
+
 /*
  * Parse params from STATUS call for snapshot target
  *
@@ -1930,6 +1940,72 @@ int dm_tree_node_add_cache_target(struct dm_tree_node *node,
 				  const char *policy_name,
 				  const struct dm_config_node *policy_settings,
 				  uint32_t data_block_size);
+
+/*
+ * Add a cache target using a cachevol (single LV with metadata and data).
+ * The cachevol_uuid refers to a single device containing both metadata and data,
+ * with metadata_start/metadata_len and data_start/data_len specifying the regions.
+ */
+int dm_tree_node_add_cachevol_target(struct dm_tree_node *node,
+				     uint64_t size,
+				     uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
+				     const char *metadata_uuid,
+				     const char *data_uuid,
+				     const char *cachevol_uuid,
+				     const char *origin_uuid,
+				     const char *policy_name,
+				     const struct dm_config_node *policy_settings,
+				     uint64_t metadata_start,
+				     uint64_t metadata_len,
+				     uint64_t data_start,
+				     uint64_t data_len,
+				     uint32_t data_block_size);
+
+struct writecache_settings {
+	/*
+	 * Allow an unrecognized key and its val to be passed to the kernel for
+	 * cases where a new kernel setting is added but lvm doesn't know about
+	 * it yet.
+	 */
+	char *new_key;
+	char *new_val;
+
+	/*
+	 * Flag is 1 if a value has been set.
+	 */
+	unsigned high_watermark_set:1;
+	unsigned low_watermark_set:1;
+	unsigned writeback_jobs_set:1;
+	unsigned autocommit_blocks_set:1;
+	unsigned autocommit_time_set:1;
+	unsigned fua_set:1;
+	unsigned nofua_set:1;
+	unsigned cleaner_set:1;
+	unsigned max_age_set:1;
+	unsigned metadata_only_set:1;
+	unsigned pause_writeback_set:1;
+	uint32_t reserved : 21;
+
+	uint64_t high_watermark;
+	uint64_t low_watermark;
+	uint64_t writeback_jobs;
+	uint64_t autocommit_blocks;
+	uint64_t autocommit_time; /* in milliseconds */
+	uint32_t fua;
+	uint32_t nofua;
+	uint32_t cleaner;
+	uint32_t max_age;         /* in milliseconds */
+	uint32_t metadata_only;
+	uint32_t pause_writeback; /* in milliseconds */
+};
+
+int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
+				uint64_t size,
+				const char *origin_uuid,
+				const char *cache_uuid,
+				int pmem,
+				uint32_t writecache_block_size,
+				struct writecache_settings *settings);
 
 /*
  * FIXME Add individual cache policy pairs  <key> = value, like:

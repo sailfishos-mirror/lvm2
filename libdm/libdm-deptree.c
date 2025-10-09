@@ -35,6 +35,7 @@ enum {
 	SEG_SNAPSHOT_MERGE,
 	SEG_STRIPED,
 	SEG_ZERO,
+	SEG_WRITECACHE,
 	SEG_THIN_POOL,
 	SEG_THIN,
 	SEG_RAID0,
@@ -73,6 +74,7 @@ static const struct {
 	{ SEG_SNAPSHOT_MERGE, "snapshot-merge" },
 	{ SEG_STRIPED, "striped" },
 	{ SEG_ZERO, "zero"},
+	{ SEG_WRITECACHE, "writecache"},
 	{ SEG_THIN_POOL, "thin-pool"},
 	{ SEG_THIN, "thin"},
 	{ SEG_RAID0, "raid0"},
@@ -185,6 +187,11 @@ struct load_segment {
 	uint32_t min_recovery_rate;	/* raid kB/sec/disk */
 	uint32_t data_copies;		/* raid10 data_copies */
 
+	uint64_t metadata_start;	/* Cache */
+	uint64_t metadata_len;		/* Cache */
+	uint64_t data_start;		/* Cache */
+	uint64_t data_len;		/* Cache */
+
 	struct dm_tree_node *metadata;	/* Thin_pool + Cache */
 	struct dm_tree_node *pool;	/* Thin_pool, Thin */
 	struct dm_tree_node *external;	/* Thin */
@@ -200,6 +207,10 @@ struct load_segment {
 	unsigned read_only;		/* Thin pool target vsn 1.3 */
 	uint32_t device_id;		/* Thin */
 
+	struct dm_tree_node *writecache_node;		/* writecache */
+	int writecache_pmem;				/* writecache, 1 if pmem, 0 if ssd */
+	uint32_t writecache_block_size;			/* writecache, in bytes */
+	struct writecache_settings writecache_settings;	/* writecache */
 };
 
 /* Per-device properties */
@@ -2517,7 +2528,7 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 				    char *params, size_t paramsize)
 {
 	int pos = 0;
-	/* unsigned feature_count; */
+	unsigned feature_count;
 	char data[DM_FORMAT_DEV_BUFSIZE];
 	char metadata[DM_FORMAT_DEV_BUFSIZE];
 	char origin[DM_FORMAT_DEV_BUFSIZE];
@@ -2542,19 +2553,23 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 	EMIT_PARAMS(pos, " %u", seg->data_block_size);
 
 	/* Features */
-	/* feature_count = hweight32(seg->flags); */
-	/* EMIT_PARAMS(pos, " %u", feature_count); */
+
+	feature_count = 1; /* One of passthrough|writeback|writethrough is always set. */
+
 	if (seg->flags & DM_CACHE_FEATURE_METADATA2)
-		EMIT_PARAMS(pos, " 2 metadata2 ");
-	else
-		EMIT_PARAMS(pos, " 1 ");
+		feature_count++;
+
+	EMIT_PARAMS(pos, " %u", feature_count);
+
+	if (seg->flags & DM_CACHE_FEATURE_METADATA2)
+		EMIT_PARAMS(pos, " metadata2");
 
 	if (seg->flags & DM_CACHE_FEATURE_PASSTHROUGH)
-		EMIT_PARAMS(pos, "passthrough");
+		EMIT_PARAMS(pos, " passthrough");
         else if (seg->flags & DM_CACHE_FEATURE_WRITEBACK)
-		EMIT_PARAMS(pos, "writeback");
+		EMIT_PARAMS(pos, " writeback");
 	else
-		EMIT_PARAMS(pos, "writethrough");
+		EMIT_PARAMS(pos, " writethrough");
 
 	/* Cache Policy */
 	name = seg->policy_name ? : "default";
@@ -2569,6 +2584,112 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 		for (cn = seg->policy_settings->child; cn; cn = cn->sib)
 			if (cn->v) /* Skip deleted entry */
 				EMIT_PARAMS(pos, " %s %" PRIu64, cn->key, cn->v->v.i);
+
+	return 1;
+}
+
+static int _writecache_emit_segment_line(struct dm_task *dmt,
+				    struct load_segment *seg,
+				    char *params, size_t paramsize)
+{
+	int pos = 0;
+	int count = 0;
+	uint32_t block_size;
+	char origin_dev[DM_FORMAT_DEV_BUFSIZE];
+	char cache_dev[DM_FORMAT_DEV_BUFSIZE];
+
+	if (!_build_dev_string(origin_dev, sizeof(origin_dev), seg->origin))
+		return_0;
+
+	if (!_build_dev_string(cache_dev, sizeof(cache_dev), seg->writecache_node))
+		return_0;
+
+	if (seg->writecache_settings.high_watermark_set)
+		count += 2;
+	if (seg->writecache_settings.low_watermark_set)
+		count += 2;
+	if (seg->writecache_settings.writeback_jobs_set)
+		count += 2;
+	if (seg->writecache_settings.autocommit_blocks_set)
+		count += 2;
+	if (seg->writecache_settings.autocommit_time_set)
+		count += 2;
+	if (seg->writecache_settings.fua_set)
+		count += 1;
+	if (seg->writecache_settings.nofua_set)
+		count += 1;
+	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner)
+		count += 1;
+	if (seg->writecache_settings.max_age_set)
+		count += 2;
+	if (seg->writecache_settings.metadata_only_set)
+		count += 1;
+	if (seg->writecache_settings.pause_writeback_set)
+		count += 2;
+	if (seg->writecache_settings.new_key)
+		count += 2;
+
+	if (!(block_size = seg->writecache_block_size))
+		block_size = 4096;
+
+	EMIT_PARAMS(pos, "%s %s %s %u %d",
+		    seg->writecache_pmem ? "p" : "s",
+		    origin_dev, cache_dev, block_size, count);
+
+	if (seg->writecache_settings.high_watermark_set) {
+		EMIT_PARAMS(pos, " high_watermark %llu",
+			(unsigned long long)seg->writecache_settings.high_watermark);
+	}
+
+	if (seg->writecache_settings.low_watermark_set) {
+		EMIT_PARAMS(pos, " low_watermark %llu",
+			(unsigned long long)seg->writecache_settings.low_watermark);
+	}
+
+	if (seg->writecache_settings.writeback_jobs_set) {
+		EMIT_PARAMS(pos, " writeback_jobs %llu",
+			(unsigned long long)seg->writecache_settings.writeback_jobs);
+	}
+
+	if (seg->writecache_settings.autocommit_blocks_set) {
+		EMIT_PARAMS(pos, " autocommit_blocks %llu",
+			(unsigned long long)seg->writecache_settings.autocommit_blocks);
+	}
+
+	if (seg->writecache_settings.autocommit_time_set) {
+		EMIT_PARAMS(pos, " autocommit_time %llu",
+			(unsigned long long)seg->writecache_settings.autocommit_time);
+	}
+
+	if (seg->writecache_settings.fua_set) {
+		EMIT_PARAMS(pos, " fua");
+	}
+
+	if (seg->writecache_settings.nofua_set) {
+		EMIT_PARAMS(pos, " nofua");
+	}
+
+	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner) {
+		EMIT_PARAMS(pos, " cleaner");
+	}
+
+	if (seg->writecache_settings.max_age_set) {
+		EMIT_PARAMS(pos, " max_age %u", seg->writecache_settings.max_age);
+	}
+
+	if (seg->writecache_settings.metadata_only_set) {
+		EMIT_PARAMS(pos, " metadata_only");
+	}
+
+	if (seg->writecache_settings.pause_writeback_set) {
+		EMIT_PARAMS(pos, " pause_writeback %u", seg->writecache_settings.pause_writeback);
+	}
+
+	if (seg->writecache_settings.new_key) {
+		EMIT_PARAMS(pos, " %s %s",
+			seg->writecache_settings.new_key,
+			seg->writecache_settings.new_val);
+	}
 
 	return 1;
 }
@@ -2707,6 +2828,10 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 		if (!_cache_emit_segment_line(dmt, seg, params, paramsize))
 			return_0;
 		break;
+	case SEG_WRITECACHE:
+		if (!_writecache_emit_segment_line(dmt, seg, params, paramsize))
+			return_0;
+		break;
 	}
 
 	switch(seg->type) {
@@ -2718,6 +2843,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 	case SEG_THIN_POOL:
 	case SEG_THIN:
 	case SEG_CACHE:
+	case SEG_WRITECACHE:
 		break;
 	case SEG_CRYPT:
 	case SEG_LINEAR:
@@ -3425,20 +3551,23 @@ int dm_tree_node_add_raid_target_with_params_v2(struct dm_tree_node *node,
 	return 1;
 }
 
-DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
-	(struct dm_tree_node *node,
-	 uint64_t size,
-	 uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
-	 const char *metadata_uuid,
-	 const char *data_uuid,
-	 const char *origin_uuid,
-	 const char *policy_name,
-	 const struct dm_config_node *policy_settings,
-	 uint32_t data_block_size)
+static int _dm_tree_node_add_cache_target_impl(struct dm_tree_node *node,
+					       uint64_t size,
+					       uint64_t feature_flags,
+					       const char *metadata_uuid,
+					       const char *data_uuid,
+					       const char *origin_uuid,
+					       const char *policy_name,
+					       const struct dm_config_node *policy_settings,
+					       uint64_t metadata_start,
+					       uint64_t metadata_len,
+					       uint64_t data_start,
+					       uint64_t data_len,
+					       uint32_t data_block_size)
 {
 	struct dm_config_node *cn;
 	struct load_segment *seg;
-	const uint64_t _modemask =
+	const uint64_t modemask =
 		DM_CACHE_FEATURE_PASSTHROUGH |
 		DM_CACHE_FEATURE_WRITETHROUGH |
 		DM_CACHE_FEATURE_WRITEBACK;
@@ -3450,12 +3579,12 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
 		return 0;
 	}
 
-	switch (feature_flags & _modemask) {
+	switch (feature_flags & modemask) {
 	case DM_CACHE_FEATURE_PASSTHROUGH:
 	case DM_CACHE_FEATURE_WRITEBACK:
 		if (strcmp(policy_name, "cleaner") == 0) {
 			/* Enforce writethrough mode for cleaner policy */
-			feature_flags = ~_modemask;
+			feature_flags = ~modemask;
 			feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
 		}
                 /* Fall through */
@@ -3509,6 +3638,10 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
 	if (!_link_tree_nodes(node, seg->origin))
 		return_0;
 
+	seg->metadata_start = metadata_start;
+	seg->metadata_len = metadata_len;
+	seg->data_start = data_start;
+	seg->data_len = data_len;
 	seg->data_block_size = data_block_size;
 	seg->flags = feature_flags;
 	seg->policy_name = policy_name;
@@ -3536,6 +3669,103 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
 	/* Always some throughput available for cache to proceed */
 	if (seg->migration_threshold < data_block_size * 8)
 		seg->migration_threshold = data_block_size * 8;
+
+	return 1;
+}
+
+DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
+	(struct dm_tree_node *node,
+	 uint64_t size,
+	 uint64_t feature_flags, /* DM_CACHE_FEATURE_* */
+	 const char *metadata_uuid,
+	 const char *data_uuid,
+	 const char *origin_uuid,
+	 const char *policy_name,
+	 const struct dm_config_node *policy_settings,
+	 uint32_t data_block_size)
+{
+	return _dm_tree_node_add_cache_target_impl(node, size, feature_flags,
+						   metadata_uuid, data_uuid, origin_uuid,
+						   policy_name, policy_settings,
+						   0, 0, 0, 0, /* No cachevol offsets */
+						   data_block_size);
+}
+
+int dm_tree_node_add_cachevol_target(struct dm_tree_node *node,
+				     uint64_t size,
+				     uint64_t feature_flags,
+				     const char *metadata_uuid,
+				     const char *data_uuid,
+				     const char *cachevol_uuid,
+				     const char *origin_uuid,
+				     const char *policy_name,
+				     const struct dm_config_node *policy_settings,
+				     uint64_t metadata_start,
+				     uint64_t metadata_len,
+				     uint64_t data_start,
+				     uint64_t data_len,
+				     uint32_t data_block_size)
+{
+	if (!metadata_uuid || !*metadata_uuid) {
+		log_error("Cachevol metadata UUID is required.");
+		return 0;
+	}
+
+	if (!data_uuid || !*data_uuid) {
+		log_error("Cachevol data UUID is required.");
+		return 0;
+	}
+
+	if (!cachevol_uuid || !*cachevol_uuid) {
+		log_error("Cachevol UUID is required.");
+		return 0;
+	}
+
+	/* Call the implementation function with provided cmeta/cdata UUIDs and offsets */
+	return _dm_tree_node_add_cache_target_impl(node, size, feature_flags,
+						   metadata_uuid, data_uuid, origin_uuid,
+						   policy_name, policy_settings,
+						   metadata_start, metadata_len,
+						   data_start, data_len,
+						   data_block_size);
+}
+
+int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
+				  uint64_t size,
+				  const char *origin_uuid,
+				  const char *cache_uuid,
+				  int pmem,
+				  uint32_t writecache_block_size,
+				  struct writecache_settings *settings)
+{
+	struct load_segment *seg;
+
+	if (!(seg = _add_segment(node, SEG_WRITECACHE, size)))
+		return_0;
+
+	seg->writecache_pmem = pmem;
+	seg->writecache_block_size = writecache_block_size;
+
+	if (!(seg->writecache_node = dm_tree_find_node_by_uuid(node->dtree, cache_uuid))) {
+		log_error("Missing writecache's cache uuid %s.", cache_uuid);
+		return 0;
+	}
+	if (!_link_tree_nodes(node, seg->writecache_node))
+		return_0;
+
+	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree, origin_uuid))) {
+		log_error("Missing writecache's origin uuid %s.", origin_uuid);
+		return 0;
+	}
+	if (!_link_tree_nodes(node, seg->origin))
+		return_0;
+
+	memcpy(&seg->writecache_settings, settings, sizeof(struct writecache_settings));
+
+	if (settings->new_key && settings->new_val) {
+		seg->writecache_settings.new_key = dm_pool_strdup(node->dtree->mem, settings->new_key);
+		seg->writecache_settings.new_val = dm_pool_strdup(node->dtree->mem, settings->new_val);
+	}
 
 	return 1;
 }
