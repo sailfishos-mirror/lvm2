@@ -10,3 +10,5 @@ dm_vdo_parse_logical_size
 dm_vdo_status_parse
 dm_tree_node_add_integrity_target
 dm_get_status_integrity
+dm_raid_clear_failed_devices
+dm_raid_count_failed_devices

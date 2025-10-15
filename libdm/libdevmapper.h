@@ -414,6 +414,12 @@ int dm_get_status_integrity(struct dm_pool *mem, const char *params,
                             struct dm_status_integrity **status);
 
 /*
+ * RAID target support
+ */
+int dm_raid_count_failed_devices(const char *dev_path, uint32_t *nr_failed);
+int dm_raid_clear_failed_devices(const char *dev_path, uint32_t *nr_failed);
+
+/*
  * Parse params from STATUS call for snapshot target
  *
  * Snapshot target's format:
