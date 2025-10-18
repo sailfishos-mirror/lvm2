@@ -402,6 +402,7 @@ endif
 
 INTERNAL_LIBS = \
 	$(top_builddir)/libdaemon/client/libdaemonclient.a \
+	$(top_builddir)/liballoc/liballoc.a \
 	$(top_builddir)/device_mapper/libdevice-mapper.a \
 	$(top_builddir)/base/libbase.a
 LVMINTERNAL_LIBS = $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)

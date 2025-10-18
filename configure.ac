@@ -2075,6 +2075,7 @@ conf/lvmlocal.conf
 conf/command_profile_template.profile
 conf/metadata_profile_template.profile
 include/Makefile
+liballoc/Makefile
 lib/Makefile
 include/lvm-version.h
 libdaemon/Makefile

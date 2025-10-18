@@ -20,6 +20,7 @@
 #include "lib/misc/lvm-string.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/metadata/lv_alloc.h"
+#include "lib/metadata/alloc_bridge.h"
 #include "lib/metadata/pv_alloc.h"
 #include "lib/display/display.h"
 #include "lib/metadata/segtype.h"
@@ -2059,6 +2060,10 @@ static int _setup_allocated_segment(struct logical_volume *lv, uint64_t status,
 	uint32_t s, extents, area_multiple;
 	struct lv_segment *seg;
 
+	log_debug_alloc("_setup_allocated_segment: aa=%p area_count=%u", aa, area_count);
+	for (s = 0; s < area_count; s++)
+		log_debug_alloc("  aa[%u]: pv=%p pe=%u len=%u", s, aa[s].pv, aa[s].pe, aa[s].len);
+
 	area_multiple = _calc_area_multiple(segtype, area_count, 0);
 	extents = aa[0].len * area_multiple;
 
@@ -3862,6 +3867,9 @@ int lv_add_segment(struct alloc_handle *ah,
 		return 0;
 	}
 
+	log_debug_alloc("lv_add_segment: ah=%p, first_area=%u, num_areas=%u, &allocated_areas[first_area]=%p, ah->area_count=%u",
+			ah, first_area, num_areas, &ah->allocated_areas[first_area], ah->area_count);
+
 	if (!_setup_allocated_segments(lv, &ah->allocated_areas[first_area],
 				     num_areas, status,
 				     stripe_size, segtype,
@@ -4564,9 +4572,9 @@ int lv_extend(struct logical_volume *lv,
 
 	}
 
-	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors,
-				    log_count, region_size, extents,
-				    allocatable_pvs, alloc, approx_alloc, NULL)))
+	if (!(ah = allocate_extents_liballoc(lv->vg, lv, segtype, stripes, mirrors,
+					     log_count, region_size, extents,
+					     allocatable_pvs, alloc, approx_alloc, NULL)))
 		return_0;
 
 	new_extents = ah->new_extents;

@@ -18,7 +18,7 @@ top_builddir = @top_builddir@
 abs_top_builddir = @abs_top_builddir@
 abs_top_srcdir = @abs_top_srcdir@
 
-SUBDIRS = libdm conf daemons include lib libdaemon man scripts tools
+SUBDIRS = libdm conf daemons include liballoc lib libdaemon man scripts tools
 
 ifeq ("@UDEV_RULES@", "yes")
   SUBDIRS += udev
@@ -34,7 +34,7 @@ endif
 # FIXME Should use intermediate Makefiles here!
 ifeq ($(MAKECMDGOALS),distclean)
   SUBDIRS = conf include man test scripts \
-    libdaemon lib tools daemons libdm \
+    libdaemon liballoc lib tools daemons libdm \
     udev po
 tools.distclean: test.distclean
 endif
@@ -47,7 +47,8 @@ include $(top_srcdir)/base/Makefile
 include $(top_srcdir)/device_mapper/Makefile
 include $(top_srcdir)/test/unit/Makefile
 
-lib: include libdaemon $(BASE_TARGET) $(DEVICE_MAPPER_TARGET)
+liballoc: include $(BASE_TARGET) $(DEVICE_MAPPER_TARGET)
+lib: include liballoc libdaemon $(BASE_TARGET) $(DEVICE_MAPPER_TARGET)
 daemons: lib libdaemon tools
 scripts: lib
 tools: lib libdaemon
@@ -59,7 +60,8 @@ unit-test  run-unit-test: test libdm
 
 daemons.device-mapper: libdm.device-mapper
 tools.device-mapper: libdm.device-mapper
-device-mapper: tools.device-mapper daemons.device-mapper man.device-mapper
+liballoc.device-mapper: libdm.device-mapper
+device-mapper: tools.device-mapper daemons.device-mapper man.device-mapper liballoc.device-mapper
 device_mapper: device-mapper
 
 ifeq ("@INTL@", "yes")
@@ -76,7 +78,7 @@ daemons.cflow: tools.cflow
 cflow: include.cflow
 endif
 
-CSCOPE_DIRS = base daemons device_mapper include lib libdaemon scripts tools libdm test
+CSCOPE_DIRS = base daemons device_mapper include liballoc lib libdaemon scripts tools libdm test
 ifneq ("@CSCOPE_CMD@", "")
 cscope.out:
 	@CSCOPE_CMD@ -b -R $(patsubst %,-s%,$(addprefix $(srcdir)/,$(CSCOPE_DIRS)))

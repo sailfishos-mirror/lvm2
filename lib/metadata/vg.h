@@ -17,20 +17,11 @@
 
 #include "lib/uuid/uuid.h"
 #include "device_mapper/all.h"
+#include "liballoc/alloc_types.h"
 
 struct cmd_context;
 struct format_instance;
 struct logical_volume;
-
-typedef enum {
-	ALLOC_INVALID,
-	ALLOC_CONTIGUOUS,
-	ALLOC_CLING,
-	ALLOC_CLING_BY_TAGS,	/* Internal - never written or displayed. */
-	ALLOC_NORMAL,
-	ALLOC_ANYWHERE,
-	ALLOC_INHERIT
-} alloc_policy_t;
 
 #define VG_PR_REQUIRE	0x00000001
 #define VG_PR_AUTOSTART	0x00000002

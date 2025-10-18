@@ -75,6 +75,7 @@ SOURCES =\
 	locking/file_locking.c \
 	locking/locking.c \
 	log/log.c \
+	metadata/alloc_bridge.c \
 	metadata/cache_manip.c \
 	metadata/writecache_manip.c \
 	metadata/integrity_manip.c \
