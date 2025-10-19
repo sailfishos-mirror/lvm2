@@ -25,6 +25,7 @@ UNIT_SOURCE=\
 	test/unit/dmstatus_t.c \
 	test/unit/framework.c \
 	test/unit/io_engine_t.c \
+	test/unit/liballoc_t.c \
 	test/unit/matcher_t.c \
 	test/unit/percent_t.c \
 	test/unit/radix_tree_t.c \
@@ -42,8 +43,9 @@ CLEAN_TARGETS += $(UNIT_DEPENDS) $(UNIT_OBJECTS) \
 
 lib/liblvm-internal.a: lib
 libdaemon/client/libdaemonclient.a: libdaemon
+liballoc/liballoc.a: liballoc
 
-$(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
+$(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS) liballoc/liballoc.a
 	$(SHOW) "    [LD] $@"
 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
 	      -o $@ $+ $(LVMLIBS)
