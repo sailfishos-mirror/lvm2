@@ -212,6 +212,16 @@ const char *dm_task_get_message_response(struct dm_task *dmt);
 const char *dm_task_get_name(const struct dm_task *dmt);
 struct dm_names *dm_task_get_names(struct dm_task *dmt);
 
+/*
+ * These functions return device-mapper names based on the value
+ * of the mangling mode set during preceding dm_task_run call:
+ *   - unmangled name for DM_STRING_MANGLING_{AUTO, HEX},
+ *   - name without any changes for DM_STRING_MANGLING_NONE.
+ *
+ * To get mangled or unmangled form of the name directly, use
+ * dm_task_get_name_mangled or dm_task_get_name_unmangled function.
+ */
+
 int dm_task_set_ro(struct dm_task *dmt);
 int dm_task_set_newname(struct dm_task *dmt, const char *newname);
 int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid);
@@ -2406,6 +2416,21 @@ struct dm_str_list {
 };
 
 /*
+ * Active device element returned dm_task_get_device_list()
+ * Only for accessing structure members.
+ * Do NOT allocate this structure locally.
+ * More elements can be added later (with DM_DEVICE_LIST_HAS_FLAG).
+ */
+struct dm_active_device {
+	struct dm_list list;
+	dev_t devno;
+	const char *name;	/* device name */
+
+	uint32_t event_nr;	/* valid when DM_DEVICE_LIST_HAS_EVENT_NR is set */
+	const char *uuid;	/* valid uuid when DM_DEVICE_LIST_HAS_UUID is set */
+};
+
+/*
  * Initialise a list before use.
  * The list head's next and previous pointers point back to itself.
  */
@@ -2587,6 +2612,25 @@ struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *e
  * Return the number of elements in a list by walking it.
  */
 unsigned int dm_list_size(const struct dm_list *head);
+
+/*
+ * Retrieve the list of devices and put them into easily accessible
+ * struct dm_active_device list elements.
+ * devs_features provides flag-set with used features so it's easy to check
+ * whether the kernel provides i.e. UUID info together with DM names
+ */
+#define DM_DEVICE_LIST_HAS_EVENT_NR	1
+#define DM_DEVICE_LIST_HAS_UUID		2
+int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
+			    unsigned *devs_features);
+/* Release all associated memory with list of active DM devices */
+void dm_device_list_destroy(struct dm_list **devs_list);
+/*
+ * Compare two dm_list structures containing dm_active_device elements.
+ * Returns 1 if both lists contain identical devices (same devno and uuid in same order),
+ * 0 if lists differ.
+ */
+int dm_device_list_equal(const struct dm_list *list1, const struct dm_list *list2);
 
 /*********
  * selinux

@@ -802,6 +802,119 @@ struct dm_versions *dm_task_get_versions(struct dm_task *dmt)
 				       dmt->dmi.v4->data_start);
 }
 
+int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
+			    unsigned *devs_features)
+{
+	struct dm_names *names, *names1;
+	struct dm_active_device *dm_dev, *dm_new_dev;
+	struct dm_list *devs;
+	unsigned next = 0;
+	uint32_t *event_nr;
+	char *uuid_ptr;
+	size_t len;
+	int cnt = 0;
+
+	*devs_list = 0;
+	*devs_features = 0;
+
+	if ((names = dm_task_get_names(dmt)) && names->dev) {
+		names1 = names;
+		if (!names->name[0])
+			cnt = -1; /* -> cnt == 0 when no device is really present */
+		do {
+			names1 = (struct dm_names *)((char *) names1 + next);
+			next = names1->next;
+			++cnt;
+		} while (next);
+	}
+
+	/* buffer for devs +  sorted ptrs + dm_devs + aligned strings */
+	if (!(devs = malloc(sizeof(*devs) + cnt * (2 * sizeof(void*) + sizeof(*dm_dev)) +
+			    (cnt ? (char*)names1 - (char*)names + 256 : 0))))
+		return_0;
+
+	dm_list_init(devs);
+
+	if (!cnt) {
+		/* nothing in the list -> mark all features present */
+		*devs_features |= (DM_DEVICE_LIST_HAS_EVENT_NR | DM_DEVICE_LIST_HAS_UUID);
+		goto out; /* nothing else to do */
+	}
+
+	/* Shift position where to store individual dm_devs */
+	dm_dev = (struct dm_active_device *) ((long*) (devs + 1) + cnt);
+
+	do {
+		names = (struct dm_names *)((char *) names + next);
+
+		dm_dev->devno = (dev_t) names->dev;
+		dm_dev->name = (const char *)(dm_dev + 1);
+		dm_dev->event_nr = 0;
+		dm_dev->uuid = "";
+
+		len = strlen(names->name) + 1;
+		memcpy((char*)dm_dev->name, names->name, len);
+
+		dm_new_dev = _align_ptr((char*)(dm_dev + 1) + len);
+		if (_check_has_event_nr()) {
+
+			*devs_features |= DM_DEVICE_LIST_HAS_EVENT_NR;
+			event_nr = _align_ptr(names->name + len);
+			dm_dev->event_nr = event_nr[0];
+
+			if ((event_nr[1] & DM_NAME_LIST_FLAG_HAS_UUID)) {
+				*devs_features |= DM_DEVICE_LIST_HAS_UUID;
+				uuid_ptr = _align_ptr(event_nr + 2);
+				len = strlen(uuid_ptr) + 1;
+				memcpy(dm_new_dev, uuid_ptr, len);
+				dm_dev->uuid = (const char *) dm_new_dev;
+				dm_new_dev = _align_ptr((char*)dm_new_dev + len);
+			}
+		}
+
+		dm_list_add(devs, &dm_dev->list);
+		dm_dev = dm_new_dev;
+		next = names->next;
+	} while (next);
+
+    out:
+	*devs_list = devs;
+
+	return 1;
+}
+
+void dm_device_list_destroy(struct dm_list **devs_list)
+{
+	struct dm_list *devs = *devs_list;
+
+	if (devs) {
+		free(devs);
+		*devs_list = NULL;
+	}
+}
+
+int dm_device_list_equal(const struct dm_list *list1, const struct dm_list *list2)
+{
+	const struct dm_active_device *dev1, *dev2;
+	const struct dm_list *l2;
+
+	if (!list1 || !list2)
+		return (list1 == list2);
+
+	if (!(l2 = dm_list_first(list2)))
+		return dm_list_empty(list1);
+
+	dm_list_iterate_items(dev1, list1) {
+		dev2 = dm_list_item(l2, struct dm_active_device);
+		if ((dev1->devno != dev2->devno) || strcmp(dev1->uuid, dev2->uuid))
+			return 0;
+		if (!(l2 = dm_list_next(list2, l2)))
+			return !dm_list_next(list1, &dev1->list);
+	}
+
+	return 1;
+}
+
 const char *dm_task_get_message_response(struct dm_task *dmt)
 {
 	const char *start, *end;

@@ -247,6 +247,16 @@ struct load_properties {
 	unsigned delay_resume_if_extended;
 
 	/*
+	 * When comparing table lines to decide if a reload is
+	 * needed, ignore any differences between the lvm device
+	 * params and the kernel-reported device params.
+	 * dm-integrity reports many internal parameters on the
+	 * table line when lvm does not explicitly set them,
+	 * causing lvm and the kernel to have differing params.
+	 */
+	unsigned skip_reload_params_compare;
+
+	/*
 	 * Call node_send_messages(), set to 2 if there are messages
 	 * When != 0, it validates matching transaction id, thus thin-pools
 	 * where transaction_id is passed as 0 are never validated, this
@@ -2810,6 +2820,9 @@ static int _load_node(struct dm_tree_node *dnode)
 
 	if (!dm_task_suppress_identical_reload(dmt))
 		log_warn("WARNING: Failed to suppress reload of identical tables.");
+
+	if (dnode->props.skip_reload_params_compare)
+		dmt->skip_reload_params_compare = 1;
 
 	if ((r = dm_task_run(dmt))) {
 		r = dm_task_get_info(dmt, &dnode->info);
