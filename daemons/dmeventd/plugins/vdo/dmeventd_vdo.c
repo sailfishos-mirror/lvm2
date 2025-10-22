@@ -16,15 +16,6 @@
 #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
 #include "daemons/dmeventd/libdevmapper-event.h"
 
-/*
- * Use parser from new device_mapper library.
- * Although during compilation we can see dm_vdo_status_parse()
- * in runtime we are linked against systems libdm 'older' library
- * which does not provide this symbol and plugin fails to load
- */
-/* coverity[unnecessary_header] used for parsing */
-#include "device_mapper/vdo/status.c"
-
 #include <sys/wait.h>
 #include <stdarg.h>
 

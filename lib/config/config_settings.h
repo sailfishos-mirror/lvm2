@@ -118,7 +118,6 @@
  * the previous default value was set (uncommented) in lvm.conf.
  */
 #include "lib/config/defaults.h"
-#include "device_mapper/vdo/vdo_limits.h"
 
 cfg_section(root_CFG_SECTION, "(root)", root_CFG_SECTION, 0, vsn(0, 0, 0), 0, NULL, NULL)
 

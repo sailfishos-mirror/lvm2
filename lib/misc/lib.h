@@ -19,7 +19,7 @@
 #ifndef _LVM_LIB_H
 #define _LVM_LIB_H
 
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 #include "base/memory/zalloc.h"
 #include "lib/misc/intl.h"
 #include "lib/misc/util.h"

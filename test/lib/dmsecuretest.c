@@ -22,7 +22,7 @@
  *
  */
 
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 #include <unistd.h>
 #include <signal.h>

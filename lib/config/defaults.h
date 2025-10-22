@@ -16,8 +16,6 @@
 #ifndef _LVM_DEFAULTS_H
 #define _LVM_DEFAULTS_H
 
-#include "device_mapper/vdo/vdo_limits.h"
-
 
 /*
  * By default the first PE is placed at 1 MiB.

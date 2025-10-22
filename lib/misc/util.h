@@ -15,7 +15,7 @@
 #ifndef _LVM_UTIL_H
 #define _LVM_UTIL_H
 
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 #define min(a, b) ({ __typeof__(a) _a = (a); \
 		     __typeof__(b) _b = (b); \

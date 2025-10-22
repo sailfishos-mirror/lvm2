@@ -19,7 +19,7 @@
 #define _LVM_TOOL_H
 
 #include "base/memory/zalloc.h"
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 #include "lib/misc/util.h"
 
 #include <unistd.h>

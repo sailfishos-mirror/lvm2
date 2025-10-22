@@ -13,7 +13,7 @@
  */
 
 #include "daemon-io.h"
-#include "device_mapper/misc/dm-logging.h"
+#include "libdm/misc/dm-logging.h"
 
 #include "lib/misc/util.h"
 

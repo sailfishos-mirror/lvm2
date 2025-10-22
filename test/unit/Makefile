@@ -14,7 +14,7 @@
 #       which defined all top_* variables
 
 UNIT_SOURCE=\
-	device_mapper/vdo/status.c \
+	libdm/vdo/status.c \
 	\
 	test/unit/bcache_t.c \
 	test/unit/bcache_utils_t.c \

@@ -16,7 +16,7 @@
 #define _LVM_VG_H
 
 #include "lib/id/id.h"
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 struct cmd_context;
 struct format_instance;

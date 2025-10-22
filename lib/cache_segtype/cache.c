@@ -587,7 +587,7 @@ static int _cache_add_target_line(struct dev_manager *dm,
 	unsigned  i, j;
 	union lvid metadata_lvid;
 	union lvid data_lvid;
-	char *metadata_uuid, *data_uuid, *origin_uuid;
+	char *metadata_uuid, *cachevol_uuid, *data_uuid, *origin_uuid;
 	uint64_t feature_flags = 0;
 	unsigned attr;
 
@@ -648,42 +648,10 @@ static int _cache_add_target_line(struct dev_manager *dm,
 	if (!(origin_uuid = build_dm_uuid(mem, seg_lv(seg, 0), NULL)))
 		return_0;
 
-	if (!lv_is_cache_vol(seg->pool_lv)) {
-		/* We don't use start/len when using separate data/meta devices. */
-		if (seg->metadata_len || seg->data_len) {
-			log_error(INTERNAL_ERROR "LV %s using unsupported ranges with cache pool.",
-				 display_lvname(seg->lv));
-			return 0;
-		}
-
-		if (!(metadata_uuid = build_dm_uuid(mem, cache_pool_seg->metadata_lv, NULL)))
-			return_0;
-
-		if (!(data_uuid = build_dm_uuid(mem, seg_lv(cache_pool_seg, 0), NULL)))
-			return_0;
-	} else {
-		if (!seg->metadata_len || !seg->data_len || (seg->metadata_start == seg->data_start)) {
-			log_error(INTERNAL_ERROR "LV %s has invalid ranges metadata %llu %llu data %llu %llu.",
-				 display_lvname(seg->lv),
-				 (unsigned long long)seg->metadata_start,
-				 (unsigned long long)seg->metadata_len,
-				 (unsigned long long)seg->data_start,
-				 (unsigned long long)seg->data_len);
-			return 0;
-		}
-
-		memset(&metadata_lvid, 0, sizeof(metadata_lvid));
-		memset(&data_lvid, 0, sizeof(data_lvid));
-		memcpy(&metadata_lvid.id[0], &seg->lv->vg->id, sizeof(struct id));
-		memcpy(&metadata_lvid.id[1], (seg->metadata_id) ? : &seg->pool_lv->lvid.id[1], sizeof(struct id));
-		memcpy(&data_lvid.id[0], &seg->lv->vg->id, sizeof(struct id));
-		memcpy(&data_lvid.id[1], (seg->data_id) ? : &seg->pool_lv->lvid.id[1], sizeof(struct id));
-
-		if (!(metadata_uuid = dm_build_dm_uuid(mem, UUID_PREFIX, (const char *)&metadata_lvid.s, "cmeta")))
-			return_0;
-		if (!(data_uuid = dm_build_dm_uuid(mem, UUID_PREFIX, (const char *)&data_lvid.s, "cdata")))
-			return_0;
-	}
+	/* Validate and prepare policy settings and name (common for both cache pool and cachevol) */
+	const char *policy_name = seg->cleaner_policy ? "cleaner" :
+		/* undefined policy name -> likely an old "mq" */
+		cache_pool_seg->policy_name ? : "mq";
 
 	policy_settings = seg->cleaner_policy ? NULL : setting_seg->policy_settings;
 	if (policy_settings && cache_pool_seg->policy_name) {
@@ -740,21 +708,73 @@ static int _cache_add_target_line(struct dev_manager *dm,
 		}
 	}
 
-	if (!dm_tree_node_add_cache_target(node, len,
-					   feature_flags,
-					   metadata_uuid,
-					   data_uuid,
-					   origin_uuid,
-					   seg->cleaner_policy ? "cleaner" :
-						   /* undefined policy name -> likely an old "mq" */
-						   cache_pool_seg->policy_name ? : "mq",
-					   policy_settings,
-					   seg->metadata_start,
-					   seg->metadata_len,
-					   seg->data_start,
-					   seg->data_len,
-					   setting_seg->chunk_size))
-		return_0;
+	if (!lv_is_cache_vol(seg->pool_lv)) {
+		/* We don't use start/len when using separate data/meta devices. */
+		if (seg->metadata_len || seg->data_len) {
+			log_error(INTERNAL_ERROR "LV %s using unsupported ranges with cache pool.",
+				 display_lvname(seg->lv));
+			return 0;
+		}
+
+		if (!(metadata_uuid = build_dm_uuid(mem, cache_pool_seg->metadata_lv, NULL)))
+			return_0;
+
+		if (!(data_uuid = build_dm_uuid(mem, seg_lv(cache_pool_seg, 0), NULL)))
+			return_0;
+
+		if (!dm_tree_node_add_cache_target(node, len,
+						   feature_flags,
+						   metadata_uuid,
+						   data_uuid,
+						   origin_uuid,
+						   policy_name,
+						   policy_settings,
+						   setting_seg->chunk_size))
+			return_0;
+	} else {
+		/* Cachevol: single LV with metadata and data regions */
+
+		if (!seg->metadata_len || !seg->data_len || (seg->metadata_start == seg->data_start)) {
+			log_error(INTERNAL_ERROR "LV %s has invalid ranges metadata %llu %llu data %llu %llu.",
+				 display_lvname(seg->lv),
+				 (unsigned long long)seg->metadata_start,
+				 (unsigned long long)seg->metadata_len,
+				 (unsigned long long)seg->data_start,
+				 (unsigned long long)seg->data_len);
+			return 0;
+		}
+
+		if (!(cachevol_uuid = build_dm_uuid(mem, seg->pool_lv, NULL)))
+			return_0;
+
+		/* Build proper UUIDs for -cmeta and -cdata sub-devices */
+		memset(&metadata_lvid, 0, sizeof(metadata_lvid));
+		memset(&data_lvid, 0, sizeof(data_lvid));
+		memcpy(&metadata_lvid.id[0], &seg->lv->vg->id, sizeof(struct id));
+		memcpy(&metadata_lvid.id[1], (seg->metadata_id) ? : &seg->pool_lv->lvid.id[1], sizeof(struct id));
+		memcpy(&data_lvid.id[0], &seg->lv->vg->id, sizeof(struct id));
+		memcpy(&data_lvid.id[1], (seg->data_id) ? : &seg->pool_lv->lvid.id[1], sizeof(struct id));
+
+		if (!(metadata_uuid = dm_build_dm_uuid(mem, UUID_PREFIX, (const char *)&metadata_lvid.s, "cmeta")))
+			return_0;
+		if (!(data_uuid = dm_build_dm_uuid(mem, UUID_PREFIX, (const char *)&data_lvid.s, "cdata")))
+			return_0;
+
+		if (!dm_tree_node_add_cachevol_target(node, len,
+						      feature_flags,
+						      metadata_uuid,
+						      data_uuid,
+						      cachevol_uuid,
+						      origin_uuid,
+						      policy_name,
+						      policy_settings,
+						      seg->metadata_start,
+						      seg->metadata_len,
+						      seg->data_start,
+						      seg->data_len,
+						      setting_seg->chunk_size))
+			return_0;
+	}
 
 	return 1;
 }

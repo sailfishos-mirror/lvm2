@@ -16,7 +16,7 @@
 #define _LVM_DAEMON_STRAY_H
 
 /*
- * needs dm -> #include "device_mapper/all.h"
+ * needs dm -> #include "libdm/libdevmapper.h"
  * needs logging -> #include "libdm/misc/dmlib.h"
  */
 #include "lib/misc/lvm-file.h"

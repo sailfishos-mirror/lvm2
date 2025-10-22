@@ -21,7 +21,7 @@
 #include "lib/label/label.h"
 #include "lib/config/config.h"
 #include "lib/commands/toolcontext.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/misc/dm-ioctl.h"
 #include "lib/activate/activate.h"
 #include "lib/misc/lvm-string.h"
 #include "lib/mm/xlate.h"

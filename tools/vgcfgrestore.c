@@ -14,8 +14,8 @@
  */
 
 #include "tools.h"
-#include "device_mapper/all.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/libdevmapper.h"
+#include "libdm/misc/dm-ioctl.h"
 
 /*
  * Check if there are any active volumes from restored vg_name.

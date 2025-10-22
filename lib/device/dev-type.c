@@ -25,7 +25,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/activate/activate.h"
 #include "lib/display/display.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/misc/dm-ioctl.h"
 
 #ifdef BLKID_WIPING_SUPPORT
 #include <blkid/blkid.h>

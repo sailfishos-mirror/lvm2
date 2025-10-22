@@ -18,7 +18,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/device/device_id.h"
 #include "lib/datastruct/str_list.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/misc/dm-ioctl.h"
 #ifdef UDEV_SYNC_SUPPORT
 #include <libudev.h>
 #include "lib/device/dev-ext-udev-constants.h"

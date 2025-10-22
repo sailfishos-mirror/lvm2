@@ -401,9 +401,9 @@ ifeq ("@SHARED_LINK@", "yes")
 endif
 
 INTERNAL_LIBS = \
-	$(top_builddir)/libdaemon/client/libdaemonclient.a \
-	$(top_builddir)/device_mapper/libdevice-mapper.a \
-	$(top_builddir)/base/libbase.a
+	$(top_builddir)/libdaemon/client/libdaemonclient.a
+
+LIBS += -L$(top_builddir)/libdm/ioctl -ldevmapper -Wl,-rpath,$(top_builddir)/libdm/ioctl
 LVMINTERNAL_LIBS = $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
 
 all: $(SUBDIRS) $(TARGETS)

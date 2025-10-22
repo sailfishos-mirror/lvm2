@@ -36,7 +36,7 @@ static int _bad_field(const char *field)
 }
 
 static int _import_bool(const struct dm_config_node *n,
-			const char *name, bool *b)
+			const char *name, int *b)
 {
 	uint32_t t = 0;
 
@@ -45,12 +45,12 @@ static int _import_bool(const struct dm_config_node *n,
 			return _bad_field(name);
 
 		if (t) {
-			*b = true;
+			*b = 1;
 			return 1;
 		}
 	}
 
-	*b = false;
+	*b = 0;
 
 	return 1;
 }

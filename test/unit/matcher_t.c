@@ -14,7 +14,7 @@
  */
 
 #include "units.h"
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 #include "matcher_data.h"
 

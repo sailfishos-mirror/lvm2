@@ -14,7 +14,7 @@
 #include "libdaemon/server/daemon-server.h"
 #include "lvm-version.h"
 #include "daemons/lvmlockd/lvmlockd-client.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/misc/dm-ioctl.h"
 
 /* #include <assert.h> */
 #include <errno.h>

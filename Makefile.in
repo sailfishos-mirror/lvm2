@@ -43,11 +43,9 @@ DISTCLEAN_TARGETS += config.cache config.log config.status make.tmpl
 
 include make.tmpl
 
-include $(top_srcdir)/base/Makefile
-include $(top_srcdir)/device_mapper/Makefile
 include $(top_srcdir)/test/unit/Makefile
 
-lib: include libdaemon $(BASE_TARGET) $(DEVICE_MAPPER_TARGET)
+lib: include libdaemon libdm
 daemons: lib libdaemon tools
 scripts: lib
 tools: lib libdaemon
@@ -76,7 +74,7 @@ daemons.cflow: tools.cflow
 cflow: include.cflow
 endif
 
-CSCOPE_DIRS = base daemons device_mapper include lib libdaemon scripts tools libdm test
+CSCOPE_DIRS = daemons include lib libdaemon scripts tools libdm test
 ifneq ("@CSCOPE_CMD@", "")
 cscope.out:
 	@CSCOPE_CMD@ -b -R $(patsubst %,-s%,$(addprefix $(srcdir)/,$(CSCOPE_DIRS)))

@@ -15,7 +15,7 @@
 #ifndef _LVM_DAEMON_CONFIG_UTIL_H
 #define _LVM_DAEMON_CONFIG_UTIL_H
 
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 #include <stdarg.h>
 #include <stdint.h>

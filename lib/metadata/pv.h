@@ -16,7 +16,7 @@
 #define _LVM_PV_H
 
 #include "lib/id/id.h"
-#include "device_mapper/all.h"
+#include "libdm/libdevmapper.h"
 
 struct device;
 struct format_type;

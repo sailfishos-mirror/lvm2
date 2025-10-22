@@ -25,7 +25,7 @@
 #include "lib/metadata/metadata-exported.h"
 #include "lib/activate/activate.h"
 #include "lib/display/display.h"
-#include "device_mapper/misc/dm-ioctl.h"
+#include "libdm/misc/dm-ioctl.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
