@@ -1957,7 +1957,6 @@ static int _sysfs_get_dev_major_minor(const char *path, uint32_t major, uint32_t
 	return r;
 }
 
-
 static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
 {
 	const char *name, *name_dev;
@@ -2055,25 +2054,31 @@ static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, si
 
 static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, size_t buf_size)
 {
-	char *name;
-	char sysfs_path[PATH_MAX], temp_buf[PATH_MAX];
+	char *name, *sysfs_path, *temp_buf = NULL;
 	ssize_t size;
+	size_t len;
 	int r = 0;
 
-	if (dm_snprintf(sysfs_path, sizeof(sysfs_path),
-			"%sdev/block/%" PRIu32 ":%" PRIu32,
+	if (!(sysfs_path = malloc(PATH_MAX)) ||
+	    !(temp_buf = malloc(PATH_MAX))) {
+		log_error("_sysfs_get_kernel_name: failed to allocate temporary buffers");
+		goto bad;
+	}
+
+	if (dm_snprintf(sysfs_path, PATH_MAX, "%sdev/block/%" PRIu32 ":%" PRIu32,
 			_sysfs_dir, major, minor) < 0) {
 		log_error("_sysfs_get_kernel_name: dm_snprintf failed");
 		goto bad;
 	}
 
-	if ((size = readlink(sysfs_path, temp_buf, sizeof(temp_buf) - 1)) < 0) {
-		if (errno == ENOENT) {
+	if ((size = readlink(sysfs_path, temp_buf, PATH_MAX - 1)) < 0) {
+		if (errno != ENOENT)
+			log_sys_error("readlink", sysfs_path);
+		else {
 			log_sys_debug("readlink", sysfs_path);
 			r = _sysfs_find_kernel_name(major, minor, buf, buf_size);
 			goto out;
-		} else
-			log_sys_error("readlink", sysfs_path);
+		}
 		goto bad;
 	}
 	temp_buf[size] = '\0';
@@ -2082,15 +2087,20 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
 		log_error("Could not locate device kernel name in sysfs path %s", temp_buf);
 		goto bad;
 	}
+	name += 1;
+	len = size - (name - temp_buf) + 1;
 
-	if (!_dm_strncpy(buf, name + 1, buf_size)) {
+	if (len > buf_size) {
 		log_error("_sysfs_get_kernel_name: output buffer too small");
 		goto bad;
 	}
 
+	strcpy(buf, name);
 	r = 1;
 bad:
 out:
+	free(temp_buf);
+	free(sysfs_path);
 
 	return r;
 }
