@@ -1,3 +1,7 @@
+Version 2.03.37 - 
+==================
+  Warn on classic snapshot on raid creation and error on activation + test.
+
 Version 2.03.33 - 
 ==================
   Repair raid arrays with transiently lost devices.
