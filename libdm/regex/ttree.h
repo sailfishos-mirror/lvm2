@@ -16,8 +16,9 @@
 #ifndef _DM_TTREE_H
 #define _DM_TTREE_H
 
+#include "libdm/misc/dmlib.h"
+
 struct ttree;
-struct dm_pool;
 
 struct ttree *ttree_create(struct dm_pool *mem, unsigned int klen);
 
