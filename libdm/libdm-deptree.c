@@ -373,13 +373,13 @@ struct dm_tree *dm_tree_create(void)
 	dtree->mem = dmem;
 	dtree->optional_uuid_suffixes = NULL;
 
-	if (!(dtree->devs = dm_hash_create(8))) {
+	if (!(dtree->devs = dm_hash_create(61))) {
 		log_error("dtree hash creation failed");
 		dm_pool_destroy(dtree->mem);
 		return NULL;
 	}
 
-	if (!(dtree->uuids = dm_hash_create(32))) {
+	if (!(dtree->uuids = dm_hash_create(31))) {
 		log_error("dtree uuid hash creation failed");
 		dm_hash_destroy(dtree->devs);
 		dm_pool_destroy(dtree->mem);
@@ -1449,20 +1449,9 @@ static int _thin_pool_get_status(struct dm_tree_node *dnode,
 	char *type = NULL;
 	char *params = NULL;
 
-	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
+	if (!(dmt = _dm_task_create_device_status(dnode->info.major,
+						  dnode->info.minor)))
 		return_0;
-
-	if (!dm_task_set_major(dmt, dnode->info.major) ||
-	    !dm_task_set_minor(dmt, dnode->info.minor)) {
-		log_error("Failed to set major minor.");
-		goto out;
-	}
-
-	if (!dm_task_no_flush(dmt))
-		log_warn("WARNING: Can't set no_flush flag."); /* Non fatal */
-
-	if (!dm_task_run(dmt))
-		goto_out;
 
 	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
 
@@ -1639,7 +1628,7 @@ static struct load_segment *_get_last_load_segment(struct dm_tree_node *node)
 	return dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
 }
 
-
+/* For preload pass only validate pool's transaction_id */
 static int _thin_pool_node_send_messages(struct dm_tree_node *dnode,
 					 struct load_segment *seg,
 					 int send)
@@ -1826,7 +1815,12 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 
 		if (info.open_count) {
 			/* Skip internal non-toplevel opened nodes */
-			if (level)
+			/* On some old udev systems without correct udev rules
+			 * this hack avoids 'leaking' active _mimageX legs after
+			 * deactivation of mirror LV. Other suffixes are not added
+			 * since it's expected newer systems with wider range of
+			 * supported targets also use better udev */
+			if (level && !strstr(name, "_mimage"))
 				continue;
 
 			/* When retry is not allowed, error */
@@ -1866,7 +1860,7 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 
 		if (!_deactivate_node(name, info.major, info.minor,
 				      &child->dtree->cookie, child->udev_flags,
-				      (level == 0) ? child->dtree->retry_remove : 0)) {
+				      child->dtree->retry_remove)) {
 			log_error("Unable to deactivate %s (" FMTu32 ":"
 				  FMTu32 ").", name, info.major, info.minor);
 			r = 0;
@@ -2112,7 +2106,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
 	struct dm_tree_node *child = dnode;
 	const char *name;
 	const char *uuid;
-	int priority;
+	int priority, next_priority;
 
 	/* Activate children first */
 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
@@ -2133,9 +2127,14 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
 
 	for (priority = 0; priority < 3; priority++) {
 		awaiting_peer_rename = 0;
+		next_priority = 0;
 		while ((child = dm_tree_next_child(&handle, dnode, 0))) {
-			if (priority != child->activation_priority)
+			if (priority != child->activation_priority) {
+				if ((next_priority < child->activation_priority) &&
+				    (child->activation_priority > priority))
+					next_priority = child->activation_priority;
 				continue;
+			}
 
 			if (!(uuid = dm_tree_node_get_uuid(child))) {
 				stack;
@@ -2198,6 +2197,8 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
 		}
 		if (awaiting_peer_rename)
 			priority--; /* redo priority level */
+		else if (!next_priority)
+			break;  /* no more work, higher priority was not found in the chain */
 	}
 
 	return r;
@@ -2908,6 +2909,9 @@ static int _integrity_emit_segment_line(struct dm_task *dmt,
 	if (set->allow_discards_set && set->allow_discards)
 		EMIT_PARAMS(pos, " allow_discards");
 
+	if (!dm_task_secure_data(dmt))
+		stack;
+
 	return 1;
 }
 
@@ -3414,7 +3418,8 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 		}
 
 		/* No resume for a device without parents or with unchanged or smaller size */
-		if (!dm_tree_node_num_children(child, 1) || (child->props.size_changed <= 0))
+		if (!dm_tree_node_num_children(child, 1) ||
+		    (child->props.size_changed <= 0))
 			continue;
 
 		if (!child->info.inactive_table && !child->info.suspended)
@@ -4434,6 +4439,12 @@ int dm_tree_node_set_thin_external_origin(struct dm_tree_node *node,
 		return_0;
 
 	seg->external = external;
+
+	if (!external->info.minor) {
+		log_debug_activation("Delaying resume for new external origin %s.",
+				     external->name);
+		external->props.delay_resume_if_new = 1;
+	}
 
 	return 1;
 }
