@@ -505,7 +505,10 @@ static void _dm_task_free_targets(struct dm_task *dmt)
 
 	for (t = dmt->head; t; t = n) {
 		n = t->next;
-		_dm_zfree_string(t->params);
+		if (dmt->secure_data)
+			_dm_zfree_string(t->params);
+		else
+			dm_free(t->params);
 		dm_free(t->type);
 		dm_free(t);
 	}
@@ -516,7 +519,10 @@ static void _dm_task_free_targets(struct dm_task *dmt)
 void dm_task_destroy(struct dm_task *dmt)
 {
 	_dm_task_free_targets(dmt);
-	_dm_zfree_dmi(dmt->dmi.v4);
+	if (dmt->secure_data)
+		_dm_zfree_dmi(dmt->dmi.v4);
+	else
+		dm_free(dmt->dmi.v4);
 	dm_free(dmt->dev_name);
 	dm_free(dmt->mangled_dev_name);
 	dm_free(dmt->newname);
@@ -885,7 +891,7 @@ int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
 
 void dm_device_list_destroy(struct dm_list **devs_list)
 {
-	struct dm_list *devs = *devs_list;
+	struct dm_device_list *devs = (struct dm_device_list *) *devs_list;
 
 	if (devs) {
 		free(devs);
@@ -1185,9 +1191,10 @@ static char *_add_target(struct target *t, char *out, char *end)
 	while (*pt)
 		if (*pt++ == '\\')
 			backslash_count++;
-	len = strlen(t->params) + backslash_count;
 
-	if ((out >= end) || (out + len + 1) >= end) {
+	len = strlen(t->params) + 1;
+
+	if ((out >= end) || (out + len + backslash_count) >= end) {
 		log_error("Ran out of memory building ioctl parameter");
 		return NULL;
 	}
@@ -1203,8 +1210,8 @@ static char *_add_target(struct target *t, char *out, char *end)
 		*out++ = '\0';
 	}
 	else {
-		strcpy(out, t->params);
-		out += len + 1;
+		memcpy(out, t->params, len);
+		out += len + backslash_count;
 	}
 
 	/* align next block */
@@ -1268,14 +1275,14 @@ static int _add_params(int type)
 
 static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
 {
-	const size_t min_size = 16 * 1024;
+	size_t min_size;
 	const int (*version)[3];
 
 	struct dm_ioctl *dmi;
 	struct target *t;
 	struct dm_target_msg *tmsg;
 	size_t len = sizeof(struct dm_ioctl);
-	size_t newname_len = 0, message_len = 0, geometry_len = 0;
+	size_t message_len = 0, newname_len = 0, geometry_len = 0;
 	char *b, *e;
 	int count = 0;
 
@@ -1288,6 +1295,18 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
 	else if (dmt->head)
 		log_debug_activation(INTERNAL_ERROR "dm '%s' ioctl should not define parameters.",
 				     _cmd_data_v4[dmt->type].name);
+	switch (dmt->type) {
+	case DM_DEVICE_CREATE:
+	case DM_DEVICE_DEPS:
+	case DM_DEVICE_LIST:
+	case DM_DEVICE_STATUS:
+	case DM_DEVICE_TABLE:
+	case DM_DEVICE_TARGET_MSG:
+		min_size = 16 * 1024;
+		break;
+	default:
+		min_size = 2 * 1024;
+	}
 
 	if (count && (dmt->sector || dmt->message)) {
 		log_error("targets and message are incompatible");
@@ -1774,11 +1793,36 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
 		len = strlen(t2->params);
 		while (len-- > 0 && t2->params[len] == ' ')
 			t2->params[len] = '\0';
-		if ((t1->start != t2->start) ||
-		    (t1->length != t2->length) ||
-		    (strcmp(t1->type, t2->type)) ||
-		    (strcmp(t1->params, t2->params)))
+
+		if (t1->start != t2->start) {
+			log_debug("reload %u:%u diff start %llu %llu type %s %s", task->major, task->minor,
+				   (unsigned long long)t1->start, (unsigned long long)t2->start, t1->type, t2->type);
 			goto no_match;
+		}
+		if (t1->length != t2->length) {
+			log_debug("reload %u:%u diff length %llu %llu type %s %s", task->major, task->minor,
+				  (unsigned long long)t1->length, (unsigned long long)t2->length, t1->type, t2->type);
+			goto no_match;
+		}
+		if (strcmp(t1->type, t2->type)) {
+			log_debug("reload %u:%u diff type %s %s", task->major, task->minor, t1->type, t2->type);
+			goto no_match;
+		}
+		if (strcmp(t1->params, t2->params)) {
+			if (dmt->skip_reload_params_compare) {
+				log_debug("reload %u:%u diff params ignore for type %s",
+					  task->major, task->minor, t1->type);
+				log_debug("reload params1 %s", t1->params);
+				log_debug("reload params2 %s", t2->params);
+			} else {
+				log_debug("reload %u:%u diff params for type %s",
+					  task->major, task->minor, t1->type);
+				log_debug("reload params1 %s", t1->params);
+				log_debug("reload params2 %s", t2->params);
+				goto no_match;
+			}
+		}
+
 		t1 = t1->next;
 		t2 = t2->next;
 	}
