@@ -635,7 +635,7 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 		match(TOK_IDENTIFIER);
 	}
 
-	if (!strlen(str)) {
+	if (!*str) {
 		log_error("Parse error at byte %" PRIptrdiff_t " (line %d): empty section identifier",
 			  p->tb - p->fb + 1, p->line);
 		return NULL;
@@ -1070,7 +1070,7 @@ static const char *_find_config_str(const void *start, node_lookup_fn find_fn,
 	}
 
 	if (fail)
-		log_very_verbose("%s not found in config: defaulting to %s",
+		log_very_verbose("%s not found in config: defaulting to \"%s\"",
 				 path, fail);
 	return fail;
 }
