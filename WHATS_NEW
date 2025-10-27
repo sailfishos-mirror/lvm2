@@ -1,3 +1,8 @@
+Version 2.03.37 - 
+==================
+  Warn on classic snapshot on raid creation and error on activation + test.
+  Improve lvmdbusd matching of udevd reported device paths.
+
 Version 2.03.36 - 24th October 2025
 ===================================
   Fix uninitialized chunk_size_calc_policy in pool parameter functions.
