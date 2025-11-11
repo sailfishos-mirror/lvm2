@@ -18,6 +18,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/metadata/metadata.h"
 #include "lib/config/defaults.h"
+#include "lib/config/config.h"
 #include "lib/misc/lvm-string.h"
 #include "lib/activate/activate.h"
 #include "lib/filters/filter.h"
@@ -33,6 +34,7 @@
 #include "lib/format_text/archiver.h"
 #include "lib/lvmpolld/lvmpolld-client.h"
 #include "lib/device/device_id.h"
+#include "include/lvm-version.h"
 
 #include <locale.h>
 #include <sys/stat.h>
@@ -652,6 +654,43 @@ static void _init_device_ids_refresh(struct cmd_context *cmd)
 
 	if (check_hostname && cmd->hostname)
 		cmd->device_ids_check_hostname = 1;
+}
+
+void log_debug_config(struct cmd_context *cmd)
+{
+	struct config_def_tree_spec tree_spec = {0};
+	struct cft_check_handle *handle = NULL;
+	unsigned int major, minor, patchlevel;
+
+	/* Parse version from LVM_VERSION string */
+	if (sscanf(LVM_VERSION, "%u.%u.%u", &major, &minor, &patchlevel) != 3) {
+		major = 0;
+		minor = 0;
+		patchlevel = 0;
+	}
+
+	tree_spec.cmd = cmd;
+	tree_spec.type = CFG_DEF_TREE_CURRENT;
+	tree_spec.current_cft = cmd->cft;
+	tree_spec.version = vsn(major, minor, patchlevel);
+	tree_spec.log_debug = 1;
+
+	/* Check config to mark differences from defaults */
+	if (!(handle = get_config_tree_check_handle(cmd, cmd->cft)))
+		return;
+
+	handle->force_check = 1;
+	handle->suppress_messages = 1;
+	handle->skip_if_checked = 0;
+	handle->check_diff = 1;
+
+	if (!config_def_check(handle))
+		return;
+
+	tree_spec.check_status = handle->status;
+
+	/* Write config via log_debug */
+	config_write(cmd->cft, &tree_spec, NULL, 0, NULL);
 }
 
 static int _process_config(struct cmd_context *cmd)

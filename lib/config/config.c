@@ -1693,6 +1693,57 @@ struct out_baton {
 
 #define MAX_COMMENT_LINE 512
 
+static void _out_line(struct out_baton *out, const char *fmt, ...)
+	__attribute__ ((format(printf, 2, 3)));
+
+static void _out_line(struct out_baton *out, const char *fmt, ...)
+{
+	va_list ap;
+	char buf[4096];
+	const char *p;
+	size_t len;
+
+	va_start(ap, fmt);
+	if (out->tree_spec->log_debug) {
+		if (vsnprintf(buf, sizeof(buf), fmt, ap) >= 0) {
+			/* Skip section headers and brackets for log_debug output */
+			p = buf;
+			/* Skip leading whitespace */
+			while (*p == ' ' || *p == '\t')
+				p++;
+
+			/* Skip empty lines */
+			if (*p == '\0' || *p == '\n')
+				goto out;
+
+			/* Skip closing brackets */
+			if (*p == '}') {
+				va_end(ap);
+				return;
+			}
+
+			/* Skip lines ending with opening bracket (section headers) */
+			len = strlen(p);
+			if (len > 0 && p[len - 1] == '\n')
+				len--;
+			while (len > 0 && (p[len - 1] == ' ' || p[len - 1] == '\t'))
+				len--;
+			if (len > 1 && p[len - 1] == '{')
+				goto out;
+
+			/* Print without leading whitespace and without trailing newline */
+			if (len > 0 && p[len] == '\n')
+				log_debug("%.*s", (int)len, p);
+			else
+				log_debug("%s", p);
+		}
+	} else {
+		vfprintf(out->fp, fmt, ap);
+	}
+out:
+	va_end(ap);
+}
+
 static int _copy_one_line(const char *comment, char *line, int *pos, int len)
 {
 	int p;
@@ -1766,11 +1817,11 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
 
 	if (out->tree_spec->withsummary || out->tree_spec->withcomments) {
 		_cfg_def_make_path(path, sizeof(path), cfg_def->id, cfg_def, 1);
-		fprintf(out->fp, "\n");
-		fprintf(out->fp, "%s# Configuration %s %s.\n", line, node_type_name, path);
+		_out_line(out, "\n");
+		_out_line(out, "%s# Configuration %s %s.\n", line, node_type_name, path);
 
 		if (out->tree_spec->withcomments && is_deprecated && cfg_def->deprecation_comment)
-			fprintf(out->fp, "%s# %s", line, cfg_def->deprecation_comment);
+			_out_line(out, "%s# %s", line, cfg_def->deprecation_comment);
 
 		if (cfg_def->comment) {
 			int pos = 0;
@@ -1780,7 +1831,7 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
 						continue;
 					commentline[0] = '\0';
 				}
-				fprintf(out->fp, "%s#%s%s\n", line, commentline[0] ? " " : "", commentline);
+				_out_line(out, "%s#%s%s\n", line, commentline[0] ? " " : "", commentline);
 				/* withsummary prints only the first comment line. */
 				if (!out->tree_spec->withcomments)
 					break;
@@ -1788,37 +1839,37 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
 		}
 
 		if (is_deprecated)
-			fprintf(out->fp, "%s# This configuration %s is deprecated.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s is deprecated.\n", line, node_type_name);
 
 		if (cfg_def->flags & CFG_ADVANCED)
-			fprintf(out->fp, "%s# This configuration %s is advanced.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s is advanced.\n", line, node_type_name);
 
 		if (cfg_def->flags & CFG_UNSUPPORTED)
-			fprintf(out->fp, "%s# This configuration %s is not officially supported.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s is not officially supported.\n", line, node_type_name);
 
 		if (cfg_def->flags & CFG_NAME_VARIABLE)
-			fprintf(out->fp, "%s# This configuration %s has variable name.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s has variable name.\n", line, node_type_name);
 
 		if (cfg_def->flags & CFG_DEFAULT_UNDEFINED)
-			fprintf(out->fp, "%s# This configuration %s does not have a default value defined.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s does not have a default value defined.\n", line, node_type_name);
 
 		if (cfg_def->flags & CFG_DEFAULT_COMMENTED)
-			fprintf(out->fp, "%s# This configuration %s has an automatic default value.\n", line, node_type_name);
+			_out_line(out, "%s# This configuration %s has an automatic default value.\n", line, node_type_name);
 
 		if ((out->tree_spec->type == CFG_DEF_TREE_FULL) &&
 		    (out->tree_spec->check_status[cn->id] & CFG_USED))
-			fprintf(out->fp, "%s# Value defined in existing configuration has been used for this setting.\n", line);
+			_out_line(out, "%s# Value defined in existing configuration has been used for this setting.\n", line);
 	}
 
 	if (out->tree_spec->withversions) {
 		if (!_get_config_node_version(cfg_def->since_version, version))
 			return_0;
-		fprintf(out->fp, "%s# Available since version %s.\n", line, version);
+		_out_line(out, "%s# Available since version %s.\n", line, version);
 
 		if (is_deprecated) {
 			if (!_get_config_node_version(cfg_def->deprecated_since_version, version))
 				return_0;
-			fprintf(out->fp, "%s# Deprecated since version %s.\n", line, version);
+			_out_line(out, "%s# Deprecated since version %s.\n", line, version);
 		}
 	}
 
@@ -1866,7 +1917,7 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void 
 		if (out->tree_spec->withsummary && cfg_def->comment)
 			_copy_one_line(cfg_def->comment, summary, &pos, strlen(cfg_def->comment));
 
-		fprintf(out->fp, "%s%s%s%s%s%s%s\n", config_path,
+		_out_line(out, "%s%s%s%s%s%s%s\n", config_path,
 			*summary || out->tree_spec->withversions ? " - ": "",
 			*summary ? summary : "",
 			*summary ? " " : "",
@@ -1907,7 +1958,7 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void 
 		/* print with # at the front to comment out the line */
 		if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
 			space_prefix_len = strspn(line, "\t ");
-			fprintf(out->fp, "%.*s%s%s\n", space_prefix_len, line, "# ",
+			_out_line(out, "%.*s%s%s\n", space_prefix_len, line, "# ",
 				line + space_prefix_len);
 		}
 		return 1;
@@ -1915,7 +1966,7 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void 
 
 	/* print the line as it is */
 	if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn))
-		fprintf(out->fp, "%s\n", line);
+		_out_line(out, "%s\n", line);
 
 	if (out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION) && space_prefix_len)
 		dm_pool_free(out->mem, (char *) line);
@@ -1945,7 +1996,11 @@ int config_write(struct dm_config_tree *cft,
 	int free_fp = 1;
 	int r = 1;
 
-	if (!file) {
+	if (tree_spec->log_debug) {
+		/* When using log_debug, we don't need a file pointer */
+		baton.fp = NULL;
+		free_fp = 0;
+	} else if (!file) {
 		baton.fp = stdout;
 		file = "stdout";
 		free_fp = 0;
@@ -1954,12 +2009,13 @@ int config_write(struct dm_config_tree *cft,
 		return 0;
 	}
 
-	log_verbose("Dumping configuration to %s", file);
+	if (!tree_spec->log_debug)
+		log_verbose("Dumping configuration to %s", file);
 
 	if (tree_spec->withgeneralpreamble)
-		fprintf(baton.fp, CFG_PREAMBLE_GENERAL);
+		_out_line(&baton, CFG_PREAMBLE_GENERAL);
 	if (tree_spec->withlocalpreamble)
-		fprintf(baton.fp, CFG_PREAMBLE_LOCAL);
+		_out_line(&baton, CFG_PREAMBLE_LOCAL);
 
 	if (!argc) {
 		if (!dm_config_write_node_out(cft->root, &_out_spec, &baton)) {

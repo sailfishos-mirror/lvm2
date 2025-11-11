@@ -3165,6 +3165,8 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 	log_debug("Version: %s", LVM_VERSION);
 	log_debug("Parsing: %s", cmd->cmd_line);
 
+	log_debug_config(cmd);
+
 	if (!(cmd->command = _find_command(cmd, cmd->name, &argc, argv)))
 		return EINVALID_CMD_LINE;
 

@@ -316,6 +316,8 @@ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache);
 int init_connections(struct cmd_context *cmd);
 int init_run_by_dmeventd(struct cmd_context *cmd);
 
+void log_debug_config(struct cmd_context *cmd);
+
 /*
  * A config context is a very light weight cmd struct that
  * is only used for reading config settings from lvm.conf,
