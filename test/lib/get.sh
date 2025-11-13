@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (C) 2011-2017 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2011-2025 Red Hat, Inc. All rights reserved.
 #
 # This copyrighted material is made available to anyone wishing to use,
 # modify, copy, or redistribute it subject to the terms and conditions
@@ -18,105 +18,97 @@
 #
 #  get lv_devices LV     [lvs params]
 
-test -z "$BASH" || set -e -o pipefail
-
 # trims only leading prefix and suffix
-trim_() {
-	rm -f debug.log             # drop log, command was ok
+__get__trim_() {
 	local var=${1%"${1##*[! ]}"}  # remove trailing space characters
 	echo "${var#"${var%%[! ]*}"}" # remove leading space characters
 }
 
-pv_field() {
+__get__pv_field() {
 	local r
 	r=$(pvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-vg_field() {
+__get__vg_field() {
 	local r
 	r=$(vgs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-lv_field() {
+__get__lv_field() {
 	local r
 	r=$(lvs --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-lv_first_seg_field() {
+__get__lv_first_seg_field() {
 	local r
 	read -r r < <(lvs --config 'log{prefix=""}' --unbuffered --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-lvh_field() {
+__get__lvh_field() {
 	local r
 	r=$(lvs -H --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-lva_field() {
+__get__lva_field() {
 	local r
 	r=$(lvs -a --config 'log{prefix=""}' --noheadings -o "$2" "${@:3}" "$1")
-	trim_ "$r"
+	__get__trim_ "$r"
 }
 
-lv_devices() {
-	lv_field "$1" devices -a "${@:2}" | sed 's/([^)]*)//g; s/,/\n/g'
+__get__lv_devices() {
+	__get__lv_field "$1" devices -a "${@:2}" | sed 's/([^)]*)//g; s/,/\n/g'
 }
 
-lv_field_lv_() {
-	lv_field "$1" "$2" -a --unbuffered | tr -d '[]'
+__get__lv_field_lv_() {
+	__get__lv_field "$1" "$2" -a --unbuffered | tr -d '[]'
 }
 
-lv_tree_devices_() {
+__get__lv_tree_devices_() {
 	local lv="$1/$2"
 	local type
-	type=$(lv_first_seg_field "$lv" segtype -a)
+	type=$(__get__lv_first_seg_field "$lv" segtype -a)
 	#local orig
-	#orig=$(lv_field_lv_ "$lv" origin)
+	#orig=$(__get__lv_field_lv_ "$lv" origin)
 	# FIXME: should we count in also origins ?
-	#test -z "$orig" || lv_tree_devices_ $1 $orig
+	#test -z "$orig" || __get__lv_tree_devices_ $1 $orig
 	case "$type" in
 	linear|striped)
-		lv_devices "$lv"
+		__get__lv_devices "$lv"
 		;;
 	mirror|raid*)
 		local log
-		log=$(lv_field_lv_ "$lv" mirror_log)
-		test -z "$log" || lv_tree_devices_ "$1" "$log"
-		for i in $(lv_devices "$lv"); do
-			lv_tree_devices_ "$1" "$i"
+		log=$(__get__lv_field_lv_ "$lv" mirror_log)
+		test -z "$log" || __get__lv_tree_devices_ "$1" "$log"
+		for i in $(__get__lv_devices "$lv"); do
+			__get__lv_tree_devices_ "$1" "$i"
 		done
 		;;
 	thin)
-		lv_tree_devices_ "$1" "$(lv_field_lv_ "$lv" pool_lv)"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_field_lv_ "$lv" pool_lv)"
 		;;
 	thin-pool)
-		lv_tree_devices_ "$1" "$(lv_field_lv_ "$lv" data_lv)"
-		lv_tree_devices_ "$1" "$(lv_field_lv_ "$lv" metadata_lv)"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_field_lv_ "$lv" data_lv)"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_field_lv_ "$lv" metadata_lv)"
 		;;
 	cache)
-		lv_tree_devices_ "$1" "$(lv_devices "$lv")"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_devices "$lv")"
 		;;
 	cache-pool)
-		lv_tree_devices_ "$1" "$(lv_field_lv_ "$lv" data_lv)"
-		lv_tree_devices_ "$1" "$(lv_field_lv_ "$lv" metadata_lv)"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_field_lv_ "$lv" data_lv)"
+		__get__lv_tree_devices_ "$1" "$(__get__lv_field_lv_ "$lv" metadata_lv)"
 		;;
 	esac
 }
 
-lv_tree_devices() {
-	lv_tree_devices_ "$@" | sort -u
+__get__lv_tree_devices() {
+	__get__lv_tree_devices_ "$@" | sort -u
 }
 
-first_extent_sector() {
-	pv_field "$@" pe_start --units s --nosuffix
+__get__first_extent_sector() {
+	__get__pv_field "$@" pe_start --units s --nosuffix
 }
-
-#set -x
-unset LVM_VALGRIND
-unset LVM_LOG_FILE_EPOCH
-"$@"
