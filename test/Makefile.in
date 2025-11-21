@@ -41,6 +41,7 @@ CLEAN_TARGETS += $(shell find -H lib -type l 2>/dev/null) \
 
 CLEAN_TARGETS += .lib-dir-stamp .tests-stamp $(LIB) $(addprefix lib/,\
 	clvmd harness dmeventd dmsetup dmstats lvmpolld \
+	$(LIB_LINK_NOT) $(LIB_NOT) \
 	$(LVM_PROFILES) $(LVM_SCRIPTS) \
 	paths-installed paths-installed-t paths-common paths-common-t)
 
@@ -233,7 +234,7 @@ LIB_NOT := not
 LIB_SHARED := check aux inittest utils get lvm-wrapper lvm_vdo_wrapper
 LIB_CONF := $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF)
 LIB_DATA := $(LIB_FLAVOURS) dm-version-expected version-expected
-LIB_EXEC := $(LIB_NOT) dmsecuretest securetest
+LIB_EXEC := dmsecuretest securetest
 LVM_SCRIPTS := fsadm lvresize_fs_helper lvm_import_vdo
 
 install: .tests-stamp lib/paths-installed
@@ -255,8 +256,6 @@ install: .tests-stamp lib/paths-installed
 		$(INSTALL_DATA) $(LVM_PROFILES) $(DATADIR)/lib
 	$(Q) cd $(DATADIR)/lib &&\
 		$(foreach FILE, $(CMDS), $(LN_S) -f lvm-wrapper $(FILE) $(newline))
-	$(Q) cd $(EXECDIR) &&\
-		$(foreach FILE, $(LIB_LINK_NOT), $(LN_S) -f $(LIB_NOT) $(FILE) $(newline))
 	$(Q) $(INSTALL_PROGRAM) -D lib/runner $(bindir)/lvm2-testsuite
 
 lib/should lib/invalid lib/fail: lib/not
@@ -348,7 +347,7 @@ lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
 	$(Q) cut -f 1 -d ' ' <$< >$@
 
 CMDS := lvm $(shell cat $(abs_top_builddir)/tools/.commands 2>/dev/null)
-LIB := $(addprefix lib/, $(LVM_SCRIPTS) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_EXEC) $(LIB_LINK_NOT) $(LIB_DATA))
+LIB := $(addprefix lib/, $(LVM_SCRIPTS) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_EXEC) $(LIB_DATA))
 
 .tests-stamp: .lib-dir-stamp $(LIB) $(SUBDIRS)
 	$(SHOW) "    [TESTS-STAMP]"
