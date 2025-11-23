@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2011-2025 Red Hat, Inc. All rights reserved.
 #
 # This copyrighted material is made available to anyone wishing to use,
 # modify, copy, or redistribute it subject to the terms and conditions
@@ -18,6 +18,148 @@ die() {
 	rm -f debug.log*
 	echo -e "$@" >&2
 	return 1
+}
+
+# Source test library functions with internal namespacing
+. lib/aux
+. lib/get
+. lib/check
+. lib/lvm-wrapper
+
+# Create dispatcher functions to maintain backward compatibility
+# and provide namespace protection. Functions are called as:
+#   aux function_name args...
+#   get function_name args...
+#   check function_name args...
+# which internally call __aux__function_name, __get__function_name, __check__function_name
+#
+# Each dispatcher unsets variables that should not affect the helper functions
+# (matching behavior of old wrapper scripts)
+aux() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	# Clear LVM_EXPECTED_EXIT_STATUS so nested calls work normally
+	local LVM_EXPECTED_EXIT_STATUS
+	local LVM_LOG_FILE_EPOCH=
+	local LVM_VALGRIND=
+	local devs
+	[[ -f DEVICES ]] && devs=( $(< DEVICES) ) || true
+
+	local s=0
+	local cmd="__aux__$1"
+
+	# Check if function exists, otherwise run command directly
+	declare -f "$cmd" >/dev/null 2>&1 || cmd=$1
+
+	# Only restore trace if explicitly requested via LVM_TEST_AUX_TRACE
+	[[ "${LVM_TEST_AUX_TRACE:-0}" != 0 ]] && set -x
+
+	"$cmd" "${@:2}" || s=$?
+	{ [[ "$r" -eq 0 ]] || set -x; return "$s"; } 2>/dev/null
+}
+
+get() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	# Clear LVM_EXPECTED_EXIT_STATUS so nested calls work normally
+	local LVM_EXPECTED_EXIT_STATUS
+	local LVM_LOG_FILE_EPOCH=
+	local LVM_VALGRIND=
+	local s=0
+
+	# Set trace if explicitly requested
+	[[ "${LVM_TEST_GET_TRACE:-0}" != 0 ]] && set -x
+
+	"__get__$1" "${@:2}" || s=$?
+	{ [[ "$r" -eq 0 ]] || set -x; return "$s"; } 2>/dev/null
+}
+
+check() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	# Clear LVM_EXPECTED_EXIT_STATUS so nested calls work normally
+	local LVM_EXPECTED_EXIT_STATUS
+	local LVM_LOG_FILE_EPOCH=
+	local LVM_VALGRIND=
+	local s=0
+
+	# Restore trace if explicitly requested
+	[[ "${LVM_TEST_CHECK_TRACE:-0}" != 0 ]] && set -x
+
+	"__check__$1" "${@:2}" || s=$?
+	{ [[ "$r" -eq 0 ]] || set -x; return "$s"; } 2>/dev/null
+}
+
+fail() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	local s=0
+	#local debug_files="debug.log*"
+	#[[ "$debug_files" = "debug.log*" ]] || rm -f debug.log*
+
+	LVM_EXPECTED_EXIT_STATUS=5 "$@" || s=$?
+
+	if [[ "$s" -ne 5 ]]; then
+		echo "Test expected fail exit code 5, but got $s." >&2
+		{ [[ "$r" -eq 0 ]] || set -x; return 1; } 2>/dev/null
+	fi
+
+	{ [[ "$r" -eq 0 ]] || set -x; return 0; } 2>/dev/null
+}
+
+invalid() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	local s=0
+	#local debug_files="debug.log*"
+	#[[ "$debug_files" = "debug.log*" ]] || rm -f debug.log*
+
+	LVM_EXPECTED_EXIT_STATUS=3 "$@" || s=$?
+
+	if [[ "$s" -ne 3 ]]; then
+		echo "Test expected invalid exit code 3, but got $s." >&2
+		{ [[ "$r" -eq 0 ]] || set -x; return 1; } 2>/dev/null
+	fi
+
+	{ [[ "$r" -eq 0 ]] || set -x; return 0; } 2>/dev/null
+}
+
+not() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	local s=0
+	#local debug_files="debug.log*"
+	#[[ "$debug_files" = "debug.log*" ]] || rm -f debug.log*
+
+	LVM_EXPECTED_EXIT_STATUS=">1" "$@" || s=$?
+
+	if [[ "$s" -eq 0 ]]; then
+		echo "Test not expected success exit code." >&2
+		{ [[ "$r" -eq 0 ]] || set -x; return 1; } 2>/dev/null
+	fi
+
+	{ [[ "$r" -eq 0 ]] || set -x; return 0; } 2>/dev/null
+}
+
+should() {
+	{ local r=0; case $- in *x*) r=1; set +x ;; esac; } 2>/dev/null
+
+	#rm -f debug.log*
+
+	if ! "$@"; then
+		echo "TEST WARNING: Ignoring command failure." >&2
+		local pattern="debug.log*${LVM_LOG_FILE_EPOCH}*"
+		# Use glob expansion to check if any files match
+		local files=( $pattern )
+		if [[ -e "${files[0]}" ]]; then
+			echo "## timing off"
+			echo "<======== Debug log ========>"
+			sed -e 's,^,## SHOULD DEBUG: ,' "${files[@]}" 2>/dev/null || true
+			echo "## timing on"
+			rm -f "$pattern" || true
+		fi
+	fi
+	{ [[ "$r" -eq 0 ]] || set -x; return 0; } 2>/dev/null
 }
 
 rand_bytes() {
