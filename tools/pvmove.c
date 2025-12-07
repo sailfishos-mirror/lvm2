@@ -300,8 +300,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 						const char *lv_name,
 						struct dm_list *allocatable_pvs,
 						alloc_policy_t alloc,
-						struct dm_list **lvs_changed,
-						unsigned *exclusive)
+						struct dm_list **lvs_changed)
 {
 	struct logical_volume *lv_mirr, *lv;
 	struct lv_segment *seg;
@@ -310,7 +309,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	uint32_t log_count = 0;
 	int lv_found = 0;
 	int lv_skipped = 0;
-	int needs_exclusive = *exclusive;
 	const struct logical_volume *holder;
 	const char *new_lv_name;
 
@@ -388,16 +386,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		}
 
 		seg = first_seg(lv);
-		if (!needs_exclusive) {
-			/* Presence of exclusive LV decides whether pvmove must be also exclusive */
-			if (!seg_only_exclusive(seg)) {
-				holder = lv_lock_holder(lv);
-				if (seg_only_exclusive(first_seg(holder)) || lv_is_origin(holder) || lv_is_cow(holder))
-					needs_exclusive = 1;
-			} else
-				needs_exclusive = 1;
-		}
-
 		if (seg_is_raid(seg) || seg_is_mirrored(seg)) {
 			dm_list_init(&trim_list);
 
@@ -449,32 +437,47 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 		holder = lv_lock_holder(lv);
 
-		if (needs_exclusive) {
-			/* With exclusive pvmove skip LV when:
-			 *  - is active remotely
-			 *  - is not active locally and cannot be activated exclusively locally
-			 *
-			 * Note: lvm2 can proceed with exclusive pvmove for 'just' locally active LVs
-			 * in the case it's NOT active anywhere else, since LOCKED LVs cannot be
-			 * later activated by user.
+		if (lv_is_active(holder)) {
+			/*
+			 * Holder is active locally - proceed with pvmove.
+			 * The holder will be part of the pvmove operation.
 			 */
-			if ((!lv_is_active(holder) && !activate_lv(cmd, holder))) {
-				lv_skipped = 1;
-				log_print_unless_silent("Skipping LV %s which is not locally exclusive%s.",
-							display_lvname(lv),
-							/* Report missing cmirrord cases that mattered.
-							 * With exclusive LV types cmirrord would not help. */
-							(*exclusive &&
-							 !lv_is_origin(holder) &&
-							 !seg_only_exclusive(first_seg(holder))) ?
-							" and clustered mirror (cmirror) not detected" : "");
-				continue;
+		} else {
+			/*
+			 * Holder is not active locally.
+			 * For shared VG, check if holder is active on another node.
+			 */
+			if (vg_is_shared(vg)) {
+				int ex = 0, sh = 0;
+
+				if (!lockd_query_lv(cmd, (struct logical_volume *)holder, &ex, &sh)) {
+					lv_skipped = 1;
+					log_print_unless_silent("Skipping LV %s - cannot query lock state.",
+								display_lvname(lv));
+					continue;
+				}
+
+				if (ex || sh) {
+					/* Holder is locked/active on another node */
+					lv_skipped = 1;
+					log_print_unless_silent("Skipping LV %s - holder %s is active on another node.",
+								display_lvname(lv), display_lvname(holder));
+					continue;
+				}
 			}
-		} else if (!activate_lv(cmd, holder)) {
-			lv_skipped = 1;
-			log_print_unless_silent("Skipping LV %s which cannot be activated.",
-						display_lvname(lv));
-			continue;
+
+			/*
+			 * Holder is not active anywhere.
+			 * Insert mirror segments in metadata but do not activate.
+			 * If the LV is activated later, it comes up through the
+			 * mirror layer automatically.
+			 */
+			if (holder != lv)
+				log_verbose("Holder %s is inactive, inserting pvmove mirrors for %s in metadata only.",
+					    display_lvname(holder), display_lvname(lv));
+			else
+				log_verbose("LV %s is inactive, inserting pvmove mirrors in metadata only.",
+					    display_lvname(lv));
 		}
 
 		if (!_insert_pvmove_mirrors(cmd, lv_mirr, source_pvl, lv,
@@ -512,23 +515,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		return NULL;
 	}
 
-	if (needs_exclusive)
-		*exclusive = 1;
-
 	return lv_mirr;
-}
-
-static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
-			unsigned exclusive)
-{
-	int r = 0;
-
-	r = activate_lv(cmd, lv_mirr);
-
-	if (!r)
-		stack;
-
-	return r;
 }
 
 /*
@@ -536,23 +523,45 @@ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
  * (Not called after first or any other section completes.)
  */
 static int _update_metadata(struct logical_volume *lv_mirr,
-			    struct dm_list *lvs_changed,
-			    unsigned exclusive)
+			    struct dm_list *lvs_changed)
 {
 	struct lv_list *lvl;
-	struct logical_volume *lv = lv_mirr;
+	struct logical_volume *lv = NULL;
 
-	/* coverity[unreachable] intentional single iteration to get first item */
+	/*
+	 * Find the first active LV from lvs_changed for lv_update_and_reload().
+	 * The suspend/resume of an active LV with track_pvmove_deps=1
+	 * (via !lv_is_pvmove) discovers and reloads ALL active participating
+	 * LVs through the pvmove dependency tree.
+	 *
+	 * If no LV is active, mirrors exist only in metadata and will
+	 * take effect when LVs are activated.
+	 */
 	dm_list_iterate_items(lvl, lvs_changed) {
-		lv = lvl->lv;
-		break;
+		if (lv_is_active(lvl->lv)) {
+			lv = lvl->lv;
+			break;
+		}
 	}
 
-	if (!lv_update_and_reload(lv))
-                return_0;
+	if (!lv) {
+		/*
+		 * No active LV participates in this pvmove.
+		 * Write and commit metadata without suspend/resume:
+		 * there are no kernel tables to reload.
+		 */
+		log_verbose("No active LVs affected by pvmove, committing metadata only.");
+		if (!vg_write(lv_mirr->vg))
+			return_0;
+		if (!vg_commit(lv_mirr->vg))
+			return_0;
+	} else {
+		if (!lv_update_and_reload(lv))
+			return_0;
+	}
 
-	/* Ensure mirror LV is active */
-	if (!_activate_lv(lv_mirr->vg->cmd, lv_mirr, exclusive)) {
+	/* Activate pvmove mirror to start the data copy */
+	if (!activate_lv(lv_mirr->vg->cmd, lv_mirr)) {
 		if (test_mode())
 			return 1;
 
@@ -593,11 +602,8 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	struct dm_list *lvs_changed;
 	struct logical_volume *lv_mirr;
 	struct logical_volume *lv = NULL;
-	struct lv_list *lvl;
-	const struct logical_volume *lvh;
 	const char *pv_name = pv_dev_name(pv);
 	unsigned flags = PVMOVE_FIRST_TIME;
-	unsigned exclusive = 0;
 	int r = ECMD_FAILED;
 
 	if (!vg) {
@@ -641,6 +647,12 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	}
 
 	/*
+	 * FIXME: The named-LV requirement for shared VGs is artificially
+	 * conservative.  pvmove always works on identified per-LV extents, so
+	 * moving all LVs from a PV should be safe once each participating LV
+	 * is locked exclusively before being moved.  Remove this restriction
+	 * once the no-name path acquires per-LV locks in shared VGs.
+	 *
 	 * We would need to avoid any PEs used by LVs that are active (ex) on
 	 * other hosts.  For LVs that are active on multiple hosts (sh), we
 	 * would need to used cluster mirrors.
@@ -672,15 +684,8 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			goto out;
 		}
 
-		dm_list_iterate_items(lvl, lvs_changed) {
-			lvh = lv_lock_holder(lvl->lv);
-			/* Exclusive LV decides whether pvmove must be also exclusive */
-			if (lv_is_origin(lvh) || seg_only_exclusive(first_seg(lvh)))
-				exclusive = 1;
-		}
-
 		/* Ensure mirror LV is active */
-		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+		if (!activate_lv(cmd, lv_mirr)) {
 			log_error("ABORTING: Temporary mirror activation failed.");
 			goto out;
 		}
@@ -702,13 +707,9 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 
 		if (!(lv_mirr = _set_up_pvmove_lv(cmd, vg, source_pvl, lv_name,
 						  allocatable_pvs, pp->alloc,
-						  &lvs_changed, &exclusive)))
+						  &lvs_changed)))
 			goto_out;
 	}
-
-	/* Lock lvs_changed and activate (with old metadata) */
-	if (!activate_lvs(cmd, lvs_changed, exclusive))
-		goto_out;
 
 	/* FIXME Presence of a mirror once set PVMOVE - now remove associated logic */
 	/* init_pvmove(1); */
@@ -718,7 +719,7 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 		goto out;
 
 	if (flags & PVMOVE_FIRST_TIME)
-		if (!_update_metadata(lv_mirr, lvs_changed, exclusive))
+		if (!_update_metadata(lv_mirr, lvs_changed))
 			goto_out;
 
 	/* LVs are all in status LOCKED */
