@@ -20,8 +20,6 @@
 #include "pvmove_poll.h"
 #include "lib/lvmpolld/lvmpolld-client.h"
 
-#define PVMOVE_FIRST_TIME   0x00000001      /* Called for first time */
-
 struct pvmove_params {
 	char *pv_name_arg; /* original unmodified arg */
 	char *lv_name_arg; /* original unmodified arg */
@@ -293,17 +291,62 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
 	return _sub_lv_of(seg->lv, lv_name);
 }
 
-/* Create new LV with mirror segments for the required copies */
-static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
-						struct volume_group *vg,
-						struct dm_list *source_pvl,
-						const char *lv_name,
-						struct dm_list *allocatable_pvs,
-						alloc_policy_t alloc,
-						struct dm_list **lvs_changed,
-						unsigned *exclusive)
+/* Return 0 if lv on source_pvl cannot be pvmoved. source_pvl may be NULL. */
+static int _pvmove_lv_check_moveable(const struct logical_volume *lv,
+				     struct dm_list *source_pvl)
 {
-	struct logical_volume *lv_mirr, *lv;
+	struct logical_volume *lv_cachevol;
+	struct logical_volume *lv_orig;
+
+	if (lv_is_converting(lv) || lv_is_merging(lv)) {
+		log_error("Unable to pvmove when %s volume %s is present.",
+			  lv_is_converting(lv) ? "converting" : "merging",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_writecache_cachevol(lv)) {
+		log_error("Unable to pvmove device used for writecache.");
+		return 0;
+	}
+
+	if (lv_is_writecache(lv)) {
+		lv_cachevol = first_seg(lv)->writecache;
+		if (source_pvl && lv_is_on_pvs(lv_cachevol, source_pvl)) {
+			log_error("Unable to move device used for writecache cachevol %s.",
+				  display_lvname(lv_cachevol));
+			return 0;
+		}
+	}
+
+	if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
+		log_error("Unable to pvmove device used for raid with integrity.");
+		return 0;
+	}
+
+	if (lv_is_cache(lv) || lv_is_writecache(lv)) {
+		lv_orig = seg_lv(first_seg(lv), 0);
+		if (lv_is_raid(lv_orig) && lv_raid_has_integrity(lv_orig)) {
+			log_error("Unable to pvmove raid LV with integrity under cache.");
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+/* Populate pvmove mirror LV with segments for the required copies */
+static int _set_up_pvmove_lv(struct cmd_context *cmd,
+			     struct volume_group *vg,
+			     struct logical_volume *lv_mirr,
+			     struct dm_list *source_pvl,
+			     const char *lv_name,
+			     struct dm_list *allocatable_pvs,
+			     alloc_policy_t alloc,
+			     struct dm_list **lvs_changed,
+			     unsigned *exclusive)
+{
+	struct logical_volume *lv;
 	struct lv_segment *seg;
 	struct lv_list *lvl;
 	struct dm_list trim_list;
@@ -314,19 +357,9 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	const struct logical_volume *holder;
 	const char *new_lv_name;
 
-	/* FIXME Cope with non-contiguous => splitting existing segments */
-	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
-					LVM_READ | LVM_WRITE,
-					ALLOC_CONTIGUOUS, vg))) {
-		log_error("Creation of temporary pvmove LV failed.");
-		return NULL;
-	}
-
-	lv_mirr->status |= (PVMOVE | LOCKED);
-
 	if (!(*lvs_changed = dm_pool_alloc(cmd->mem, sizeof(**lvs_changed)))) {
 		log_error("lvs_changed list struct allocation failed.");
-		return NULL;
+		return 0;
 	}
 
 	dm_list_init(*lvs_changed);
@@ -352,7 +385,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 		if (lv_name) {
 			if (!(new_lv_name = top_level_lv_name(vg, lv_name)))
-				return_NULL;
+				return_0;
 
 			if (strcmp(lv->name, new_lv_name))
 				continue;
@@ -361,31 +394,8 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		if (!lv_is_on_pvs(lv, source_pvl))
 			continue;
 
-		if (lv_is_converting(lv) || lv_is_merging(lv)) {
-			log_error("Unable to pvmove when %s volume %s is present.",
-				  lv_is_converting(lv) ? "converting" : "merging",
-				  display_lvname(lv));
-			return NULL;
-		}
-
-		if (lv_is_writecache_cachevol(lv)) {
-			log_error("Unable to pvmove device used for writecache.");
-			return NULL;
-		}
-
-		if (lv_is_writecache(lv)) {
-			struct logical_volume *lv_cachevol = first_seg(lv)->writecache;
-			if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
-				log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
-				return NULL;
-			}
-
-		}
-
-		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
-			log_error("Unable to pvmove device used for raid with integrity.");
-			return NULL;
-		}
+		if (!_pvmove_lv_check_moveable(lv, source_pvl))
+			return_0;
 
 		seg = first_seg(lv);
 		if (!needs_exclusive) {
@@ -402,7 +412,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 			dm_list_init(&trim_list);
 
 			if (!get_pv_list_for_lv(vg->cmd->mem, lv, &trim_list))
-				return_NULL;
+				return_0;
 
 			/*
 			 * Remove any PVs holding SubLV siblings to allow
@@ -411,11 +421,11 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 			 * Callee checks for lv_name and valid raid segment type.
 			 */
 			if (!_remove_sibling_pvs_from_trim_list(lv, lv_name, &trim_list))
-				return_NULL;
+				return_0;
 
 			if (!_trim_allocatable_pvs(allocatable_pvs,
 						   &trim_list, alloc))
-				return_NULL;
+				return_0;
 		}
 	}
 
@@ -479,13 +489,12 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 		if (!_insert_pvmove_mirrors(cmd, lv_mirr, source_pvl, lv,
 					    *lvs_changed))
-			return_NULL;
+			return_0;
 	}
 
 	if (lv_name && !lv_found) {
-		/* NOTE: Is this now an internal error? It is already checked in _pvmove_setup_single */
 		log_error("Logical volume %s not found.", lv_name);
-		return NULL;
+		return 0;
 	}
 
 	/* Is temporary mirror empty? */
@@ -495,7 +504,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 				  "It contains locked, hidden or "
 				  "non-top level LVs only.");
 		log_error("No data to move for %s.", vg->name);
-		return NULL;
+		return 0;
 	}
 
 	if (!lv_add_mirrors(cmd, lv_mirr, 1, 1, 0,
@@ -504,31 +513,44 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 			    (arg_is_set(cmd, atomic_ARG)) ?
 			    MIRROR_BY_SEGMENTED_LV : MIRROR_BY_SEG)) {
 		log_error("Failed to convert pvmove LV to mirrored.");
-		return NULL;
+		return 0;
 	}
 
 	if (!split_parent_segments_for_layer(cmd, lv_mirr)) {
 		log_error("Failed to split segments being moved.");
-		return NULL;
+		return 0;
 	}
 
 	if (needs_exclusive)
 		*exclusive = 1;
 
-	return lv_mirr;
+	return 1;
 }
 
-static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
-			unsigned exclusive)
+/*
+ * Validate a resume of an in-progress pvmove: find participating LVs,
+ * warn about ignored args.
+ * Returns 1 on success (lvs_changed populated), 0 on error.
+ */
+static int _pvmove_validate_resume(struct cmd_context *cmd,
+				   struct volume_group *vg,
+				   struct logical_volume *lv_mirr,
+				   const char *lv_name,
+				   int pv_count,
+				   const char *pv_name,
+				   struct dm_list **lvs_changed)
 {
-	int r = 0;
+	log_print_unless_silent("Detected pvmove in progress for %s.", pv_name);
 
-	r = activate_lv(cmd, lv_mirr);
+	if (!(*lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
+		log_error("ABORTING: Failed to generate list of moving LVs.");
+		return 0;
+	}
 
-	if (!r)
-		stack;
+	if (pv_count || lv_name)
+		log_warn("WARNING: Ignoring remaining command line arguments.");
 
-	return r;
+	return 1;
 }
 
 /*
@@ -536,23 +558,21 @@ static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
  * (Not called after first or any other section completes.)
  */
 static int _update_metadata(struct logical_volume *lv_mirr,
-			    struct dm_list *lvs_changed,
-			    unsigned exclusive)
+			    struct dm_list *lvs_changed)
 {
 	struct lv_list *lvl;
 	struct logical_volume *lv = lv_mirr;
 
-	/* coverity[unreachable] intentional single iteration to get first item */
 	dm_list_iterate_items(lvl, lvs_changed) {
 		lv = lvl->lv;
 		break;
 	}
 
 	if (!lv_update_and_reload(lv))
-                return_0;
+		return_0;
 
-	/* Ensure mirror LV is active */
-	if (!_activate_lv(lv_mirr->vg->cmd, lv_mirr, exclusive)) {
+	/* Activate pvmove mirror to start the data copy */
+	if (!activate_lv(lv_mirr->vg->cmd, lv_mirr)) {
 		if (test_mode())
 			return 1;
 
@@ -596,7 +616,6 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	struct lv_list *lvl;
 	const struct logical_volume *lvh;
 	const char *pv_name = pv_dev_name(pv);
-	unsigned flags = PVMOVE_FIRST_TIME;
 	unsigned exclusive = 0;
 	int r = ECMD_FAILED;
 
@@ -626,18 +645,8 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			return ECMD_FAILED;
 		}
 
-		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
-			log_error("pvmove not allowed on raid LV with integrity.");
+		if (!_pvmove_lv_check_moveable(lv, NULL))
 			return ECMD_FAILED;
-		}
-
-		if (lv_is_cache(lv) || lv_is_writecache(lv)) {
-			struct logical_volume *lv_orig = seg_lv(first_seg(lv), 0);
-			if (lv_is_raid(lv_orig) && lv_raid_has_integrity(lv_orig)) {
-				log_error("pvmove not allowed on raid LV with integrity.");
-				return ECMD_FAILED;
-			}
-		}
 	}
 
 	/*
@@ -663,14 +672,10 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	}
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
-		log_print_unless_silent("Detected pvmove in progress for %s.", pv_name);
-		if (pp->pv_count || lv_name)
-			log_warn("WARNING: Ignoring remaining command line arguments.");
-
-		if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
-			log_error("ABORTING: Failed to generate list of moving LVs.");
+		/* Resume path */
+		if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name,
+					     pp->pv_count, pv_name, &lvs_changed))
 			goto out;
-		}
 
 		dm_list_iterate_items(lvl, lvs_changed) {
 			lvh = lv_lock_holder(lvl->lv);
@@ -680,12 +685,10 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 		}
 
 		/* Ensure mirror LV is active */
-		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+		if (!activate_lv(cmd, lv_mirr)) {
 			log_error("ABORTING: Temporary mirror activation failed.");
 			goto out;
 		}
-
-		flags &= ~PVMOVE_FIRST_TIME;
 	} else {
 		/* Determine PE ranges to be moved */
 		if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
@@ -700,28 +703,32 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 							     vg, pv, pp->alloc)))
 			goto_out;
 
-		if (!(lv_mirr = _set_up_pvmove_lv(cmd, vg, source_pvl, lv_name,
-						  allocatable_pvs, pp->alloc,
-						  &lvs_changed, &exclusive)))
+		/* FIXME Cope with non-contiguous => splitting existing segments */
+		if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
+						LVM_READ | LVM_WRITE,
+						ALLOC_CONTIGUOUS, vg))) {
+			log_error("Creation of temporary pvmove LV failed.");
+			goto_out;
+		}
+
+		lv_mirr->status |= (PVMOVE | LOCKED);
+
+		if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
+				       allocatable_pvs, pp->alloc,
+				       &lvs_changed, &exclusive))
+			goto_out;
+
+		/* Lock lvs_changed and activate (with old metadata) */
+		if (!activate_lvs(cmd, lvs_changed, exclusive))
+			goto_out;
+
+		if (!_update_metadata(lv_mirr, lvs_changed))
 			goto_out;
 	}
-
-	/* Lock lvs_changed and activate (with old metadata) */
-	if (!activate_lvs(cmd, lvs_changed, exclusive))
-		goto_out;
-
-	/* FIXME Presence of a mirror once set PVMOVE - now remove associated logic */
-	/* init_pvmove(1); */
-	/* vg->status |= PVMOVE; */
 
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
 		goto out;
 
-	if (flags & PVMOVE_FIRST_TIME)
-		if (!_update_metadata(lv_mirr, lvs_changed, exclusive))
-			goto_out;
-
-	/* LVs are all in status LOCKED */
 	pp->setup_result = ECMD_PROCESSED;
 	r = ECMD_PROCESSED;
 out:
