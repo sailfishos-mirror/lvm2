@@ -14,13 +14,13 @@ SKIP_WITH_LVMPOLLD=1
 
 . lib/inittest
 
-which mkfs.xfs || skip
+which mkfs.ext4 || skip
 aux have_integrity 1 5 0 || skip
 # Avoid 4K ramdisk devices on older kernels
 aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
 
 mnt="mnt"
-mkdir -p $mnt
+mkdir -p "$mnt"
 
 aux prepare_devs 5 64
 
@@ -41,7 +41,7 @@ _prepare_vg() {
 }
 
 _add_new_data_to_mnt() {
-        mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+        mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
 
         mount "$DM_DEV_DIR/$vg/$lv1" $mnt
 
@@ -94,49 +94,18 @@ _verify_data_on_lv() {
         lvchange -an $vg/$lv1
 }
 
-_sync_percent() {
-	local checklv=$1
-	get lv_field "$checklv" sync_percent | cut -d. -f1
-}
-
-_wait_sync() {
-	local checklv=$1
-
-	for i in $(seq 1 10) ; do
-		sync=$(_sync_percent "$checklv")
-		echo "sync_percent is $sync"
-
-		if test "$sync" = "100"; then
-			return
-		fi
-
-		sleep 1
-	done
-
-	# TODO: There is some strange bug, first leg of RAID with integrity
-	# enabled never gets in sync. I saw this in BB, but not when executing
-	# the commands manually
-	if test -z "$sync"; then
-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
-		exit
-	fi
-	echo "timeout waiting for recalc"
-	return 1
-}
-
 # lvrename
 _prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
-_wait_sync $vg/${lv1}_rimage_0
-_wait_sync $vg/${lv1}_rimage_1
-_wait_sync $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/$lv1
 _add_new_data_to_mnt
-umount $mnt
+umount "$mnt"
 lvrename $vg/$lv1 $vg/$lv2
-mount "$DM_DEV_DIR/$vg/$lv2" $mnt
+mount "$DM_DEV_DIR/$vg/$lv2" "$mnt"
 _verify_data_on_mnt
-umount $mnt
+umount "$mnt"
 lvchange -an $vg/$lv2
 lvremove $vg/$lv2
 vgremove -ff $vg
@@ -146,9 +115,9 @@ vgremove -ff $vg
 # lv must be active
 _prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
-_wait_sync $vg/${lv1}_rimage_0
-_wait_sync $vg/${lv1}_rimage_1
-_wait_sync $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/$lv1
 lvs -o raidintegritymode $vg/$lv1 | grep journal
 _add_new_data_to_mnt
 lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
@@ -159,7 +128,7 @@ grep "$dev3" out
 not grep "$dev1" out
 _add_more_data_to_mnt
 _verify_data_on_mnt
-umount $mnt
+umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
@@ -169,9 +138,9 @@ vgremove -ff $vg
 # same as prev but with bitmap mode
 _prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2"
-_wait_sync $vg/${lv1}_rimage_0
-_wait_sync $vg/${lv1}_rimage_1
-_wait_sync $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/$lv1
 lvs -o raidintegritymode $vg/$lv1 | grep bitmap
 _add_new_data_to_mnt
 lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
@@ -182,7 +151,7 @@ grep "$dev3" out
 not grep "$dev1" out
 _add_more_data_to_mnt
 _verify_data_on_mnt
-umount $mnt
+umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
@@ -194,9 +163,9 @@ vgremove -ff $vg
 # (like lvconvert --replace does for a dev that's not missing).
 _prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
-_wait_sync $vg/${lv1}_rimage_0
-_wait_sync $vg/${lv1}_rimage_1
-_wait_sync $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/$lv1
 _add_new_data_to_mnt
 aux disable_dev "$dev2"
 lvs -a -o+devices $vg > out
@@ -209,7 +178,7 @@ not grep "$dev2" out
 not grep unknown out
 _add_more_data_to_mnt
 _verify_data_on_mnt
-umount $mnt
+umount "$mnt"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 aux enable_dev "$dev2"
@@ -223,11 +192,11 @@ vgremove -ff $vg
 
 _prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
-_wait_sync $vg/${lv1}_rimage_0
-_wait_sync $vg/${lv1}_rimage_1
-_wait_sync $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/$lv1
 _add_new_data_to_mnt
-umount $mnt
+umount "$mnt"
 lvchange -an $vg/$lv1
 aux disable_dev "$dev2"
 lvs -a -o+devices $vg
@@ -236,10 +205,35 @@ not lvchange -ay --activationmode degraded $vg/$lv1
 not lvchange -ay --activationmode partial $vg/$lv1
 lvconvert --raidintegrity n $vg/$lv1
 lvchange -ay --activationmode degraded $vg/$lv1
-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
 _add_more_data_to_mnt
 _verify_data_on_mnt
-umount $mnt
+umount "$mnt"
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+aux enable_dev "$dev2"
+vgremove -ff $vg
+
+# When disks for raid images are missing, vgreduce --removemissing --force
+# should remove the missing images from the raid LV.
+_prepare_vg
+lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3"
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/${lv1}_rimage_2
+aux wait_recalc $vg/$lv1
+_add_new_data_to_mnt
+aux disable_dev "$dev2"
+lvs -a -o+devices,segtype $vg |tee out
+# The vgreduce uses error target for missing image
+vgreduce --removemissing --force $vg
+lvs -a -o+devices,segtype $vg |tee out
+cat out
+not grep "$dev2" out
+grep error out
+_add_more_data_to_mnt
+_verify_data_on_mnt
+umount "$mnt"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 aux enable_dev "$dev2"

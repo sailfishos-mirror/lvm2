@@ -21,9 +21,9 @@ aux have_integrity 1 5 0 || skip
 which mkfs.xfs || skip
 
 mnt="mnt"
-mkdir -p $mnt
+mkdir -p "$mnt"
 
-# raid1 LV needs to be extended to 512MB to test imeta being exended
+# raid1 LV needs to be extended to 512MB to test imeta being extended
 aux prepare_devs 4 632
 
 # this test may consume lot of disk space - so make sure cleaning works
@@ -92,42 +92,11 @@ _verify_data_on_lv() {
 	umount $mnt
 }
 
-_sync_percent() {
-	local checklv=$1
-	get lv_field "$checklv" sync_percent | cut -d. -f1
-}
-
-_wait_recalc() {
-	local checklv=$1
-
-	for i in $(seq 1 20) ; do
-		sync=$(_sync_percent "$checklv")
-		echo "sync_percent is $sync"
-
-		if test "$sync" = "100"; then
-			return
-		fi
-
-		sleep 1
-	done
-
-	# TODO: There is some strange bug, first leg of RAID with integrity
-	# enabled never gets in sync. I saw this in BB, but not when executing
-	# the commands manually
-	if test -z "$sync"; then
-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
-		exit
-	fi
-	echo "timeout waiting for recalc"
-	return 1
-}
-
 # lvextend to 512MB is needed for the imeta LV to
 # be extended from 4MB to 8MB.
 
 _prepare_vg
-lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+lvcreate --type raid1 -m1 -n $lv1 -L 300 $vg
 lvchange -an $vg/$lv1
 lvchange -ay $vg/$lv1
 _add_data_to_lv
@@ -135,8 +104,8 @@ _add_data_to_lv
 lvchange -an $vg/$lv1
 lvconvert --raidintegrity y $vg/$lv1
 lvchange -ay $vg/$lv1
-_wait_recalc $vg/${lv1}_rimage_0
-_wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
 lvs -a -o+devices $vg
 _verify_data_on_lv
 lvchange -an $vg/$lv1
@@ -144,8 +113,8 @@ lvextend -L 512M $vg/$lv1
 lvs -a -o+devices $vg
 lvchange -ay $vg/$lv1
 _verify_data_on_lv
-_wait_recalc $vg/${lv1}_rimage_0
-_wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
 lvs -a -o+devices $vg
 check lv_field $vg/${lv1}_rimage_0_imeta size "12.00m"
 check lv_field $vg/${lv1}_rimage_1_imeta size "12.00m"
@@ -166,8 +135,8 @@ lvs -a -o+devices $vg
 # adding integrity again will allocate new 12MB imeta LVs
 # on dev3,dev4
 lvconvert --raidintegrity y $vg/$lv1
-_wait_recalc $vg/${lv1}_rimage_0
-_wait_recalc $vg/${lv1}_rimage_1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
 lvs -a -o+devices $vg
 check lv_field $vg/${lv1}_rimage_0_imeta size "20.00m"
 check lv_field $vg/${lv1}_rimage_1_imeta size "20.00m"
@@ -177,7 +146,7 @@ lvremove $vg/$lv1
 
 # As the test doesn't wait for full resync
 # delay legs so not all data need to be written.
-aux delay_dev "$dev1" 1000 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"
+aux delay_dev "$dev1" 400 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"
 aux delay_dev "$dev2" 0 10 "$(( $(get first_extent_sector "$dev2") + 16000 )):1200000"
 
 
