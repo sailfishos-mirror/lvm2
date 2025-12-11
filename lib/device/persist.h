@@ -67,6 +67,7 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
 int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags);
 
 int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail);
+int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_group *vg, int *is_started_other);
 
 int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t prev_gen);
 
