@@ -3026,6 +3026,26 @@ static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t 
 		    seg->vdo_params.logical_threads,
 		    seg->vdo_params.physical_threads);
 
+	/* Add format parameters for kernel direct formatting */
+	if (seg->vdo_params.use_kernel_format) {
+		/* Convert slab size from MB to 4KiB blocks */
+		EMIT_PARAMS(pos, " slabSize " FMTu64,
+			    seg->vdo_params.slab_size_mb * UINT64_C(256)); // 1MiB -> 256 * 4KiB blocks
+
+		/* Index memory size: format as GiB if >= 1024MB, otherwise as fraction */
+		if (seg->vdo_params.index_memory_size_mb >= 1024)
+			EMIT_PARAMS(pos, " indexMemory %u", seg->vdo_params.index_memory_size_mb / 1024);
+		else if (seg->vdo_params.index_memory_size_mb >= 768)
+			EMIT_PARAMS(pos, " indexMemory 0.75");
+		else if (seg->vdo_params.index_memory_size_mb >= 512)
+			EMIT_PARAMS(pos, " indexMemory 0.50");
+		else
+			EMIT_PARAMS(pos, " indexMemory 0.25");
+
+		/* Sparse index setting */
+		EMIT_PARAMS(pos, " indexSparse %s", seg->vdo_params.use_sparse_index ? "on" : "off");
+	}
+
 	return 1;
 }
 
