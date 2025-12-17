@@ -2167,6 +2167,8 @@ struct dm_vdo_target_params {
 
 	/* write policy */
 	enum dm_vdo_write_policy write_policy;
+
+	int use_kernel_format;         /* kernel direct format (added last for ABI compat) */
 };
 
 int dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
