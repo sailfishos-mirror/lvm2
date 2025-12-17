@@ -783,6 +783,12 @@ cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_
 	"Enables sparse indexing for VDO volume.\n")
 
 // vdo format
+cfg(allocation_vdo_use_kernel_format_CFG, "vdo_use_kernel_format", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_KERNEL_FORMAT, VDO_1ST_VSN, NULL, 0, NULL,
+	"Use kernel direct formatting for VDO volume.\n"
+	"When enabled (1), uses kernel direct formatting (requires dm-vdo 9.2.0+).\n"
+	"When disabled (0), uses traditional userspace vdoformat tool.\n")
+
+// vdo format
 cfg(allocation_vdo_index_memory_size_mb_CFG, "vdo_index_memory_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_INDEX_MEMORY_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the amount of index memory in MiB for VDO volume.\n"
 	"The value must be at least 256MiB and at most 1TiB.\n")
@@ -1336,10 +1342,10 @@ cfg_array(global_vdo_format_options_CFG, "vdo_format_options", global_CFG_SECTIO
 cfg_array(global_vdo_disabled_features_CFG, "vdo_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 3, 11), NULL, 0, NULL,
 	"Features to not use in the vdo driver.\n"
 	"This can be helpful for testing, or to avoid using a feature that is\n"
-	"causing problems. Features include: online_rename, version4\n"
+	"causing problems. Features include: online_rename, version4, direct_format\n"
 	"#\n"
 	"Example\n"
-	"vdo_disabled_features = [ \"online_rename\", \"version4\" ]\n"
+	"vdo_disabled_features = [ \"online_rename\", \"version4\", \"direct_format\" ]\n"
 	"#\n")
 
 cfg(global_fsadm_executable_CFG, "fsadm_executable", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FSADM_PATH, vsn(2, 2, 170), "@FSADM_PATH@", 0, NULL,

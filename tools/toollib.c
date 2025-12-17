@@ -1369,6 +1369,7 @@ int get_vdo_settings(struct cmd_context *cmd,
 			DO_OFFLINE(slab_size_mb);
 			DO_OFFLINE(use_metadata_hints);
 			DO_OFFLINE(use_sparse_index);
+			DO_OFFLINE(use_kernel_format);
 
 			option = "write_policy";
 			if (_compare_vdo_option(cn->key, option)) {

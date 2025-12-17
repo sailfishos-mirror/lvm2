@@ -2164,6 +2164,7 @@ struct dm_vdo_target_params {
 	int use_deduplication;
 	int use_metadata_hints;
 	int use_sparse_index;          /* format */
+	int use_kernel_format;         // kernel direct format
 
 	/* write policy */
 	enum dm_vdo_write_policy write_policy;

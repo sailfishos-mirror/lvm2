@@ -253,6 +253,9 @@ static int _vdo_pool_text_import(struct lv_segment *seg,
 	if (!_import_bool(n, "use_sparse_index", &vtp->use_sparse_index))
 		return_0;
 
+	if (!_import_bool(n, "use_kernel_format", &vtp->use_kernel_format))
+		return_0;
+
 	if (!dm_config_get_uint32(n, "index_memory_size_mb", &vtp->index_memory_size_mb))
 		return _bad_field("index_memory_size_mb");
 
@@ -326,6 +329,8 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter 
 
 	if (vtp->use_sparse_index)
 		outf(f, "use_sparse_index = 1");
+	if (vtp->use_kernel_format)
+		outf(f, "use_kernel_format = 1");
 	/* TODO - conditionally */
 	outsize(f, vtp->index_memory_size_mb * UINT64_C(2 * 1024),
 		"index_memory_size_mb = %u", vtp->index_memory_size_mb);
@@ -429,6 +434,7 @@ static int _vdo_target_present(struct cmd_context *cmd,
 	} _features[] = {
 		{ 6, 2, 3, VDO_FEATURE_ONLINE_RENAME, "online_rename" },
 		{ 8, 2, 0, VDO_FEATURE_VERSION4, "version4" },
+		{ 9, 2, 0, VDO_FEATURE_DIRECT_FORMAT, "direct_format" },
 	};
 	static const char _lvmconf[] = "global/vdo_disabled_features";
 	static int _vdo_checked = 0;

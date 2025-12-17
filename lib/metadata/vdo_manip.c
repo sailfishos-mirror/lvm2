@@ -408,9 +408,32 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 	if (format) {
 		if (test_mode()) {
 			log_verbose("Test mode: Skipping formatting of VDO pool volume.");
-		} else if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
-			log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
-			return 0;
+		} else if (vtp->use_kernel_format) {
+			/* Kernel direct formatting - check for feature support */
+			unsigned attrs = 0;
+
+			if (!vdo_pool_segtype->ops->target_present ||
+			    !vdo_pool_segtype->ops->target_present(cmd, NULL, &attrs) ||
+			    !(attrs & VDO_FEATURE_DIRECT_FORMAT)) {
+				log_error("Kernel direct formatting (vdo_use_kernel_format=1) requires VDO target version 9.2.0 or newer.");
+				return 0;
+			}
+
+			/* Kernel decides to format if the first 4k are zeroes */
+			if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
+				log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
+					  display_lvname(data_lv));
+				return 0;
+			}
+
+			if (!*virtual_extents)
+				vdo_logical_size = data_lv->size;
+		} else {
+			/* Traditional userspace vdoformat */
+			if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
+				log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
+				return 0;
+			}
 		}
 	} else {
 		log_verbose("Skipping VDO formatting %s.", display_lvname(data_lv));
@@ -617,6 +640,8 @@ int fill_vdo_target_params(struct cmd_context *cmd,
 		find_config_tree_int(cmd, allocation_vdo_block_map_era_length_CFG, profile);
 	vtp->use_sparse_index =
 		find_config_tree_int(cmd, allocation_vdo_use_sparse_index_CFG, profile);
+	vtp->use_kernel_format =
+		find_config_tree_int(cmd, allocation_vdo_use_kernel_format_CFG, profile);
 	vtp->index_memory_size_mb =
 		find_config_tree_int64(cmd, allocation_vdo_index_memory_size_mb_CFG, profile);
 	vtp->slab_size_mb =
