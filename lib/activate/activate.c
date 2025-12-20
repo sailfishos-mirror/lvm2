@@ -1595,7 +1595,13 @@ static int _lv_deactivate(const struct logical_volume *lv)
 	int r;
 	struct dev_manager *dm;
 
-	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
+	/*
+	 * Do not track pvmove deps for deactivation.  The deps tracking
+	 * adds all LVs participating in pvmove to the tree, which is
+	 * needed for suspend/resume (atomic table reload) but causes
+	 * deactivation to cascade and remove LVs we want to keep active.
+	 */
+	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 0)))
 		return_0;
 
 	if (!(r = dev_manager_deactivate(dm, lv)))

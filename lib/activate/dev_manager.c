@@ -2947,6 +2947,9 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 			if (seg_type(seg, s) == AREA_LV && seg_lv(seg, s) &&
 			    /* origin only for cache without pending delete */
 			    (!dm->track_pending_delete || !lv_is_cache(lv)) &&
+			    /* Deactivation: treat pvmove LV as PV boundary,
+			     * kernel deps walk provides correct hierarchy */
+			    !(!dm->activation && !dm->suspend && lv_is_pvmove(seg_lv(seg, s))) &&
 			    !_add_lv_to_dtree(dm, dtree, seg_lv(seg, s),
 					      lv_is_vdo_pool(seg_lv(seg, s)) ? 1 : 0))
 				return_0;
