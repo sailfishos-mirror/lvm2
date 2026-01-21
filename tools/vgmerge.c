@@ -33,6 +33,22 @@ static struct volume_group *_vgmerge_vg_read(struct cmd_context *cmd,
 	return vg;
 }
 
+static int _vgs_are_compatible_for_merge(struct cmd_context *cmd,
+					 struct volume_group *vg_from,
+					 struct volume_group *vg_to)
+{
+	if (lvs_in_vg_activated(vg_from)) {
+		log_error("Logical volumes in \"%s\" must be inactive",
+			  vg_from->name);
+		return 0;
+	}
+
+	if (!vgs_are_compatible(cmd, vg_from, vg_to))
+		return_0;
+
+	return 1;
+}
+
 /* Select bigger pool metadata spare volume */
 static int _vgmerge_select_pool_metadata_spare(struct cmd_context *cmd,
 					       struct volume_group *vg_to,
@@ -50,7 +66,7 @@ static int _vgmerge_select_pool_metadata_spare(struct cmd_context *cmd,
 	vg_remove_pool_metadata_spare(svg);
 
 	/* Re-test lv name compatibility */
-	if (!vgs_are_compatible(cmd, vg_from, vg_to))
+	if (!_vgs_are_compatible_for_merge(cmd, vg_from, vg_to))
 		return_0;
 
 	return 1;
@@ -116,7 +132,13 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
 		return ECMD_FAILED;
 	}
 
-	if (!vgs_are_compatible(cmd, vg_from, vg_to))
+	if (lvs_in_vg_activated(vg_from)) {
+		log_error("Logical volumes in \"%s\" must be inactive",
+			  vg_from->name);
+		goto bad;
+	}
+
+	if (!_vgs_are_compatible_for_merge(cmd, vg_from, vg_to))
 		goto_bad;
 
 	/* FIXME List arg: vg_show_with_pv_and_lv(vg_to); */

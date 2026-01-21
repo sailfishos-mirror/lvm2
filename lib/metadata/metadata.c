@@ -1831,12 +1831,6 @@ int vgs_are_compatible(struct cmd_context *cmd __attribute__((unused)),
 	struct pv_list *pvl;
 	const char *name1, *name2;
 
-	if (lvs_in_vg_activated(vg_from)) {
-		log_error("Logical volumes in \"%s\" must be inactive",
-			  vg_from->name);
-		return 0;
-	}
-
 	/* Check compatibility */
 	if (vg_to->extent_size != vg_from->extent_size) {
 		log_error("Extent sizes differ: %d (%s) and %d (%s)",
