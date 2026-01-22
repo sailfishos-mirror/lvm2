@@ -93,13 +93,22 @@ not vgsplit --alloc cling $vg1 $vg2 "$dev1" 2>err;
 grep "Volume group \"$vg2\" exists, but new VG option specified" err
 vgremove $vg1 $vg2
 
-# vgsplit rejects vg with active lv
+# vgsplit rejects vg with active lv if it is allocated on a PV being split
 pvcreate -M$mdatype -ff "$dev3" "$dev4"
 vgcreate -M$mdatype $vg1 "$dev1" "$dev2"
 vgcreate -M$mdatype $vg2 "$dev3" "$dev4"
-lvcreate -l 4 -n $lv1 $vg1
+lvcreate -l 4 -n $lv1 $vg1 "$dev1"
 not vgsplit $vg1 $vg2 "$dev1" 2>err;
-grep "Logical volumes in \"$vg1\" must be inactive\$" err
+grep "Logical volume $vg1/$lv1 must be inactive" err
+vgremove -f $vg1 $vg2
+
+# vgsplit accepts vg with active lv if it is not allocated on a PV being split
+pvcreate -M$mdatype -ff "$dev3" "$dev4"
+vgcreate -M$mdatype $vg1 "$dev1" "$dev2"
+vgcreate -M$mdatype $vg2 "$dev3" "$dev4"
+lvcreate -l 4 -n $lv1 $vg1 "$dev2"
+vgsplit $vg1 $vg2 "$dev1" 1>err;
+grep "Existing volume group \"$vg2\" successfully split from \"$vg1\"" err
 vgremove -f $vg1 $vg2
 
 # vgsplit rejects split because max_lv is exceeded
