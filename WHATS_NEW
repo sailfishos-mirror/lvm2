@@ -1,5 +1,6 @@
 Version 2.03.39 - 
 ==================
+  Fix vgsplit to not fail on no active LV on a PV being split to an existing VG.
 
 Version 2.03.38 - 15th December 2025
 ====================================
