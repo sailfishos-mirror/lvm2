@@ -375,13 +375,21 @@ which are set in /etc/lvm/lvmlocal.conf:
 .P
 local/pr_key
 
-The value set in pr_key will be used directly.  It is a hex string up to
-16 characters long.  pr_key will not be used for sanlock shared VGs.
+The local persistent reservation key in hexadecimal.
+The max length is 16 hex characters (8 bytes), plus an optional
+0x prefix. The pr_key setting is used for local VGs.
+Shared VGs use PR keys that are based on the host_id, and ignore
+this pr_key setting.
 
 local/host_id
 
-For a sanlock shared VG, or if no pr_key is set, a key will be created
-using the host_id.  This is a decimal integer between 1 and 2000.
+A unique host identifier, used for sanlock shared VGs, and for
+persistent reservation keys. Accepted values are 1-2000, except
+when sanlock_align_size is configured to 1, 2 or 4, which correspond
+to max host_id values of 250, 500, or 1000.
+PR keys for sanlock VGs are a combination of the host_id and the
+sanlock generation number. Local VGs will use the host_id as a PR
+key only when local/pr_key is not set.
 
 For a local VG, or a dlm shared VG, a key using host_id has the form:
 

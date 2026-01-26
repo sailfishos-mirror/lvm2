@@ -2296,9 +2296,11 @@ cfg(local_system_id_CFG, "system_id", local_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_D
 
 cfg(local_pr_key_CFG, "pr_key", local_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, 0, vsn(2, 3, 32), NULL, 0, NULL,
 	"The local persistent reservation key in hexadecimal.\n"
-	"The value must be unique among all hosts using the same VG.\n"
 	"The max length is 16 hex characters (8 bytes), plus an optional\n"
-	"0x prefix. If pr_key is not set, host_id will be used to create a key.\n")
+	"0x prefix. The value must be unique among all the hosts using the\n"
+	"same shared devices. The pr_key setting is used for local VGs.\n"
+	"Shared VGs use PR keys that are based on the host_id, and ignore\n"
+	"this pr_key setting.\n")
 
 cfg_array(local_extra_system_ids_CFG, "extra_system_ids", local_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 2, 117), NULL, 0, NULL,
 	"A list of extra VG system IDs the local host can access.\n"
@@ -2310,11 +2312,13 @@ cfg_array(local_extra_system_ids_CFG, "extra_system_ids", local_CFG_SECTION, CFG
 	"correct usage and possible dangers.\n")
 
 cfg(local_host_id_CFG, "host_id", local_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(2, 2, 124), NULL, 0, NULL,
-	"The sanlock host_id used by lvmlockd. This must be unique among all the hosts\n"
-	"using shared VGs with sanlock. Accepted values are 1-2000, except when sanlock_align_size\n"
-	"is configured to 1, 2 or 4, which correspond to max host_id values of 250, 500, or 1000.\n"
-	"When using persistent reservations, lvm will generate a PR key from the host_id\n"
-	"if pr_key is not defined. All hosts using a sanlock shared VG with PR must use\n"
-	"the same approach for configuring their PR key (pr_key or host_id.)\n")
+	"A unique host identifier, used for sanlock shared VGs, and for\n"
+	"persistent reservation keys. Accepted values are 1-2000, except\n"
+	"when sanlock_align_size is configured to 1, 2 or 4, which correspond\n"
+	"to max host_id values of 250, 500, or 1000. The value must be unique\n"
+	"among all the hosts using the same shared devices.\n"
+	"PR keys for sanlock VGs are a combination of the host_id and the\n"
+	"sanlock generation number. Local VGs will use the host_id as a PR\n"
+	"key only when pr_key is not set (see above).\n")
 
 cfg(CFG_COUNT, NULL, root_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, 0, vsn(0, 0, 0), NULL, 0, NULL, NULL)

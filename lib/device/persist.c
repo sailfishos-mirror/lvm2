@@ -1401,6 +1401,11 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	int pv_res_other = 0;
 	int prtype;
 
+	if (vg_is_sanlock(vg) && !local_host_id) {
+		log_error("No host_id configured.");
+		return 0;
+	}
+
 	if (vg_is_sanlock(vg))
 		local_key = NULL;
 
@@ -2483,6 +2488,11 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 		if (!parse_prkey(our_key_buf, &our_key_val))
 			return_0;
 		goto key_done;
+	}
+
+	if (vg_is_sanlock(vg) && !local_host_id) {
+		log_error("No host_id configured.");
+		return 0;
 	}
 
 	if (vg_is_sanlock(vg))
