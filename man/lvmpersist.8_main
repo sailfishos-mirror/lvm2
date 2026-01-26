@@ -100,20 +100,20 @@ Local Settings below.)
 .SH USAGE
 The basic command set and options for managing PR:
 .P
-Device-level PR utility:
+Device-level PR utility (change device PR state):
 .br
 .B lvmpersist
 .BR start | stop | remove | clear | read
 .RI [ OPTIONS ]
 .I DEST
 .P
-VG PR configuration:
+VG PR configuration (change VG metadata):
 .br
 .B vgchange --setpersist
 .BR y | n
 .I VG
 .P
-VG PR operations:
+VG PR operations (change device PR state):
 .br
 .B vgchange --persist
 .BR start | stop | remove | clear | read | check
@@ -347,8 +347,17 @@ remkey VG, where "remkey" is the PR key of the currently started host.
 .P
 .SS Shared VG usage
 .P
-When using a shared VG, all hosts using the VG are started, and a WEAR
-(Write Exclusive - all registrants) reservation is held on the devices.
+For a shared VG, the VG metadata is configured by one host using the
+vgchange --setpersist command, which writes the desired PR configuration
+to the VG metadata.  The vgchange --setpersist command requires VG locking
+to be started.
+All hosts use the vgchange --persist commands to start/stop/check the state
+of their own PR on disk.  These are not VG metadata operations, but send 
+PR commands to change PR state on disk (typically via lvmpersist.)
+.P
+When using a shared VG, all hosts using the VG will perform a start
+command, and a WEAR
+(Write Exclusive - all registrants) reservation will be held on the devices.
 .P
 PR should be started before locking is started (vgchange --persist start
 followed by vgchange --lockstart, or a combined vgchange --persist start
