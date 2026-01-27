@@ -7239,10 +7239,17 @@ int lv_raid_replace(struct logical_volume *lv,
 	return _lv_raid_rebuild_or_replace(lv, force, remove_pvs, allocate_pvs, 0);
 }
 
+/*
+ * Return values:
+ *   0: error
+ *   1: no changes were made (no partial RAID sublvs found)
+ *   2: changes were made (partial sublvs replaced with error target)
+ */
 int lv_raid_remove_missing(struct logical_volume *lv)
 {
 	uint32_t s;
 	struct lv_segment *seg = first_seg(lv);
+	int changes = 0;
 
 	if (!lv_is_partial(lv)) {
 		log_error(INTERNAL_ERROR "%s is not a partial LV.",
@@ -7316,9 +7323,12 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 
 		log_debug("Found %d partial integrity images to remove from %s", remove_count, lv->name);
 
-		if (remove_count && !lv_remove_integrity_from_raid(lv, &remove_images)) {
-			log_error("Failed to remove integrity from partial raid LV %s.", display_lvname(lv));
-			return 0;
+		if (remove_count) {
+			if (!lv_remove_integrity_from_raid(lv, &remove_images)) {
+				log_error("Failed to remove integrity from partial raid LV %s.", display_lvname(lv));
+				return 0;
+			}
+			changes = 1;
 		}
 	}
 
@@ -7346,12 +7356,16 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 				  display_lvname(seg_metalv(seg, s)));
 			return 0;
 		}
+		changes = 1;
 	}
+
+	if (!changes)
+		return 1;
 
 	if (!lv_update_and_reload(lv))
 		return_0;
 
-	return 1;
+	return 2;
 }
 
 /*
