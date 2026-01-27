@@ -86,6 +86,7 @@ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
 {
 	struct lv_list *lvl;
 	struct logical_volume *lv;
+	int r;
 
 	cmd->partial_activation = 1;
 
@@ -98,15 +99,31 @@ static int _make_vg_consistent(struct cmd_context *cmd, struct volume_group *vg)
 		/* Are any segments of this LV on missing PVs? */
 		if (lv_is_partial(lv)) {
 			if (seg_is_raid(first_seg(lv))) {
-				if (!lv_raid_remove_missing(lv))
+				if (!(r = lv_raid_remove_missing(lv)))
 					return_0;
-				goto restart;
+				if (r > 1)
+					goto restart;
+				/*
+				 * No RAID sublvs are partial, so RAID LV itself
+				 * is partial for another reason, like the RAID being
+				 * dependent on another type that is also marked as partial
+				 * (e.g. a RAID LV that is also a snapshot origin).
+				 * Fall through to handle that case.
+				 */
 			}
 
 			if (lv_is_mirror(lv)) {
-				if (!mirror_remove_missing(cmd, lv, 1))
+				if (!(r = mirror_remove_missing(cmd, lv, 1)))
 					return_0;
-				goto restart;
+				if (r > 1)
+					goto restart;
+				/*
+				 * No mirror images are missing, so mirror LV itself
+				 * is partial for another reason, like the mirror being
+				 * dependent on another type that is also marked as partial
+				 * (e.g. a mirror LV that is also a snapshot origin).
+				 * Fall through to handle that case.
+				 */
 			}
 
 			if (arg_is_set(cmd, mirrorsonly_ARG) && !lv_is_mirrored(lv)) {
