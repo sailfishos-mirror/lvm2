@@ -37,6 +37,9 @@ SOURCES =\
 	regex/matcher.c \
 	regex/parse_rx.c \
 	regex/ttree.c \
+	vdo/vdo_target.c \
+	vdo/vdo_reader.c \
+	vdo/vdo_status.c \
 	$(interface)/libdm-iface.c
 
 INCLUDES = -I$(srcdir)/$(interface)

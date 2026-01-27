@@ -38,6 +38,7 @@ enum {
 	SEG_WRITECACHE,
 	SEG_THIN_POOL,
 	SEG_THIN,
+	SEG_VDO,
 	SEG_RAID0,
 	SEG_RAID0_META,
 	SEG_RAID1,
@@ -77,6 +78,7 @@ static const struct {
 	{ SEG_WRITECACHE, "writecache"},
 	{ SEG_THIN_POOL, "thin-pool"},
 	{ SEG_THIN, "thin"},
+	{ SEG_VDO, "vdo" },
 	{ SEG_RAID0, "raid0"},
 	{ SEG_RAID0_META, "raid0_meta"},
 	{ SEG_RAID1, "raid1"},
@@ -207,10 +209,18 @@ struct load_segment {
 	unsigned read_only;		/* Thin pool target vsn 1.3 */
 	uint32_t device_id;		/* Thin */
 
+	// VDO params
+	uint32_t vdo_version;		/* VDO - version of target table line */
+	struct dm_tree_node *vdo_data;  /* VDO */
+	struct dm_vdo_target_params vdo_params; /* VDO */
+	const char *vdo_name;           /* VDO - device name is ALSO passed as table arg */
+	uint64_t vdo_data_size;		/* VDO - size of data storage device */
+
 	struct dm_tree_node *writecache_node;		/* writecache */
 	int writecache_pmem;				/* writecache, 1 if pmem, 0 if ssd */
 	uint32_t writecache_block_size;			/* writecache, in bytes */
 	struct writecache_settings writecache_settings;	/* writecache */
+
 };
 
 /* Per-device properties */
@@ -1399,6 +1409,31 @@ out:
 	return r;
 }
 
+static struct dm_task *_dm_task_create_device_status(uint32_t major, uint32_t minor)
+{
+	struct dm_task *dmt;
+
+	if (!(dmt = dm_task_create(DM_DEVICE_STATUS)))
+		return_NULL;
+
+	if (!dm_task_set_major(dmt, major) || !dm_task_set_minor(dmt, minor)) {
+		log_error("Failed to set major minor.");
+		goto out;
+	}
+
+	if (!dm_task_no_flush(dmt))
+		log_warn("WARNING: Can't set no_flush flag."); /* Non fatal */
+
+	if (!dm_task_run(dmt))
+		goto_out;
+
+	return dmt;
+out:
+	dm_task_destroy(dmt);
+
+	return NULL;
+}
+
 static int _thin_pool_get_status(struct dm_tree_node *dnode,
 				 struct dm_status_thin_pool *s)
 {
@@ -1437,6 +1472,39 @@ static int _thin_pool_get_status(struct dm_tree_node *dnode,
 	log_debug_activation("Found transaction id %" PRIu64 " for thin pool %s "
 			     "with status line: %s.",
 			     s->transaction_id, _node_name(dnode), params);
+
+	r = 1;
+out:
+	dm_task_destroy(dmt);
+
+	return r;
+}
+
+static int _vdo_get_status(struct dm_tree_node *dnode,
+			   struct dm_vdo_status_parse_result *s)
+{
+	struct dm_task *dmt;
+	int r = 0;
+	uint64_t start, length;
+	char *type = NULL;
+	char *params = NULL;
+
+	if (!(dmt = _dm_task_create_device_status(dnode->info.major,
+						  dnode->info.minor)))
+		return_0;
+
+	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
+
+	if (!type || (strcmp(type, "vdo") != 0)) {
+		log_error("Expected vdo target for %s and got %s.",
+			  _node_name(dnode), type ? : "no target");
+		goto out;
+	}
+
+	log_debug("Parsing VDO status: %s", params);
+
+	if (!dm_vdo_status_parse(NULL, params, s))
+		goto_out;
 
 	r = 1;
 out:
@@ -1565,34 +1633,14 @@ static struct load_segment *_get_last_load_segment(struct dm_tree_node *node)
 	return dm_list_item(dm_list_last(&node->props.segs), struct load_segment);
 }
 
-/* For preload pass only validate pool's transaction_id */
-static int _node_send_messages(struct dm_tree_node *dnode,
-			       const char *uuid_prefix,
-			       size_t uuid_prefix_len,
-			       int send)
+
+static int _thin_pool_node_send_messages(struct dm_tree_node *dnode,
+					 struct load_segment *seg,
+					 int send)
 {
-	struct load_segment *seg;
 	struct thin_message *tmsg;
 	struct dm_status_thin_pool stp;
-	const char *uuid;
 	int have_messages;
-
-	if (!dnode->info.exists)
-		return 1;
-
-	if (!(seg = _get_last_load_segment(dnode)))
-		return_0;
-
-	if (seg->type != SEG_THIN_POOL)
-		return 1;
-
-	if (!(uuid = dm_tree_node_get_uuid(dnode)))
-		return_0;
-
-	if (!_uuid_prefix_matches(uuid, uuid_prefix, uuid_prefix_len)) {
-		log_debug_activation("UUID \"%s\" does not match.", uuid);
-		return 1;
-	}
 
 	if (!_thin_pool_get_status(dnode, &stp))
 		return_0;
@@ -1646,6 +1694,86 @@ static int _node_send_messages(struct dm_tree_node *dnode,
 
 	return 1;
 }
+
+static int _vdo_node_send_messages(struct dm_tree_node *dnode,
+				   struct load_segment *seg,
+				   int send)
+{
+	struct dm_vdo_status_parse_result vdo_status;
+	int send_compression_message = 0;
+	int send_deduplication_message = 0;
+	int r = 0;
+
+	if (!_vdo_get_status(dnode, &vdo_status))
+		return_0;
+
+	if (seg->vdo_params.use_compression) {
+		if (vdo_status.status->compression_state == DM_VDO_COMPRESSION_OFFLINE)
+			send_compression_message = 1;
+	} else if (vdo_status.status->compression_state != DM_VDO_COMPRESSION_OFFLINE)
+		send_compression_message = 1;
+
+	if (seg->vdo_params.use_deduplication) {
+		if (vdo_status.status->index_state == DM_VDO_INDEX_OFFLINE)
+			send_deduplication_message = 1;
+	} else if (vdo_status.status->index_state != DM_VDO_INDEX_OFFLINE)
+		send_deduplication_message = 1;
+
+	log_debug("VDO needs message for compression %u(%u) and deduplication %u(%u).",
+		  send_compression_message, vdo_status.status->index_state,
+		  send_deduplication_message, vdo_status.status->compression_state);
+
+	if (send_compression_message &&
+	    !_node_message(dnode->info.major, dnode->info.minor, 0,
+			   seg->vdo_params.use_compression ?
+			   "compression on" : "compression off"))
+		goto_out;
+
+	if (send_deduplication_message &&
+	    !_node_message(dnode->info.major, dnode->info.minor, 0,
+			   seg->vdo_params.use_deduplication ?
+			   "index-enable" : "index-disable"))
+		goto_out;
+
+	r = 1;
+out:
+	free(vdo_status.status->device);
+	free(vdo_status.status);
+
+	return r;
+}
+
+
+static int _node_send_messages(struct dm_tree_node *dnode,
+			       const char *uuid_prefix,
+			       size_t uuid_prefix_len,
+			       int send)
+{
+	struct load_segment *seg;
+	const char *uuid;
+
+	if (!dnode->info.exists || !dnode->info.live_table)
+		return 1;
+
+	if (!(uuid = dm_tree_node_get_uuid(dnode)))
+		return_0;
+
+	if (!_uuid_prefix_matches(uuid, uuid_prefix, uuid_prefix_len)) {
+		log_debug_activation("UUID \"%s\" does not match.", uuid);
+		return 1;
+	}
+
+	if (!(seg = _get_last_load_segment(dnode)))
+		return_0;
+
+	switch (seg->type) {
+	case SEG_THIN_POOL: return _thin_pool_node_send_messages(dnode, seg, send);
+	case SEG_VDO:	    return _vdo_node_send_messages(dnode, seg, send);
+	}
+
+	return 1;
+}
+
 
 /*
  * FIXME Don't attempt to deactivate known internal dependencies.
@@ -2694,6 +2822,92 @@ static int _writecache_emit_segment_line(struct dm_task *dmt,
 	return 1;
 }
 
+static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t minor,
+				  struct load_segment *seg,
+				  char *params, size_t paramsize)
+{
+	int pos = 0;
+	char data[DM_FORMAT_DEV_BUFSIZE];
+	char data_dev[128]; // for /dev/dm-XXXX
+	uint64_t logical_blocks;
+	struct dm_task *vdo_dmt;
+	uint64_t start, length = 0;
+	char *type = NULL;
+	char *vdo_params = NULL;
+
+	if (!_build_dev_string(data, sizeof(data), seg->vdo_data))
+		return_0;
+	/* Unlike normal targets, current VDO requires device path */
+	if (dm_snprintf(data_dev, sizeof(data_dev), "/dev/dm-%u", seg->vdo_data->info.minor) < 0) {
+		log_error("Can create VDO data volume path for %s.", data);
+		return 0;
+	}
+
+	/*
+	 * If there is already running VDO target, read 'existing' virtual size out of table line
+	 * and avoid reading it them from VDO metadata device
+	 *
+	 * NOTE: ATM VDO virtual size can be ONLY extended thus it's simple to recognize 'right' size.
+	 * However if there would be supported also reduction, this check would need to check range.
+	 */
+	if ((vdo_dmt = dm_task_create(DM_DEVICE_TABLE))) {
+		if (dm_task_set_major(vdo_dmt, major) &&
+		    dm_task_set_minor(vdo_dmt, minor) &&
+		    dm_task_run(vdo_dmt)) {
+			(void) dm_get_next_target(vdo_dmt, NULL, &start, &length, &type, &vdo_params);
+			if (!type || strcmp(type, "vdo"))
+				length = 0;
+		}
+
+		dm_task_destroy(vdo_dmt);
+	}
+
+	if (!length && dm_vdo_parse_logical_size(data_dev, &logical_blocks))
+		length = logical_blocks * 8;
+
+	if (seg->size < length) {
+		log_debug_activation("Correcting VDO virtual volume size from " FMTu64  " to " FMTu64 ".",
+				     seg->size, length);
+		seg->size = length;
+	}
+
+	if (seg->vdo_version < 4) {
+		EMIT_PARAMS(pos, "V2 %s " FMTu64 " %u " FMTu64 " %u %s %s %s ",
+			    data_dev,
+			    seg->vdo_data_size / 8, // this parameter is in 4K units
+			    seg->vdo_params.minimum_io_size * UINT32_C(512), //  sector to byte units
+			    seg->vdo_params.block_map_cache_size_mb * UINT64_C(256),	// 1MiB -> 4KiB units
+			    seg->vdo_params.block_map_era_length,
+			    seg->vdo_params.use_metadata_hints ? "on" : "off" ,
+			    (seg->vdo_params.write_policy == DM_VDO_WRITE_POLICY_SYNC) ? "sync" :
+			    (seg->vdo_params.write_policy == DM_VDO_WRITE_POLICY_ASYNC) ? "async" :
+			    (seg->vdo_params.write_policy == DM_VDO_WRITE_POLICY_ASYNC_UNSAFE) ? "async-unsafe" : "auto", // policy
+			    seg->vdo_name);
+	} else {
+		EMIT_PARAMS(pos, "V4 %s " FMTu64 " %u " FMTu64 " %u "
+			    "deduplication %s compression %s ",
+			    data_dev,
+			    seg->vdo_data_size / 8, // this parameter is in 4K units
+			    seg->vdo_params.minimum_io_size * UINT32_C(512), //  sector to byte units
+			    seg->vdo_params.block_map_cache_size_mb * UINT64_C(256),	// 1MiB -> 4KiB units
+			    seg->vdo_params.block_map_era_length,
+			    seg->vdo_params.use_deduplication ? "on" : "off",
+			    seg->vdo_params.use_compression ? "on" : "off");
+	}
+
+	EMIT_PARAMS(pos, "maxDiscard %u ack %u bio %u bioRotationInterval %u cpu %u hash %u logical %u physical %u",
+		    seg->vdo_params.max_discard,
+		    seg->vdo_params.ack_threads,
+		    seg->vdo_params.bio_threads,
+		    seg->vdo_params.bio_rotation,
+		    seg->vdo_params.cpu_threads,
+		    seg->vdo_params.hash_zone_threads,
+		    seg->vdo_params.logical_threads,
+		    seg->vdo_params.physical_threads);
+
+	return 1;
+}
+
 static int _thin_pool_emit_segment_line(struct dm_task *dmt,
 					struct load_segment *seg,
 					char *params, size_t paramsize)
@@ -2784,6 +2998,10 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 		break;
 	case SEG_STRIPED:
 		EMIT_PARAMS(pos, "%u %u ", seg->area_count, seg->stripe_size);
+		break;
+	case SEG_VDO:
+		if (!_vdo_emit_segment_line(dmt, major, minor, seg, params, paramsize))
+		      return_0;
 		break;
 	case SEG_CRYPT:
 		EMIT_PARAMS(pos, "%s%s%s%s%s %s %" PRIu64 " ", seg->cipher,
@@ -4192,6 +4410,41 @@ void dm_tree_node_set_callback(struct dm_tree_node *dnode,
 {
 	dnode->callback = cb;
 	dnode->callback_data = data;
+}
+
+int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
+				uint64_t size,
+				uint32_t vdo_version,
+				const char *vdo_pool_name,
+				const char *data_uuid,
+				uint64_t data_size,
+				const struct dm_vdo_target_params *vtp)
+{
+	struct load_segment *seg;
+
+	if (!(seg = _add_segment(node, SEG_VDO, size)))
+		return_0;
+
+	if (!(seg->vdo_data = dm_tree_find_node_by_uuid(node->dtree, data_uuid))) {
+		log_error("Missing VDO's data uuid %s.", data_uuid);
+		return 0;
+	}
+
+	if (!dm_vdo_validate_target_params(vtp, size))
+		return_0;
+
+	if (!_link_tree_nodes(node, seg->vdo_data))
+		return_0;
+
+	seg->vdo_version = vdo_version;
+	seg->vdo_params = *vtp;
+	seg->vdo_name = vdo_pool_name;
+	seg->vdo_data_size = data_size;
+
+	if (seg->vdo_version < 4)
+		node->props.send_messages = 2;
+
+	return 1;
 }
 
 #if defined(GNU_SYMVER)

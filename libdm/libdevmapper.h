@@ -2008,6 +2008,149 @@ int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
 				struct writecache_settings *settings);
 
 /*
+ * VDO target support
+ */
+
+#ifndef SECTOR_SHIFT
+#define SECTOR_SHIFT 9L
+#endif
+
+#define DM_VDO_BLOCK_SIZE			UINT64_C(8)		// 4KiB in sectors
+#define DM_VDO_BLOCK_SIZE_KB			(DM_VDO_BLOCK_SIZE << SECTOR_SHIFT)
+
+#define DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_MB	(128)			// 128MiB
+#define DM_VDO_BLOCK_MAP_CACHE_SIZE_MAXIMUM_MB	(16 * 1024 * 1024 - 1)	// 16TiB - 1
+#define DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_PER_LOGICAL_THREAD  (4096 * DM_VDO_BLOCK_SIZE_KB)
+
+#define DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM	1
+#define DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM	16380
+
+#define DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB	256			// 0.25 GiB
+#define DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB	(1024 * 1024 * 1024)	// 1TiB
+
+#define DM_VDO_SLAB_SIZE_MINIMUM_MB		128			// 128MiB
+#define DM_VDO_SLAB_SIZE_MAXIMUM_MB		(32 * 1024)		// 32GiB
+#define DM_VDO_SLABS_MAXIMUM			8192
+
+#define DM_VDO_LOGICAL_SIZE_MAXIMUM	(UINT64_C(4) * 1024 * 1024 * 1024 * 1024 * 1024 >> SECTOR_SHIFT) // 4PiB
+#define DM_VDO_PHYSICAL_SIZE_MAXIMUM	(UINT64_C(64) * DM_VDO_BLOCK_SIZE_KB * 1024 * 1024 * 1024 >> SECTOR_SHIFT) // 256TiB
+
+#define DM_VDO_ACK_THREADS_MINIMUM		0
+#define DM_VDO_ACK_THREADS_MAXIMUM		100
+
+#define DM_VDO_BIO_THREADS_MINIMUM		1
+#define DM_VDO_BIO_THREADS_MAXIMUM		100
+
+#define DM_VDO_BIO_ROTATION_MINIMUM		1
+#define DM_VDO_BIO_ROTATION_MAXIMUM		1024
+
+#define DM_VDO_CPU_THREADS_MINIMUM		1
+#define DM_VDO_CPU_THREADS_MAXIMUM		100
+
+#define DM_VDO_HASH_ZONE_THREADS_MINIMUM	0
+#define DM_VDO_HASH_ZONE_THREADS_MAXIMUM	100
+
+#define DM_VDO_LOGICAL_THREADS_MINIMUM		0
+#define DM_VDO_LOGICAL_THREADS_MAXIMUM		60
+
+#define DM_VDO_PHYSICAL_THREADS_MINIMUM		0
+#define DM_VDO_PHYSICAL_THREADS_MAXIMUM		16
+
+#define DM_VDO_MAX_DISCARD_MINIMUM		1
+#define DM_VDO_MAX_DISCARD_MAXIMUM		(UINT32_MAX / (uint32_t)(DM_VDO_BLOCK_SIZE_KB))
+
+enum dm_vdo_operating_mode {
+	DM_VDO_MODE_RECOVERING,
+	DM_VDO_MODE_READ_ONLY,
+	DM_VDO_MODE_NORMAL
+};
+
+enum dm_vdo_compression_state {
+	DM_VDO_COMPRESSION_ONLINE,
+	DM_VDO_COMPRESSION_OFFLINE
+};
+
+enum dm_vdo_index_state {
+	DM_VDO_INDEX_ERROR,
+	DM_VDO_INDEX_CLOSED,
+	DM_VDO_INDEX_OPENING,
+	DM_VDO_INDEX_CLOSING,
+	DM_VDO_INDEX_OFFLINE,
+	DM_VDO_INDEX_ONLINE,
+	DM_VDO_INDEX_UNKNOWN
+};
+
+struct dm_vdo_status {
+	char *device;
+	enum dm_vdo_operating_mode operating_mode;
+	int recovering;
+	enum dm_vdo_index_state index_state;
+	enum dm_vdo_compression_state compression_state;
+	uint64_t used_blocks;
+	uint64_t total_blocks;
+};
+
+#define VDO_MAX_ERROR 256
+
+struct dm_vdo_status_parse_result {
+	char error[VDO_MAX_ERROR];
+	struct dm_vdo_status *status;
+};
+
+enum dm_vdo_write_policy {
+	DM_VDO_WRITE_POLICY_AUTO = 0,
+	DM_VDO_WRITE_POLICY_SYNC,
+	DM_VDO_WRITE_POLICY_ASYNC,
+	DM_VDO_WRITE_POLICY_ASYNC_UNSAFE
+};
+
+struct dm_vdo_target_params {
+	uint32_t minimum_io_size;       // in sectors
+	uint32_t block_map_cache_size_mb;
+	union {
+		uint32_t block_map_era_length;	// format period
+		uint32_t block_map_period;      // supported alias
+	};
+	uint32_t index_memory_size_mb;  // format
+
+	uint32_t slab_size_mb;          // format
+
+	uint32_t max_discard;
+	// threads
+	uint32_t ack_threads;
+	uint32_t bio_threads;
+	uint32_t bio_rotation;
+	uint32_t cpu_threads;
+	uint32_t hash_zone_threads;
+	uint32_t logical_threads;
+	uint32_t physical_threads;
+
+	int use_compression;
+	int use_deduplication;
+	int use_metadata_hints;
+	int use_sparse_index;          // format
+
+	// write policy
+	enum dm_vdo_write_policy write_policy;
+};
+
+int dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
+				  uint64_t vdo_size);
+
+int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
+				uint64_t size,
+				uint32_t vdo_version,
+				const char *vdo_pool_name,
+				const char *data_uuid,
+				uint64_t data_size,
+				const struct dm_vdo_target_params *vtp);
+
+int dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks);
+
+int dm_vdo_status_parse(struct dm_pool *mem, const char *input,
+			struct dm_vdo_status_parse_result *result);
+
+/*
  * FIXME Add individual cache policy pairs  <key> = value, like:
  * int dm_tree_node_add_cache_policy_arg(struct dm_tree_node *dnode,
  *				      const char *key, uint64_t value);
