@@ -7257,9 +7257,6 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 		return 0;
 	}
 
-	if (!archive(lv->vg))
-		return_0;
-
 	log_debug("Attempting to remove missing devices from %s LV, %s.",
 		  lvseg_name(seg), display_lvname(lv));
 
@@ -7324,6 +7321,8 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 		log_debug("Found %d partial integrity images to remove from %s", remove_count, lv->name);
 
 		if (remove_count) {
+			if (!changes && !archive(lv->vg))
+				return_0;
 			if (!lv_remove_integrity_from_raid(lv, &remove_images)) {
 				log_error("Failed to remove integrity from partial raid LV %s.", display_lvname(lv));
 				return 0;
@@ -7340,6 +7339,9 @@ int lv_raid_remove_missing(struct logical_volume *lv)
 		if ((seg_lv(seg, s) && !lv_is_partial(seg_lv(seg, s))) &&
 		    (!seg->meta_areas || !seg_metalv(seg, s) || !lv_is_partial(seg_metalv(seg, s))))
 			continue;
+
+		if (!changes && !archive(lv->vg))
+			return_0;
 
 		log_debug("Replacing %s segments with error target.",
 			  display_lvname(seg_lv(seg, s)));
