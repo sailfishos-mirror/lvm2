@@ -132,12 +132,6 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
 		return ECMD_FAILED;
 	}
 
-	if (lvs_in_vg_activated(vg_from)) {
-		log_error("Logical volumes in \"%s\" must be inactive",
-			  vg_from->name);
-		goto bad;
-	}
-
 	if (!_vgs_are_compatible_for_merge(cmd, vg_from, vg_to))
 		goto_bad;
 
