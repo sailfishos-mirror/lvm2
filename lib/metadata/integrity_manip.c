@@ -532,8 +532,8 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
 	struct dm_list *use_pvh = NULL;
 	uint32_t area_count, s;
 	uint32_t revert_meta_lvs = 0;
-	int lbs_4k = 0, lbs_512 = 0, lbs_unknown = 0;
-	int pbs_4k = 0, pbs_512 = 0, pbs_unknown = 0;
+	int lbs_4k = 0, lbs_512 = 0;
+	int pbs_4k = 0, pbs_512 = 0;
 	int is_active;
 	int r;
 
@@ -608,23 +608,16 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
 			unsigned int pbs = 0;
 			unsigned int lbs = 0;
 
-			if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs)) {
-				lbs_unknown++;
-				pbs_unknown++;
+			if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs))
 				continue;
-			}
 			if (lbs == 4096)
 				lbs_4k++;
 			else if (lbs == 512)
 				lbs_512++;
-			else
-				lbs_unknown++;
 			if (pbs == 4096)
 				pbs_4k++;
 			else if (pbs == 512)
 				pbs_512++;
-			else
-				pbs_unknown++;
 		}
 
 		use_pvh = &allocatable_pvs;

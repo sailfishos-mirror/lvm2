@@ -6081,8 +6081,8 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
 	uint32_t fs_block_size = 0;
 	uint32_t block_size_setting = 0;
 	uint32_t block_size = 0;
-	int lbs_unknown = 0, lbs_4k = 0, lbs_512 = 0;
-	int pbs_unknown = 0, pbs_4k = 0, pbs_512 = 0;
+	int lbs_4k = 0, lbs_512 = 0;
+	int pbs_4k = 0;
 	int rv = 0;
 
 	/* This is set if the user specified a writecache block size on the command line. */
@@ -6100,25 +6100,16 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
 		unsigned int pbs = 0;
 		unsigned int lbs = 0;
 
-		if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs)) {
-			lbs_unknown++;
-			pbs_unknown++;
+		if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs))
 			continue;
-		}
 
 		if (lbs == 4096)
 			lbs_4k++;
 		else if (lbs == 512)
 			lbs_512++;
-		else
-			lbs_unknown++;
 
 		if (pbs == 4096)
 			pbs_4k++;
-		else if (pbs == 512)
-			pbs_512++;
-		else
-			pbs_unknown++;
 	}
 
 	if (lbs_4k && lbs_512) {
