@@ -2325,7 +2325,6 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 	int pv_count = 0;
 	int errors = 0;
 	int found = 0;
-	int y = 0;
 	int n = 0;
 
 	if (vg_is_sanlock(vg))
@@ -2450,9 +2449,7 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 			continue;
 		}
 
-		if (found)
-			y++;
-		else
+		if (!found)
 			n++;
 	}
 

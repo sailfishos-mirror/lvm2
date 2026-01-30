@@ -3028,7 +3028,6 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
 	char *dlid;
 	const char *name;
 	unsigned num_error_areas = 0;
-	unsigned num_existing_areas = 0;
 
 	for (s = start_area; s < areas; s++) {
 		if (((seg_type(seg, s) == AREA_PV) && _bad_pv_area(seg, s)) ||
@@ -3054,7 +3053,6 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
 			if (!dm_tree_node_add_target_area(node, name, NULL,
 				    (seg_pv(seg, s)->pe_start + (extent_size * seg_pe(seg, s)))))
 				return_0;
-			num_existing_areas++;
 		} else if (seg_is_raid(seg)) {
 			/*
 			 * RAID can handle unassigned areas.  It simple puts

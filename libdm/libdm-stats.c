@@ -1864,7 +1864,6 @@ static size_t _stats_group_tag_len(const struct dm_stats *dms,
 				   dm_bitset_t regions)
 {
 	int i, j, next;
-	int64_t nr_regions = 0;
 	size_t buflen = 0, id_len = 0;
 
 	/* check region ids and find last set bit */
@@ -1881,8 +1880,6 @@ static size_t _stats_group_tag_len(const struct dm_stats *dms,
 
 		/* set to last set bit */
 		j = next - 1;
-
-		nr_regions += j - i + 1;
 
 		/* handle range */
 		if (i != j) {

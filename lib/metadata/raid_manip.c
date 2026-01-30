@@ -766,7 +766,6 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 	unsigned dc, idx1, idx1_sav, idx2, s, ss, str, xchg;
 	uint32_t data_copies = seg->data_copies;
 	uint32_t *idx, stripes = seg->area_count;
-	unsigned i = 0;
 
 	if (!stripes) {
 		log_error(INTERNAL_ERROR "stripes may not be 0.");
@@ -891,7 +890,6 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 				idx[idx[s]] = idx[s];
 				idx[s] = ss;
 			}
-		i++;
 	} while (xchg);
 
 	return 1;
