@@ -14,12 +14,6 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-#
-# Snapshots of 'mirrors' are not supported.  They can no longer be created.
-# This file could be used to test some aspect of vgreduce, snapshot, and
-# RAID at some point though...
-#
-
 aux prepare_vg 5
 
 lvcreate --type mirror -m 3 -L 2M -n 4way $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5":0
@@ -35,4 +29,31 @@ lvs -a -o +devices $vg | not grep unknown
 lvs -a -o +devices $vg
 check mirror $vg 4way "$dev5"
 
+vgremove -ff $vg
+
+# snaphost of mirror
+vgcreate $vg "$dev1" "$dev2" "$dev3"
+lvcreate --type mirror -m 1 -L 2M -n mirror_lv $vg
+lvcreate -s $vg/mirror_lv -L 2m -n snap
+aux disable_dev "$dev1"
+vgreduce --removemissing --force $vg
+lvs -a -o +devices $vg | not grep unknown
+# both mirror_lv and snap should be removed
+not lvs $vg/mirror_lv
+not lvs $vg/snap
+aux enable_dev "$dev1"
+vgck --updatemetadata "$vg"
+vgremove -ff $vg
+
+# snapshot of raid
+vgcreate $vg "$dev1" "$dev2" "$dev3"
+lvcreate --type raid1 -m 1 -L 2M -n raid_lv $vg
+lvcreate -s $vg/raid_lv -L 2m -n snap
+aux disable_dev "$dev1"
+vgreduce --removemissing --force $vg
+lvs -a -o +devices $vg | not grep unknown
+# both raid_lv and snap should be removed
+not lvs $vg/raid_lv
+not lvs $vg/snap
+aux enable_dev "$dev1"
 vgremove -ff $vg
