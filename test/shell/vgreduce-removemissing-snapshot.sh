@@ -45,6 +45,7 @@ aux enable_dev "$dev1"
 vgck --updatemetadata "$vg"
 vgremove -ff $vg
 
+if aux have_raid 1 0 0; then
 # snapshot of raid
 vgcreate $vg "$dev1" "$dev2" "$dev3"
 lvcreate --type raid1 -m 1 -L 2M -n raid_lv $vg
@@ -57,3 +58,4 @@ not lvs $vg/raid_lv
 not lvs $vg/snap
 aux enable_dev "$dev1"
 vgremove -ff $vg
+fi
