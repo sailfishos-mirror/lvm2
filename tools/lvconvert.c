@@ -579,6 +579,12 @@ static uint32_t _get_log_count(struct logical_volume *lv)
 	return 0;
 }
 
+/*
+ * Return values:
+ *   0: error
+ *   1: no changes were made
+ *   2: changes were made
+ */
 static int _lv_update_mirrored_log(struct logical_volume *lv,
 				   struct dm_list *operable_pvs,
 				   int log_count)
@@ -602,11 +608,20 @@ static int _lv_update_mirrored_log(struct logical_volume *lv,
 		return 1;
 
 	/* Reducing redundancy of the log */
-	return remove_mirror_images(log_lv, log_count,
-				    is_mirror_image_removable,
-				    operable_pvs, 0U);
+	if (!remove_mirror_images(log_lv, log_count,
+				  is_mirror_image_removable,
+				  operable_pvs, 0U))
+		return 0;
+
+	return 2;
 }
 
+/*
+ * Return values:
+ *   0: error
+ *   1: no changes were made
+ *   2: changes were made
+ */
 static int _lv_update_log_type(struct cmd_context *cmd,
 			       struct lvconvert_params *lp,
 			       struct logical_volume *lv,
@@ -631,7 +646,7 @@ static int _lv_update_log_type(struct cmd_context *cmd,
 				       arg_count(cmd, yes_ARG) ||
 				       arg_count(cmd, force_ARG)))
 			return_0;
-		return 1;
+		return 2;
 	}
 
 	log_lv = first_seg(original_lv)->log_lv;
@@ -656,12 +671,15 @@ static int _lv_update_log_type(struct cmd_context *cmd,
 		    !lv_update_and_reload(log_lv))
 			return_0;
 
-		return 1;
+		return 2;
 	}
 
 	/* Reducing redundancy of the log */
-	return remove_mirror_images(log_lv, log_count,
-				    is_mirror_image_removable, operable_pvs, 1U);
+	if (!remove_mirror_images(log_lv, log_count,
+				  is_mirror_image_removable, operable_pvs, 1U))
+		return 0;
+
+	return 2;
 }
 
 /*
@@ -1002,39 +1020,62 @@ out_skip_log_convert:
 	return 1;
 }
 
+/*
+ * Return values:
+ *   0: error
+ *   1: no changes were made (no failed mirror images/logs found)
+ *   2: changes were made (failed mirror images/logs removed)
+ */
 int mirror_remove_missing(struct cmd_context *cmd,
 			  struct logical_volume *lv, int force)
 {
 	struct dm_list *failed_pvs;
 	int log_count = _get_log_count(lv) - _failed_logs_count(lv);
+	int changes = 0;
+	int r;
 
 	if (!(failed_pvs = _failed_pv_list(lv->vg)))
 		return_0;
 
 	if (force && _failed_mirrors_count(lv) == (int)lv_mirror_count(lv)) {
 		log_error("No usable images left in %s.", display_lvname(lv));
-		return lv_remove_with_dependencies(cmd, lv, DONT_PROMPT, 0);
+		if (!lv_remove_with_dependencies(cmd, lv, DONT_PROMPT, 0))
+			return_0;
+		return 2;
 	}
 
 	/*
 	 * We must adjust the log first, or the entire mirror
 	 * will get stuck during a suspend.
 	 */
-	if (!_lv_update_mirrored_log(lv, failed_pvs, log_count))
+	if (!(r = _lv_update_mirrored_log(lv, failed_pvs, log_count)))
 		return_0;
 
-	if (_failed_mirrors_count(lv) > 0 &&
-	    !lv_remove_mirrors(cmd, lv, _failed_mirrors_count(lv),
-			       log_count ? 0U : 1U,
-			       _is_partial_lv, NULL, 0))
-		return_0;
+	if (r > 1)
+		changes = 1;
 
-	if (lv_is_mirrored(lv) &&
-	    !_lv_update_log_type(cmd, NULL, lv, failed_pvs, log_count))
-		return_0;
+	if (_failed_mirrors_count(lv) > 0) {
+		if (!lv_remove_mirrors(cmd, lv, _failed_mirrors_count(lv),
+				       log_count ? 0U : 1U,
+				       _is_partial_lv, NULL, 0))
+			return_0;
 
-	if (!lv_update_and_reload(lv))
-		return_0;
+		changes = 1;
+	}
+
+	if (lv_is_mirrored(lv)) {
+		if (!(r = _lv_update_log_type(cmd, NULL, lv, failed_pvs, log_count)))
+			return_0;
+
+		if (r > 1)
+			changes = 1;
+	}
+
+	if (changes) {
+		if (!lv_update_and_reload(lv))
+			return_0;
+		return 2;
+	}
 
 	return 1;
 }
