@@ -16,7 +16,7 @@
 #ifndef _LVM_DEVICE_H
 #define _LVM_DEVICE_H
 
-#include "base/data-struct/list.h"
+#include "libdm/libdevmapper.h"
 #include "lib/id/id.h"
 
 #include <stdint.h>

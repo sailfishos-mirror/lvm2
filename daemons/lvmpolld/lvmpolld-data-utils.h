@@ -15,7 +15,7 @@
 #ifndef _LVM_LVMPOLLD_DATA_UTILS_H
 #define _LVM_LVMPOLLD_DATA_UTILS_H
 
-#include "base/data-struct/hash.h"
+#include "libdm/libdevmapper.h"
 
 #include <pthread.h>
 #include <stdio.h>
