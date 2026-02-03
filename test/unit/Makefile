@@ -14,7 +14,7 @@
 #       which defined all top_* variables
 
 UNIT_SOURCE=\
-	libdm/vdo/status.c \
+	libdm/vdo/vdo_status.c \
 	\
 	test/unit/bcache_t.c \
 	test/unit/bcache_utils_t.c \
