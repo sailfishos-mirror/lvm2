@@ -26,7 +26,7 @@
 #include "lib/format_text/text_import.h"
 #include "lib/config/defaults.h"
 #include "lib/datastruct/str_list.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 typedef int (*section_fn) (struct cmd_context *cmd,
 			   struct format_type *fmt,

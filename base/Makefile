@@ -19,8 +19,7 @@
 
 BASE_SOURCE=\
 	base/data-struct/hash.c \
-	base/data-struct/list.c \
-	base/data-struct/radix-tree.c
+	base/data-struct/list.c 
 
 BASE_TARGET = base/libbase.a
 BASE_DEPENDS = $(BASE_SOURCE:%.c=%.d)

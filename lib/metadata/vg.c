@@ -20,7 +20,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/format_text/archiver.h"
 #include "lib/device/persist.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 struct volume_group *alloc_vg(const char *pool_name, struct cmd_context *cmd,
 			      const char *vg_name)

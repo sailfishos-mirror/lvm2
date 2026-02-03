@@ -35,7 +35,7 @@
 #include "lib/locking/lvmlockd.h"
 #include "lib/device/persist.h"
 #include "lib/notify/lvmnotify.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 #include <time.h>
 #include <math.h>

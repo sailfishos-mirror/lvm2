@@ -14,7 +14,7 @@
  */
 
 #include "base/memory/zalloc.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 #include "lib/misc/lib.h"
 #include "lib/device/dev-type.h"
 #include "lib/device/device_id.h"

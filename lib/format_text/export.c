@@ -25,7 +25,7 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/device/device_id.h"
 #include "libdaemon/client/config-util.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 #include <stdarg.h>
 #include <time.h>

@@ -32,7 +32,7 @@
 #include "lib/label/label.h"
 #include "lib/misc/lvm-signal.h"
 #include "lib/device/filesystem.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 #ifdef HAVE_BLKZEROOUT
 #include <sys/ioctl.h>

@@ -21,7 +21,7 @@
 #include "lib/metadata/segtype.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/locking/lvmlockd.h"
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 
 #include <time.h>
 #include <sys/utsname.h>

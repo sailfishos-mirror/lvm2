@@ -14,7 +14,7 @@
 
 #include "lib/device/bcache.h"
 
-#include "base/data-struct/radix-tree.h"
+#include "lib/datastruct/radix-tree.h"
 #include "lib/log/lvm-logging.h"
 #include "lib/log/log.h"
 

@@ -13,9 +13,9 @@
 //----------------------------------------------------------------
 
 #ifdef SIMPLE_RADIX_TREE
-#include "base/data-struct/radix-tree-simple.c"
+#include "lib/datastruct/radix-tree-simple.c"
 #else
-#include "base/data-struct/radix-tree-adaptive.c"
+#include "lib/datastruct/radix-tree-adaptive.c"
 #endif
 
 //----------------------------------------------------------------
