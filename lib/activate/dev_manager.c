@@ -3326,9 +3326,9 @@ static int _add_new_cvol_subdev_to_dtree(struct dev_manager *dm,
 		if (!(dlid_pool = build_dm_uuid(dm->mem, pool_lv, NULL)))
 			return_0;
 
-		/* add seg_area to prev load_seg: offset 0 maps to cachevol lv offset 0 */
+		/* add seg_area to prev load_seg: map to correct offset in cachevol */
 		if (!dm_tree_node_add_target_area(dnode, NULL, dlid_pool,
-						  meta_or_data ? 0 : lvseg->metadata_len))
+						  meta_or_data ? lvseg->metadata_start : lvseg->data_start))
 			return_0;
 	}
 
