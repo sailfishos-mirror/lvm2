@@ -2305,7 +2305,11 @@ class TestDbusService(unittest.TestCase):
 		if not self.vdo:
 			raise unittest.SkipTest('vdo not supported')
 
-		vg, _pool, _lv = self._create_vdo_pool()
+		vg, pool, lv = self._create_vdo_pool()
+
+		self.assertEqual(pool.LvCommon.SegType, ["vdo-pool"])
+		self.assertEqual(lv.LvCommon.PoolLv, pool.object_path)
+
 		self.handle_return(vg.Vg.Remove(dbus.Int32(g_tmo), EOD))
 
 	def test_vdo_pool_compression_deduplication(self):

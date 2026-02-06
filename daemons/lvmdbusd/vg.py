@@ -837,9 +837,14 @@ class VgVdo(Vg):
 					(pool_lv)
 			raise dbus.exceptions.DBusException(VG_VDO_INTERFACE, msg)
 
-		Vg.handle_execute(*cmdhandler.vg_create_vdo_pool(
+		rc, out, err = cmdhandler.vg_create_vdo_pool(
 			pool.lv_full_name(), name, virtual_size,
-			create_options))
+			create_options)
+
+		if rc == 0:
+			mt_remove_dbus_objects((pool,))
+
+		Vg.handle_execute(rc, out, err)
 		return Vg.fetch_new_lv(vg_name, pool.Name)
 
 	@dbus.service.method(
