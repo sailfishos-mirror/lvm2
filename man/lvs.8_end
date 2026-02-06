@@ -68,10 +68,10 @@ Volume uses is missing from the system. (\fBX\fP) unknown signifies the status
 is unknown.
 .
 .IP
-Related to RAID Logical Volumes: (\fBr\fP)efresh needed,
+Related to RAID Logical Volumes: (\fBr\fP)efresh or repair needed,
 (\fBm\fP)ismatches exist, (\fBw\fP)ritemostly.
 .br
-(\fBr\fP)efresh signifies that one or more of the Physical Volumes
+(\fBr\fP)efresh or repair signifies that one or more of the Physical Volumes
 this RAID Logical Volume uses had suffered a write error.
 The write error could be due to a temporary failure of that Physical Volume
 or an indication that it is failing.
