@@ -155,9 +155,13 @@ static int _check_merging_origin(const struct logical_volume *lv,
 
 static void _cond_warn_raid_volume_health(struct cmd_context *cmd, const struct logical_volume *lv)
 {
-	if (lv_is_raid(lv) && !lv_raid_healthy(lv) && !lv_is_partial(lv))
-		log_warn("WARNING: RaidLV %s needs to be refreshed!  See character 'r' at position 9 in the RaidLV's attributes%s.", display_lvname(lv),
+	raid_need_t need;
+
+	if (lv_is_raid(lv) && !lv_raid_healthy(lv, &need) && !lv_is_partial(lv) && (need != RAID_NEED_ERROR)) {
+		log_warn("WARNING: RaidLV %s needs to be %s!  See character 'r' at position 9 in the RaidLV's attributes%s.", display_lvname(lv),
+			 need == RAID_NEED_REFRESH ? "refreshed" : need == RAID_NEED_REPAIR ? "repaired" : "refreshed or repaired",
 			 arg_is_set(cmd, all_ARG) ? " and its SubLV(s)" : " and also its SubLV(s) with option '-a'");
+	}
 }
 
 static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,

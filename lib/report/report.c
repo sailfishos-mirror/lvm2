@@ -4042,6 +4042,7 @@ static int _lvhealthstatus_disp(struct dm_report *rh, struct dm_pool *mem,
 	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
 	const struct logical_volume *lv = lvdm->lv;
 	const char *health = "";
+	raid_need_t raid_need;
 	uint64_t n;
 
 	if (lv_is_partial(lv))
@@ -4049,9 +4050,14 @@ static int _lvhealthstatus_disp(struct dm_report *rh, struct dm_pool *mem,
 	else if (lv_is_raid_type(lv)) {
 		if (!activation())
 			health = "unknown";
-		else if (!lv_raid_healthy(lv))
-			health = "refresh needed";
-		else if (lv_is_raid(lv)) {
+		else if (!lv_raid_healthy(lv, &raid_need)) {
+			if (raid_need == RAID_NEED_REFRESH)
+				health = "refresh needed";
+			else if (raid_need == RAID_NEED_REPAIR)
+				health = "repair needed";
+			else if (raid_need == RAID_NEED_REFRESH_OR_REPAIR)
+				health = "refresh or repair needed";
+		} else if (lv_is_raid(lv)) {
 			if (lv_raid_mismatch_count(lv, &n) && n)
 				health = "mismatches exist";
 		} else if (lv->status & LV_WRITEMOSTLY)

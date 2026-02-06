@@ -1621,8 +1621,8 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
 
 		if (!activation())
 			repstr[8] = 'X';	/* Unknown */
-		else if (!lv_raid_healthy(lv))
-			repstr[8] = 'r';  /* RAID needs 'r'efresh */
+		else if (!lv_raid_healthy(lv, NULL))
+			repstr[8] = 'r';  /* RAID needs 'r'efresh or 'r'epair */
 		else if (lv_is_raid(lv)) {
 			if (lv_raid_mismatch_count(lv, &n) && n)
 				repstr[8] = 'm';  /* RAID has 'm'ismatches */
