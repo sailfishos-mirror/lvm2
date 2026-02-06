@@ -217,13 +217,19 @@ def call_lvm(command):
 	return process.returncode, stdout_text, stderr_text
 
 
-def supports_vdo():
-	cmd = ['segtypes']
-	modprobe = Popen(["modprobe", "kvdo"], stdout=PIPE, stderr=PIPE, close_fds=True, env=os.environ)
+def _modprobe(module):
+	modprobe = Popen(["modprobe", module], stdout=PIPE, stderr=PIPE, close_fds=True, env=os.environ)
 	modprobe.communicate()
 	if modprobe.returncode != 0:
 		return False
-	rc, out, err = call_lvm(cmd)
+	else:
+		return True
+
+
+def supports_vdo():
+	if not (_modprobe("kvdo") or _modprobe("dm-vdo")):
+		return False
+	rc, out, err = call_lvm(['segtypes'])
 	if rc != 0 or "vdo" not in out:
 		return False
 	return True
