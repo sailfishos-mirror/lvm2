@@ -190,7 +190,7 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const Timespec& t) {
         IosFlagSaver iosfs(os);
 
-        os << std::right << std::setw( 2 ) << std::setfill( ' ' ) << t.ts.tv_sec / 60 << ":"
+        os << std::right << std::setw( 3 ) << std::setfill( ' ' ) << t.ts.tv_sec / 60 << ":"
             << std::setw( 2 ) << std::setfill( '0' ) << t.ts.tv_sec % 60 << "."
             << std::setw( 3 ) << t.ts.tv_nsec / 1000000; // use milliseconds ATM
         return os;
@@ -987,8 +987,8 @@ struct TestCase {
     }
 
     void show_progress() {
-        progress( Update ) << tag( "running" )
-            << pretty() << " " << start.elapsed() << std::flush;
+        progress( Update ) << tag( "running", start.elapsed() )
+            << pretty() << std::flush;
     }
 
     bool monitor() {
@@ -1074,10 +1074,26 @@ struct TestCase {
         return "### " + std::string( pad, ' ' ) + n + ": ";
     }
 
+    std::string tag( const std::string &n, const Timespec &elapsed ) {
+        if ( options.batch )
+            return "## ";
+        std::stringstream ss;
+        size_t pad = n.length();
+        pad = (pad < 12) ? 12 - pad : 0;
+        ss << "### " << elapsed << "  " << std::string( pad, ' ' ) << n << ": ";
+        return ss.str();
+    }
+
     std::string tag( Journal::R r ) {
         std::stringstream s;
         s << r;
         return tag( s.str() );
+    }
+
+    std::string tag( Journal::R r, const Timespec &elapsed ) {
+        std::stringstream s;
+        s << r;
+        return tag( s.str(), elapsed );
     }
 
     enum P { First, Update, Last };
@@ -1111,7 +1127,7 @@ struct TestCase {
         start.gettime();
         silent_start = start;
 
-        progress( First ) << tag( "running" ) << pretty() << std::flush;
+        progress( First ) << tag( "running", start.elapsed() ) << pretty() << std::flush;
         if ( options.verbose || options.interactive )
             progress() << std::endl;
 
@@ -1159,7 +1175,7 @@ struct TestCase {
                 progress( First ) << "   " << ru;
             progress( Last ) << std::endl;
         } else
-            progress( Last ) << tag( r ) << pretty() << std::endl;
+            progress( Last ) << tag( r, start.elapsed() ) << pretty() << std::endl;
 
         io.clear();
     }
