@@ -216,7 +216,7 @@ int dm_vdo_status_parse(struct dm_pool *mem, const char *input,
 		goto bad;
 	}
 
-	if (!(s->device = (!mem) ? strndup(b, (te - b)) : dm_pool_alloc(mem, (te - b)))) {
+	if (!(s->device = (!mem) ? strndup(b, (te - b)) : dm_pool_strndup(mem, b, (te - b)))) {
 		_set_error(result, "out of memory");
 		goto bad;
 	}
