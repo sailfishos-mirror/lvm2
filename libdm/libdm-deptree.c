@@ -3490,7 +3490,7 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
 	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree,
 						      origin_uuid))) {
 		log_error("Missing cache's origin uuid %s.",
-			  metadata_uuid);
+			  origin_uuid);
 		return 0;
 	}
 	if (!_link_tree_nodes(node, seg->origin))
