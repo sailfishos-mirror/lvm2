@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2018-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -24,6 +24,7 @@ void bcache_tests(struct dm_list *all_tests);
 void bcache_utils_tests(struct dm_list *all_tests);
 void bitset_tests(struct dm_list *all_tests);
 void config_tests(struct dm_list *all_tests);
+void daemon_stray_tests(struct dm_list *all_tests);
 void dm_list_tests(struct dm_list *all_tests);
 void dm_hash_tests(struct dm_list *all_tests);
 void dm_status_tests(struct dm_list *all_tests);
@@ -41,6 +42,7 @@ static inline void register_all_tests(struct dm_list *all_tests)
 	bcache_utils_tests(all_tests);
 	bitset_tests(all_tests);
 	config_tests(all_tests);
+	daemon_stray_tests(all_tests);
 	dm_list_tests(all_tests);
 	dm_hash_tests(all_tests);
 	dm_status_tests(all_tests);
