@@ -2058,12 +2058,10 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
  * VDO target support
  */
 
-#ifndef SECTOR_SHIFT
-#define SECTOR_SHIFT 9L
-#endif
+#define DM_SECTOR_SHIFT 9L
 
 #define DM_VDO_BLOCK_SIZE			UINT64_C(8)		// 4KiB in sectors
-#define DM_VDO_BLOCK_SIZE_KB			(DM_VDO_BLOCK_SIZE << SECTOR_SHIFT)
+#define DM_VDO_BLOCK_SIZE_KB			(DM_VDO_BLOCK_SIZE << DM_SECTOR_SHIFT)
 
 #define DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_MB	(128)			// 128MiB
 #define DM_VDO_BLOCK_MAP_CACHE_SIZE_MAXIMUM_MB	(16 * 1024 * 1024 - 1)	// 16TiB - 1
@@ -2079,8 +2077,8 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
 #define DM_VDO_SLAB_SIZE_MAXIMUM_MB		(32 * 1024)		// 32GiB
 #define DM_VDO_SLABS_MAXIMUM			8192
 
-#define DM_VDO_LOGICAL_SIZE_MAXIMUM	(UINT64_C(4) * 1024 * 1024 * 1024 * 1024 * 1024 >> SECTOR_SHIFT) // 4PiB
-#define DM_VDO_PHYSICAL_SIZE_MAXIMUM	(UINT64_C(64) * DM_VDO_BLOCK_SIZE_KB * 1024 * 1024 * 1024 >> SECTOR_SHIFT) // 256TiB
+#define DM_VDO_LOGICAL_SIZE_MAXIMUM	(UINT64_C(4) * 1024 * 1024 * 1024 * 1024 * 1024 >> DM_SECTOR_SHIFT) // 4PiB
+#define DM_VDO_PHYSICAL_SIZE_MAXIMUM	(UINT64_C(64) * DM_VDO_BLOCK_SIZE_KB * 1024 * 1024 * 1024 >> DM_SECTOR_SHIFT) // 256TiB
 
 #define DM_VDO_ACK_THREADS_MINIMUM		0
 #define DM_VDO_ACK_THREADS_MAXIMUM		100
@@ -2137,10 +2135,10 @@ struct dm_vdo_status {
 	uint64_t total_blocks;
 };
 
-#define VDO_MAX_ERROR 256
+#define DM_VDO_MAX_ERROR 256
 
 struct dm_vdo_status_parse_result {
-	char error[VDO_MAX_ERROR];
+	char error[DM_VDO_MAX_ERROR];
 	struct dm_vdo_status *status;
 };
 

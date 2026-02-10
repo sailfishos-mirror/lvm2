@@ -21,10 +21,10 @@ int dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
 	int valid = 1;
 
 	/* 512 or 4096 bytes only ATM */
-	if ((vtp->minimum_io_size != (512 >> SECTOR_SHIFT)) &&
-	    (vtp->minimum_io_size != (4096 >> SECTOR_SHIFT))) {
+	if ((vtp->minimum_io_size != (512 >> DM_SECTOR_SHIFT)) &&
+	    (vtp->minimum_io_size != (4096 >> DM_SECTOR_SHIFT))) {
 		log_error("VDO minimum io size %u is unsupported [512, 4096].",
-			  (vtp->minimum_io_size << SECTOR_SHIFT));
+			  (vtp->minimum_io_size << DM_SECTOR_SHIFT));
 		valid = 0;
 	}
 
@@ -153,7 +153,7 @@ int dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
 
 	if (vdo_size > DM_VDO_LOGICAL_SIZE_MAXIMUM) {
 		log_error("VDO logical size is larger than limit " FMTu64 " TiB by " FMTu64 " KiB.",
-			  DM_VDO_LOGICAL_SIZE_MAXIMUM / (UINT64_C(1024) * 1024 * 1024 * 1024 >> SECTOR_SHIFT),
+			  DM_VDO_LOGICAL_SIZE_MAXIMUM / (UINT64_C(1024) * 1024 * 1024 * 1024 >> DM_SECTOR_SHIFT),
 			  (vdo_size - DM_VDO_LOGICAL_SIZE_MAXIMUM) / 2);
 		valid = 0;
 	}
