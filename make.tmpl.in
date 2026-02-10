@@ -403,7 +403,7 @@ endif
 INTERNAL_LIBS = \
 	$(top_builddir)/libdaemon/client/libdaemonclient.a
 
-LIBS += -L$(top_builddir)/libdm/ioctl -ldevmapper -Wl,-rpath,$(top_builddir)/libdm/ioctl
+LIBS += -L$(top_builddir)/libdm/ioctl -ldevmapper -Wl,-rpath-link,$(top_builddir)/libdm/ioctl
 LVMINTERNAL_LIBS = $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
 
 all: $(SUBDIRS) $(TARGETS)
