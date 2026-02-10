@@ -946,6 +946,11 @@ static int _handle_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
 
 static int _activate_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
 {
+	if (lv_is_partial(vg->sanlock_lv)) {
+		log_error("Cannot use sanlock lv %s/%s with missing PVs.", vg->name, vg->sanlock_lv->name);
+		return 0;
+	}
+
 	if (!activate_lv(cmd, vg->sanlock_lv)) {
 		log_error("Failed to activate sanlock lv %s/%s", vg->name, vg->sanlock_lv->name);
 		return 0;
