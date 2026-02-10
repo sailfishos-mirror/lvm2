@@ -657,6 +657,8 @@ GET_LVSEG_STR_PROPERTY_FN(seg_monitor, lvseg_monitor_dup(lvseg->lv->vg->vgmem, l
 #define _kernel_cache_settings_set prop_not_implemented_set
 #define _kernel_cache_policy_get prop_not_implemented_get
 #define _kernel_cache_policy_set prop_not_implemented_set
+#define _kernel_cache_mode_get prop_not_implemented_get
+#define _kernel_cache_mode_set prop_not_implemented_set
 #define _kernel_metadata_format_get prop_not_implemented_get
 #define _kernel_metadata_format_set prop_not_implemented_set
 #define _integrity_settings_get prop_not_implemented_get

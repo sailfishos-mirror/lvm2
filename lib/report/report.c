@@ -1602,6 +1602,31 @@ static int _kernelmetadataformat_disp(struct dm_report *rh, struct dm_pool *mem,
 	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
 }
 
+static int _kernel_cache_mode_disp(struct dm_report *rh, struct dm_pool *mem,
+				   struct dm_report_field *field,
+				   const void *data, void *private)
+{
+	const struct lv_with_info_and_seg_status *lvdm = (const struct lv_with_info_and_seg_status *) data;
+	const char *s = NULL;
+	uint64_t flags;
+
+	if (lvdm->seg_status.type == SEG_STATUS_CACHE) {
+		flags = lvdm->seg_status.cache->feature_flags;
+
+		if (flags & DM_CACHE_FEATURE_PASSTHROUGH)
+			s = "passthrough";
+		else if (flags & DM_CACHE_FEATURE_WRITEBACK)
+			s = "writeback";
+		else if (flags & DM_CACHE_FEATURE_WRITETHROUGH)
+			s = "writethrough";
+
+		if (s)
+			return _field_string(rh, field, s);
+	}
+
+	return _field_set_value(field, "", NULL);
+}
+
 static int _cache_policy_disp(struct dm_report *rh, struct dm_pool *mem,
 			      struct dm_report_field *field,
 			      const void *data, void *private)
