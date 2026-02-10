@@ -3584,7 +3584,7 @@ static int _dm_tree_node_add_cache_target_impl(struct dm_tree_node *node,
 	case DM_CACHE_FEATURE_WRITEBACK:
 		if (strcmp(policy_name, "cleaner") == 0) {
 			/* Enforce writethrough mode for cleaner policy */
-			feature_flags = ~modemask;
+			feature_flags &= ~modemask;
 			feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
 		}
                 /* Fall through */
