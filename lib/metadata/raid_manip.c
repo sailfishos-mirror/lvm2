@@ -7127,7 +7127,7 @@ try_again:
 
 	/* Add integrity layer to any new images. */
 	if (has_integrity) {
-		struct integrity_settings *isettings = NULL;
+		struct dm_integrity_settings *isettings = NULL;
 		if (!lv_get_raid_integrity_settings(lv, &isettings))
 			return_0;
 		if (!lv_add_integrity_to_raid(lv, isettings, NULL, NULL))

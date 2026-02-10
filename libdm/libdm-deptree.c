@@ -221,11 +221,11 @@ struct load_segment {
 	struct dm_tree_node *writecache_node;		/* writecache */
 	int writecache_pmem;				/* writecache, 1 if pmem, 0 if ssd */
 	uint32_t writecache_block_size;			/* writecache, in bytes */
-	struct writecache_settings writecache_settings;	/* writecache */
+	struct dm_writecache_settings writecache_settings;	/* writecache */
 
 	uint64_t integrity_data_sectors;		/* integrity (provided_data_sectors) */
 	struct dm_tree_node *integrity_meta_node;	/* integrity */
-	struct integrity_settings integrity_settings;	/* integrity */
+	struct dm_integrity_settings integrity_settings;/* integrity */
 	int integrity_recalculate;			/* integrity */
 };
 
@@ -2833,7 +2833,7 @@ static int _integrity_emit_segment_line(struct dm_task *dmt,
 				    struct load_segment *seg,
 				    char *params, size_t paramsize)
 {
-	struct integrity_settings *set = &seg->integrity_settings;
+	struct dm_integrity_settings *set = &seg->integrity_settings;
 	int pos = 0;
 	int count;
 	char origin_dev[DM_FORMAT_DEV_BUFSIZE];
@@ -4053,7 +4053,7 @@ int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
 				  const char *cache_uuid,
 				  int pmem,
 				  uint32_t writecache_block_size,
-				  struct writecache_settings *settings)
+				  struct dm_writecache_settings *settings)
 {
 	struct load_segment *seg;
 
@@ -4077,7 +4077,7 @@ int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
 	if (!_link_tree_nodes(node, seg->origin))
 		return_0;
 
-	memcpy(&seg->writecache_settings, settings, sizeof(struct writecache_settings));
+	memcpy(&seg->writecache_settings, settings, sizeof(*settings));
 
 	if (settings->new_key && settings->new_val) {
 		seg->writecache_settings.new_key = dm_pool_strdup(node->dtree->mem, settings->new_key);
@@ -4091,7 +4091,7 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
 				  uint64_t size,
 				  const char *origin_uuid,
 				  const char *meta_uuid,
-				  struct integrity_settings *settings,
+				  struct dm_integrity_settings *settings,
 				  int recalculate)
 {
 	struct load_segment *seg;

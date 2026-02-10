@@ -1460,7 +1460,7 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 				return_0;
 
 			if (lv_raid_has_integrity(lv) && !images_reduced) {
-				struct integrity_settings *isettings = NULL;
+				struct dm_integrity_settings *isettings = NULL;
 				if (!lv_get_raid_integrity_settings(lv, &isettings))
 					return_0;
 				if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
@@ -5733,7 +5733,7 @@ static int _lvconvert_detach_writecache(struct cmd_context *cmd,
 					struct logical_volume *lv_fast)
 {
 	struct lvconvert_result *lr = (struct lvconvert_result *) handle->custom_handle;
-	struct writecache_settings settings;
+	struct dm_writecache_settings settings;
 	struct convert_poll_id_list *idl;
 	uint32_t block_size_sectors;
 	int active_begin = 0;
@@ -6029,7 +6029,7 @@ static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
 					    struct logical_volume *lv,
 					    struct logical_volume *lv_fast,
 					    uint32_t block_size_sectors,
-					    struct writecache_settings *settings)
+					    struct dm_writecache_settings *settings)
 {
 	struct logical_volume *lv_wcorig;
 	const struct segment_type *segtype;
@@ -6059,7 +6059,7 @@ static struct logical_volume *_lv_writecache_create(struct cmd_context *cmd,
 	/* writecache_block_size is in bytes */
 	seg->writecache_block_size = block_size_sectors * 512;
 
-	memcpy(&seg->writecache_settings, settings, sizeof(struct writecache_settings));
+	memcpy(&seg->writecache_settings, settings, sizeof(seg->writecache_settings));
 
 	if (!add_seg_to_segs_using_this_lv(lv_fast, seg))
 		return_NULL;
@@ -6306,7 +6306,7 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
 	struct volume_group *vg = lv->vg;
 	struct logical_volume *lv_update;
 	struct logical_volume *lv_fast;
-	struct writecache_settings settings = { 0 };
+	struct dm_writecache_settings settings = { 0 };
 	const char *fast_name;
 	uint32_t block_size_sectors = 0;
 	char *lockd_fast_args = NULL;
@@ -6551,7 +6551,7 @@ static int _lvconvert_integrity_remove(struct cmd_context *cmd, struct logical_v
 }
 
 static int _lvconvert_integrity_add(struct cmd_context *cmd, struct logical_volume *lv,
-				    struct integrity_settings *set)
+				    struct dm_integrity_settings *set)
 {
 	struct volume_group *vg = lv->vg;
 	struct dm_list *use_pvh;
@@ -6589,7 +6589,7 @@ static int _lvconvert_integrity_single(struct cmd_context *cmd,
 					struct logical_volume *lv,
 					struct processing_handle *handle)
 {
-	struct integrity_settings settings = { .tag_size = 0 };
+	struct dm_integrity_settings settings = { .tag_size = 0 };
 	int ret;
 
 	if (arg_is_set(cmd, integritysettings_ARG)) {

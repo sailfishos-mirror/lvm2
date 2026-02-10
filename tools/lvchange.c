@@ -610,7 +610,7 @@ static int _lvchange_writecache(struct cmd_context *cmd,
 			   struct logical_volume *lv,
 			   uint32_t *mr)
 {
-	struct writecache_settings settings = { 0 };
+	struct dm_writecache_settings settings = { 0 };
 	uint32_t block_size_sectors = 0;
 	struct lv_segment *seg = first_seg(lv);
 	int set_count = 0;
@@ -694,7 +694,7 @@ static int _lvchange_writecache(struct cmd_context *cmd,
 			log_print("No settings changed.");
 			return 1;
 		}
-		memset(&seg->writecache_settings, 0, sizeof(struct writecache_settings));
+		memset(&seg->writecache_settings, 0, sizeof(seg->writecache_settings));
 	}
 
 	/* Request caller to commit and reload metadata */
@@ -814,7 +814,7 @@ static int _lvchange_integrity(struct cmd_context *cmd,
 			       struct logical_volume *lv,
 			       uint32_t *mr)
 {
-	struct integrity_settings settings = { .block_size = 0 };
+	struct dm_integrity_settings settings = { .block_size = 0 };
 	struct logical_volume *lv_image;
 	struct lv_segment *seg, *seg_image;
 	uint32_t s;

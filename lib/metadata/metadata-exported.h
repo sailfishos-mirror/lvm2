@@ -546,11 +546,11 @@ struct lv_segment {
 
 	struct logical_volume *writecache;	/* For writecache */
 	uint32_t writecache_block_size;		/* For writecache */
-	struct writecache_settings writecache_settings; /* For writecache */
+	struct dm_writecache_settings writecache_settings; /* For writecache */
 
 	uint64_t integrity_data_sectors;
 	struct logical_volume *integrity_meta_dev;
-	struct integrity_settings integrity_settings;
+	struct dm_integrity_settings integrity_settings;
 	uint32_t integrity_recalculate;
 
 	struct dm_vdo_target_params vdo_params;	/* For VDO-pool */
@@ -1072,7 +1072,7 @@ struct lvcreate_params {
 
 	int raidintegrity;
 	const char *raidintegritymode;
-	struct integrity_settings integrity_settings;
+	struct dm_integrity_settings integrity_settings;
 
 	struct dm_list tags;	/* all */
 
@@ -1159,14 +1159,14 @@ int lv_is_cow(const struct logical_volume *lv);
 int lv_is_cache_origin(const struct logical_volume *lv);
 int lv_is_writecache_origin(const struct logical_volume *lv);
 int lv_is_writecache_cachevol(const struct logical_volume *lv);
-int writecache_settings_to_str_list(struct writecache_settings *settings, struct dm_list *result, struct dm_pool *mem);
+int writecache_settings_to_str_list(struct dm_writecache_settings *settings, struct dm_list *result, struct dm_pool *mem);
 int lv_writecache_set_cleaner(struct logical_volume *lv);
 bool lv_writecache_is_clean(struct cmd_context *cmd, struct logical_volume *lv, uint64_t *dirty_blocks);
 bool writecache_cleaner_supported(struct cmd_context *cmd);
 
 struct logical_volume *lv_integrity_from_origin(const struct logical_volume *lv);
 int lv_is_integrity_origin(const struct logical_volume *lv);
-int integrity_settings_to_str_list(struct integrity_settings *settings, struct dm_list *result, struct dm_pool *mem);
+int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struct dm_list *result, struct dm_pool *mem);
 
 int lv_is_merging_cow(const struct logical_volume *cow);
 uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size);
@@ -1485,15 +1485,15 @@ struct dm_list *create_pv_list(struct dm_pool *mem, struct volume_group *vg, int
 struct dm_list *clone_pv_list(struct dm_pool *mem, struct dm_list *pvsl);
 int pv_list_to_dev_list(struct dm_pool *mem, struct dm_list *pvs, struct dm_list *devs);
 
-int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_settings *settings, struct dm_list *pvh,
+int lv_add_integrity_to_raid(struct logical_volume *lv, struct dm_integrity_settings *settings, struct dm_list *pvh,
 			     struct logical_volume *lv_imeta_0);
 int lv_remove_integrity_from_raid(struct logical_volume *lv, char **remove_images);
 void lv_clear_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_has_integrity_recalculate_metadata(struct logical_volume *lv);
 int lv_raid_has_integrity(const struct logical_volume *lv);
 int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh);
-int lv_get_raid_integrity_settings(struct logical_volume *lv, struct integrity_settings **isettings);
-int integrity_mode_set(const char *mode, struct integrity_settings *settings);
+int lv_get_raid_integrity_settings(struct logical_volume *lv, struct dm_integrity_settings **isettings);
+int integrity_mode_set(const char *mode, struct dm_integrity_settings *settings);
 int lv_integrity_mismatches(struct cmd_context *cmd, const struct logical_volume *lv, uint64_t *mismatches);
 int lv_raid_integrity_total_mismatches(struct cmd_context *cmd, const struct logical_volume *lv, uint64_t *mismatches);
 

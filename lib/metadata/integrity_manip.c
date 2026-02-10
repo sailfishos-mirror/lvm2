@@ -104,7 +104,7 @@ static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes, u
 static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 				struct volume_group *vg,
 				struct lvcreate_params *lp,
-				struct integrity_settings *settings,
+				struct dm_integrity_settings *settings,
 				struct logical_volume **meta_lv)
 {
 	char metaname[NAME_LEN] = { 0 };
@@ -347,7 +347,7 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv, char **remove_image
 	return 1;
 }
 
-int integrity_mode_set(const char *mode, struct integrity_settings *settings)
+int integrity_mode_set(const char *mode, struct dm_integrity_settings *settings)
 {
 	if (!mode)
 		settings->mode[0] = DEFAULT_MODE;
@@ -363,7 +363,7 @@ int integrity_mode_set(const char *mode, struct integrity_settings *settings)
 }
 
 static int _set_integrity_block_size(struct cmd_context *cmd, struct logical_volume *lv, int is_active,
-				     struct integrity_settings *settings,
+				     struct dm_integrity_settings *settings,
 				     int lbs_4k, int lbs_512, int pbs_4k, int pbs_512)
 {
 	char pathname[PATH_MAX];
@@ -514,7 +514,7 @@ bad:
  *    
  */
 
-int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_settings *settings,
+int lv_add_integrity_to_raid(struct logical_volume *lv, struct dm_integrity_settings *settings,
 			     struct dm_list *pvh, struct logical_volume *lv_imeta_0)
 {
 	char imeta_name[NAME_LEN];
@@ -528,7 +528,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
 	struct lv_segment *seg_top, *seg_image;
 	struct pv_list *pvl;
 	const struct segment_type *segtype;
-	struct integrity_settings *set = NULL;
+	struct dm_integrity_settings *set = NULL;
 	struct dm_list *use_pvh = NULL;
 	uint32_t area_count, s;
 	uint32_t revert_meta_lvs = 0;
@@ -721,7 +721,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
 		if (!add_seg_to_segs_using_this_lv(lv_imeta, seg_image))
 			goto_bad;
 
-		memcpy(&seg_image->integrity_settings, settings, sizeof(struct integrity_settings));
+		memcpy(&seg_image->integrity_settings, settings, sizeof(struct dm_integrity_settings));
 		set = &seg_image->integrity_settings;
 
 		if (!set->mode[0])
@@ -919,7 +919,7 @@ int lv_raid_has_integrity(const struct logical_volume *lv)
 	return 0;
 }
 
-int lv_get_raid_integrity_settings(struct logical_volume *lv, struct integrity_settings **isettings)
+int lv_get_raid_integrity_settings(struct logical_volume *lv, struct dm_integrity_settings **isettings)
 {
 	struct logical_volume *lv_image;
 	struct lv_segment *seg, *seg_image;
@@ -1026,7 +1026,7 @@ fail:
 	return 0;
 }
 
-int integrity_settings_to_str_list(struct integrity_settings *settings, struct dm_list *result, struct dm_pool *mem)
+int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struct dm_list *result, struct dm_pool *mem)
 {
 	int errors = 0;
 

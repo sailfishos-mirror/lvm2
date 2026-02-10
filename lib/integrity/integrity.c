@@ -38,7 +38,7 @@ static void _integrity_display(const struct lv_segment *seg)
 static int _integrity_text_import(struct lv_segment *seg,
 				   const struct dm_config_node *sn)
 {
-	struct integrity_settings *set;
+	struct dm_integrity_settings *set;
 	struct logical_volume *origin_lv = NULL;
 	struct logical_volume *meta_lv = NULL;
 	const char *origin_name = NULL;
@@ -46,7 +46,7 @@ static int _integrity_text_import(struct lv_segment *seg,
 	const char *mode = NULL;
 	const char *hash = NULL;
 
-	memset(&seg->integrity_settings, 0, sizeof(struct integrity_settings));
+	memset(&seg->integrity_settings, 0, sizeof(struct dm_integrity_settings));
 	set = &seg->integrity_settings;
 
 	/* origin always set */
@@ -184,7 +184,7 @@ static int _integrity_text_import_area_count(const struct dm_config_node *sn,
 static int _integrity_text_export(const struct lv_segment *seg,
 				   struct formatter *f)
 {
-	const struct integrity_settings *set = &seg->integrity_settings;
+	const struct dm_integrity_settings *set = &seg->integrity_settings;
 
 	outf(f, "origin = \"%s\"", seg_lv(seg, 0)->name);
 	outf(f, "data_sectors = %llu", (unsigned long long)seg->integrity_data_sectors);

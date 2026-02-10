@@ -93,7 +93,7 @@ static uint32_t _raidmaxrecoveryrate(const struct logical_volume *lv)
 
 static const char *_raidintegritymode(const struct logical_volume *lv)
 {
-	struct integrity_settings *settings = NULL;
+	struct dm_integrity_settings *settings = NULL;
 
 	if (lv_raid_has_integrity((struct logical_volume *)lv))
 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
@@ -112,7 +112,7 @@ static const char *_raidintegritymode(const struct logical_volume *lv)
 
 static uint32_t _raidintegrityblocksize(const struct logical_volume *lv)
 {
-	struct integrity_settings *settings = NULL;
+	struct dm_integrity_settings *settings = NULL;
 
 	if (lv_raid_has_integrity((struct logical_volume *)lv))
 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);

@@ -1453,7 +1453,7 @@ out:
 	return r;
 }
 
-static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecache_settings *settings,
+static int _get_one_writecache_setting(struct cmd_context *cmd, struct dm_writecache_settings *settings,
 				       char *key, char *val, uint32_t *block_size_sectors)
 {
 	/* special case: block_size is not a setting but is set with the --cachesettings option */
@@ -1581,7 +1581,7 @@ static int _get_one_writecache_setting(struct cmd_context *cmd, struct writecach
 	return 0;
 }
 
-int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings *settings,
+int get_writecache_settings(struct cmd_context *cmd, struct dm_writecache_settings *settings,
 			    uint32_t *block_size_sectors)
 {
 	const struct dm_config_node *cns, *cn1, *cn2;
@@ -1678,7 +1678,7 @@ int get_writecache_settings(struct cmd_context *cmd, struct writecache_settings 
 	return 1;
 }
 
-static int _get_one_integrity_setting(struct cmd_context *cmd, struct integrity_settings *settings,
+static int _get_one_integrity_setting(struct cmd_context *cmd, struct dm_integrity_settings *settings,
 				      char *key, char *val)
 {
 	/*
@@ -1746,7 +1746,7 @@ static int _get_one_integrity_setting(struct cmd_context *cmd, struct integrity_
 	return 0;
 }
 
-int get_integrity_settings(struct cmd_context *cmd, struct integrity_settings *settings)
+int get_integrity_settings(struct cmd_context *cmd, struct dm_integrity_settings *settings)
 {
 	struct arg_value_group_list *group;
 	const char *str;

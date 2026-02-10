@@ -446,7 +446,7 @@ int lv_writecache_set_cleaner(struct logical_volume *lv)
 	return 1;
 }
 
-int writecache_settings_to_str_list(struct writecache_settings *settings, struct dm_list *result, struct dm_pool *mem)
+int writecache_settings_to_str_list(struct dm_writecache_settings *settings, struct dm_list *result, struct dm_pool *mem)
 {
 	int errors = 0;
 

@@ -1976,7 +1976,7 @@ int dm_tree_node_add_cachevol_target(struct dm_tree_node *node,
 				     uint64_t data_len,
 				     uint32_t data_block_size);
 
-struct writecache_settings {
+struct dm_writecache_settings {
 	/*
 	 * Allow an unrecognized key and its val to be passed to the kernel for
 	 * cases where a new kernel setting is added but lvm doesn't know about
@@ -2020,9 +2020,9 @@ int dm_tree_node_add_writecache_target(struct dm_tree_node *node,
 				const char *cache_uuid,
 				int pmem,
 				uint32_t writecache_block_size,
-				struct writecache_settings *settings);
+				struct dm_writecache_settings *settings);
 
-struct integrity_settings {
+struct dm_integrity_settings {
 	char mode[8];
 	uint32_t tag_size;
 	uint32_t block_size;       /* optional table param always set by lvm */
@@ -2051,7 +2051,7 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
 				uint64_t size,
 				const char *origin_uuid,
 				const char *meta_uuid,
-				struct integrity_settings *settings,
+				struct dm_integrity_settings *settings,
 				int recalculate);
 
 /*

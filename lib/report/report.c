@@ -1465,7 +1465,7 @@ static int _cache_settings_disp(struct dm_report *rh, struct dm_pool *mem,
 		if (!(result = str_list_create(mem)))
 			return_0;
 
-		if (!writecache_settings_to_str_list((struct writecache_settings *)&seg->writecache_settings, result, mem))
+		if (!writecache_settings_to_str_list((struct dm_writecache_settings *)&seg->writecache_settings, result, mem))
 			return_0;
 
 		return _field_set_string_list(rh, field, result, private, 0, NULL);
@@ -3351,7 +3351,7 @@ static int _raidintegritymode_disp(struct dm_report *rh __attribute__((unused)),
 				   void *private __attribute__((unused)))
 {
 	struct logical_volume *lv = (struct logical_volume *) data;
-	struct integrity_settings *settings = NULL;
+	struct dm_integrity_settings *settings = NULL;
 	const char *mode = NULL;
 	char *repstr;
 
@@ -3387,7 +3387,7 @@ static int _raidintegrityblocksize_disp(struct dm_report *rh __attribute__((unus
 				   void *private __attribute__((unused)))
 {
 	struct logical_volume *lv = (struct logical_volume *) data;
-	struct integrity_settings *settings = NULL;
+	struct dm_integrity_settings *settings = NULL;
 
 	if (lv_raid_has_integrity(lv))
 		lv_get_raid_integrity_settings(lv, &settings);
@@ -3431,7 +3431,7 @@ static int _integrity_settings_disp(struct dm_report *rh, struct dm_pool *mem,
 		if (!(result = str_list_create(mem)))
 			return_0;
 
-		if (!integrity_settings_to_str_list((struct integrity_settings *)&seg->integrity_settings, result, mem))
+		if (!integrity_settings_to_str_list((struct dm_integrity_settings *)&seg->integrity_settings, result, mem))
 			return_0;
 
 		return _field_set_string_list(rh, field, result, private, 0, NULL);

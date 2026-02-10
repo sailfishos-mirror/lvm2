@@ -78,7 +78,7 @@ static int _writecache_text_import(struct lv_segment *seg,
 	if (!add_seg_to_segs_using_this_lv(fast_lv, seg))
 		return_0;
 
-	memset(&seg->writecache_settings, 0, sizeof(struct writecache_settings));
+	memset(&seg->writecache_settings, 0, sizeof(seg->writecache_settings));
 
 	if (dm_config_has_node(sn, "high_watermark")) {
 		if (!dm_config_get_uint64(sn, "high_watermark", &seg->writecache_settings.high_watermark))
