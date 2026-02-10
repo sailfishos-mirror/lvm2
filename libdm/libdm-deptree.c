@@ -1720,8 +1720,8 @@ static int _vdo_node_send_messages(struct dm_tree_node *dnode,
 		send_deduplication_message = 1;
 
 	log_debug("VDO needs message for compression %u(%u) and deduplication %u(%u).",
-		  send_compression_message, vdo_status.status->index_state,
-		  send_deduplication_message, vdo_status.status->compression_state);
+		  send_compression_message, vdo_status.status->compression_state,
+		  send_deduplication_message, vdo_status.status->index_state);
 
 	if (send_compression_message &&
 	    !_node_message(dnode->info.major, dnode->info.minor, 0,
