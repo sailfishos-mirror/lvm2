@@ -93,6 +93,32 @@ lvcreate -H -L10 -n $lv1 --cachemetadataformat 2 --cachepool $vg/cpool
 check lv_field $vg/$lv1 cachemetadataformat "2"
 lvremove -f $vg
 
+# Test kernel_cache_mode vs cachemode after cleaner policy switch.
+#
+# The cleaner policy must enforce writethrough in the kernel to prevent
+# new dirty blocks while flushing - otherwise the cache would never drain.
+# However LVM metadata preserves the original mode (e.g. writeback) so it
+# can be restored when cleaner finishes.
+#
+# The LVM cache segment handler (_cache_add_target_line) handles this by
+# emitting DM_CACHE_FEATURE_WRITETHROUGH when seg->cleaner_policy is set,
+# before calling the libdm API.  The libdm function
+# _dm_tree_node_add_cache_target_impl() also has enforcement code for
+# cleaner+writeback/passthrough, but it is never reached because the
+# segment handler already passes writethrough feature_flags.
+#
+# kernel_cache_mode reads the actual mode from dm status feature_flags,
+# while cachemode reads the mode from LVM metadata - they can differ.
+lvcreate --type cache-pool --cachemode writeback -L1 $vg/cpool
+lvcreate -H -L10 -n $lv1 --cachepool $vg/cpool
+check lv_field $vg/$lv1 cachemetadataformat "2"
+check lv_field $vg/$lv1 kernelmetadataformat "2"
+lvchange --cachepolicy cleaner $vg/$lv1
+check lv_field $vg/$lv1 kernelmetadataformat "2"
+check lv_field $vg/$lv1 kernel_cache_mode "writethrough"
+check lv_field $vg/$lv1 cachemode "writeback"
+lvremove -f $vg
+
 fi
 #lvs -a -o name,cachemetadataformat,kernelmetadataformat,chunksize,cachepolicy,cachemode $vg
 
