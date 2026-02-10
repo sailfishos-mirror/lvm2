@@ -1,5 +1,6 @@
 Version 2.03.39 - 
 ==================
+  Use -Wl,-rpath-link for library linking.
   Switch from use of internal device_mapper library to libdm.
   Refactor libbase radix tree to lib/datastruct.
   Use dm_device_list_equal for DM cache comparison.
