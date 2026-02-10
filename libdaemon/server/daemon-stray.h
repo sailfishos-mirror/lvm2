@@ -77,6 +77,7 @@ static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
 {
 	char filename[PATH_MAX];
 	int r;
+	int flags;
 
 	/* Ignore bad file descriptors */
 	if (!is_valid_fd(fd))
@@ -84,6 +85,17 @@ static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
 
 	if (!suppress_warnings)
 		_daemon_get_filename(fd, filename, sizeof(filename));
+
+	/* Retrieve FD flags before closing */
+	flags = fcntl(fd, F_GETFD);
+
+	/*
+	 * Skip descriptors marked close-on-exec.
+	 * These are intentionally opened by well-behaved libraries
+	 * (e.g. a PKCS#11 module) that properly set FD_CLOEXEC.
+	 */
+	if (flags >= 0 && (flags & FD_CLOEXEC))
+		return;
 
 	r = close(fd);
 	if ((fd <= STDERR_FILENO) || suppress_warnings)

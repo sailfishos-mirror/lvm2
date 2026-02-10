@@ -1,3 +1,7 @@
+Version 2.03.39 - 
+==================
+  Preserve file desciptors with CLOEXEC opened in library constructors.
+
 Version 2.03.37 - 
 ==================
   Warn on classic snapshot on raid creation and error on activation + test.
