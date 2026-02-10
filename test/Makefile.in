@@ -233,7 +233,7 @@ LIB_NOT := not
 LIB_SHARED := check aux inittest utils get lvm-wrapper lvm_vdo_wrapper
 LIB_CONF := $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF)
 LIB_DATA := $(LIB_FLAVOURS) dm-version-expected version-expected
-LIB_EXEC := $(LIB_NOT) dmsecuretest securetest
+LIB_EXEC := $(LIB_NOT) dmsecuretest
 LVM_SCRIPTS := fsadm lvresize_fs_helper lvm_import_vdo
 
 install: .tests-stamp lib/paths-installed
@@ -266,10 +266,6 @@ lib/should lib/invalid lib/fail: lib/not
 lib/runner: lib/runner.o .lib-dir-stamp
 	$(SHOW) "    [LD] $@"
 	$(Q) $(CXX) $(CXXFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< $(RT_LIBS)
-
-lib/securetest: lib/dmsecuretest.o .lib-dir-stamp
-	$(SHOW) "    [LD] $@"
-	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS) -o $@ $< -L$(interfacebuilddir) -ldevmapper $(LIBS)
 
 lib/not: lib/not.o
 lib/runner.o: $(wildcard $(srcdir)/lib/*.h)

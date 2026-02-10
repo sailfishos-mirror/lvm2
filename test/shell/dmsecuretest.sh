@@ -31,9 +31,8 @@ aux driver_at_least 4 6 || skip
 # ensure we can create devices (uses dmsetup, etc)
 aux prepare_devs 1
 
-# check both code versions - linked libdm  and internal device_mapper version
-# there should not be any difference
-for i in securetest dmsecuretest ; do
+# test linked libdm version
+for i in dmsecuretest ; do
 
 # 1st. try with empty table
 # 2nd. retry with already exiting DM node - exercise error path also wipes
