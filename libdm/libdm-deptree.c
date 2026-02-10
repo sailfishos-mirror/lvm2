@@ -2928,7 +2928,7 @@ static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t 
 		return_0;
 	/* Unlike normal targets, current VDO requires device path */
 	if (dm_snprintf(data_dev, sizeof(data_dev), "/dev/dm-%u", seg->vdo_data->info.minor) < 0) {
-		log_error("Can create VDO data volume path for %s.", data);
+		log_error("Can't create VDO data volume path for %s.", data);
 		return 0;
 	}
 
