@@ -1,5 +1,14 @@
 Version 1.02.213 - 
 ===================
+  Copy dm_device_list_destroy, dm_task_get_device_list.
+  Add dm_device_list_equal.
+  Copy dm_get_status_writecache, dm_tree_node_add_writecache_target.
+  Add dm_tree_node_add_cachevol_target.
+  Copy dm_tree_node_add_vdo_target, dm_vdo_validate_target_params.
+  Copy dm_vdo_parse_logical_size, dm_vdo_status_parse.
+  Copy dm_tree_node_add_integrity_target, dm_get_status_integrity.
+  Copy dm_raid_clear_failed_devices, dm_raid_count_failed_devices.
+  Replace simple permutation-based hash with Bob Jenkins hash algorithm.
 
 Version 1.02.212 - 15th December 2025
 =====================================
