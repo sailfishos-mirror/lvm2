@@ -550,7 +550,7 @@ static int _report_field_string_list(struct dm_report *rh,
 	}
 
 	/* more than one item - allocate temporary array for string list items for further processing */
-	if (!(arr = dm_malloc(list_size * sizeof(struct str_pos_len)))) {
+	if (!(arr = dm_zalloc(list_size * sizeof(struct str_pos_len)))) {
 		log_error("%s failed to allocate temporary array for processing", _error_msg_prefix);
 		goto out;
 	}
@@ -592,7 +592,8 @@ static int _report_field_string_list(struct dm_report *rh,
 	for (i = 0, pos = 0; i < list_size; i++) {
 		arr[i].item.pos = pos;
 
-		memcpy(repstr + pos, arr[i].str, arr[i].item.len);
+		if (arr[i].str)
+			memcpy(repstr + pos, arr[i].str, arr[i].item.len);
 		memcpy(repstr_extra + i + 1, &arr[i].item, sizeof(struct pos_len));
 
 		pos += arr[i].item.len;
@@ -2731,7 +2732,7 @@ dm_percent_t dm_make_percent(uint64_t numerator, uint64_t denominator)
 
 int dm_report_value_cache_set(struct dm_report *rh, const char *name, const void *data)
 {
-	if (!rh->value_cache && (!(rh->value_cache = dm_hash_create(64)))) {
+	if (!rh->value_cache && (!(rh->value_cache = dm_hash_create(63)))) {
 		log_error("Failed to create cache for values used during reporting.");
 		return 0;
 	}
@@ -4237,6 +4238,7 @@ static struct selection_node *_parse_ex(struct dm_report *rh,
 					const char *s,
 					const char **next)
 {
+	static const char _ps_expected_msg[] = "Syntax error: left parenthesis expected at \'%s\'";
 	static const char _pe_expected_msg[] = "Syntax error: right parenthesis expected at \'%s\'";
 	struct selection_node *sn = NULL;
 	uint32_t t;
@@ -4246,7 +4248,7 @@ static struct selection_node *_parse_ex(struct dm_report *rh,
 	if (t == SEL_MODIFIER_NOT) {
 		/* '!' '(' EXPRESSION ')' */
 		if (!_tok_op_log(*next, &tmp, SEL_PRECEDENCE_PS)) {
-			log_error("Syntax error: left parenthesis expected at \'%s\'", *next);
+			log_error(_ps_expected_msg, *next);
 			goto error;
 		}
 		if (!(sn = _parse_or_ex(rh, tmp, next, NULL)))
@@ -4847,31 +4849,39 @@ bad:
 
 static int _safe_repstr_output(struct dm_report *rh, const char *repstr, size_t len)
 {
-	const char *p_repstr;
+	const char *repstr_next_write = repstr;
+	const char *repstr_current = repstr;
 	const char *repstr_end = len ? repstr + len : repstr + strlen(repstr);
 
-	/* Escape any JSON_QUOTE that may appear in reported string. */
-	while (1) {
-		if (!(p_repstr = memchr(repstr, JSON_QUOTE[0], repstr_end - repstr)))
-			break;
+	/* Escape any JSON_ESCAPE_CHAR and JSON_QUOTE that may appear in reported string. */
+	while (repstr_current < repstr_end) {
+		if (repstr_current[0] == JSON_ESCAPE_CHAR[0] || repstr_current[0] == JSON_QUOTE[0]) {
+			// Write out all "sanitized" chars so far
+			if (repstr_next_write < repstr_current) {
+				if (!dm_pool_grow_object(rh->mem, repstr_next_write, repstr_current - repstr_next_write)) {
+					log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
+					return 0;
+				}
 
-		if (p_repstr > repstr) {
-			if (!dm_pool_grow_object(rh->mem, repstr, p_repstr - repstr)) {
+				repstr_next_write = repstr_current;
+			}
+
+			// Add an escape
+			if (!dm_pool_grow_object(rh->mem, JSON_ESCAPE_CHAR, 1)) {
 				log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
 				return 0;
 			}
 		}
-		if (!dm_pool_grow_object(rh->mem, JSON_ESCAPE_CHAR, 1) ||
-		    !dm_pool_grow_object(rh->mem, JSON_QUOTE, 1)) {
+
+		++repstr_current;
+	}
+
+	// Write out all remaining "sanitized" chars
+	if (repstr_next_write < repstr_end) {
+		if (!dm_pool_grow_object(rh->mem, repstr_next_write, repstr_end - repstr_next_write)) {
 			log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
 			return 0;
 		}
-		repstr = p_repstr + 1;
-	}
-
-	if (!dm_pool_grow_object(rh->mem, repstr, repstr_end - repstr)) {
-		log_error(UNABLE_TO_EXTEND_OUTPUT_LINE_MSG);
-		return 0;
 	}
 
 	return 1;
