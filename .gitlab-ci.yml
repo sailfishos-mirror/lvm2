@@ -1,128 +1,92 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
+# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
+# Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/#customizing-analyzer-behavior
+# Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
 stages:
-  - approve
-  - test
-  - post
-
+- approve
+- test
+- post
 approve1:
   stage: approve
   script:
-    - echo "Approved..."
+  - echo "Approved..."
   rules:
-    # TODO: Filter only safe repositories, or user in developers
-    - if: $CI_PROJECT_PATH != "csonto/lvm2" && $CI_PROJECT_PATH != "lvmteam/lvm2"
-      when: manual
-    # TODO: for other branches than main/rhel: run pipeline only when requested:
-    - if: $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH !~ "^rhel.*"
-      when: manual
-    - when: on_success
+  - if: $CI_PROJECT_PATH != "csonto/lvm2" && $CI_PROJECT_PATH != "lvmteam/lvm2"
+    when: manual
+  - if: $CI_COMMIT_BRANCH != "main" && $CI_COMMIT_BRANCH !~ "^rhel.*"
+    when: manual
+  - when: on_success
   allow_failure: false
-
-
 pages:
   image: elecnix/ikiwiki
   stage: test
   script:
-    - ikiwiki --setup ikiwiki.setup --libdir themes/ikistrap/lib
+  - ikiwiki --setup ikiwiki.setup --libdir themes/ikistrap/lib
   artifacts:
     paths:
-      - public
+    - public
   only:
     refs:
-      - main
+    - main
     changes:
-      - doc/**/*
-      - ikiwiki.setup
-
-
-# TODO:
-# - check results of autoreconf and make generate - may need additional commit
-#     - we need a particular setup (rawhide OR latest supported fedora?)
-# - do make rpm and publish results as artifacts - we will use packit/COPR for this eventually
-
-# Run on any commits to main (master), rhel8, rhel9 branches
+    - doc/**/*
+    - ikiwiki.setup
 test-job:
   stage: test
   parallel:
     matrix:
-      - TAG: rhel8
-        CONFIGURE: >
-          --with-default-use-devices-file=0
-          --with-cluster=internal
-          --enable-cmirrord
-      - TAG: rhel9
-        CONFIGURE: >
-          --with-default-use-devices-file=1
-          --enable-app-machineid
-          --enable-editline
-          --disable-readline
+    - TAG: rhel8
+      CONFIGURE: "--with-default-use-devices-file=0 --with-cluster=internal --enable-cmirrord\n"
+    - TAG: rhel9
+      CONFIGURE: "--with-default-use-devices-file=1 --enable-app-machineid --enable-editline
+        --disable-readline\n"
   artifacts:
     paths:
-      - test/results/
+    - test/results/
     expire_in: 1 week
     when: always
   tags:
-      - ${TAG}
+  - "${TAG}"
   timeout: 2h
   script:
-    # Common options go here, diffs to the above matrix
-    - >
-      ./configure ${CONFIGURE}
-      --enable-fsadm
-      --enable-write_install
-      --enable-pkgconfig
-      --enable-cmdlib
-      --enable-dmeventd
-      --enable-blkid_wiping
-      --enable-udev_sync
-      --with-thin=internal
-      --with-cache=internal
-      --enable-lvmpolld
-      --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
-      --enable-lvmlockd-sanlock
-      --enable-dbus-service --enable-notify-dbus
-      --enable-dmfilemapd
-      --with-vdo-format=/usr/bin/vdoformat
-      --disable-silent-rules
-    - make
-    - rm -rf test/results
-    - mkdir -p /dev/shm/lvm2-test
-    - mount -o remount,dev /dev/shm
-    # TODO: Need to distinguish failed test from failed harness
-    # TODO: Also need a way to find if run is incomplete, e.g. full disk resulting in many skipped tests
-    - VERBOSE=0 BATCH=1 LVM_TEST_DIR=/dev/shm/lvm2-test make check || true
-    - rm -rf /dev/shm/lvm2-test
-    - cut -d' ' -f2 test/results/list | sort | uniq -c
-    # Filter artifacts - keep only logs from tests which are not pass
-    - (cd test/results && rm $(grep 'passed$' list | cut -d' ' -f1 | sed -e 's|/|_|g' -e 's|.*|\0.txt|'))
-    - find test/results -type f -empty -delete
-    # TODO: Keep a list of known failures, and translate into regexp - or simply use python...
-    - if grep failed test/results/list | grep -v '\(dbustest\|lvconvert-mirror\|lvconvert-raid-reshape-size\|lvconvert-raid-reshape-stripes-load-fail\)\.sh' | sort; then false; else true; fi
+  - "./configure ${CONFIGURE} --enable-fsadm --enable-write_install --enable-pkgconfig
+    --enable-cmdlib --enable-dmeventd --enable-blkid_wiping --enable-udev_sync --with-thin=internal
+    --with-cache=internal --enable-lvmpolld --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+    --enable-lvmlockd-sanlock --enable-dbus-service --enable-notify-dbus --enable-dmfilemapd
+    --with-vdo-format=/usr/bin/vdoformat --disable-silent-rules\n"
+  - make
+  - rm -rf test/results
+  - mkdir -p /dev/shm/lvm2-test
+  - mount -o remount,dev /dev/shm
+  - VERBOSE=0 BATCH=1 LVM_TEST_DIR=/dev/shm/lvm2-test make check || true
+  - rm -rf /dev/shm/lvm2-test
+  - cut -d' ' -f2 test/results/list | sort | uniq -c
+  - "(cd test/results && rm $(grep 'passed$' list | cut -d' ' -f1 | sed -e 's|/|_|g'
+    -e 's|.*|\\0.txt|'))"
+  - find test/results -type f -empty -delete
+  - if grep failed test/results/list | grep -v '\(dbustest\|lvconvert-mirror\|lvconvert-raid-reshape-size\|lvconvert-raid-reshape-stripes-load-fail\)\.sh'
+    | sort; then false; else true; fi
   rules:
-    # Filter only safe repositories, or user in developers:
-    # NOTE: Already done in approve stage, may be more caution than necessary
-    - if: $CI_PROJECT_PATH != "csonto/lvm2" && $CI_PROJECT_PATH != "lvmteam/lvm2"
-      when: manual
-    - when: on_success
-
-# reboot must be configured to let runner finish cleanly while not accepting new jobs
-# NOTE: If this causes warnings, gitlab-runner needs to be configured to be stopped using SIGQUIT
-# See: https://docs.gitlab.com/runner/commands/#gitlab-runner-stop-doesnt-shut-down-gracefully
-# NOTE: It should be possible to use after_script in test job, which runs
-# before artifacts collection, but reboot may be too eager to stop the job
-# while collecting artifacts
-# NOTE: What would happen when there are multiple jobs in the queue for each
-# tag? Could the tests run first and reboot only after them? I think so!
+  - if: $CI_PROJECT_PATH != "csonto/lvm2" && $CI_PROJECT_PATH != "lvmteam/lvm2"
+    when: manual
+  - when: on_success
 reboot:
   stage: post
   parallel:
     matrix:
-      - TAG: rhel8
-      - TAG: rhel9
+    - TAG: rhel8
+    - TAG: rhel9
   tags:
-      - ${TAG}
+  - "${TAG}"
   timeout: 1m
   script:
-    - reboot
+  - reboot
   allow_failure: true
   when: always
-
+sast:
+  stage: test
+include:
+- template: Security/SAST.gitlab-ci.yml
