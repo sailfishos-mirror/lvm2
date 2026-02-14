@@ -40,9 +40,9 @@ static int *_fd_table = NULL;
 
 //----------------------------------------------------------------
 
-static void log_sys_warn(const char *call)
+static void log_sys_warn(const char *call, int err)
 {
-	log_warn("WARNING: %s failed: %s.", call, strerror(errno));
+	log_warn("WARNING: %s failed: %s.", call, strerror(err));
 }
 
 // Assumes the list is not empty.
@@ -141,6 +141,7 @@ static struct async_engine *_to_async(struct io_engine *e)
 
 static void _async_destroy(struct io_engine *ioe)
 {
+	int r;
 	struct async_engine *e = _to_async(ioe);
 
 	_cb_set_destroy(e->cbs);
@@ -155,8 +156,9 @@ static void _async_destroy(struct io_engine *ioe)
 			log_debug_devs("Skipping AIO context destroy for different pid.");
 		else {
 			log_debug_devs("Destroy AIO context.");
-			if (io_destroy(e->aio_context)) // really slow (~40ms)
-				log_sys_warn("io_destroy");
+			r = io_destroy(e->aio_context); // really slow (~40ms)
+			if (r < 0)
+				log_sys_warn("io_destroy", -r);
 		}
 	}
 
@@ -331,7 +333,7 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
 
 	if (r < 0) {
-		log_sys_warn("io_getevents");
+		log_sys_warn("io_getevents", -r);
 		return false;
 	}
 
