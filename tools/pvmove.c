@@ -322,6 +322,20 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 	lv_mirr->status |= (PVMOVE | LOCKED);
 
+	/* In shared VGs, create and acquire cluster lock for pvmove LV
+	 * so other nodes see pvmove is running */
+	if (vg_is_shared(vg)) {
+		if (!lockd_init_lv_args(cmd, vg, lv_mirr,
+					vg->lock_type, NULL, &lv_mirr->lock_args)) {
+			log_error("Failed to initialize lock for pvmove LV.");
+			return NULL;
+		}
+		if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+			log_error("Failed to acquire cluster lock for pvmove LV.");
+			return NULL;
+		}
+	}
+
 	if (!(*lvs_changed = dm_pool_alloc(cmd->mem, sizeof(**lvs_changed)))) {
 		log_error("lvs_changed list struct allocation failed.");
 		return NULL;
@@ -692,6 +706,13 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 		/* Ensure mirror LV is active */
 		if (!activate_lv(cmd, lv_mirr)) {
 			log_error("ABORTING: Temporary mirror activation failed.");
+			goto out;
+		}
+
+		/* Re-acquire cluster lock for pvmove LV (needed after crash/restart) */
+		if (vg_is_shared(vg) && lv_mirr->lock_args &&
+		    !lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+			log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
 			goto out;
 		}
 

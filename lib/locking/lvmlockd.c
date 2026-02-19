@@ -4544,6 +4544,11 @@ out:
 
 int lockd_lv_uses_lock(struct logical_volume *lv)
 {
+	/* pvmove LVs need cluster lock even though hidden,
+	 * so other nodes see pvmove is running */
+	if (lv_is_pvmove(lv))
+		return 1;
+
 	if (!lv_is_visible(lv))
 		return 0;
 

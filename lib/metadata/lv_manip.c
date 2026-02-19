@@ -7691,6 +7691,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	struct lv_segment *seg = first_seg(lv);
 	char msg[NAME_LEN + 300], *msg_dup;
 	int other_unlock = 0;
+	int pvmove_lv_removed = 0;
 
 	vg = lv->vg;
 
@@ -7910,6 +7911,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 		log_verbose("Removing orphaned pvmove LV %s.", display_lvname(pvmove_lv));
 		if (!lv_remove(pvmove_lv))
 			return_0;
+		pvmove_lv_removed = 1;
 	}
 
 	if (!pool_lv && (!strcmp(cmd->name, "lvremove") || !strcmp(cmd->name, "vgremove"))) {
@@ -7929,6 +7931,16 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 		log_print_unless_silent("Ignoring update failure of pool %s.",
 					display_lvname(pool_lv));
 	}
+
+	/*
+	 * Unlock cluster locks only after a successful metadata commit so the
+	 * cluster remains protected if the commit fails.
+	 * pvmove_lv (orphaned pvmove mirror) uses lv_remove() internally which
+	 * does not call lockd_lvremove_done(); unlock it explicitly here,
+	 * mirroring what lv_remove_single() does for lv below.
+	 */
+	if (pvmove_lv_removed)
+		lockd_lvremove_done(cmd, pvmove_lv, NULL, 0);
 
 	lockd_lvremove_done(cmd, lv, lockd_other, other_unlock);
 
