@@ -17,6 +17,7 @@
 #include "lib/datastruct/radix-tree.h"
 #include "lib/log/lvm-logging.h"
 #include "lib/log/log.h"
+#include "lib/misc/lvm-signal.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -331,9 +332,13 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 
 	memset(&event, 0, sizeof(event));
 
+	/*
+	 * Retry on EINTR from stray signals, but stop if an LVM interrupt
+	 * signal (SIGINT/SIGTERM via sigint_allow()) has been caught.
+	 */
 	do {
 		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
-	} while (r == -EINTR);
+	} while (r == -EINTR && !sigint_caught());
 
 	if (r < 0) {
 		log_sys_warn("io_getevents", -r);
