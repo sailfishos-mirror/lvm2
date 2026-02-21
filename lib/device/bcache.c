@@ -326,11 +326,9 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int di,
 static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 {
 	int i, r;
-	struct io_event event[MAX_EVENT];
+	struct io_event event[MAX_EVENT] = { };
 	struct control_block *cb;
 	struct async_engine *e = _to_async(ioe);
-
-	memset(&event, 0, sizeof(event));
 
 	/*
 	 * Retry on EINTR from stray signals, but stop if an LVM interrupt
