@@ -234,18 +234,17 @@ static void _do_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 	T_ASSERT(bcache_set_bytes(f->cache, f->di, byte_b, byte_e - byte_b, val));
 }
 
-static void _reopen(struct fixture *f)
+/*
+ * Flush dirty blocks to disk and drop all cached blocks so the
+ * next read goes back to the file.  This replaces the old _reopen()
+ * which destroyed and recreated the entire bcache + io_engine -
+ * io_destroy() alone takes ~40ms, so avoiding it per-test saves
+ * significant time.
+ */
+static void _flush_and_invalidate(struct fixture *f)
 {
-        struct io_engine *engine;
-
-	bcache_destroy(f->cache);
-	engine = create_async_io_engine();
-	T_ASSERT(engine);
-
-	f->cache = bcache_create(T_BLOCK_SIZE / 512, NR_BLOCKS, engine);
-	T_ASSERT(f->cache);
-
-	f->di = bcache_set_fd(f->fd);
+	T_ASSERT(bcache_flush(f->cache));
+	bcache_invalidate_di(f->cache, f->di);
 }
 
 //----------------------------------------------------------------
@@ -267,7 +266,7 @@ static void _rwv_cycle(struct fixture *f, uint64_t b, uint64_t e)
 
 	_verify(f, b, e, INIT_PATTERN);
 	_do_write(f, b, e, pat); 
-	_reopen(f);
+	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify(f, b, e, pat);
 	_verify(f, e, _min(e + 128, _max_byte()), INIT_PATTERN);
@@ -311,7 +310,7 @@ static void _zero_cycle(struct fixture *f, uint64_t b, uint64_t e)
 {
 	_verify(f, b, e, INIT_PATTERN);
 	_do_zero(f, b, e); 
-	_reopen(f);
+	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify_zeroes(f, b, e);
 	_verify(f, e, _min(e + 128, _max_byte()), INIT_PATTERN);
@@ -356,7 +355,7 @@ static void _set_cycle(struct fixture *f, uint64_t b, uint64_t e)
 
 	_verify(f, b, e, INIT_PATTERN);
 	_do_set(f, b, e, val); 
-	_reopen(f);
+	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify_set(f, b, e, val);
 	_verify(f, e, _min(e + 128, _max_byte()), INIT_PATTERN);
