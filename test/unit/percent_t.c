@@ -22,10 +22,10 @@ static void test_percent_100(void *fixture)
 {
 	char buf[32];
 
-        /* Check 100% is shown only for DM_PERCENT_100*/
+	/* Check 100% is shown only for DM_PERCENT_100*/
 	dm_percent_t p_100 = dm_make_percent(100, 100);
-        dm_percent_t p1_100 = dm_make_percent(100000, 100000);
-        dm_percent_t n_100 = dm_make_percent(999999, 1000000);
+	dm_percent_t p1_100 = dm_make_percent(100000, 100000);
+	dm_percent_t n_100 = dm_make_percent(999999, 1000000);
 
 	T_ASSERT_EQUAL(p_100, DM_PERCENT_100);
 	T_ASSERT_EQUAL(p1_100, DM_PERCENT_100);
@@ -59,8 +59,8 @@ static void test_percent_0(void *fixture)
 
 	/* Check 0% is shown only for DM_PERCENT_0 */
 	dm_percent_t p_0 = dm_make_percent(0, 100);
-        dm_percent_t p1_0 = dm_make_percent(0, 100000);
-        dm_percent_t n_0 = dm_make_percent(1, 1000000);
+	dm_percent_t p1_0 = dm_make_percent(0, 100000);
+	dm_percent_t n_0 = dm_make_percent(1, 1000000);
 
 	T_ASSERT_EQUAL(p_0, DM_PERCENT_0);
 	T_ASSERT_EQUAL(p1_0, DM_PERCENT_0);

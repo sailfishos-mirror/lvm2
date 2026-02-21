@@ -116,4 +116,3 @@ void dm_status_tests(struct dm_list *all_tests)
 	register_test(ts, "/device-mapper/raid/status", "parsing raid status", _test_raid_status);
 	dm_list_add(all_tests, &ts->list);
 }
-

@@ -177,4 +177,4 @@ void config_tests(struct dm_list *all_tests)
 	T("cascade", "cascade", test_cascade);
 
 	dm_list_add(all_tests, &ts->list);
-};
+}

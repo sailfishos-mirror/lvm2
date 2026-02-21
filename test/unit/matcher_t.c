@@ -74,21 +74,21 @@ static void test_matching(void *fixture)
 
 static void test_kabi_query(void *fixture)
 {
-        // Remember, matches regexes from last to first.
-        static const char * const _patterns[] = {
-                ".*", ".*/dev/md.*", "loop"
-        };
+	// Remember, matches regexes from last to first.
+	static const char * const _patterns[] = {
+		".*", ".*/dev/md.*", "loop"
+	};
 
-        static const struct {
-                const char *input;
+	static const struct {
+		const char *input;
 		unsigned r;
-        } _cases[] = {
+	} _cases[] = {
 		{"foo", 0},
 		{"/dev/mapper/vg-lvol1", 0},
 		{"/dev/mapper/vglvol1", 0},
 		{"/dev/md1", 1},
 		{"loop", 2},
-        };
+	};
 
 	int r;
 	unsigned i;
@@ -99,16 +99,14 @@ static void test_kabi_query(void *fixture)
 	T_ASSERT(scanner != NULL);
 
 	for (i = 0; i < DM_ARRAY_SIZE(_cases); i++) {
-        	r = dm_regex_match(scanner, _cases[i].input);
-        	if (r != _cases[i].r) {
-                	test_fail("'%s' expected to match '%s', but matched %s",
-                                  _cases[i].input,
-                                  _cases[i].r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[_cases[i].r],
-                                  r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[r]);
-        	}
+		r = dm_regex_match(scanner, _cases[i].input);
+		if (r != _cases[i].r) {
+			test_fail("'%s' expected to match '%s', but matched %s",
+				  _cases[i].input,
+				  _cases[i].r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[_cases[i].r],
+				  r >= DM_ARRAY_SIZE(_patterns) ? "<nothing>" : _patterns[r]);
+		}
 	}
-
-
 }
 
 #define T(path, desc, fn) register_test(ts, "/base/regex/" path, desc, fn)

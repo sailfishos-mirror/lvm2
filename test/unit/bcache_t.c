@@ -428,7 +428,6 @@ static void test_block_size_must_be_positive(void *fixture)
 static void test_block_size_must_be_multiple_of_page_size(void *fixture)
 {
 	static const unsigned _bad_examples[] = {3, 9, 13, 1025};
-
 	unsigned i;
 
 	for (i = 0; i < DM_ARRAY_SIZE(_bad_examples); i++)
@@ -951,8 +950,8 @@ static void test_concurrent_reads_after_invalidate(void *context)
 
 	_cycle(f, nr_cache_blocks);
 	for (i = 0; i < nr_cache_blocks; i++)
-        	bcache_invalidate_di(f->cache, i);
-        _cycle(f, nr_cache_blocks);
+		bcache_invalidate_di(f->cache, i);
+	_cycle(f, nr_cache_blocks);
 }
 
 /*----------------------------------------------------------------
@@ -1010,7 +1009,7 @@ static struct test_suite *_small_tests(void)
 	T("abort-specific-di", "abort doesn't effect other dis", test_abort_only_specific_di);
 
 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
-          test_concurrent_reads_after_invalidate);
+	  test_concurrent_reads_after_invalidate);
 
 	return ts;
 }

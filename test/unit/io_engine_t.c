@@ -45,12 +45,12 @@ struct fixture {
 
 static void _fill_buffer(uint8_t *buffer, uint8_t seed, size_t count)
 {
-        unsigned i;
-        uint8_t b = seed;
+	unsigned i;
+	uint8_t b = seed;
 
 	for (i = 0; i < count; i++) {
-        	buffer[i] = b;
-        	b = ((b << 5) + b) + i;
+		buffer[i] = b;
+		b = ((b << 5) + b) + i;
 	}
 }
 
@@ -60,8 +60,8 @@ static void _check_buffer(uint8_t *buffer, uint8_t seed, size_t count)
 	uint8_t b = seed;
 
 	for (i = 0; i < count; i++) {
-        	T_ASSERT_EQUAL(buffer[i], b);
-        	b = ((b << 5) + b) + i;
+		T_ASSERT_EQUAL(buffer[i], b);
+		b = ((b << 5) + b) + i;
 	}
 }
 
@@ -72,10 +72,10 @@ static void _print_buffer(const char *name, uint8_t *buffer, size_t count)
 	fprintf(stderr, "%s:\n", name);
 	while (count) {
 		for (col = 0; count && col < 20; col++) {
-        		fprintf(stderr, "%x, ", (unsigned) *buffer);
-        		col++;
-        		buffer++;
-        		count--;
+			fprintf(stderr, "%x, ", (unsigned) *buffer);
+			col++;
+			buffer++;
+			count--;
 		}
 		fprintf(stderr, "\n");
 	}
@@ -83,15 +83,15 @@ static void _print_buffer(const char *name, uint8_t *buffer, size_t count)
 
 static void *_fix_init(void)
 {
-        struct fixture *f = malloc(sizeof(*f));
+	struct fixture *f = malloc(sizeof(*f));
 
-        T_ASSERT(f);
-        f->e = create_async_io_engine();
-        T_ASSERT(f->e);
+	T_ASSERT(f);
+	f->e = create_async_io_engine();
+	T_ASSERT(f->e);
 	if (posix_memalign((void **) &f->data, PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
-        	test_fail("posix_memalign failed");
+		test_fail("posix_memalign failed");
 
-        snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
+	snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
 	/* coverity[secure_temp] don't care */
 	f->fd = mkstemp(f->fname);
 	T_ASSERT(f->fd >= 0);
@@ -101,12 +101,12 @@ static void *_fix_init(void)
 	T_ASSERT(write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS) > 0);
 	T_ASSERT(lseek(f->fd, 0, SEEK_SET) != -1);
 
-        return f;
+	return f;
 }
 
 static void _fix_exit(void *fixture)
 {
-        struct fixture *f = fixture;
+	struct fixture *f = fixture;
 
 	if (f) {
 		(void) close(f->fd);
@@ -341,24 +341,23 @@ static void _test_wait_eintr(void *fixture)
 
 static struct test_suite *_tests(void)
 {
-        struct test_suite *ts = test_suite_create(_fix_init, _fix_exit);
-        if (!ts) {
-                fprintf(stderr, "out of memory\n");
-                exit(1);
-        }
+	struct test_suite *ts = test_suite_create(_fix_init, _fix_exit);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
 
-        T("create-destroy", "simple create/destroy", _test_create);
-        T("read", "read sanity check", _test_read);
-        T("write", "write sanity check", _test_write);
-        T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
+	T("create-destroy", "simple create/destroy", _test_create);
+	T("read", "read sanity check", _test_read);
+	T("write", "write sanity check", _test_write);
+	T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
 	T("destroy-after-fork", "io_destroy skipped in child after fork", _test_destroy_after_fork);
 	T("wait-eintr", "io_getevents interrupted by signal", _test_wait_eintr);
 
-        return ts;
+	return ts;
 }
 
 void io_engine_tests(struct dm_list *all_tests)
 {
 	dm_list_add(all_tests, &_tests()->list);
 }
-

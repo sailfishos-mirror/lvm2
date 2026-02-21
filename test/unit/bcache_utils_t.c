@@ -116,7 +116,7 @@ static void *_sync_init(void)
 
 static void _fix_exit(void *fixture)
 {
-        struct fixture *f = fixture;
+	struct fixture *f = fixture;
 
 	if (f) {
 		bcache_destroy(f->cache);
@@ -130,7 +130,7 @@ static void _fix_exit(void *fixture)
 //----------------------------------------------------------------
 
 static void _verify_bytes(struct block *b, uint64_t base,
-                          uint64_t offset, uint64_t len, uint8_t pat)
+			  uint64_t offset, uint64_t len, uint8_t pat)
 {
 	unsigned i;
 
@@ -153,8 +153,8 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 
 	// Verify via bcache_read_bytes
 	{
-        	unsigned i;
-        	size_t len2 = byte_e - byte_b;
+		unsigned i;
+		size_t len2 = byte_e - byte_b;
 		uint8_t *buffer = malloc(len2);
 
 		T_ASSERT(buffer);
@@ -162,27 +162,27 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 
 		T_ASSERT(bcache_read_bytes(f->cache, f->di, byte_b, len2, buffer));
 		for (i = 0; i < len; i++)
-        		T_ASSERT_EQUAL(buffer[i], _pattern_at(pat, byte_b + i));
-        	free(buffer);
+			T_ASSERT_EQUAL(buffer[i], _pattern_at(pat, byte_b + i));
+		free(buffer);
 	}
 
 	// Verify again, driving bcache directly
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
+		T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
-        	_verify_bytes(b, bb * T_BLOCK_SIZE, offset, blen, pat);
+		_verify_bytes(b, bb * T_BLOCK_SIZE, offset, blen, pat);
 
-        	offset = 0;
-        	len -= blen;
+		offset = 0;
+		len -= blen;
 
-        	bcache_put(b);
+		bcache_put(b);
 	}
 }
 
 static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t val)
 {
-        unsigned i;
+	unsigned i;
 	struct block *b;
 	block_address bb = byte_b / T_BLOCK_SIZE;
 	block_address be = (byte_e + T_BLOCK_SIZE - 1) / T_BLOCK_SIZE;
@@ -190,37 +190,37 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
 	uint64_t blen, len = byte_e - byte_b;
 
 	for (; bb != be; bb++) {
-        	T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
+		T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
 		for (i = 0; i < blen; i++)
-        		T_ASSERT(((uint8_t *) b->data)[offset + i] == val);
+			T_ASSERT(((uint8_t *) b->data)[offset + i] == val);
 
-        	offset = 0;
-        	len -= blen;
+		offset = 0;
+		len -= blen;
 
-        	bcache_put(b);
+		bcache_put(b);
 	}
 }
 
 static void _verify_zeroes(struct fixture *f, uint64_t byte_b, uint64_t byte_e)
 {
-        _verify_set(f, byte_b, byte_e, 0);
+	_verify_set(f, byte_b, byte_e, 0);
 }
 
 static void _do_write(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t pat)
 {
-        unsigned i;
-        size_t len = byte_e - byte_b;
-        uint8_t *buffer = malloc(len);
+	unsigned i;
+	size_t len = byte_e - byte_b;
+	uint8_t *buffer = malloc(len);
 
 	T_ASSERT(buffer);
 	memset(buffer, 0, len);
 
-        for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++)
 		buffer[i] = _pattern_at(pat, byte_b + i);
 
-        T_ASSERT(bcache_write_bytes(f->cache, f->di, byte_b, byte_e - byte_b, buffer));
+	T_ASSERT(bcache_write_bytes(f->cache, f->di, byte_b, byte_e - byte_b, buffer));
 	free(buffer);
 }
 
@@ -257,7 +257,7 @@ static uint8_t _random_pattern(void)
 
 static uint64_t _max_byte(void)
 {
-        return T_BLOCK_SIZE * NR_BLOCKS;
+	return T_BLOCK_SIZE * NR_BLOCKS;
 }
 
 static void _rwv_cycle(struct fixture *f, uint64_t b, uint64_t e)
@@ -265,7 +265,7 @@ static void _rwv_cycle(struct fixture *f, uint64_t b, uint64_t e)
 	uint8_t pat = _random_pattern();
 
 	_verify(f, b, e, INIT_PATTERN);
-	_do_write(f, b, e, pat); 
+	_do_write(f, b, e, pat);
 	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify(f, b, e, pat);
@@ -279,29 +279,29 @@ static void _test_rw_first_block(void *fixture)
 
 static void _test_rw_last_block(void *fixture)
 {
-        uint64_t last_block = NR_BLOCKS - 1;
+	uint64_t last_block = NR_BLOCKS - 1;
 	_rwv_cycle(fixture, byte(last_block, 0),
-                   byte(last_block, T_BLOCK_SIZE)); 
+		   byte(last_block, T_BLOCK_SIZE));
 }
 
 static void _test_rw_several_whole_blocks(void *fixture)
 {
-        _rwv_cycle(fixture, byte(5, 0), byte(10, 0));
+	_rwv_cycle(fixture, byte(5, 0), byte(10, 0));
 }
 
 static void _test_rw_within_single_block(void *fixture)
 {
-        _rwv_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
+	_rwv_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
 }
 
 static void _test_rw_cross_one_boundary(void *fixture)
 {
-        _rwv_cycle(fixture, byte(13, 43), byte(14, 43));
+	_rwv_cycle(fixture, byte(13, 43), byte(14, 43));
 }
 
 static void _test_rw_many_boundaries(void *fixture)
 {
-        _rwv_cycle(fixture, byte(13, 13), byte(23, 13));
+	_rwv_cycle(fixture, byte(13, 13), byte(23, 13));
 }
 
 //----------------------------------------------------------------
@@ -309,7 +309,7 @@ static void _test_rw_many_boundaries(void *fixture)
 static void _zero_cycle(struct fixture *f, uint64_t b, uint64_t e)
 {
 	_verify(f, b, e, INIT_PATTERN);
-	_do_zero(f, b, e); 
+	_do_zero(f, b, e);
 	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify_zeroes(f, b, e);
@@ -323,28 +323,28 @@ static void _test_zero_first_block(void *fixture)
 
 static void _test_zero_last_block(void *fixture)
 {
-        uint64_t last_block = NR_BLOCKS - 1;
-	_zero_cycle(fixture, byte(last_block, 0), byte(last_block, T_BLOCK_SIZE)); 
+	uint64_t last_block = NR_BLOCKS - 1;
+	_zero_cycle(fixture, byte(last_block, 0), byte(last_block, T_BLOCK_SIZE));
 }
 
 static void _test_zero_several_whole_blocks(void *fixture)
 {
-        _zero_cycle(fixture, byte(5, 0), byte(10, 0));
+	_zero_cycle(fixture, byte(5, 0), byte(10, 0));
 }
 
 static void _test_zero_within_single_block(void *fixture)
 {
-        _zero_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
+	_zero_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
 }
 
 static void _test_zero_cross_one_boundary(void *fixture)
 {
-        _zero_cycle(fixture, byte(13, 43), byte(14, 43));
+	_zero_cycle(fixture, byte(13, 43), byte(14, 43));
 }
 
 static void _test_zero_many_boundaries(void *fixture)
 {
-        _zero_cycle(fixture, byte(13, 13), byte(23, 13));
+	_zero_cycle(fixture, byte(13, 13), byte(23, 13));
 }
 
 //----------------------------------------------------------------
@@ -354,7 +354,7 @@ static void _set_cycle(struct fixture *f, uint64_t b, uint64_t e)
 	uint8_t val = _random_pattern();
 
 	_verify(f, b, e, INIT_PATTERN);
-	_do_set(f, b, e, val); 
+	_do_set(f, b, e, val);
 	_flush_and_invalidate(f);
 	_verify(f, b < 128 ? 0 : b - 128, b, INIT_PATTERN);
 	_verify_set(f, b, e, val);
@@ -368,28 +368,28 @@ static void _test_set_first_block(void *fixture)
 
 static void _test_set_last_block(void *fixture)
 {
-        uint64_t last_block = NR_BLOCKS - 1;
-	_set_cycle(fixture, byte(last_block, 0), byte(last_block, T_BLOCK_SIZE)); 
+	uint64_t last_block = NR_BLOCKS - 1;
+	_set_cycle(fixture, byte(last_block, 0), byte(last_block, T_BLOCK_SIZE));
 }
 
 static void _test_set_several_whole_blocks(void *fixture)
 {
-        _set_cycle(fixture, byte(5, 0), byte(10, 0));
+	_set_cycle(fixture, byte(5, 0), byte(10, 0));
 }
 
 static void _test_set_within_single_block(void *fixture)
 {
-        _set_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
+	_set_cycle(fixture, byte(7, 3), byte(7, T_BLOCK_SIZE / 2));
 }
 
 static void _test_set_cross_one_boundary(void *fixture)
 {
-        _set_cycle(fixture, byte(13, 43), byte(14, 43));
+	_set_cycle(fixture, byte(13, 43), byte(14, 43));
 }
 
 static void _test_set_many_boundaries(void *fixture)
 {
-        _set_cycle(fixture, byte(13, 13), byte(23, 13));
+	_set_cycle(fixture, byte(13, 13), byte(23, 13));
 }
 
 //----------------------------------------------------------------
@@ -398,71 +398,71 @@ static void _test_set_many_boundaries(void *fixture)
 
 static struct test_suite *_async_tests(void)
 {
-        struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
-        if (!ts) {
-                fprintf(stderr, "out of memory\n");
-                exit(1);
-        }
+	struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
 
 #define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
-        T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
-        T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
-        T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
-        T("rw-within-single-block", "read/write/verify within single block", _test_rw_within_single_block);
-        T("rw-cross-one-boundary", "read/write/verify across one boundary", _test_rw_cross_one_boundary);
-        T("rw-many-boundaries", "read/write/verify many boundaries", _test_rw_many_boundaries);
+	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
+	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
+	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
+	T("rw-within-single-block", "read/write/verify within single block", _test_rw_within_single_block);
+	T("rw-cross-one-boundary", "read/write/verify across one boundary", _test_rw_cross_one_boundary);
+	T("rw-many-boundaries", "read/write/verify many boundaries", _test_rw_many_boundaries);
 
-        T("zero-first-block", "zero the first block", _test_zero_first_block);
-        T("zero-last-block", "zero the last block", _test_zero_last_block);
-        T("zero-several-blocks", "zero several whole blocks", _test_zero_several_whole_blocks);
-        T("zero-within-single-block", "zero within single block", _test_zero_within_single_block);
-        T("zero-cross-one-boundary", "zero across one boundary", _test_zero_cross_one_boundary);
-        T("zero-many-boundaries", "zero many boundaries", _test_zero_many_boundaries);
+	T("zero-first-block", "zero the first block", _test_zero_first_block);
+	T("zero-last-block", "zero the last block", _test_zero_last_block);
+	T("zero-several-blocks", "zero several whole blocks", _test_zero_several_whole_blocks);
+	T("zero-within-single-block", "zero within single block", _test_zero_within_single_block);
+	T("zero-cross-one-boundary", "zero across one boundary", _test_zero_cross_one_boundary);
+	T("zero-many-boundaries", "zero many boundaries", _test_zero_many_boundaries);
 
-        T("set-first-block", "set the first block", _test_set_first_block);
-        T("set-last-block", "set the last block", _test_set_last_block);
-        T("set-several-blocks", "set several whole blocks", _test_set_several_whole_blocks);
-        T("set-within-single-block", "set within single block", _test_set_within_single_block);
-        T("set-cross-one-boundary", "set across one boundary", _test_set_cross_one_boundary);
-        T("set-many-boundaries", "set many boundaries", _test_set_many_boundaries);
+	T("set-first-block", "set the first block", _test_set_first_block);
+	T("set-last-block", "set the last block", _test_set_last_block);
+	T("set-several-blocks", "set several whole blocks", _test_set_several_whole_blocks);
+	T("set-within-single-block", "set within single block", _test_set_within_single_block);
+	T("set-cross-one-boundary", "set across one boundary", _test_set_cross_one_boundary);
+	T("set-many-boundaries", "set many boundaries", _test_set_many_boundaries);
 #undef T
 
-        return ts;
+	return ts;
 }
 
 
 static struct test_suite *_sync_tests(void)
 {
-        struct test_suite *ts = test_suite_create(_sync_init, _fix_exit);
-        if (!ts) {
-                fprintf(stderr, "out of memory\n");
-                exit(1);
-        }
+	struct test_suite *ts = test_suite_create(_sync_init, _fix_exit);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
 
 #define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/sync/" path, desc, fn)
-        T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
-        T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
-        T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
-        T("rw-within-single-block", "read/write/verify within single block", _test_rw_within_single_block);
-        T("rw-cross-one-boundary", "read/write/verify across one boundary", _test_rw_cross_one_boundary);
-        T("rw-many-boundaries", "read/write/verify many boundaries", _test_rw_many_boundaries);
+	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
+	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
+	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
+	T("rw-within-single-block", "read/write/verify within single block", _test_rw_within_single_block);
+	T("rw-cross-one-boundary", "read/write/verify across one boundary", _test_rw_cross_one_boundary);
+	T("rw-many-boundaries", "read/write/verify many boundaries", _test_rw_many_boundaries);
 
-        T("zero-first-block", "zero the first block", _test_zero_first_block);
-        T("zero-last-block", "zero the last block", _test_zero_last_block);
-        T("zero-several-blocks", "zero several whole blocks", _test_zero_several_whole_blocks);
-        T("zero-within-single-block", "zero within single block", _test_zero_within_single_block);
-        T("zero-cross-one-boundary", "zero across one boundary", _test_zero_cross_one_boundary);
-        T("zero-many-boundaries", "zero many boundaries", _test_zero_many_boundaries);
+	T("zero-first-block", "zero the first block", _test_zero_first_block);
+	T("zero-last-block", "zero the last block", _test_zero_last_block);
+	T("zero-several-blocks", "zero several whole blocks", _test_zero_several_whole_blocks);
+	T("zero-within-single-block", "zero within single block", _test_zero_within_single_block);
+	T("zero-cross-one-boundary", "zero across one boundary", _test_zero_cross_one_boundary);
+	T("zero-many-boundaries", "zero many boundaries", _test_zero_many_boundaries);
 
-        T("set-first-block", "set the first block", _test_set_first_block);
-        T("set-last-block", "set the last block", _test_set_last_block);
-        T("set-several-blocks", "set several whole blocks", _test_set_several_whole_blocks);
-        T("set-within-single-block", "set within single block", _test_set_within_single_block);
-        T("set-cross-one-boundary", "set across one boundary", _test_set_cross_one_boundary);
-        T("set-many-boundaries", "set many boundaries", _test_set_many_boundaries);
+	T("set-first-block", "set the first block", _test_set_first_block);
+	T("set-last-block", "set the last block", _test_set_last_block);
+	T("set-several-blocks", "set several whole blocks", _test_set_several_whole_blocks);
+	T("set-within-single-block", "set within single block", _test_set_within_single_block);
+	T("set-cross-one-boundary", "set across one boundary", _test_set_cross_one_boundary);
+	T("set-many-boundaries", "set many boundaries", _test_set_many_boundaries);
 #undef T
 
-        return ts;
+	return ts;
 }
 
 void bcache_utils_tests(struct dm_list *all_tests)
@@ -470,4 +470,3 @@ void bcache_utils_tests(struct dm_list *all_tests)
 	dm_list_add(all_tests, &_async_tests()->list);
 	dm_list_add(all_tests, &_sync_tests()->list);
 }
-
