@@ -1,5 +1,9 @@
 Version 2.03.39 - 
 ==================
+  Propagate bcache _wait_all() failure to bcache_flush() and bcache_invalidate_di().
+  Propagate io_getevents() EINTR failure through bcache wait chain to abort I/O.
+  Retry io_getevents() on EINTR unless LVM interrupt signal was caught.
+  Fix checking error codes from io_destroy() and io_getevents().
   Add lvm-index(7), lvm-categories(7) and lvm-args(7) man pages.
   Show active cache mode in kernel table line with lvs -o kernel_cache_mode.
   Preserve file desciptors with CLOEXEC opened in library constructors.
@@ -51,7 +55,7 @@ Version 2.03.36 - 24th October 2025
   Allow creating _imeta with multiple segments.
   Fix driver_version() accepts NULL version buffer pointer.
   Fix invalid free() call in error path of _add_metadata_area_to_pv().
-  Avoid destroying aio context in forked process.
+  Avoid destroying aio context (calling of io_destroy()) in forked process.
   Add lvs -o cache_promotions,cache_promotions fields.
   Update pvmove logic when moving i.e. raid legs.
   Display integrity info in lvdisplay.
