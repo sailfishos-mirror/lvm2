@@ -14,12 +14,15 @@
 
 #include "units.h"
 #include "lib/device/bcache.h"
+#include "lib/misc/lvm-signal.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -209,6 +212,129 @@ static void _test_write_bytes(void *fixture)
 	f->e = NULL;   // already destroyed
 }
 
+/*
+ * Test that _async_destroy() skips io_destroy() after fork().
+ *
+ * The aio_context is created in the parent process. After fork() the
+ * child inherits the context value but must not call io_destroy() on
+ * it - only the original process should do that.  _async_destroy()
+ * compares aio_context_pid against getpid() to guard this.
+ *
+ * Also exercises the normal io_destroy() path in the parent, verifying
+ * that the negative-return error reporting (commit 512a39448) works
+ * without crashing (io_destroy returns -errno, not -1+errno).
+ */
+static void _test_destroy_after_fork(void *fixture)
+{
+	struct io_engine *e;
+	pid_t pid;
+	int status;
+
+	e = create_async_io_engine();
+	T_ASSERT(e);
+
+	pid = fork();
+	T_ASSERT(pid >= 0);
+
+	if (!pid) {
+		/*
+		 * Child: destroy must skip io_destroy() because pid
+		 * differs from aio_context_pid.  If it incorrectly
+		 * calls io_destroy() the parent's context gets
+		 * invalidated and the parent's destroy will fail.
+		 */
+		e->destroy(e);
+		_exit(0);
+	}
+
+	/* Parent: wait for child to finish its destroy first */
+	T_ASSERT(waitpid(pid, &status, 0) == pid);
+	T_ASSERT(WIFEXITED(status) && !WEXITSTATUS(status));
+
+	/*
+	 * Parent: destroy calls io_destroy() for real.
+	 * This would fail if the child incorrectly destroyed
+	 * the shared aio_context.
+	 */
+	e->destroy(e);
+}
+
+/*
+ * Test that _async_wait() is interruptible by SIGINT/SIGTERM (via
+ * sigint_allow()), but retries on other signals such as SIGALRM.
+ *
+ * The retry loop in _async_wait() is:
+ *   do { r = io_getevents(...); } while (r == -EINTR && !sigint_caught());
+ *
+ * So EINTR from a stray signal retries; EINTR after SIGINT/SIGTERM
+ * (which set sigint_caught()) stops and returns false.
+ *
+ * Strategy: call wait() with no I/O submitted so io_getevents(min_nr=1)
+ * must block.  A child process sends SIGINT to the parent after a short
+ * delay, interrupting io_getevents().  Since sigint_allow() installed
+ * _catch_sigint (which sets sigint_caught()), the retry loop exits and
+ * wait() returns false.
+ *
+ * Why not raise(SIGINT) before calling wait()?
+ * raise() delivers the signal immediately, before io_getevents() is
+ * even called.  _catch_sigint sets sigint_caught() but io_getevents()
+ * then blocks forever because no I/O is pending and the signal is
+ * already consumed.  The child-process approach ensures the signal
+ * arrives while io_getevents() is actually blocked.
+ *
+ * Why not issue I/O and race a signal?
+ * Linux AIO on regular files (and character devices like /dev/zero,
+ * /dev/urandom) completes synchronously inside io_submit() - the
+ * kernel posts the completion before io_submit() returns, so
+ * io_getevents() never blocks.  Only O_DIRECT on a real block device
+ * goes through the true async path.  Calling wait() with no I/O
+ * pending guarantees io_getevents() blocks, making the test
+ * deterministic without needing a block device.
+ */
+static void _test_wait_eintr(void *fixture)
+{
+	struct io_engine *e;
+	pid_t child;
+	int status;
+
+	e = create_async_io_engine();
+	T_ASSERT(e);
+
+	/*
+	 * Arm the LVM SIGINT/SIGTERM handler (clears SA_RESTART,
+	 * installs _catch_sigint which sets sigint_caught()).
+	 */
+	sigint_allow();
+
+	/*
+	 * Fork a child that waits 10ms then sends SIGINT to the parent.
+	 * By then the parent is guaranteed to be inside io_getevents().
+	 */
+	child = fork();
+	T_ASSERT(child >= 0);
+	if (!child) {
+		usleep(10000);
+		kill(getppid(), SIGINT);
+		_exit(0);
+	}
+
+	/*
+	 * No I/O submitted: io_getevents(min_nr=1) blocks until SIGINT
+	 * arrives from the child.  sigint_caught() is then set so the
+	 * retry loop exits and wait() returns false.
+	 */
+	T_ASSERT(!e->wait(e, _complete_io));
+	T_ASSERT(sigint_caught());
+
+	T_ASSERT(waitpid(child, &status, 0) == child);
+	T_ASSERT(WIFEXITED(status) && !WEXITSTATUS(status));
+
+	sigint_restore();
+	sigint_clear();
+
+	e->destroy(e);
+}
+
 //----------------------------------------------------------------
 
 #define T(path, desc, fn) register_test(ts, "/base/device/bcache/io-engine/" path, desc, fn)
@@ -225,6 +351,8 @@ static struct test_suite *_tests(void)
         T("read", "read sanity check", _test_read);
         T("write", "write sanity check", _test_write);
         T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
+	T("destroy-after-fork", "io_destroy skipped in child after fork", _test_destroy_after_fork);
+	T("wait-eintr", "io_getevents interrupted by signal", _test_wait_eintr);
 
         return ts;
 }
