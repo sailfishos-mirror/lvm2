@@ -34,6 +34,10 @@ LVMDBUSDMAN = lvmdbusd.8
 
 MAN5=lvm.conf.5
 MAN7=lvmsystemid.7 lvmreport.7 lvmraid.7 lvmautoactivation.7
+MAN7INDEX=lvm-index.7
+# Builtin commands with no dedicated man page (no _des or _main files).
+# These have only _meta files and are included in index/categories generation.
+MANBUILTIN=config.8 devtypes.8 dumpconfig.8 formats.8 fullreport.8 help.8 lastlog.8 lvpoll.8 segtypes.8 systemid.8 tags.8 version.8
 
 MAN8=lvm.8 lvmdump.8 lvm-fullreport.8 lvm-lvpoll.8 \
      lvcreate.8 lvchange.8 lvmconfig.8 lvconvert.8 lvdisplay.8 \
@@ -48,6 +52,12 @@ MAN8=lvm.8 lvmdump.8 lvm-fullreport.8 lvm-lvpoll.8 \
 MAN8SO=lvm-config.8 lvm-dumpconfig.8
 MAN8DM=dmsetup.8 dmstats.8
 MAN8CLUSTER=
+
+MANALL = $(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER) $(MANBUILTIN)
+# Build list of existing _meta files: append _meta suffix, prepend $(srcdir)/,
+# then filter to paths that exist on disk (e.g. lvm-config.8_meta doesn't).
+# Uses = (not :=) so expansion is deferred until use, after conditional += appends.
+MANALL_META = $(wildcard $(addprefix $(srcdir)/,$(addsuffix _meta,$(MANALL))))
 
 MAN_ALL_GOALS := distclean all_man install_all_man
 ifneq (,$(filter $(MAN_ALL_GOALS),$(MAKECMDGOALS)))
@@ -119,8 +129,10 @@ TESTMAN=test.gen
 
 include $(top_builddir)/make.tmpl
 
-CLEAN_TARGETS+=$(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8:%.8=%.8_gen) $(MAN8CLUSTER) \
-	$(MAN8DM) $(TESTMAN)
+CLEAN_TARGETS+=$(MAN5) $(MAN7) \
+	$(MAN7INDEX) $(MAN7INDEX:%.7=%.7_gen) \
+	$(MAN8) $(MAN8SO) \
+	$(MAN8:%.8=%.8_gen) $(MAN8CLUSTER) $(MAN8DM) $(TESTMAN)
 
 all: man device-mapper
 
@@ -128,11 +140,11 @@ all: man device-mapper
 
 device-mapper: $(MAN8DM)
 
-man: $(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8CLUSTER)
+man: $(MAN5) $(MAN7) $(MAN7INDEX) $(MAN8) $(MAN8SO) $(MAN8CLUSTER)
 
 all_man: man
 
-$(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER): Makefile
+$(MAN5) $(MAN7) $(MAN7INDEX) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER): Makefile
 
 $(MANGENERATOR):
 	$(SHOW) "    [MAKE] $<"
@@ -259,6 +271,11 @@ checksed:
 	$(Q) $(SUBSTVARS)
 	$(Q) $(ESCAPEHYPHENS)
 
+$(MAN7INDEX): $(srcdir)/$(MAN7INDEX)_gen
+	$(SHOW) "    [INDEX] $@"
+	$(Q) $(SUBSTVARS)
+	$(Q) $(ESCAPEHYPHENS)
+
 $(MAN8SO): lvmconfig.8
 	$(SHOW) "    [MAN] $@"
 	$(Q) echo ".so $<" > $@
@@ -268,7 +285,7 @@ install_man5: $(MAN5)
 	$(Q) $(INSTALL) -d $(MAN5DIR)
 	$(Q) $(INSTALL_DATA) $^ $(MAN5DIR)/
 
-install_man7: $(MAN7)
+install_man7: $(MAN7) $(MAN7INDEX)
 	$(SHOW) "    [INSTALL] $^"
 	$(Q) $(INSTALL) -d $(MAN7DIR)
 	$(Q) $(INSTALL_DATA) $^ $(MAN7DIR)/
@@ -305,5 +322,10 @@ pregenerated_man: $(MANGENERATOR) $(TESTMAN)
 		$(MANGENERATOR) --secondary $$CMD )  \
 		> $(srcdir)/$$CMD.8_pregen ; \
 	done
+
+$(MAN7INDEX)_gen: $(MANGENERATOR) $(TESTMAN) $(MANALL_META)
+	$(Q) set -e ; ( \
+		$(MANGENERATOR) --index $(MANALL_META) \
+	) > $@
 
 generate: pregenerated_man
