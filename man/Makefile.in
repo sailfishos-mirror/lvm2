@@ -328,16 +328,26 @@ pregenerated_man: $(MANGENERATOR) $(TESTMAN)
 		( $(MANGENERATOR) --primary $$CMD $$i && \
 		$(MANGENERATOR) --secondary $$CMD )  \
 		> $(srcdir)/$$CMD.8_pregen ; \
-	done
+	done && \
+	$(MANGENERATOR) --index $(MANALL_META) > $(srcdir)/$(MAN7INDEX)_pregen && \
+	$(MANGENERATOR) --categories $(MANALL_META) > $(srcdir)/$(MAN7CATEGORIES)_pregen
 
 $(MAN7INDEX)_gen: $(MANGENERATOR) $(TESTMAN) $(MANALL_META)
 	$(Q) set -e ; ( \
-		$(MANGENERATOR) --index $(MANALL_META) \
+	    if [ ! -s $(TESTMAN) ] ; then \
+		cat $(srcdir)/$(@:%.7_gen=%.7_pregen) ; \
+	    else \
+		$(MANGENERATOR) --index $(MANALL_META) ; \
+	    fi \
 	) > $@
 
 $(MAN7CATEGORIES)_gen: $(MANGENERATOR) $(TESTMAN) $(MANALL_META)
 	$(Q) set -e ; ( \
-		$(MANGENERATOR) --categories $(MANALL_META) \
+	    if [ ! -s $(TESTMAN) ] ; then \
+		cat $(srcdir)/$(@:%.7_gen=%.7_pregen) ; \
+	    else \
+		$(MANGENERATOR) --categories $(MANALL_META) ; \
+	    fi \
 	) > $@
 
 generate: pregenerated_man
