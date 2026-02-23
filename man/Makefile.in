@@ -35,6 +35,7 @@ LVMDBUSDMAN = lvmdbusd.8
 MAN5=lvm.conf.5
 MAN7=lvmsystemid.7 lvmreport.7 lvmraid.7 lvmautoactivation.7
 MAN7INDEX=lvm-index.7
+MAN7CATEGORIES=lvm-categories.7
 # Builtin commands with no dedicated man page (no _des or _main files).
 # These have only _meta files and are included in index/categories generation.
 MANBUILTIN=config.8 devtypes.8 dumpconfig.8 formats.8 fullreport.8 help.8 lastlog.8 lvpoll.8 segtypes.8 systemid.8 tags.8 version.8
@@ -131,6 +132,7 @@ include $(top_builddir)/make.tmpl
 
 CLEAN_TARGETS+=$(MAN5) $(MAN7) \
 	$(MAN7INDEX) $(MAN7INDEX:%.7=%.7_gen) \
+	$(MAN7CATEGORIES) $(MAN7CATEGORIES:%.7=%.7_gen) \
 	$(MAN8) $(MAN8SO) \
 	$(MAN8:%.8=%.8_gen) $(MAN8CLUSTER) $(MAN8DM) $(TESTMAN)
 
@@ -140,11 +142,11 @@ all: man device-mapper
 
 device-mapper: $(MAN8DM)
 
-man: $(MAN5) $(MAN7) $(MAN7INDEX) $(MAN8) $(MAN8SO) $(MAN8CLUSTER)
+man: $(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN8) $(MAN8SO) $(MAN8CLUSTER)
 
 all_man: man
 
-$(MAN5) $(MAN7) $(MAN7INDEX) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER): Makefile
+$(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER): Makefile
 
 $(MANGENERATOR):
 	$(SHOW) "    [MAKE] $<"
@@ -276,6 +278,11 @@ $(MAN7INDEX): $(srcdir)/$(MAN7INDEX)_gen
 	$(Q) $(SUBSTVARS)
 	$(Q) $(ESCAPEHYPHENS)
 
+$(MAN7CATEGORIES): $(srcdir)/$(MAN7CATEGORIES)_gen
+	$(SHOW) "    [INDEX] $@"
+	$(Q) $(SUBSTVARS)
+	$(Q) $(ESCAPEHYPHENS)
+
 $(MAN8SO): lvmconfig.8
 	$(SHOW) "    [MAN] $@"
 	$(Q) echo ".so $<" > $@
@@ -285,7 +292,7 @@ install_man5: $(MAN5)
 	$(Q) $(INSTALL) -d $(MAN5DIR)
 	$(Q) $(INSTALL_DATA) $^ $(MAN5DIR)/
 
-install_man7: $(MAN7) $(MAN7INDEX)
+install_man7: $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES)
 	$(SHOW) "    [INSTALL] $^"
 	$(Q) $(INSTALL) -d $(MAN7DIR)
 	$(Q) $(INSTALL_DATA) $^ $(MAN7DIR)/
@@ -326,6 +333,11 @@ pregenerated_man: $(MANGENERATOR) $(TESTMAN)
 $(MAN7INDEX)_gen: $(MANGENERATOR) $(TESTMAN) $(MANALL_META)
 	$(Q) set -e ; ( \
 		$(MANGENERATOR) --index $(MANALL_META) \
+	) > $@
+
+$(MAN7CATEGORIES)_gen: $(MANGENERATOR) $(TESTMAN) $(MANALL_META)
+	$(Q) set -e ; ( \
+		$(MANGENERATOR) --categories $(MANALL_META) \
 	) > $@
 
 generate: pregenerated_man
