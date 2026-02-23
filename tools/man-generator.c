@@ -17,6 +17,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <getopt.h>
+#include <unistd.h>
 
 
 #define stack
@@ -1444,6 +1445,421 @@ static void _print_opt_list(const char *prefix, int *opt_list, int opt_count)
 	printf("\n");
 }
 
+/* Category names and descriptions for categorized index */
+struct cmd_category_desc {
+	const char *name;	/* short name used in meta files */
+	const char *desc;	/* display description */
+};
+
+static const struct cmd_category_desc _cmd_categories[] = {
+	{"core", "Core Commands"},
+	{"builtin", "Builtin Commands"},
+	{"concepts", "Concepts"},
+	{"configuration", "Configuration"},
+	{"devices_file", "Devices File Management"},
+	{"pv", "Physical Volume Commands"},
+	{"vg", "Volume Group Commands"},
+	{"lv", "Logical Volume Commands"},
+	{"reporting", "Reporting Commands"},
+	{"scanning", "Scanning Commands"},
+	{"check", "Check Commands"},
+	{"daemons", "Daemons"},
+	{"utility", "Utility Commands"},
+	{"dm", "Device-Mapper Commands"},
+	{"obsolete", "Obsolete"},
+};
+
+#define CMD_CATEGORIES_COUNT (sizeof(_cmd_categories) / sizeof(_cmd_categories[0]))
+
+/* Index entry for man page index generation */
+struct index_cname {
+	char name[24];
+	char *desc;
+	int category;	/* index into _cmd_categories[], -1 if unknown */
+};
+
+static int _compare_index_name(const void *a, const void *b)
+{
+	const struct index_cname **ea = (const struct index_cname **)a;
+	const struct index_cname **eb = (const struct index_cname **)b;
+
+	return strcmp((*ea)->name, (*eb)->name);
+}
+
+static int _get_category_index(const char *value)
+{
+	unsigned i;
+	size_t len;
+
+	for (i = 0; i < CMD_CATEGORIES_COUNT; i++) {
+		len = strlen(_cmd_categories[i].name);
+		if (!strncmp(value, _cmd_categories[i].name, len) &&
+		    (value[len] == '\n' || value[len] == '\0'))
+			return (int) i;
+	}
+
+	return -1;
+}
+
+static int _read_meta_category(const char *path)
+{
+	FILE *f;
+	char line[256];
+	char *value;
+	int category = -1;
+
+	if (!(f = fopen(path, "r")))
+		return -1;
+
+	while (fgets(line, sizeof(line), f)) {
+		if (strncmp(line, "category", 8))
+			continue;
+		value = line + 8;
+		while (*value == ' ' || *value == '\t')
+			value++;
+		if (*value != '=')
+			continue;
+		value++;
+		while (*value == ' ' || *value == '\t')
+			value++;
+		category = _get_category_index(value);
+		break;
+	}
+
+	fclose(f);
+	return category;
+}
+
+static size_t _str_has_suffix(const char *str, const char *suffix)
+{
+	size_t str_len = strlen(str);
+	size_t suffix_len = strlen(suffix);
+	size_t r;
+
+	if (str_len == 0 || suffix_len == 0 || suffix_len >= str_len)
+		return 0;
+
+	r = str_len - suffix_len;
+	if (!memcmp(str + r, suffix, suffix_len))
+		return r;
+
+	return 0;
+}
+
+/*
+ * For *.*_des files (dynamically generated man pages), extract command name from
+ * file name and then get the command name and description from the command_names
+ * table.
+ */
+static int _get_des_index_cname(const char *des, struct index_cname **entry)
+{
+	const struct command_name *cname;
+	char *s, *cmd_name;
+	int r = 0;
+
+	if (!(s = cmd_name = strdup(des))) {
+		log_error("File name strdup failed: %s", des);
+		goto out;
+	}
+
+	if (!(s = strrchr(s, '.'))) {
+		log_error("Unexpected file name: %s.", des);
+		goto out;
+	}
+	*s = '\0';
+
+	s = cmd_name;
+	if (!strncmp(s, "lvm-", 4))
+		s += 4;
+
+	if (!(cname = find_command_name(s))) {
+		log_error("Could not find command for %s.", s);
+		goto out;
+	}
+
+	if (!(*entry = calloc(1, sizeof(**entry)))) {
+		log_error("Failed to allocate memory.");
+		goto out;
+	}
+
+	_dm_strncpy((char *) (*entry)->name, cname->name, sizeof((*entry)->name));
+	if (cname->desc) {
+		if (!((*entry)->desc = strdup(cname->desc))) {
+			log_error("Failed to strdup description.");
+			free(*entry);
+			*entry = NULL;
+			goto out;
+		}
+	}
+	(*entry)->category = -1;
+
+	r = 1;
+out:
+	free(cmd_name);
+	return r;
+}
+
+/*
+ * For *.*_main files (static man pages), extract command name and
+ * description directly from the text in the file under the .SH NAME section.
+ */
+static int _get_main_index_cname(const char *path, const char *filename, struct index_cname **entry)
+{
+	FILE *f;
+	char line[1024];
+	int in_name = 0;
+	char *delim;
+	size_t len;
+
+	if (!(f = fopen(path, "r"))) {
+		log_error("Failed to open file %s.", filename);
+		return 0;
+	}
+
+	if (!(*entry = calloc(1, sizeof(**entry)))) {
+		log_error("Failed to allocate memory.");
+		fclose(f);
+		return 0;
+	}
+
+	(*entry)->category = -1;
+
+	while (fgets(line, sizeof(line), f)) {
+		/* Look for .SH NAME section */
+		if (in_name) {
+			if (!strncmp(line, ".SH ", 4))
+				break;
+		} else {
+			if (!strncmp(line, ".SH NAME", 8))
+				in_name = 1;
+			continue;
+		}
+
+		/* Skip empty lines and comments in NAME section */
+		if ((line[0] == '\n' || line[0] == '.'))
+			continue;
+
+		if ((delim = strstr(line, " \\(em "))) {
+			delim[0] = '\0';
+			delim += 6;
+		}
+
+		if (!delim && (delim = strstr(line, " - "))) {
+			delim[0] = '\0';
+			delim += 3;
+		}
+
+		if (delim && (len = strlen(delim)) > 1) {
+			delim[len - 1] = '\0';
+			if (!((*entry)->desc = strdup(delim))) {
+				log_error("Failed to strdup description.");
+				free(*entry);
+				*entry = NULL;
+				fclose(f);
+				return 0;
+			}
+		}
+
+		_dm_strncpy((char *) (*entry)->name, line, sizeof((*entry)->name));
+
+		break;
+	}
+
+	fclose(f);
+
+	if (!(*entry)->name[0]) {
+		log_error("No NAME section found in %s.", filename);
+		free((*entry)->desc);
+		free(*entry);
+		*entry = NULL;
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Get index entry from a _meta file path.
+ *
+ * Derive the _des or _main path from the _meta path and use it to extract
+ * command name and description. If neither exists, treat as a builtin command
+ * and get the name and description from the command_names table.
+ * Category is always read from the _meta file.
+ */
+static int _get_index_cname(const char *meta_path, struct index_cname **entry)
+{
+	const struct command_name *cname;
+	const char *name;
+	char derived[4096];
+	char *s, *cmd_name;
+	size_t pos;
+	int category;
+	int r = 0;
+
+	/* Verify _meta suffix */
+	pos = _str_has_suffix(meta_path, "_meta");
+	if (!pos) {
+		log_error("Expected _meta file: %s.", meta_path);
+		return 0;
+	}
+
+	/* Read category from the meta file */
+	category = _read_meta_category(meta_path);
+
+	/* Try _des file first */
+	if (pos + sizeof("_des") <= sizeof(derived)) {
+		memcpy(derived, meta_path, pos);
+		memcpy(derived + pos, "_des", sizeof("_des"));
+		if (access(derived, F_OK) == 0) {
+			name = strrchr(derived, '/');
+			name = name ? name + 1 : derived;
+			if (!_get_des_index_cname(name, entry))
+				return 0;
+			(*entry)->category = category;
+			return 1;
+		}
+	}
+
+	/* Try _main file next */
+	if (pos + sizeof("_main") <= sizeof(derived)) {
+		memcpy(derived, meta_path, pos);
+		memcpy(derived + pos, "_main", sizeof("_main"));
+		if (access(derived, F_OK) == 0) {
+			name = strrchr(derived, '/');
+			name = name ? name + 1 : derived;
+			if (!_get_main_index_cname(derived, name, entry))
+				return 0;
+			(*entry)->category = category;
+			return 1;
+		}
+	}
+
+	/* Builtin: no _des or _main file, get info from command_names table */
+	name = strrchr(meta_path, '/');
+	name = name ? name + 1 : meta_path;
+
+	if (!(s = cmd_name = strdup(name))) {
+		log_error("File name strdup failed: %s", name);
+		goto out;
+	}
+
+	/* Strip .<section>_meta suffix */
+	if (!(s = strrchr(s, '.'))) {
+		log_error("Unexpected file name: %s.", name);
+		goto out;
+	}
+	*s = '\0';
+
+	s = cmd_name;
+	if (!strncmp(s, "lvm-", 4))
+		s += 4;
+
+	if (!(cname = find_command_name(s))) {
+		log_error("Could not find command for %s.", s);
+		goto out;
+	}
+
+	if (!(*entry = calloc(1, sizeof(**entry)))) {
+		log_error("Failed to allocate memory.");
+		goto out;
+	}
+
+	_dm_strncpy((char *) (*entry)->name, cname->name, sizeof((*entry)->name));
+	if (cname->desc) {
+		if (!((*entry)->desc = strdup(cname->desc))) {
+			log_error("Failed to strdup description.");
+			free(*entry);
+			*entry = NULL;
+			goto out;
+		}
+	}
+	(*entry)->category = category;
+
+	r = 1;
+out:
+	free(cmd_name);
+	return r;
+}
+
+static void _print_alphabetical_index(struct index_cname **entries, int count)
+{
+	char current_letter = 0;
+	char first_letter;
+	int i;
+
+	/* Sort index items alphabetically by name. */
+	qsort(entries, count, sizeof(struct index_cname *), _compare_index_name);
+
+	_print_header("LVM-INDEX", 7);
+	printf(".\n.SH NAME\n.\n");
+	printf("lvm-index \\(em LVM command index\n");
+	printf(".\n.SH DESCRIPTION\n.\n");
+	printf("This page provides an alphabetical index of LVM manual pages.\n");
+	printf(".\n.SH INDEX\n");
+	printf("\\&\n");
+
+	/* Generate alphabetical index */
+	for (i = 0; i < count; i++) {
+		first_letter = tolower(entries[i]->name[0]);
+
+		/* Start new letter section if needed */
+		if (first_letter != current_letter) {
+			if (current_letter != 0)
+				printf(".PD\n");
+			current_letter = first_letter;
+			printf(".\n.SH %c\n", toupper(first_letter));
+			printf(".PD 0\n");
+		}
+
+		/* Print command entry */
+		printf(".TP 20\n");
+		printf(".B %s\n", entries[i]->name);
+		if (entries[i]->desc && entries[i]->desc[0])
+			printf("%s\n", entries[i]->desc);
+	}
+
+	if (current_letter != 0)
+		printf(".PD\n");
+}
+
+static int _print_index(char **files, int count)
+{
+	struct index_cname **entries;
+	int i;
+	int r = 0;
+
+	if (!(entries = calloc(count, sizeof(struct index_cname *)))) {
+		log_error("Failed to allocate memory for index items.");
+		goto out;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (!_get_index_cname(files[i], &entries[i])) {
+			log_error("Failed to extract name and description from %s.", files[i]);
+			goto out;
+		}
+	}
+
+	_print_alphabetical_index(entries, count);
+
+	printf(".SH SEE ALSO\n");
+	printf("\\fBlvm\\fP(8), \\fBlvm.conf\\fP(5), \\fBlvmdump\\fP(8)\n");
+
+	r = 1;
+out:
+	if (entries) {
+		for (i = 0; i < count; i++) {
+			if (entries[i]) {
+				free(entries[i]->desc);
+				free(entries[i]);
+			}
+		}
+		free(entries);
+	}
+
+	return r;
+}
+
 /* return 1 if the lists do not match, 0 if they match */
 static int _compare_opt_lists(int *list1, int count1, int *list2, int count2, const char *type1_str, const char *type2_str)
 {
@@ -1665,6 +2081,10 @@ int main(int argc, char *argv[])
 	int primary = 0;
 	int secondary = 0;
 	int check = 0;
+	int index = 0;
+	char **index_files = NULL;
+	int index_file_count = 0;
+	int i;
 	int r = 0;
 	size_t sz = STDOUT_BUF_SIZE;
 
@@ -1672,6 +2092,7 @@ int main(int argc, char *argv[])
 		{"primary", no_argument, 0, 'p' },
 		{"secondary", no_argument, 0, 's' },
 		{"check", no_argument, 0, 'c' },
+		{"index", no_argument, 0, 'i' },
 		{0, 0, 0, 0 }
 	};
 
@@ -1684,7 +2105,7 @@ int main(int argc, char *argv[])
 		int c;
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "psc", long_options, &option_index);
+		c = getopt_long(argc, argv, "psci", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -1700,26 +2121,47 @@ int main(int argc, char *argv[])
 		case 'c':
 			check = 1;
 			break;
+		case 'i':
+			index = 1;
+			break;
 		}
 	}
 
-	if (!primary && !secondary && !check) {
-		log_error("Usage: %s --primary|--secondary|--check <command> [/path/to/description-file].", argv[0]);
+	if ((!primary && !secondary && !check && !index) ||
+	     (index && (primary || secondary || check))) {
+		log_error("Usage: %s --primary|--secondary|--check <command> [/path/to/description-file] | --index file1 file2 ...", argv[0]);
 		goto out_free;
 	}
 
-	if (optind < argc) {
-		if (!(cmdname = strdup(argv[optind++]))) {
-			log_error("Out of memory.");
+	if (index) {
+		if (optind >= argc) {
+			log_error("No files specified for indexing.");
 			goto out_free;
 		}
-	} else if (!check) {
-		log_error("Missing command name.");
-		goto out_free;
-	}
 
-	if (optind < argc)
-		desfile = argv[optind++];
+		index_file_count = argc - optind;
+		index_files = &argv[optind];
+
+		for (i = 0; i < index_file_count; i++) {
+			if (access(index_files[i], F_OK) < 0) {
+				log_error("File does not exist: %s.", index_files[i]);
+				goto out_free;
+			}
+		}
+	} else {
+		if (optind < argc) {
+			if (!(cmdname = strdup(argv[optind++]))) {
+				log_error("Out of memory.");
+				goto out_free;
+			}
+		} else if (!check) {
+			log_error("Missing command name.");
+			goto out_free;
+		}
+
+		if (optind < argc)
+			desfile = argv[optind++];
+	}
 
 	if (!define_commands(&cmdtool, NULL))
 		goto out_free;
@@ -1733,6 +2175,8 @@ int main(int argc, char *argv[])
 		_print_man_secondary(cmdname);
 	} else if (check) {
 		r = _check_overlap();
+	} else if (index) {
+		r = _print_index(index_files, index_file_count);
 	}
 
 out_free:
