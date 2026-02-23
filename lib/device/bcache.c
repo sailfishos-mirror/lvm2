@@ -341,7 +341,10 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 	} while (r == -EINTR && !sigint_caught());
 
 	if (r < 0) {
-		log_sys_warn("io_getevents", -r);
+		if (r == -EINTR)
+			stack;
+		else
+			log_sys_warn("io_getevents", -r);
 		return false;
 	}
 
@@ -922,16 +925,20 @@ static bool _wait_io(struct bcache *cache)
  * High level IO handling
  *--------------------------------------------------------------*/
 
-static void _wait_all(struct bcache *cache)
+static bool _wait_all(struct bcache *cache)
 {
 	while (!dm_list_empty(&cache->io_pending))
-		_wait_io(cache);
+		if (!_wait_io(cache))
+			return false;
+	return true;
 }
 
-static void _wait_specific(struct block *b)
+static bool _wait_specific(struct block *b)
 {
 	while (_test_flags(b, BF_IO_PENDING))
-		_wait_io(b->cache);
+		if (!_wait_io(b->cache))
+			return false;
+	return true;
 }
 
 static unsigned _writeback(struct bcache *cache, unsigned count)
@@ -983,7 +990,8 @@ static struct block *_new_block(struct bcache *cache, int di, block_address i, b
 			if (can_wait) {
 				if (dm_list_empty(&cache->io_pending))
 					_writeback(cache, 16);  // FIXME: magic number
-				_wait_all(cache);
+				if (!_wait_all(cache))
+					return NULL;
 				if (dm_list_size(&cache->errored) >= cache->max_io) {
 					log_debug("bcache no new blocks for di %d index %u with >%d errors.",
 						  di, (uint32_t) i, cache->max_io);
@@ -1061,7 +1069,8 @@ static struct block *_lookup_or_read_block(struct bcache *cache,
 
 		if (_test_flags(b, BF_IO_PENDING)) {
 			_miss(cache, flags);
-			_wait_specific(b);
+			if (!_wait_specific(b))
+				return NULL;
 
 		} else
 			_hit(b, flags);
@@ -1081,7 +1090,10 @@ static struct block *_lookup_or_read_block(struct bcache *cache,
 
 			else {
 				_issue_read(b);
-				_wait_specific(b);
+				if (!_wait_specific(b)) {
+					_unlink_block(b);
+					return NULL;
+				}
 
 				// we know the block is clean and unerrored.
 				_unlink_block(b);
@@ -1325,7 +1337,8 @@ bool bcache_flush(struct bcache *cache)
 		_issue_write(b);
 	}
 
-	_wait_all(cache);
+	if (!_wait_all(cache))
+		return false;
 
 	return dm_list_empty(&cache->errored);
 }
@@ -1422,7 +1435,8 @@ bool bcache_invalidate_di(struct bcache *cache, int di)
 	it.it.visit = _writeback_v;
 	radix_tree_iterate(cache->rtree, k.bytes, sizeof(k.parts.di), &it.it);
 
-	_wait_all(cache);
+	if (!_wait_all(cache))
+		return false;
 
 	it.success = true;
 	it.it.visit = _invalidate_v;
