@@ -112,7 +112,7 @@
 .as AD "\" define the string if not defined on the command line
 .SH NAME
 .
-dmstats \(em device-mapper statistics management
+dmstats \(em Device-mapper statistics management
 .
 .SH SYNOPSIS
 .

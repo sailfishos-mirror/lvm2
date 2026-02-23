@@ -2,7 +2,7 @@
 .
 .SH NAME
 .
-lvm_import_vdo \(em utility to import VDO volumes into a new volume group
+lvm_import_vdo \(em Utility to import VDO volumes into a new volume group
 .
 .SH SYNOPSIS
 .

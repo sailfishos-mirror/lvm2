@@ -45,7 +45,7 @@
 .
 .SH NAME
 .
-dmfilemapd \(em device-mapper filemap monitoring daemon
+dmfilemapd \(em Device-mapper filemap monitoring daemon
 .
 .SH SYNOPSIS
 .

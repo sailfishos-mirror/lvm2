@@ -2,7 +2,7 @@
 .
 .SH NAME
 .
-lvmpersist - manage persistent reservations on a group of block devices
+lvmpersist \(em Manage persistent reservations on a group of block devices
 .
 .SH DESCRIPTION
 .
