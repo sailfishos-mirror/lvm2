@@ -958,13 +958,17 @@ int persist_is_started_gen(struct cmd_context *cmd, struct volume_group *vg, int
 	if (!vg_is_sanlock(vg))
 		return ret;
 
+	/* when lockd_vg is skipped there is no ls_generation to check */
+	if (cmd->lockd_vg_disable)
+		return 1;
+
 	/* if the generation in the key isn't correct, then return 0 (not started) */
 
 	key_gen = (our_key_val & 0xFFFFFF0000) >> 16;
 
 	if (key_gen != ls_generation) {
-		log_error("persistent reservation key 0x%llx gen %llu needs update (run vgchange --persist start)",
-			  (unsigned long long)our_key_val, (unsigned long long)key_gen);
+		log_error("persistent reservation key 0x%llx gen %llu vs %llu needs update (run vgchange --persist start)",
+			  (unsigned long long)our_key_val, (unsigned long long)key_gen, (unsigned long long)ls_generation);
 		return 0;
 	}
 	return 1;
