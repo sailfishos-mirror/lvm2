@@ -90,6 +90,8 @@ fi
  %{_sbindir}/lvmpolld
 %endif
 %{_mandir}/man5/lvm.conf.5.gz
+%{_mandir}/man7/lvm-categories.7.gz
+%{_mandir}/man7/lvm-index.7.gz
 %{_mandir}/man7/lvmautoactivation.7.gz
 %{_mandir}/man7/lvmraid.7.gz
 %{_mandir}/man7/lvmreport.7.gz
