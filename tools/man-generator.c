@@ -1902,13 +1902,13 @@ static int _print_index(char **files, int count, int categories)
 		}
 	}
 
-	if (categories)
+	if (categories) {
 		_print_category_index(entries, count);
-	else
+		printf(".\n.SH SEE ALSO\n.\n.BR lvm (8),\n.BR lvm-index (7)\n");
+	} else {
 		_print_alphabetical_index(entries, count);
-
-	printf(".SH SEE ALSO\n");
-	printf("\\fBlvm\\fP(8), \\fBlvm.conf\\fP(5), \\fBlvmdump\\fP(8)\n");
+		printf(".\n.SH SEE ALSO\n.\n.BR lvm (8),\n.BR lvm-categories (7)\n");
+	}
 
 	r = 1;
 out:

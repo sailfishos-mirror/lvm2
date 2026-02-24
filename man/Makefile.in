@@ -221,6 +221,8 @@ $(SED) -i -e "/^.TH/ !s+-+\\\-+g" \
 	  -e "s+machine-id+machine\\\-id+g" \
 	  -e "s+lvm-full+lvm\\\-full+g" \
 	  -e "s+lvm-lvpoll+lvm\\\-lvpoll+g" \
+	  -e "s+lvm-index+lvm\\\-index+g" \
+	  -e "s+lvm-categories+lvm\\\-categories+g" \
 	  -e "s+\([[:digit:]]\)\s\([KMGTPE]iB\)+\1\\\ \2+g" \
 	  $@
 endef

@@ -312,5 +312,8 @@ Search for all volume groups
 .B vgsplit
 Move physical volumes into a new or existing volume group
 .PD
+.
 .SH SEE ALSO
-\fBlvm\fP(8), \fBlvm.conf\fP(5), \fBlvmdump\fP(8)
+.
+.BR lvm (8),
+.BR lvm-categories (7)
