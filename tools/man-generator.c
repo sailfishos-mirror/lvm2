@@ -30,7 +30,6 @@ struct cmd_context {
 	void *libmem;
 };
 
-#define log_print log_error
 #define log_error(fmt, args...) \
 do { \
 	fprintf(stderr, fmt "\n", ##args); \
