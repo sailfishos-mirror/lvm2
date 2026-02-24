@@ -30,6 +30,7 @@
 
 static void test_close_preserves_cloexec(void *fixture)
 {
+#ifdef O_CLOEXEC
 	int fd;
 
 	/* Open fd with CLOEXEC - simulates well-behaved library */
@@ -42,6 +43,7 @@ static void test_close_preserves_cloexec(void *fixture)
 	T_ASSERT(is_valid_fd(fd));
 
 	(void) close(fd);
+#endif
 }
 
 static void test_close_removes_non_cloexec(void *fixture)
@@ -70,10 +72,11 @@ static void test_close_stray_fds(void *fixture)
 	int fd_keep, fd_close;
 	struct custom_fds cfds = { .out = -1, .err = -1, .report = -1 };
 
+#ifdef O_CLOEXEC
 	/* fd with CLOEXEC - well-behaved library, should survive */
 	fd_keep = open("/dev/null", O_RDONLY | O_CLOEXEC);
 	T_ASSERT(fd_keep >= 0);
-
+#endif
 	/* fd without CLOEXEC - stray, should be closed */
 	fd_close = open("/dev/null", O_RDONLY);
 	T_ASSERT(fd_close >= 0);
@@ -81,10 +84,13 @@ static void test_close_stray_fds(void *fixture)
 
 	daemon_close_stray_fds("test", 1, STDERR_FILENO, &cfds);
 
-	T_ASSERT(is_valid_fd(fd_keep));
 	T_ASSERT(!is_valid_fd(fd_close));
 
+#ifdef O_CLOEXEC
+	T_ASSERT(is_valid_fd(fd_keep));
+
 	(void) close(fd_keep);
+#endif
 }
 
 #define T(path, desc, fn) register_test(ts, "/daemon/stray-fds/" path, desc, fn)
