@@ -1,5 +1,6 @@
 Version 2.03.39 - 
 ==================
+  Add lvm-index(7), lvm-categories(7) and lvm-args(7) man pages.
   Show active cache mode in kernel table line with lvs -o kernel_cache_mode.
   Preserve file desciptors with CLOEXEC opened in library constructors.
   Use -Wl,-rpath-link for library linking.
