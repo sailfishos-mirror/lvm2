@@ -33,7 +33,7 @@ struct cmd_context {
 #define log_print log_error
 #define log_error(fmt, args...) \
 do { \
-	printf(fmt "\n", ##args); \
+	fprintf(stderr, fmt "\n", ##args); \
 } while (0)
 
 #define dm_snprintf snprintf
