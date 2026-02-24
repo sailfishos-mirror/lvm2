@@ -2135,6 +2135,124 @@ static int _check_overlap(void)
 	return r;
 }
 
+/*
+ * Print the generic (non-command-specific) part of an option description.
+ * Descriptions may contain '#cmdname' lines that start command-specific
+ * sections.  For the args reference page, we only print the generic text.
+ */
+static void _print_man_option_desc_generic(int opt_enum)
+{
+	const char *desc = opt_names[opt_enum].desc;
+	char buf[DESC_LINE];
+	int print_section = 1;
+	unsigned bi = 0;
+
+	while (*desc) {
+		buf[bi++] = *desc;
+
+		if (bi == DESC_LINE) {
+			log_error("Parsing command defs: print_man_option_desc line too long.");
+			exit(EXIT_FAILURE);
+		}
+
+		if (*desc++ != '\n' && *desc)
+			continue;
+
+		if (buf[0] == '#') {
+			/* '#' lines toggle command-specific sections */
+			if (bi > 2) {
+				/* '#cmdname' - start of command-specific section */
+				print_section = 0;
+			} else {
+				/* '#' alone - reset to generic section */
+				print_section = 1;
+			}
+		} else if (print_section && bi) {
+			buf[bi] = 0;
+			printf("%s", buf);
+		}
+
+		bi = 0;
+	}
+}
+
+static void _print_args_man(void)
+{
+	int opt_enum, val_enum, cmd_enum, i;
+	int has_commands;
+
+	_print_header("LVM-ARGS", 7);
+	printf(".\n.SH NAME\n.\n");
+	printf("lvm-args \\(em LVM command arguments reference\n");
+	printf(".\n.SH DESCRIPTION\n.\n");
+	printf("This page provides a comprehensive list of all LVM command arguments\n");
+	printf("and shows which commands accept each argument.\n");
+	printf(".\n.SH ARGUMENTS\n.\n");
+
+	for (i = 0; i < ARG_COUNT; i++) {
+		opt_enum = opt_names_alpha[i]->opt_enum;
+
+		if (opt_enum == ARG_UNUSED)
+			continue;
+
+		/* Skip placeholder entries with no option name after "--" prefix */
+		if (!opt_names[opt_enum].long_opt[2])
+			continue;
+
+		/* Skip options not used by any command */
+		has_commands = 0;
+		for (cmd_enum = 0; cmd_enum < LVM_COMMAND_COUNT; cmd_enum++) {
+			if (command_names_args[cmd_enum].all_options[opt_enum]) {
+				has_commands = 1;
+				break;
+			}
+		}
+
+		if (!has_commands)
+			continue;
+
+		printf(".\n.TP\n");
+
+		if (opt_names[opt_enum].short_opt)
+			printf("\\fB-%c\\fP|", opt_names[opt_enum].short_opt);
+
+		printf("\\fB%s\\fP", _man_long_opt_name("lvm", opt_enum));
+
+		val_enum = opt_names[opt_enum].val_enum;
+
+		if (val_enum) {
+			printf(" ");
+			if (val_names[val_enum].usage)
+				_print_val_man(NULL, opt_enum, val_enum);
+			else
+				printf("\\fI%s\\fP", val_names[val_enum].name);
+		}
+
+		printf("\n");
+
+		if (opt_names[opt_enum].desc)
+			_print_man_option_desc_generic(opt_enum);
+
+		/* List commands that accept this option */
+		printf(".br\n");
+		printf("Used by: ");
+		for (has_commands = 0, cmd_enum = 0; cmd_enum < LVM_COMMAND_COUNT; cmd_enum++) {
+			if (command_names_args[cmd_enum].all_options[opt_enum]) {
+				if (has_commands)
+					printf(", ");
+				printf("\\fB%s\\fP", command_names[cmd_enum].name);
+				has_commands = 1;
+			}
+		}
+		printf("\n");
+	}
+
+	printf(".\n.SH SEE ALSO\n.\n");
+	printf("\\fBlvm\\fP(8),\n"
+	       "\\fBlvm-index\\fP(7),\n"
+	       "\\fBlvm-categories\\fP(7)\n");
+}
+
 #define STDOUT_BUF_SIZE	 (MAX_MAN_DESC + 4 * 1024)
 
 int main(int argc, char *argv[])
@@ -2149,6 +2267,7 @@ int main(int argc, char *argv[])
 	int group_psc = 0;
 	int index = 0;
 	int categories = 0;
+	int args = 0;
 	char **index_files = NULL;
 	int index_file_count = 0;
 	int i;
@@ -2161,6 +2280,7 @@ int main(int argc, char *argv[])
 		{"check", no_argument, 0, 'c' },
 		{"index", no_argument, 0, 'i' },
 		{"categories", no_argument, 0, 'a'},
+		{"args", no_argument, 0, 'r'},
 		{0, 0, 0, 0 }
 	};
 
@@ -2173,7 +2293,7 @@ int main(int argc, char *argv[])
 		int c;
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "pscia", long_options, &option_index);
+		c = getopt_long(argc, argv, "psciar", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -2195,15 +2315,19 @@ int main(int argc, char *argv[])
 		case 'a':
 			categories = 1;
 			break;
+		case 'r':
+			args = 1;
+			break;
 		}
 	}
 
 	group_psc = primary || secondary || check;
 
-	if ((!group_psc && !index && !categories) ||
-	     (index && group_psc) || (categories && group_psc) || (index && categories)) {
+	/* Exactly one mode must be selected; --primary and --secondary may combine */
+	if ((group_psc + index + categories + args) != 1 ||
+	    (check && (primary || secondary))) {
 		log_error("Usage: %s --primary|--secondary|--check <command> [/path/to/description-file] "
-			  "| --index file1 file2 ... | --categories file1 file2 ...", argv[0]);
+			  "| --index file1 file2 ... | --categories file1 file2 ... | --args", argv[0]);
 		goto out_free;
 	}
 
@@ -2228,7 +2352,7 @@ int main(int argc, char *argv[])
 				log_error("Out of memory.");
 				goto out_free;
 			}
-		} else if (!check) {
+		} else if (!check && !args) {
 			log_error("Missing command name.");
 			goto out_free;
 		}
@@ -2251,6 +2375,9 @@ int main(int argc, char *argv[])
 		r = _check_overlap();
 	} else if (index || categories) {
 		r = _print_index(index_files, index_file_count, categories);
+	} else if (args) {
+		r = 1;
+		_print_args_man();
 	}
 
 out_free:
