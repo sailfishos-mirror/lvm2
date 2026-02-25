@@ -141,6 +141,7 @@ int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv);
 int lv_deactivate_any_missing_subdevs(const struct logical_volume *lv);
 
 int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv);
+int activate_lv_temporary(struct cmd_context *cmd, struct logical_volume *lv);
 int deactivate_lv(struct cmd_context *cmd, const struct logical_volume *lv);
 int suspend_lv(struct cmd_context *cmd, const struct logical_volume *lv);
 int suspend_lv_origin(struct cmd_context *cmd, const struct logical_volume *lv);

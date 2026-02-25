@@ -2959,6 +2959,28 @@ int deactivate_lv_with_sub_lv(const struct logical_volume *lv)
 	return 1;
 }
 
+/*
+ * Activate LV temporarily for an internal operation (e.g. formatting,
+ * wiping, metadata preparation).  Sets LV_TEMPORARY to suppress udev
+ * scanning, clears it after activation, then synchronises local device
+ * names so callers can immediately open the device node.
+ */
+int activate_lv_temporary(struct cmd_context *cmd, struct logical_volume *lv)
+{
+	int r;
+
+	lv->status |= LV_TEMPORARY;
+	r = activate_lv(cmd, lv);
+	lv->status &= ~LV_TEMPORARY;
+
+	if (!r)
+		return_0;
+
+	sync_local_dev_names(cmd);
+
+	return r;
+}
+
 int activate_lv(struct cmd_context *cmd, const struct logical_volume *lv)
 {
 	const struct logical_volume *active_lv;
