@@ -324,6 +324,8 @@ static int _deactivate_and_remove_lvs(struct volume_group *vg, struct dm_list *r
 			return_0;
 	}
 
+	sync_local_dev_names(vg->cmd);
+
 	dm_list_iterate_items(lvl, removal_lvs) {
 		if (!deactivate_lv(vg->cmd, lvl->lv))
 			return_0;
@@ -3599,6 +3601,8 @@ int lv_raid_split_and_track(struct logical_volume *lv,
 	/* Preserving exclusive local activation also for tracked LV */
 	if (!activate_lv(lv->vg->cmd, seg_lv(seg, s)))
 		return_0;
+
+	sync_local_dev_names(lv->vg->cmd);
 
 	if (!deactivate_lv(lv->vg->cmd, seg_lv(seg, s)))
 		return_0;
