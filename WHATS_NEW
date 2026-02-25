@@ -1,5 +1,9 @@
 Version 2.03.39 - 
 ==================
+  Fix dmeventd inode fallback to use /dev/dm-X when dm_dir() path is unavailable.
+  Use temporary activations for integrity, writecache, thin and VDO pool conv.
+  Add activate_lv_temporary() to consolidate LV_TEMPORARY and sync handling.
+  Add missing sync in add_mirror_log() and activate_and_wipe_lv_list().
   Propagate bcache _wait_all() failure to bcache_flush() and bcache_invalidate_di().
   Propagate io_getevents() EINTR failure through bcache wait chain to abort I/O.
   Retry io_getevents() on EINTR unless LVM interrupt signal was caught.
