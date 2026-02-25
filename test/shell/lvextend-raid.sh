@@ -49,8 +49,6 @@ aux delayzero_dev "$dev2"  40 20 "${sector}:"
 # Create raid1 LV consuming 1 MD bitmap page
 lvcreate --yes --type raid1 --regionsize ${regionsize}K -L$(( lvsz - lvext ))M -n $lv1 $vg
 
-lvs -a $vg
-
 not check lv_field $vg/$lv1 sync_percent "100.00"
 check lv_field $vg/$lv1 size "$(( lvsz - lvext )).00m" $vg/$lv1
 aux wait_for_sync $vg $lv1
