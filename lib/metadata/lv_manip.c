@@ -6975,11 +6975,10 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
 				  display_lvname(lv_top));
 			return 0;
 		}
-		if (!activate_lv(cmd, lv_top)) {
+		if (!activate_lv_temporary(cmd, lv_top)) {
 			log_error("Failed to activate %s.", display_lvname(lv_top));
 			return 0;
 		}
-		sync_local_dev_names(cmd);
 		activated = 1;
 	}
 
@@ -7014,13 +7013,10 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
 			log_error("The LV must be active to safely reduce (see --fs options.)");
 			goto out;
 		}
-		lv_top->status |= LV_TEMPORARY;
-		if (!activate_lv(cmd, lv_top)) {
+		if (!activate_lv_temporary(cmd, lv_top)) {
 			log_error("Failed to activate %s to check for fs.", display_lvname(lv_top));
 			goto out;
 		}
-		lv_top->status &= ~LV_TEMPORARY;
-		sync_local_dev_names(cmd);
 		activated_checksize = 1;
 
 	} else if (lp->fsopt[0] && !is_active) {
@@ -9855,21 +9851,17 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			}
 		}
 	} else if (lp->snapshot) {
-		lv->status |= LV_TEMPORARY;
-		if (!activate_lv(cmd, lv)) {
+		if (!activate_lv_temporary(cmd, lv)) {
 			log_error("Aborting. Failed to activate snapshot "
 				  "exception store.");
 			goto revert_new_lv;
 		}
-		lv->status &= ~LV_TEMPORARY;
 	} else if (seg_is_vdo_pool(lp)) {
-		lv->status |= LV_TEMPORARY;
-		if (!activate_lv(cmd, lv)) {
+		if (!activate_lv_temporary(cmd, lv)) {
 			log_error("Aborting. Failed to activate temporary "
 				  "volume for VDO pool creation.");
 			goto revert_new_lv;
 		}
-		lv->status &= ~LV_TEMPORARY;
 	} else if (!lv_active_change(cmd, lv, lp->activate)) {
 		log_error("Failed to activate new LV %s.", display_lvname(lv));
 		goto deactivate_and_revert_new_lv;

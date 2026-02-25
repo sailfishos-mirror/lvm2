@@ -594,13 +594,11 @@ int lv_cache_remove(struct logical_volume *cache_lv)
 				return_0;
 			return 1;
 		default:
-			cache_lv->status |= LV_TEMPORARY;
-			if (!activate_lv(cache_lv->vg->cmd, cache_lv) ||
+			if (!activate_lv_temporary(cache_lv->vg->cmd, cache_lv) ||
 			    !lv_is_active(cache_lv)) {
 				log_error("Failed to activate %s to flush cache.", display_lvname(cache_lv));
 				return 0;
 			}
-			cache_lv->status &= ~LV_TEMPORARY;
 			temp_activated = 1;
 		}
 	}

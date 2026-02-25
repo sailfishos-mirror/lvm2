@@ -193,20 +193,10 @@ static int _lv_detach_writecache_cachevol_inactive(struct logical_volume *lv, in
 	if (noflush)
 		goto detach;
 
-	/*
-	 * Activate LV internally since the LV needs to be active to flush.
-	 * LV_TEMPORARY should keep the LV from being exposed to the user
-	 * and being accessed.
-	 */
-
-	lv->status |= LV_TEMPORARY;
-
-	if (!activate_lv(cmd, lv)) {
+	if (!activate_lv_temporary(cmd, lv)) {
 		log_error("Failed to activate LV %s for flushing writecache.", display_lvname(lv));
 		return 0;
 	}
-
-	sync_local_dev_names(cmd);
 
 	if (!lv_writecache_message(lv, "flush")) {
 		log_error("Failed to flush writecache for %s.", display_lvname(lv));
@@ -233,8 +223,6 @@ static int _lv_detach_writecache_cachevol_inactive(struct logical_volume *lv, in
 		log_error("Failed to deactivate LV %s for detaching writecache.", display_lvname(lv));
 		return 0;
 	}
-
-	lv->status &= ~LV_TEMPORARY;
 
  detach:
 	if (!remove_seg_from_segs_using_this_lv(lv_fast, seg))

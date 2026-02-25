@@ -6368,11 +6368,10 @@ int lvconvert_writecache_attach_single(struct cmd_context *cmd,
 
 	if (!is_active) {
 		/* checking block size of fs on the lv requires the lv to be active */
-		if (!activate_lv(cmd, lv)) {
+		if (!activate_lv_temporary(cmd, lv)) {
 			log_error("Failed to activate LV to check block size %s", display_lvname(lv));
 			goto bad;
 		}
-		sync_local_dev_names(cmd);
 	}
 
 	if (!_set_writecache_block_size(cmd, lv, &block_size_sectors)) {

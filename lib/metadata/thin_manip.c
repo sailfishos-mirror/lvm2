@@ -495,12 +495,12 @@ int thin_pool_prepare_metadata(struct logical_volume *metadata_lv,
 		return 1;
 	}
 
-	if (!activate_lv(cmd, metadata_lv)) {
-		log_error("Cannot create temporary file to prepare metadata.");
+	if (!activate_lv_temporary(cmd, metadata_lv)) {
+		log_error("Failed to activate temporary volume to "
+			  "prepare thin pool metadata %s.",
+			  display_lvname(metadata_lv));
 		return_0;
 	}
-
-	sync_local_dev_names(cmd);
 
 	/* coverity[secure_temp] until better solution */
 	if (!(f = tmpfile())) {
@@ -1044,14 +1044,14 @@ int lv_is_thin_snapshot(const struct logical_volume *lv)
  * To prevent lvm2 to create thin volumes in externally used thin pools
  * simply increment its transaction_id.
  */
-int check_new_thin_pool(const struct logical_volume *pool_lv)
+int check_new_thin_pool(struct logical_volume *pool_lv)
 {
 	struct cmd_context *cmd = pool_lv->vg->cmd;
 	uint64_t transaction_id;
 	struct lv_status_thin_pool *status = NULL;
 
 	/* For transaction_id check LOCAL activation is required */
-	if (!activate_lv(cmd, pool_lv)) {
+	if (!activate_lv_temporary(cmd, pool_lv)) {
 		log_error("Aborting. Failed to locally activate thin pool %s.",
 			  display_lvname(pool_lv));
 		return 0;
