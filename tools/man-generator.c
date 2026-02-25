@@ -1537,7 +1537,7 @@ static int _read_meta_category(const char *path)
 		break;
 	}
 
-	fclose(f);
+	(void) fclose(f);
 	return category;
 }
 
@@ -1629,7 +1629,7 @@ static int _get_main_index_cname(const char *path, const char *filename, struct 
 
 	if (!(*entry = calloc(1, sizeof(**entry)))) {
 		log_error("Failed to allocate memory.");
-		fclose(f);
+		(void) fclose(f);
 		return 0;
 	}
 
@@ -1666,7 +1666,7 @@ static int _get_main_index_cname(const char *path, const char *filename, struct 
 				log_error("Failed to strdup description.");
 				free(*entry);
 				*entry = NULL;
-				fclose(f);
+				(void) fclose(f);
 				return 0;
 			}
 		}
@@ -1676,7 +1676,7 @@ static int _get_main_index_cname(const char *path, const char *filename, struct 
 		break;
 	}
 
-	fclose(f);
+	(void) fclose(f);
 
 	if (!(*entry)->name[0]) {
 		log_error("No NAME section found in %s.", filename);
