@@ -773,9 +773,10 @@ static uint64_t _get_device_inode(struct thread_status *ts)
 			return 0;
 
 		/* Since monitoring is not synchronized with udev
-		 * symlink may not exists, so also try /dev/dm-X */
-		if (dm_snprintf(path, sizeof(path), "%s/../dm-%d",
-				dm_dir(), ts->device.minor) < 0)
+		 * symlink may not exist, so also try real /dev/dm-X.
+		 * dm_dir() may point to a test path, use /dev directly. */
+		if (dm_snprintf(path, sizeof(path), "/dev/dm-%d",
+				ts->device.minor) < 0)
 			return_0;
 
 		if (stat(path, &buf) < 0) {
