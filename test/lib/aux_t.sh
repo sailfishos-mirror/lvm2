@@ -2097,6 +2097,14 @@ wait_pvmove_lv_ready() {
 					check_lvmpolld_init_rq_count 1 "${l##LVM-}" lvid || all=0
 				done
 				[[ "$all" = 1 ]] && return
+				# Pvmove may have completed before we could observe it running.
+				# If all tracked UUIDs appear as finished entries in the dump,
+				# the pvmove was properly registered and has already completed.
+				all=1
+				for l in "${lvid[@]%-real}" ; do
+					grep -qs "${l##LVM-}" lvmpolld_dump.txt || all=0
+				done
+				[[ "$all" = 1 ]] && return
 			else
 				# wait till wanted LV really appears
 				lvid=( $(dmsetup info --noheadings -c -o uuid "$@" 2>/dev/null) ) || true
