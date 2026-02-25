@@ -46,6 +46,9 @@ Utility to deactivate block devices
 .SH C
 .PD 0
 .TP 20
+.B cmirrord
+cluster mirror log daemon
+.TP 20
 .B config
 Display and manipulate configuration information
 .PD

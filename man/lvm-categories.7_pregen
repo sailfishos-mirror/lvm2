@@ -275,6 +275,9 @@ Check the consistency of volume group(s)
 .SH Daemons
 .PD 0
 .TP 20
+.B cmirrord
+cluster mirror log daemon
+.TP 20
 .B dmeventd
 Device-mapper event daemon
 .TP 20
