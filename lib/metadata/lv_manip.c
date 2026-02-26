@@ -5822,6 +5822,12 @@ static int _lv_resize_check_type(struct logical_volume *lv,
 {
 	struct lv_segment *seg;
 
+	if (lv_is_merging_cow(lv)) {
+		log_error("Cannot resize merging snapshot %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
 	if (lv_is_origin(lv)) {
 		if (lp->resize == LV_REDUCE) {
 			log_error("Snapshot origin volumes cannot be reduced in size yet.");
