@@ -6990,11 +6990,15 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
 
 	/*
 	 * Disable fsopt if LV type cannot hold a file system.
+	 * CoW snapshot LVs (the COW store) do not hold a filesystem even
+	 * though their segments are linear; the filesystem lives on the
+	 * origin LV and the COW store only holds exception blocks.
 	 */
 	if (lp->fsopt[0] &&
-	    !(lv_is_linear(lv) || lv_is_striped(lv) || lv_is_raid(lv) ||
-	      lv_is_mirror(lv) || lv_is_thin_volume(lv) || lv_is_vdo(lv) ||
-	      lv_is_cache(lv) || lv_is_writecache(lv))) {
+	    (lv_is_cow(lv) ||
+	     !(lv_is_linear(lv) || lv_is_striped(lv) || lv_is_raid(lv) ||
+	       lv_is_mirror(lv) || lv_is_thin_volume(lv) || lv_is_vdo(lv) ||
+	       lv_is_cache(lv) || lv_is_writecache(lv)))) {
 		log_print_unless_silent("Ignoring fs resizing options for LV type %s.",
 					seg ? seg->segtype->name : "unknown");
 		lp->fsopt[0] = '\0';
