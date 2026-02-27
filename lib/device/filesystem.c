@@ -215,9 +215,11 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 		r = read(fd, buffer, sizeof(buffer));
 		if (r < 0) {
 			ret = 0;
-			close(fd);
 			log_sys_debug("read", rdev_path);
+			close(fd);
 			break;
+		} else {
+			close(fd);
 		}
 
 		buffer[r - 1] = 0;
@@ -238,9 +240,6 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 		if (fsi->mounted && fsi->mount_dir[0])
 			break;
 	}
-
-	if (fd >= 0)
-		close(fd);
 
 	if (closedir(dr))
 		log_sys_debug("closedir", devices_path);
