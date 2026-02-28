@@ -7684,12 +7684,14 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	struct volume_group *vg;
 	int visible, historical;
 	struct logical_volume *pool_lv = NULL;
+	struct logical_volume *lv_mirr = NULL;
 	struct logical_volume *lockd_other = NULL;
 	struct lv_segment *cache_seg = NULL;
 	struct seg_list *sl;
 	struct lv_segment *seg = first_seg(lv);
 	char msg[NAME_LEN + 300], *msg_dup;
 	int other_unlock = 0;
+	int lv_mirr_removed = 0;
 
 	vg = lv->vg;
 
@@ -7745,8 +7747,27 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	}
 
 	if (lv_is_locked(lv)) {
-		log_error("Can't remove locked logical volume %s.", display_lvname(lv));
-		return 0;
+		struct lv_segment *lvseg;
+		uint32_t s;
+
+		if (force < DONT_PROMPT) {
+			log_error("Can't remove locked logical volume %s.", display_lvname(lv));
+			return 0;
+		}
+		log_warn("WARNING: Removing locked logical volume %s.", display_lvname(lv));
+
+		/* Find pvmove LV this locked participant uses so we can clean it up */
+		dm_list_iterate_items(lvseg, &lv->segments) {
+			for (s = 0; s < lvseg->area_count; s++) {
+				if (seg_type(lvseg, s) == AREA_LV &&
+				    lv_is_pvmove(seg_lv(lvseg, s))) {
+					lv_mirr = seg_lv(lvseg, s);
+					break;
+				}
+			}
+			if (lv_mirr)
+				break;
+		}
 	}
 
 	if (!lockd_lvremove_lock(cmd, lv, &lockd_other, &other_unlock))
@@ -7881,6 +7902,18 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 		return 0;
 	}
 
+	/*
+	 * If we removed a pvmove participant (LOCKED LV), check whether
+	 * the pvmove LV is now orphaned (no more participants reference it).
+	 * If so, remove it to free the PV extents it holds.
+	 */
+	if (lv_mirr && dm_list_empty(&lv_mirr->segs_using_this_lv)) {
+		log_verbose("Removing orphaned pvmove LV %s.", display_lvname(lv_mirr));
+		if (!lv_remove(lv_mirr))
+			return_0;
+		lv_mirr_removed = 1;
+	}
+
 	if (!pool_lv && (!strcmp(cmd->name, "lvremove") || !strcmp(cmd->name, "vgremove"))) {
 		/* With lvremove & vgremove try to postpone commit after last such LV */
 		vg->needs_write_and_commit = 1;
@@ -7898,6 +7931,16 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 		log_print_unless_silent("Ignoring update failure of pool %s.",
 					display_lvname(pool_lv));
 	}
+
+	/*
+	 * Unlock cluster locks only after a successful metadata commit so the
+	 * cluster remains protected if the commit fails.
+	 * lv_mirr (orphaned pvmove mirror) uses lv_remove() internally which
+	 * does not call lockd_lvremove_done(); unlock it explicitly here,
+	 * mirroring what lv_remove_single() does for lv below.
+	 */
+	if (lv_mirr_removed)
+		lockd_lvremove_done(cmd, lv_mirr, NULL, 0);
 
 	lockd_lvremove_done(cmd, lv, lockd_other, other_unlock);
 
