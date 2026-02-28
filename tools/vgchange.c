@@ -273,6 +273,28 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 		}
 	}
 
+	if (!do_activate) {
+		dm_list_iterate_items(lvl, &vg->lvs) {
+			if (!lv_is_pvmove(lvl->lv) || !lv_is_active(lvl->lv))
+				continue;
+			if (arg_count(cmd, force_ARG) == PROMPT) {
+				log_error("pvmove in progress on %s, "
+					  "use 'pvmove --abort' to cancel.",
+					  display_lvname(lvl->lv));
+				return 0;
+			}
+			if (arg_count(cmd, force_ARG) < DONT_PROMPT_OVERRIDE &&
+			    !arg_is_set(cmd, yes_ARG) &&
+			    yes_no_prompt("Interrupt pvmove on %s? [y/n]: ",
+					  display_lvname(lvl->lv)) == 'n') {
+				log_error("Aborted.");
+				return 0;
+			}
+			log_warn("WARNING: Interrupting pvmove on %s.",
+				 display_lvname(lvl->lv));
+		}
+	}
+
 	/* FIXME Move into library where clvmd can use it */
 	if (do_activate)
 		check_current_backup(vg);
