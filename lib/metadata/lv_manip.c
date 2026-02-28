@@ -7684,6 +7684,7 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	struct volume_group *vg;
 	int visible, historical;
 	struct logical_volume *pool_lv = NULL;
+	struct logical_volume *pvmove_lv = NULL;
 	struct logical_volume *lockd_other = NULL;
 	struct lv_segment *cache_seg = NULL;
 	struct seg_list *sl;
@@ -7745,8 +7746,27 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	}
 
 	if (lv_is_locked(lv)) {
-		log_error("Can't remove locked logical volume %s.", display_lvname(lv));
-		return 0;
+		struct lv_segment *lvseg;
+		uint32_t s;
+
+		if (force < DONT_PROMPT) {
+			log_error("Can't remove locked logical volume %s.", display_lvname(lv));
+			return 0;
+		}
+		log_warn("WARNING: Removing locked logical volume %s.", display_lvname(lv));
+
+		/* Find pvmove LV this locked participant uses so we can clean it up */
+		dm_list_iterate_items(lvseg, &lv->segments) {
+			for (s = 0; s < lvseg->area_count; s++) {
+				if (seg_type(lvseg, s) == AREA_LV &&
+				    lv_is_pvmove(seg_lv(lvseg, s))) {
+					pvmove_lv = seg_lv(lvseg, s);
+					break;
+				}
+			}
+			if (pvmove_lv)
+				break;
+		}
 	}
 
 	if (!lockd_lvremove_lock(cmd, lv, &lockd_other, &other_unlock))
@@ -7879,6 +7899,17 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 			  historical ? "historical ": "",
 			  historical ? lv->this_glv->historical->name : lv->name);
 		return 0;
+	}
+
+	/*
+	 * If we removed a pvmove participant (LOCKED LV), check whether
+	 * the pvmove LV is now orphaned (no more participants reference it).
+	 * If so, remove it to free the PV extents it holds.
+	 */
+	if (pvmove_lv && dm_list_empty(&pvmove_lv->segs_using_this_lv)) {
+		log_verbose("Removing orphaned pvmove LV %s.", display_lvname(pvmove_lv));
+		if (!lv_remove(pvmove_lv))
+			return_0;
 	}
 
 	if (!pool_lv && (!strcmp(cmd->name, "lvremove") || !strcmp(cmd->name, "vgremove"))) {
