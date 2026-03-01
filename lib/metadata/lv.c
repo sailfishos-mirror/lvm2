@@ -1801,7 +1801,12 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 		ay_with_mode = "sh";
 	if (activate == CHANGE_AEY)
 		ay_with_mode = "ex";
-	
+
+	/*
+	 * LOCKED LVs (pvmove participants) keep their own cluster lock
+	 * throughout pvmove.  lockd_lv() succeeds on the pvmove node
+	 * (lock already held) and fails on remote nodes (lock guarded).
+	 */
 	if (is_change_activating(activate) &&
 	    !lockd_lv(cmd, lv, ay_with_mode, LDLV_PERSISTENT)) {
 		log_error("Failed to lock logical volume %s.", display_lvname(lv));
@@ -1828,7 +1833,9 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 		break;
 	}
 
+	/* Skip unlock for LOCKED LVs -- pvmove holds the lock */
 	if (!is_change_activating(activate) &&
+	    !(vg_is_shared(lv->vg) && lv_is_locked(lv)) &&
 	    !lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
 		log_error("Failed to unlock logical volume %s.", display_lvname(lv));
 
