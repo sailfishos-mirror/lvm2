@@ -293,6 +293,88 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
 	return _sub_lv_of(seg->lv, lv_name);
 }
 
+/* Return 0 if lv on source_pvl cannot be pvmoved. */
+static int _pvmove_lv_check_moveable(struct logical_volume *lv,
+				     struct dm_list *source_pvl)
+{
+	struct logical_volume *lv_cachevol;
+
+	if (lv_is_converting(lv) || lv_is_merging(lv)) {
+		log_error("Unable to pvmove when %s volume %s is present.",
+			  lv_is_converting(lv) ? "converting" : "merging",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_writecache_cachevol(lv)) {
+		log_error("Unable to pvmove device used for writecache.");
+		return 0;
+	}
+
+	if (lv_is_writecache(lv)) {
+		lv_cachevol = first_seg(lv)->writecache;
+		if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
+			log_error("Unable to move device used for writecache cachevol %s.",
+				  display_lvname(lv_cachevol));
+			return 0;
+		}
+	}
+
+	if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
+		log_error("Unable to pvmove device used for raid with integrity.");
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Check whether an inactive holder is active on another cluster node.
+ * Returns 1 if the LV should be skipped, 0 if pvmove may proceed.
+ * Sets *lv_skipped on skip.
+ */
+static int _pvmove_lv_is_active_elsewhere(struct cmd_context *cmd,
+					  struct volume_group *vg,
+					  struct logical_volume *lv,
+					  const char *lv_name,
+					  const struct logical_volume *holder,
+					  int *lv_skipped)
+{
+	int ex = 0, sh = 0;
+
+	/*
+	 * Skip the query when lv_name matches the holder: the caller already
+	 * holds an EX lock on the named LV, so querying would return "ex" for
+	 * our own lock and incorrectly treat it as a remote activation.
+	 */
+	if (vg_is_shared(vg) &&
+	    !(lv_name && !strcmp(holder->name, lv_name))) {
+		if (!lockd_query_lv(cmd, (struct logical_volume *)holder, &ex, &sh)) {
+			*lv_skipped = 1;
+			log_print_unless_silent("Skipping LV %s - cannot query lock state.",
+						display_lvname(lv));
+			return 1;
+		}
+
+		if (ex || sh) {
+			*lv_skipped = 1;
+			log_print_unless_silent("Skipping LV %s - holder %s is active on another node.",
+						display_lvname(lv), display_lvname(holder));
+			return 1;
+		}
+	}
+
+	/* Holder is not active anywhere - metadata-only insertion */
+	if (holder != lv)
+		log_verbose("Holder %s is inactive, inserting pvmove mirrors for %s in metadata only.",
+			    display_lvname(holder), display_lvname(lv));
+	else
+		log_verbose("LV %s is inactive, inserting pvmove mirrors in metadata only.",
+			    display_lvname(lv));
+
+	return 0;
+}
+
 /* Create new LV with mirror segments for the required copies */
 static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 						struct volume_group *vg,
@@ -373,31 +455,8 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		if (!lv_is_on_pvs(lv, source_pvl))
 			continue;
 
-		if (lv_is_converting(lv) || lv_is_merging(lv)) {
-			log_error("Unable to pvmove when %s volume %s is present.",
-				  lv_is_converting(lv) ? "converting" : "merging",
-				  display_lvname(lv));
+		if (!_pvmove_lv_check_moveable(lv, source_pvl))
 			return NULL;
-		}
-
-		if (lv_is_writecache_cachevol(lv)) {
-			log_error("Unable to pvmove device used for writecache.");
-			return NULL;
-		}
-
-		if (lv_is_writecache(lv)) {
-			struct logical_volume *lv_cachevol = first_seg(lv)->writecache;
-			if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
-				log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
-				return NULL;
-			}
-
-		}
-
-		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
-			log_error("Unable to pvmove device used for raid with integrity.");
-			return NULL;
-		}
 
 		seg = first_seg(lv);
 		if (seg_is_raid(seg) || seg_is_mirrored(seg)) {
@@ -451,53 +510,9 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 		holder = lv_lock_holder(lv);
 
-		if (lv_is_active(holder)) {
-			/*
-			 * Holder is active locally - proceed with pvmove.
-			 * The holder will be part of the pvmove operation.
-			 */
-		} else {
-			/*
-			 * Holder is not active locally.
-			 * For shared VG, check if holder is active on another node.
-			 * Skip the query when lv_name matches the holder: the caller
-			 * already holds an EX lock on the named LV (acquired before
-			 * calling us), so querying would return "ex" for our own lock
-			 * and incorrectly treat it as a remote activation.
-			 */
-			if (vg_is_shared(vg) &&
-			    !(lv_name && !strcmp(holder->name, lv_name))) {
-				int ex = 0, sh = 0;
-
-				if (!lockd_query_lv(cmd, (struct logical_volume *)holder, &ex, &sh)) {
-					lv_skipped = 1;
-					log_print_unless_silent("Skipping LV %s - cannot query lock state.",
-								display_lvname(lv));
-					continue;
-				}
-
-				if (ex || sh) {
-					/* Holder is locked/active on another node */
-					lv_skipped = 1;
-					log_print_unless_silent("Skipping LV %s - holder %s is active on another node.",
-								display_lvname(lv), display_lvname(holder));
-					continue;
-				}
-			}
-
-			/*
-			 * Holder is not active anywhere.
-			 * Insert mirror segments in metadata but do not activate.
-			 * If the LV is activated later, it comes up through the
-			 * mirror layer automatically.
-			 */
-			if (holder != lv)
-				log_verbose("Holder %s is inactive, inserting pvmove mirrors for %s in metadata only.",
-					    display_lvname(holder), display_lvname(lv));
-			else
-				log_verbose("LV %s is inactive, inserting pvmove mirrors in metadata only.",
-					    display_lvname(lv));
-		}
+		if (!lv_is_active(holder) &&
+		    _pvmove_lv_is_active_elsewhere(cmd, vg, lv, lv_name, holder, &lv_skipped))
+			continue;
 
 		if (!_insert_pvmove_mirrors(cmd, lv_mirr, source_pvl, lv,
 					    *lvs_changed))
