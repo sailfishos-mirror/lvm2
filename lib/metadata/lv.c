@@ -1796,12 +1796,35 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 		     enum activation_change activate)
 {
 	const char *ay_with_mode = NULL;
+	const struct logical_volume *pvmove_lv;
+	int ex = 0, sh = 0;
 
 	if (activate == CHANGE_ASY)
 		ay_with_mode = "sh";
 	if (activate == CHANGE_AEY)
 		ay_with_mode = "ex";
-	
+
+	/*
+	 * In shared VGs, a LOCKED LV is a pvmove participant.  Activation
+	 * must be refused if another node holds the pvmove0 EX cluster lock,
+	 * because pvmove is running there and the mirror layer is in use.
+	 */
+	if (is_change_activating(activate) &&
+	    vg_is_shared(lv->vg) &&
+	    lv_is_locked(lv) &&
+	    (pvmove_lv = find_pvmove_lv_in_lv(lv))) {
+		if (!lockd_query_lv(cmd, (struct logical_volume *)pvmove_lv, &ex, &sh)) {
+			log_error("Cannot activate LV %s: failed to query pvmove lock state.",
+				  display_lvname(lv));
+			return 0;
+		}
+		if (ex && !lv_is_active(pvmove_lv)) {
+			log_error("Cannot activate LV %s: pvmove is running on another node.",
+				  display_lvname(lv));
+			return 0;
+		}
+	}
+
 	if (is_change_activating(activate) &&
 	    !lockd_lv(cmd, lv, ay_with_mode, LDLV_PERSISTENT)) {
 		log_error("Failed to lock logical volume %s.", display_lvname(lv));
