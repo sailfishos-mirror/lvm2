@@ -942,6 +942,8 @@ static const char *op_str(int x)
 		return "running_lm";
 	case LD_OP_QUERY_LOCK:
 		return "query_lock";
+	case LD_OP_SET_LOCK:
+		return "set_lock";
 	case LD_OP_FIND_FREE_LOCK:
 		return "find_free_lock";
 	case LD_OP_KILL_VG:
@@ -2354,6 +2356,23 @@ static void res_process(struct lockspace *ls, struct resource *r,
 	 * lv lock conflicts won't be transient so don't retry them.
 	 */
 
+	/*
+	 * test-only: when test_remote_ex or test_remote_sh is set, fail
+	 * incompatible lock requests with -EAGAIN.  SH is compatible with
+	 * a remote SH holder; all other combinations conflict.
+	 */
+	if (r->test_remote_ex || r->test_remote_sh) {
+		list_for_each_entry_safe(act, safe, &r->actions, list) {
+			if (act->op != LD_OP_LOCK)
+				continue;
+			if (act->mode == LD_LK_SH && r->test_remote_sh && !r->test_remote_ex)
+				continue;
+			act->result = -EAGAIN;
+			list_del(&act->list);
+			add_client_result(act);
+		}
+	}
+
 	if (r->mode == LD_LK_EX)
 		return;
 
@@ -2481,6 +2500,19 @@ static void res_process(struct lockspace *ls, struct resource *r,
 	 */
 	if ((r->type == LD_RT_LV) && (r->mode == LD_LK_UN) &&
 	    list_empty(&r->locks) && list_empty(&r->actions) && list_empty(&r->fence_wait_actions)) {
+
+		/*
+		 * test-only: keep the resource alive in ls->resources if it
+		 * carries a test_remote flag so that the injected state
+		 * survives client disconnect and is visible to subsequent
+		 * lm_lock() calls.  Guard both the r_free and the dispose
+		 * paths so the resource is not freed regardless of whether
+		 * unlock_by_client_id is set.
+		 */
+		if (r->test_remote_ex || r->test_remote_sh) {
+			log_debug("%s:%s skip dispose test_remote", ls->name, r->name);
+			return;
+		}
 
 		/* An implicit unlock of a transient lock. */
 		if (!unlock_by_client_id)
@@ -2750,6 +2782,71 @@ static int process_op_during_kill(struct action *act)
  */
 
 #define LOCK_RETRY_MS 1000 /* milliseconds to delay between retry */
+
+/*
+ * test-only: force r->mode and lk->mode to the requested mode for an LV
+ * resource.  Called from lockspace_thread_main when LD_OP_SET_LOCK is
+ * received in daemon_test mode.
+ */
+static void set_lock_act(struct lockspace *ls, struct action *act)
+{
+	struct resource *r;
+	struct lock *lk, *lk_safe;
+	int sh_count = 0;
+
+	if (!(r = find_resource_act(ls, act, 0))) {
+		act->result = -ENOMEM;
+		return;
+	}
+
+	/*
+	 * --remote: only set resource flags to simulate a remote lock holder.
+	 * No struct lock entries are created -- those only represent local locks.
+	 */
+	if (act->flags & LD_AF_TEST_REMOTE) {
+		if (act->mode == LD_LK_EX) {
+			r->test_remote_ex = 1;
+			r->test_remote_sh = 0;
+		} else if (act->mode == LD_LK_SH) {
+			r->test_remote_sh = 1;
+			r->test_remote_ex = 0;
+		} else {
+			r->test_remote_ex = 0;
+			r->test_remote_sh = 0;
+		}
+		log_debug("S %s set_lock %s remote %s",
+			  ls->name, r->name, mode_str(act->mode));
+		act->result = 0;
+		return;
+	}
+
+	/*
+	 * Local lock injection: force r->mode and every lk->mode
+	 * to the requested mode.
+	 */
+	r->mode = act->mode;
+
+	if (act->mode == LD_LK_UN) {
+		r->test_remote_ex = 0;
+		r->test_remote_sh = 0;
+	}
+
+	list_for_each_entry_safe(lk, lk_safe, &r->locks, list) {
+		if (act->mode == LD_LK_UN) {
+			list_del(&lk->list);
+			free_lock(lk);
+			continue;
+		}
+		lk->mode = act->mode;
+		if (act->mode == LD_LK_SH)
+			sh_count++;
+	}
+
+	r->sh_count = sh_count;
+	log_debug("S %s set_lock %s mode %s",
+		  ls->name, r->name, mode_str(r->mode));
+	act->result = 0;
+}
 
 static void *lockspace_thread_main(void *arg_in)
 {
@@ -3055,6 +3152,16 @@ static void *lockspace_thread_main(void *arg_in)
 					act->result = 0;
 					act->mode = r->mode;
 				}
+				list_del(&act->list);
+				add_client_result(act);
+				continue;
+			}
+
+			if (act->op == LD_OP_SET_LOCK) {
+				if (!daemon_test)
+					act->result = -EPERM;
+				else
+					set_lock_act(ls, act);
 				list_del(&act->list);
 				add_client_result(act);
 				continue;
@@ -4784,6 +4891,13 @@ static int client_send_result(struct client *cl, struct action *act)
 					  "mode = %s", mode_str(act->mode),
 					  NULL);
 
+	} else if (act->op == LD_OP_SET_LOCK) {
+
+		res = daemon_reply_simple("OK",
+					  "op = " FMTd64, (int64_t)act->op,
+					  "op_result = " FMTd64, (int64_t) act->result,
+					  NULL);
+
 	} else if (act->op == LD_OP_DUMP_LOG || act->op == LD_OP_DUMP_INFO) {
 		/*
 		 * lvmlockctl creates the unix socket then asks us to write to it.
@@ -5226,6 +5340,11 @@ static int str_to_op_rt(const char *req_name, int *op, int *rt)
 		*rt = LD_RT_LV;
 		return 0;
 	}
+	if (!strcmp(req_name, "set_lock_lv")) {
+		*op = LD_OP_SET_LOCK;
+		*rt = LD_RT_LV;
+		return 0;
+	}
 	if (!strcmp(req_name, "find_free_lock")) {
 		*op = LD_OP_FIND_FREE_LOCK;
 		*rt = LD_RT_VG;
@@ -5315,6 +5434,8 @@ static uint32_t str_to_opts(const char *str)
 		flags |= LD_AF_NODELAY;
 	if (strstr(str, "repair"))
 		flags |= LD_AF_REPAIR;
+	if (strstr(str, "remote"))
+		flags |= LD_AF_TEST_REMOTE;
 
 	/* FIXME: parse the flag values properly */
 	if (strstr(str, "adopt_only"))
@@ -5956,6 +6077,7 @@ skip_pvs_path:
 	case LD_OP_DROP_VG:
 	case LD_OP_BUSY:
 	case LD_OP_SETLOCKARGS_BEFORE:
+	case LD_OP_SET_LOCK:
 		rv = add_lock_action(act);
 		break;
 	default:
