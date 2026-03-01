@@ -733,16 +733,16 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			goto out;
 		}
 
-		/* Ensure mirror LV is active */
-		if (!activate_lv(cmd, lv_mirr)) {
-			log_error("ABORTING: Temporary mirror activation failed.");
-			goto out;
-		}
-
-		/* Re-acquire cluster lock for pvmove LV (needed after crash/restart) */
+		/* Re-acquire cluster lock before activating (shared VGs) */
 		if (vg_is_shared(vg) && lv_mirr->lock_args &&
 		    !lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
 			log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
+			goto out;
+		}
+
+		/* Ensure mirror LV is active */
+		if (!activate_lv(cmd, lv_mirr)) {
+			log_error("ABORTING: Temporary mirror activation failed.");
 			goto out;
 		}
 
