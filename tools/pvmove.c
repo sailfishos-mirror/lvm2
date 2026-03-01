@@ -293,11 +293,12 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
 	return _sub_lv_of(seg->lv, lv_name);
 }
 
-/* Return 0 if lv on source_pvl cannot be pvmoved. */
+/* Return 0 if lv on source_pvl cannot be pvmoved. source_pvl may be NULL. */
 static int _pvmove_lv_check_moveable(struct logical_volume *lv,
 				     struct dm_list *source_pvl)
 {
 	struct logical_volume *lv_cachevol;
+	struct logical_volume *lv_orig;
 
 	if (lv_is_converting(lv) || lv_is_merging(lv)) {
 		log_error("Unable to pvmove when %s volume %s is present.",
@@ -313,7 +314,7 @@ static int _pvmove_lv_check_moveable(struct logical_volume *lv,
 
 	if (lv_is_writecache(lv)) {
 		lv_cachevol = first_seg(lv)->writecache;
-		if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
+		if (source_pvl && lv_is_on_pvs(lv_cachevol, source_pvl)) {
 			log_error("Unable to move device used for writecache cachevol %s.",
 				  display_lvname(lv_cachevol));
 			return 0;
@@ -325,11 +326,24 @@ static int _pvmove_lv_check_moveable(struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_cache(lv) || lv_is_writecache(lv)) {
+		lv_orig = seg_lv(first_seg(lv), 0);
+		if (lv_is_raid(lv_orig) && lv_raid_has_integrity(lv_orig)) {
+			log_error("Unable to pvmove raid LV with integrity under cache.");
+			return 0;
+		}
+	}
+
 	return 1;
 }
 
 /*
- * Check whether an inactive holder is active on another cluster node.
+ * Check whether holder must be skipped for pvmove.
+ * In shared VGs: query cluster lock state.
+ *   sh=1 (shared): possibly active on multiple nodes - skip.
+ *   ex=1 (exclusive) and holder not locally active: active on another node - skip.
+ *   ex=1 and holder locally active: we hold EX, safe to proceed.
+ * In non-shared VGs: skip only if holder is inactive (metadata-only path).
  * Returns 1 if the LV should be skipped, 0 if pvmove may proceed.
  * Sets *lv_skipped on skip.
  */
@@ -342,13 +356,14 @@ static int _pvmove_lv_is_active_elsewhere(struct cmd_context *cmd,
 {
 	int ex = 0, sh = 0;
 
-	/*
-	 * Skip the query when lv_name matches the holder: the caller already
-	 * holds an EX lock on the named LV, so querying would return "ex" for
-	 * our own lock and incorrectly treat it as a remote activation.
-	 */
 	if (vg_is_shared(vg) &&
 	    !(lv_name && !strcmp(holder->name, lv_name))) {
+		/*
+		 * Skip the query when lv_name matches the holder: the caller
+		 * already holds an EX lock on the named LV, so querying would
+		 * return "ex" for our own lock and incorrectly treat it as
+		 * remote activation.
+		 */
 		if (!lockd_query_lv(cmd, (struct logical_volume *)holder, &ex, &sh)) {
 			*lv_skipped = 1;
 			log_print_unless_silent("Skipping LV %s - cannot query lock state.",
@@ -356,13 +371,28 @@ static int _pvmove_lv_is_active_elsewhere(struct cmd_context *cmd,
 			return 1;
 		}
 
-		if (ex || sh) {
+		if (sh) {
+			/* Shared lock: LV may be active on multiple nodes. */
+			*lv_skipped = 1;
+			log_print_unless_silent("Skipping LV %s - holder %s is active on other cluster nodes.",
+						display_lvname(lv), display_lvname(holder));
+			return 1;
+		}
+
+		if (ex && !lv_is_active(holder)) {
+			/* Exclusive lock held by another node. */
 			*lv_skipped = 1;
 			log_print_unless_silent("Skipping LV %s - holder %s is active on another node.",
 						display_lvname(lv), display_lvname(holder));
 			return 1;
 		}
+
+		if (ex)
+			return 0; /* We hold EX, holder is locally active - safe. */
 	}
+
+	if (lv_is_active(holder))
+		return 0;
 
 	/* Holder is not active anywhere - metadata-only insertion */
 	if (holder != lv)
@@ -510,8 +540,7 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 
 		holder = lv_lock_holder(lv);
 
-		if (!lv_is_active(holder) &&
-		    _pvmove_lv_is_active_elsewhere(cmd, vg, lv, lv_name, holder, &lv_skipped))
+		if (_pvmove_lv_is_active_elsewhere(cmd, vg, lv, lv_name, holder, &lv_skipped))
 			continue;
 
 		if (!_insert_pvmove_mirrors(cmd, lv_mirr, source_pvl, lv,
@@ -666,18 +695,8 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			return ECMD_FAILED;
 		}
 
-		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
-			log_error("pvmove not allowed on raid LV with integrity.");
+		if (!_pvmove_lv_check_moveable(lv, NULL))
 			return ECMD_FAILED;
-		}
-
-		if (lv_is_cache(lv) || lv_is_writecache(lv)) {
-			struct logical_volume *lv_orig = seg_lv(first_seg(lv), 0);
-			if (lv_is_raid(lv_orig) && lv_raid_has_integrity(lv_orig)) {
-				log_error("pvmove not allowed on raid LV with integrity.");
-				return ECMD_FAILED;
-			}
-		}
 	}
 
 	/*
