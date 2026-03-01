@@ -1796,13 +1796,44 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 		     enum activation_change activate)
 {
 	const char *ay_with_mode = NULL;
+	const struct logical_volume *lv_mirr;
 
 	if (activate == CHANGE_ASY)
 		ay_with_mode = "sh";
 	if (activate == CHANGE_AEY)
 		ay_with_mode = "ex";
-	
+
+	/*
+	 * In shared VGs, a LOCKED LV is a pvmove participant.  Activation
+	 * must be refused if another node holds the pvmove0 EX cluster lock,
+	 * because pvmove is running there and the mirror layer is in use.
+	 *
+	 * Probe by trying to acquire EX on pvmove0.  If it succeeds, no
+	 * remote pvmove is running -- unlock immediately and allow activation.
+	 * If it fails (-EAGAIN), pvmove is running elsewhere -- refuse.
+	 */
 	if (is_change_activating(activate) &&
+	    vg_is_shared(lv->vg) &&
+	    lv_is_locked(lv) &&
+	    (lv_mirr = find_pvmove_lv_in_lv(lv))) {
+		if (!lv_is_active(lv_mirr)) {
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_mirr, "ex", 0)) {
+				log_error("Cannot activate LV %s: pvmove is running on another node.",
+					  display_lvname(lv));
+				return 0;
+			}
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_mirr, "un", 0))
+				log_warn("WARNING: Failed to unlock pvmove LV %s after probe.",
+					 display_lvname(lv_mirr));
+		}
+	}
+
+	/*
+	 * Skip LV lock for LOCKED LVs in shared VGs: pvmove0's cluster
+	 * lock guards them.  Locks are re-acquired at pvmove finish.
+	 */
+	if (is_change_activating(activate) &&
+	    !(vg_is_shared(lv->vg) && lv_is_locked(lv)) &&
 	    !lockd_lv(cmd, lv, ay_with_mode, LDLV_PERSISTENT)) {
 		log_error("Failed to lock logical volume %s.", display_lvname(lv));
 		return 0;
@@ -1829,6 +1860,7 @@ int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 	}
 
 	if (!is_change_activating(activate) &&
+	    !(vg_is_shared(lv->vg) && lv_is_locked(lv)) &&
 	    !lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
 		log_error("Failed to unlock logical volume %s.", display_lvname(lv));
 
