@@ -446,8 +446,13 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 			/*
 			 * Holder is not active locally.
 			 * For shared VG, check if holder is active on another node.
+			 * Skip the query when lv_name matches the holder: the caller
+			 * already holds an EX lock on the named LV (acquired before
+			 * calling us), so querying would return "ex" for our own lock
+			 * and incorrectly treat it as a remote activation.
 			 */
-			if (vg_is_shared(vg)) {
+			if (vg_is_shared(vg) &&
+			    !(lv_name && !strcmp(holder->name, lv_name))) {
 				int ex = 0, sh = 0;
 
 				if (!lockd_query_lv(cmd, (struct logical_volume *)holder, &ex, &sh)) {
