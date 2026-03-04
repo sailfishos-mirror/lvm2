@@ -363,18 +363,50 @@ const struct logical_volume *find_active_pvmoved_lv(const struct logical_volume 
 	return NULL;
 }
 
-int activate_pvmoved_lvs(const struct dm_list *lvs)
+int refresh_pvmoved_lvs(const struct dm_list *lvs)
 {
 	const struct logical_volume *lv;
-	struct lv_list *lvl;
+	struct lv_list *lvl, *lvl2;
+	int already_done;
 	int r = 1;
 
 	dm_list_iterate_items(lvl, lvs) {
 		if (!(lv = find_active_pvmoved_lv(lvl->lv)))
 			continue;
 
-		if (!activate_lv(lv->vg->cmd, lv)) {
-			log_error("Failed to activate %s.", display_lvname(lv));
+		/* Multiple component LVs (e.g. _tmeta, _tdata) may share
+		 * the same lock holder; skip if already refreshed. */
+		already_done = 0;
+		dm_list_iterate_items(lvl2, lvs) {
+			if (lvl2 == lvl)
+				break;
+			if (find_active_pvmoved_lv(lvl2->lv) == lv) {
+				already_done = 1;
+				break;
+			}
+		}
+		if (already_done) {
+			log_debug_activation("Holder %s already refreshed, skipping.",
+					     display_lvname(lv));
+			continue;
+		}
+
+		/*
+		 * Use suspend+resume to force kernel DM table reload.
+		 * activate_lv() cannot be used here; it skips LVs that
+		 * are already active without reloading sub-device tables.
+		 * After pvmove layer removal, component LVs (e.g. _tmeta)
+		 * still have kernel tables pointing to the old pvmove
+		 * device; suspend+resume forces them to pick up the new
+		 * post-pvmove mappings from committed metadata.
+		 *
+		 * This is safe because pvmove skips LVs whose holders are
+		 * active on other nodes, so all participating active LVs
+		 * are guaranteed to have local DM devices.
+		 */
+		log_debug_activation("Refreshing %s after pvmove.", display_lvname(lv));
+		if (!lv_refresh_suspend_resume(lv)) {
+			log_error("Failed to refresh %s after pvmove.", display_lvname(lv));
 			r = 0;
 		}
 	}
@@ -1122,7 +1154,7 @@ static int _remove_mirror_images(struct logical_volume *lv,
 	if (!lv_update_and_reload_origin(mirrored_seg->lv))
 		return_0;
 
-	if (!activate_pvmoved_lvs(&lvs_changed))
+	if (!refresh_pvmoved_lvs(&lvs_changed))
 		return_0;
 
 	/* Save or delete the 'orphan' LVs */
