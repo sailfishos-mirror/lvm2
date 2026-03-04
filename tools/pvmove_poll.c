@@ -106,8 +106,8 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	 *
 	 * First pass: refresh ALL LVs to ensure they are properly resumed.
 	 */
-	if (!activate_pvmoved_lvs(lvs_changed))
-                return_0;
+	if (!refresh_pvmoved_lvs(lvs_changed))
+		return_0;
 
 	sync_local_dev_names(cmd);
 
