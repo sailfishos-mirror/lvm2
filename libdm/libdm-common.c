@@ -19,6 +19,7 @@
 #include "libdm/misc/kdev_t.h"
 #include "libdm/misc/dm-ioctl.h"
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -69,6 +70,7 @@ static char _default_uuid_prefix[DM_MAX_UUID_PREFIX_LEN + 1] = "LVM-";
 
 static int _verbose = 0;
 static int _suspended_dev_counter = 0;
+static pthread_mutex_t _libdm_mutex = PTHREAD_MUTEX_INITIALIZER;
 static dm_string_mangling_t _name_mangling_mode = DEFAULT_DM_NAME_MANGLING;
 
 #ifdef HAVE_SELINUX_LABEL_H
@@ -273,19 +275,24 @@ int dm_get_library_version(char *version, size_t size)
 
 void inc_suspended(void)
 {
+	pthread_mutex_lock(&_libdm_mutex);
 	_suspended_dev_counter++;
 	log_debug_activation("Suspended device counter increased to %d", _suspended_dev_counter);
+	pthread_mutex_unlock(&_libdm_mutex);
 }
 
 void dec_suspended(void)
 {
+	pthread_mutex_lock(&_libdm_mutex);
 	if (!_suspended_dev_counter) {
 		log_error("Attempted to decrement suspended device counter below zero.");
+		pthread_mutex_unlock(&_libdm_mutex);
 		return;
 	}
 
 	_suspended_dev_counter--;
 	log_debug_activation("Suspended device counter reduced to %d", _suspended_dev_counter);
+	pthread_mutex_unlock(&_libdm_mutex);
 }
 
 int dm_get_suspended_counter(void)
@@ -1573,6 +1580,8 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 	size_t len = strlen(dev_name) + strlen(old_name) + 2;
 	char *pos;
 
+	pthread_mutex_lock(&_libdm_mutex);
+
 	/*
 	 * Note: warn_if_udev_failed must have valid content
 	 */
@@ -1627,6 +1636,7 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 
 	if (!(nop = dm_malloc(sizeof(*nop) + len))) {
 		log_error("Insufficient memory to stack mknod operation");
+		pthread_mutex_unlock(&_libdm_mutex);
 		return 0;
 	}
 
@@ -1655,6 +1665,7 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 
 	_log_node_op("Stacking", nop);
 
+	pthread_mutex_unlock(&_libdm_mutex);
 	return 1;
 }
 
@@ -1663,6 +1674,7 @@ static void _pop_node_ops(void)
 	struct dm_list *noph, *nopht;
 	struct node_op_parms *nop;
 
+	pthread_mutex_lock(&_libdm_mutex);
 	dm_list_iterate_safe(noph, nopht, &_node_ops) {
 		nop = dm_list_item(noph, struct node_op_parms);
 		if (!nop->rely_on_udev) {
@@ -1675,6 +1687,7 @@ static void _pop_node_ops(void)
 			_log_node_op("Skipping", nop);
 		_del_node_op(nop);
 	}
+	pthread_mutex_unlock(&_libdm_mutex);
 }
 
 int add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
