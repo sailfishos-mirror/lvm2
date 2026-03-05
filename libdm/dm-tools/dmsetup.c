@@ -1274,7 +1274,8 @@ static char *_slurp_stdin(void)
 	return buf;
 }
 
-static int _create_concise(const struct command *cmd, int argc, char **argv)
+/* Superseded by _create_concise_async */
+static int __attribute__((unused)) _create_concise_serial(const struct command *cmd, int argc, char **argv)
 {
 	char *concise_format;
 	char *c, *n;
@@ -1419,6 +1420,9 @@ out:
 	return 0;
 }
 
+static int _create_concise_async(int argc, char **argv);
+static int _simple_names_async(int task, int argc, char **argv);
+
 static int _create(CMD_ARGS)
 {
 	const char *name;
@@ -1429,7 +1433,8 @@ static int _create(CMD_ARGS)
 			log_error("dmsetup create --concise takes at most one argument");
 			return 0;
 		}
-		return _create_concise(cmd, argc, argv);
+		return _create_concise_async(argc, argv);
+		//return _create_concise_serial(cmd, argc, argv);
 	}
 
 	if (!argc) {
@@ -2278,12 +2283,441 @@ static int _count_devices(CMD_ARGS)
 	return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Parallel create/remove helpers using the async ioctl API             */
+/* ------------------------------------------------------------------ */
+
+#define DM_ASYNC_PARALLEL 32
+
+/* Per-device context for async concise create. */
+struct _create_spec {
+	struct dm_list  list;
+	const char     *name;
+	const char     *uuid;   /* NULL if not set */
+	int             minor;  /* -1 if not set */
+	int             read_only;
+	char           *table;  /* newline-separated target lines */
+	int             ok;     /* tracks per-device success */
+};
+
+/* Work item passed as userdata through async API. */
+struct _async_work {
+	struct dm_task      *dmt;
+	struct _create_spec *spec;  /* NULL for remove */
+};
+
+/*
+ * Submit one dm_task on ctx with an _async_work item as userdata.
+ * Takes ownership of dmt on success; destroys it on failure.
+ * Increments *submitted on success.
+ */
+static int _async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
+			 struct _create_spec *spec, unsigned *submitted)
+{
+	struct _async_work *w;
+
+	if (!dm_task_prepare(dmt))
+		goto bad;
+
+	if (!(w = malloc(sizeof(*w)))) {
+		log_error("Failed to allocate async work item.");
+		goto bad;
+	}
+	w->dmt  = dmt;
+	w->spec = spec;
+
+	if (!dm_task_submit(dmt, ctx, w)) {
+		free(w);
+		goto bad;
+	}
+
+	(*submitted)++;
+	return 1;
+bad:
+	dm_task_destroy(dmt);
+	if (spec)
+		spec->ok = 0;
+	return 0;
+}
+
+/*
+ * Drain exactly n completions from ctx.
+ * Calls dm_task_handle_completion and then cb(work, result) for each.
+ * Returns 1 if all succeeded, 0 if any failed.
+ */
+static int _async_drain(struct dm_async_ctx *ctx, unsigned n,
+			void (*cb)(struct _async_work *, int))
+{
+	struct _async_work *w;
+	void *ud;
+	int r = 1, res;
+
+	while (n-- > 0 && dm_async_wait_completion(ctx, &ud, &res)) {
+		w = ud;
+		if (!dm_task_handle_completion(w->dmt, res)) {
+			r = 0;
+			if (w->spec)
+				w->spec->ok = 0;
+		}
+		if (cb)
+			cb(w, res);
+		dm_task_destroy(w->dmt);
+		free(w);
+	}
+
+	return r;
+}
+
+/*
+ * Three-phase async create from a pre-parsed spec list.
+ *   Phase 1: CREATE (empty device)
+ *   Phase 2: RELOAD (load table)
+ *   Phase 3: RESUME (activate -- this is the slow RCU step)
+ */
+static int _create_devices_async(struct dm_list *specs)
+{
+	struct dm_async_ctx *ctx;
+	struct _create_spec *spec;
+	struct dm_task *dmt;
+	uint32_t cookie = 0;
+	uint16_t udev_flags = 0;
+	unsigned submitted;
+	int r = 1;
+
+	if (!(ctx = dm_async_ctx_create(DM_ASYNC_PARALLEL)))
+		return_0;
+
+	if (_switches[NOUDEVRULES_ARG])
+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+
+	if (_udev_only)
+		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+
+	/* Phase 1: CREATE (empty, no table -- no uevent, no cookie) */
+	submitted = 0;
+	dm_list_iterate_items(spec, specs) {
+		if (!(dmt = dm_task_create(DM_DEVICE_CREATE))) {
+			spec->ok = 0; r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, spec->name) ||
+		    (spec->uuid && !dm_task_set_uuid(dmt, spec->uuid)) ||
+		    (spec->minor >= 0 && !dm_task_set_minor(dmt, spec->minor)) ||
+		    (spec->read_only && !dm_task_set_ro(dmt))) {
+			dm_task_destroy(dmt); spec->ok = 0; r = 0; continue;
+		}
+		if (!_async_submit(ctx, dmt, spec, &submitted))
+			r = 0;
+	}
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+	/* Phase 2: RELOAD (only for devices that were created successfully) */
+	submitted = 0;
+	dm_list_iterate_items(spec, specs) {
+		if (!spec->ok)
+			continue;
+		if (!(dmt = dm_task_create(DM_DEVICE_RELOAD))) {
+			spec->ok = 0; r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, spec->name) ||
+		    (spec->read_only && !dm_task_set_ro(dmt))) {
+			dm_task_destroy(dmt); spec->ok = 0; r = 0; continue;
+		}
+		/* Populate targets from the table string. */
+		_table = spec->table;
+		_added_target = 0;
+		if (!_parse_table_lines(dmt)) {
+			dm_task_destroy(dmt); spec->ok = 0; r = 0; continue;
+		}
+		_table = NULL;
+		if (!_async_submit(ctx, dmt, spec, &submitted))
+			r = 0;
+	}
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+	/* Phase 3: RESUME (generates uevent -- use shared udev cookie) */
+	if (_udev_cookie)
+		cookie = _udev_cookie;
+
+	submitted = 0;
+	dm_list_iterate_items(spec, specs) {
+		if (!spec->ok)
+			continue;
+		if (!(dmt = dm_task_create(DM_DEVICE_RESUME))) {
+			spec->ok = 0; r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, spec->name) ||
+		    !dm_task_set_cookie(dmt, &cookie, udev_flags)) {
+			dm_task_destroy(dmt); spec->ok = 0; r = 0; continue;
+		}
+		if (!_async_submit(ctx, dmt, spec, &submitted))
+			r = 0;
+	}
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+	dm_async_ctx_destroy(ctx);
+
+	if (!_udev_cookie)
+		(void) dm_udev_wait(cookie);
+
+	return r;
+}
+
+/*
+ * Parse the concise device spec string into a spec list.
+ * Modifies concise_format in-place (as the original parser does).
+ * Returns 1 on success, 0 on parse error.
+ */
+static int _parse_concise_specs(char *concise_format, struct dm_list *specs)
+{
+	char *c, *n, *fields[5] = { NULL };
+	int f = 0;
+	struct _create_spec *spec;
+
+	c = n = fields[f] = concise_format;
+
+	while (*c) {
+		if (*c == '\\') {
+			if (!*(++c)) {
+				log_error("Backslash must be followed by another character.");
+				return 0;
+			}
+			*n++ = *c++;
+			continue;
+		}
+
+		if (*c == ',' && f < 4) {
+			*n++ = '\0', c++;
+			fields[++f] = n;
+			while (isspace(*c)) c++;
+			continue;
+		}
+
+		if (*c == ',' && f >= 4) {
+			/* Table target separator: comma -> newline */
+			*n++ = '\n', c++;
+			continue;
+		}
+
+		if (*c == ';' || *(c + 1) == '\0') {
+			if (*c != ';')
+				*n++ = *c;
+			*n++ = '\0', c++;
+
+			if (f != 4) {
+				log_error("Five comma-separated fields required per device.");
+				return 0;
+			}
+
+			if (!(spec = malloc(sizeof(*spec)))) {
+				log_error("Failed to allocate device spec.");
+				return 0;
+			}
+			spec->name      = fields[0];
+			spec->uuid      = *fields[1] ? fields[1] : NULL;
+			spec->minor     = *fields[2] ? atoi(fields[2]) : -1;
+			spec->read_only = !strcmp(fields[3], "ro");
+			spec->table     = fields[4];
+			spec->ok        = 1;
+			dm_list_add(specs, &spec->list);
+
+			f = 0;
+			fields[0] = n;
+			fields[1] = fields[2] = fields[3] = fields[4] = NULL;
+			while (isspace(*c)) c++;
+			continue;
+		}
+
+		*n++ = *c++;
+	}
+
+	if (fields[0] && fields[0] != n) {
+		log_error("Incomplete entry: five comma-separated fields required.");
+		return 0;
+	}
+
+	return 1;
+}
+
+static void _free_specs(struct dm_list *specs)
+{
+	struct _create_spec *spec, *tmp;
+	dm_list_iterate_items_safe(spec, tmp, specs)
+		free(spec);
+}
+
+/*
+ * Async version of _create_concise: parses all specs first, then
+ * creates all devices in three parallel phases (CREATE/RELOAD/RESUME).
+ */
+static int _create_concise_async(int argc, char **argv)
+{
+	char *concise_format;
+	struct dm_list specs;
+	int r = 0;
+
+	if (_switches[TABLE_ARG] || _switches[MINOR_ARG] || _switches[UUID_ARG] ||
+	    _switches[NOTABLE_ARG] || _switches[INACTIVE_ARG]) {
+		log_error("--concise is incompatible with --[no]table, --minor, --uuid and --inactive.");
+		return 0;
+	}
+
+	if (argc)
+		concise_format = argv[0];
+	else if (!(concise_format = _slurp_stdin()))
+		return_0;
+
+	dm_list_init(&specs);
+
+	if (!_parse_concise_specs(concise_format, &specs))
+		goto out;
+
+	if (dm_list_empty(&specs)) {
+		r = 1;
+		goto out;
+	}
+
+	r = _create_devices_async(&specs);
+out:
+	_free_specs(&specs);
+	if (!argc)
+		free(concise_format);
+	return r;
+}
+
+/*
+ * Async simple operation for a list of named devices from argv.
+ * Handles suspend, resume, and remove in parallel.
+ * Resume and remove generate uevents and use a shared udev cookie.
+ * Returns 1 if all operations succeeded, 0 if any failed.
+ */
+static int _simple_names_async(int task, int argc, char **argv)
+{
+	struct dm_async_ctx *ctx;
+	struct dm_task *dmt;
+	uint32_t cookie = 0;
+	uint16_t udev_flags = 0;
+	int udev_wait_flag = task == DM_DEVICE_RESUME ||
+			     task == DM_DEVICE_REMOVE;
+	unsigned submitted = 0;
+	int i, r = 1;
+
+	if (!(ctx = dm_async_ctx_create(DM_ASYNC_PARALLEL)))
+		return_0;
+
+	if (_switches[NOUDEVRULES_ARG])
+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+
+	if (_udev_only)
+		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+
+	if (_udev_cookie)
+		cookie = _udev_cookie;
+
+	for (i = 0; i < argc; i++) {
+		if (!(dmt = dm_task_create(task))) {
+			r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, argv[i])) {
+			dm_task_destroy(dmt); r = 0; continue;
+		}
+		if (_switches[NOLOCKFS_ARG])
+			(void) dm_task_skip_lockfs(dmt);
+		if (_switches[NOFLUSH_ARG])
+			(void) dm_task_no_flush(dmt);
+		if (udev_wait_flag &&
+		    !dm_task_set_cookie(dmt, &cookie, udev_flags)) {
+			dm_task_destroy(dmt); r = 0; continue;
+		}
+		if (!_async_submit(ctx, dmt, NULL, &submitted))
+			r = 0;
+	}
+
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+	dm_async_ctx_destroy(ctx);
+
+	if (!_udev_cookie && udev_wait_flag)
+		(void) dm_udev_wait(cookie);
+
+	return r;
+}
+
+/*
+ * Remove all listed devices in parallel using the async ioctl API.
+ * Each DM_DEVICE_REMOVE ioctl is submitted to the thread pool so that
+ * kernel-side RCU waits overlap instead of stacking up serially.
+ * Returns 1 if all removals succeeded, 0 if any failed.
+ */
+static int _remove_devices_async(void)
+{
+	struct dm_task *list_dmt, *dmt;
+	struct dm_async_ctx *ctx;
+	struct dm_names *names;
+	unsigned next = 0;
+	void *ud;
+	int r = 1, res;
+
+	if (!(list_dmt = dm_task_create(DM_DEVICE_LIST)))
+		return_0;
+
+	if (!dm_task_run(list_dmt)) {
+		r = 0;
+		goto out_list;
+	}
+
+	if (!(names = dm_task_get_names(list_dmt)) || !names->dev)
+		goto out_list;
+
+	if (!(ctx = dm_async_ctx_create(DM_ASYNC_PARALLEL))) {
+		r = 0;
+		goto out_list;
+	}
+
+	do {
+		names = (struct dm_names *)((char *)names + next);
+
+		if (!(dmt = dm_task_create(DM_DEVICE_REMOVE))) {
+			r = 0;
+			goto drain;
+		}
+
+		if (!dm_task_set_name(dmt, names->name) ||
+		    !dm_task_prepare(dmt) ||
+		    !dm_task_submit(dmt, ctx, dmt)) {
+			dm_task_destroy(dmt);
+			r = 0;
+		}
+
+		next = names->next;
+	} while (next);
+
+drain:
+	while (dm_async_wait_completion(ctx, &ud, &res)) {
+		dmt = ud;
+		if (!dm_task_handle_completion(dmt, res))
+			r = 0;
+		dm_task_destroy(dmt);
+	}
+
+	dm_async_ctx_destroy(ctx);
+out_list:
+	dm_task_destroy(list_dmt);
+	return r;
+}
+
 static int _remove_all(CMD_ARGS)
 {
 	int r;
 
-	/* Remove all closed devices */
-	r =  _simple(DM_DEVICE_REMOVE_ALL, "", 0, 0) | dm_mknodes(NULL);
+	/* Remove all closed devices in parallel */
+	r = _remove_devices_async();
+	r |= dm_mknodes(NULL);
 
 	if (!_switches[FORCE_ARG])
 		return r;
@@ -6934,6 +7368,18 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 
 static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 {
+	/* Parallel simple operations when multiple devices named */
+	if (argc > 1) {
+		if (!strcmp(cmd->name, "remove") &&
+		    !_switches[FORCE_ARG] && !_switches[DEFERRED_ARG] &&
+		    !_switches[RETRY_ARG])
+			return _simple_names_async(DM_DEVICE_REMOVE, argc, argv);
+		if (!strcmp(cmd->name, "suspend"))
+			return _simple_names_async(DM_DEVICE_SUSPEND, argc, argv);
+		if (!strcmp(cmd->name, "resume"))
+			return _simple_names_async(DM_DEVICE_RESUME, argc, argv);
+	}
+
 	do {
 		if (!cmd->fn(cmd, subcommand, argc, argv++, NULL, multiple_devices)) {
 			log_error("Command failed.");
