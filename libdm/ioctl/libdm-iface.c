@@ -2526,6 +2526,64 @@ int dm_task_handle_completion(struct dm_task *dmt, int ioctl_result)
 	return 1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Synchronous (inline) async backend                                   */
+/* ------------------------------------------------------------------ */
+
+struct _async_sync {
+	struct dm_async_ctx  base;
+	void                *userdata;
+	int                  result;
+	int                  has_result;
+};
+
+static int _sync_submit(struct dm_async_ctx *base,
+			struct dm_task *dmt, void *userdata)
+{
+	struct _async_sync *ctx = (struct _async_sync *)base;
+	unsigned cmd = dm_task_get_ioctl_cmd(dmt);
+
+	ctx->result     = dm_ioctl_exec(base->fd, cmd, dmt, dmt->dmi.v4);
+	ctx->userdata   = userdata;
+	ctx->has_result = 1;
+	return 1;
+}
+
+static int _sync_wait(struct dm_async_ctx *base,
+		      void **userdata_out, int *result_out)
+{
+	struct _async_sync *ctx = (struct _async_sync *)base;
+
+	if (!ctx->has_result)
+		return 0;
+
+	*userdata_out   = ctx->userdata;
+	*result_out     = ctx->result;
+	ctx->has_result = 0;
+	return 1;
+}
+
+static void _sync_destroy(struct dm_async_ctx *base)
+{
+	free(base);
+}
+
+static struct dm_async_ctx *_dm_async_ctx_alloc_sync(int fd)
+{
+	struct _async_sync *ctx;
+
+	if (!(ctx = calloc(1, sizeof(*ctx)))) {
+		log_error("Failed to allocate sync async context.");
+		return NULL;
+	}
+
+	ctx->base.fd         = fd;
+	ctx->base.fn_submit  = _sync_submit;
+	ctx->base.fn_wait    = _sync_wait;
+	ctx->base.fn_destroy = _sync_destroy;
+	return &ctx->base;
+}
+
 /*
  * Create an async context for parallel ioctl submission.
  * max_parallel is the number of ioctls that may be in-flight simultaneously.
@@ -2543,6 +2601,9 @@ struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 
 	if (!_open_control())
 		return NULL;
+
+	if (max_parallel == 1)
+		return _dm_async_ctx_alloc_sync(_control_fd);
 
 	return dm_async_ctx_alloc_threads(_control_fd, max_parallel);
 }
