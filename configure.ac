@@ -102,6 +102,13 @@ AC_CHECK_HEADERS([assert.h ctype.h dirent.h errno.h fcntl.h float.h \
   unistd.h], , [AC_MSG_ERROR(bailing out)])
 
 AC_CHECK_HEADERS(termios.h sys/statvfs.h sys/timerfd.h sys/vfs.h linux/magic.h linux/fiemap.h)
+AC_MSG_CHECKING([for IORING_OP_IOCTL in linux/io_uring.h])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <linux/io_uring.h>]],
+	[[int op = IORING_OP_IOCTL;]])],
+	[AC_DEFINE([HAVE_IORING_OP_IOCTL], 1,
+		   [Define to 1 if linux/io_uring.h defines IORING_OP_IOCTL (Linux 6.5+)])
+	 AC_MSG_RESULT(yes)],
+	[AC_MSG_RESULT(no)])
 AC_CHECK_HEADERS(xfs/xfs.h, LVM_NO_XFS_WARN=, LVM_NO_XFS_WARN=y, [#define _GNU_SOURCE 1])
 AC_CHECK_HEADERS(libaio.h,LVM_NEEDS_LIBAIO_WARN=,LVM_NEEDS_LIBAIO_WARN=y)
 AS_CASE(["$host_os"],

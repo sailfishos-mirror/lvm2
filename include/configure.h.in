@@ -236,6 +236,9 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
+/* Define to 1 if linux/io_uring.h defines IORING_OP_IOCTL (Linux 6.5+) */
+#undef HAVE_IORING_OP_IOCTL
+
 /* Define to 1 if you have the <langinfo.h> header file. */
 #undef HAVE_LANGINFO_H
 

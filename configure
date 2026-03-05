@@ -6770,6 +6770,32 @@ then :
 
 fi
 
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for IORING_OP_IOCTL in linux/io_uring.h" >&5
+printf %s "checking for IORING_OP_IOCTL in linux/io_uring.h... " >&6; }
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <linux/io_uring.h>
+int
+main (void)
+{
+int op = IORING_OP_IOCTL;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"
+then :
+
+printf "%s\n" "#define HAVE_IORING_OP_IOCTL 1" >>confdefs.h
+
+	 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+else case e in #(
+  e) { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; } ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
        for ac_header in xfs/xfs.h
 do :
   ac_fn_c_check_header_compile "$LINENO" "xfs/xfs.h" "ac_cv_header_xfs_xfs_h" "#define _GNU_SOURCE 1
