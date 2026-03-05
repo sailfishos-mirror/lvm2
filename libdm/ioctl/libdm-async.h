@@ -57,4 +57,9 @@ int dm_ioctl_exec(int fd, unsigned command, struct dm_task *dmt,
 /* Thread-pool backend (always compiled). */
 struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel);
 
+#ifdef HAVE_IORING_OP_IOCTL
+/* io_uring backend (requires IORING_OP_IOCTL in linux/io_uring.h, Linux 6.5+). */
+struct dm_async_ctx *dm_async_ctx_alloc_uring(int fd, unsigned max_parallel);
+#endif
+
 #endif /* LIBDM_ASYNC_H */

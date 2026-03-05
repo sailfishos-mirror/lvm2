@@ -2594,6 +2594,11 @@ static struct dm_async_ctx *_dm_async_ctx_alloc_sync(int fd)
  */
 struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 {
+#ifdef HAVE_IORING_OP_IOCTL
+	/* -1 = untried, 0 = failed (use threads forever), 1 = works */
+	static int _uring_available = -1;
+#endif
+
 	if (!max_parallel) {
 		log_error("dm_async_ctx_create: max_parallel must be > 0.");
 		return NULL;
@@ -2604,6 +2609,19 @@ struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 
 	if (max_parallel == 1)
 		return _dm_async_ctx_alloc_sync(_control_fd);
+
+#ifdef HAVE_IORING_OP_IOCTL
+	if (_uring_available != 0) {
+		struct dm_async_ctx *ctx =
+			dm_async_ctx_alloc_uring(_control_fd, max_parallel);
+		if (ctx) {
+			_uring_available = 1;
+			return ctx;
+		}
+		log_debug_activation("io_uring not available; using thread pool.");
+		_uring_available = 0;
+	}
+#endif
 
 	return dm_async_ctx_alloc_threads(_control_fd, max_parallel);
 }
