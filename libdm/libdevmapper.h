@@ -1488,6 +1488,39 @@ int dm_task_run(struct dm_task *dmt);
 int dm_task_get_errno(struct dm_task *dmt);
 
 /*
+ * Async ioctl submission API.
+ *
+ * Usage pattern:
+ *   ctx = dm_async_ctx_create(N);          // N parallel ioctls max
+ *   for each dmt:
+ *     dm_task_prepare(dmt);                // build ioctl buffer
+ *     dm_task_submit(dmt, ctx, userdata);  // hand off to worker
+ *   while (dm_async_wait_completion(ctx, &ud, &r))
+ *     dm_task_handle_completion(dmt, r);   // post-process in main thread
+ *   dm_async_ctx_destroy(ctx);
+ *
+ * dm_async_ctx_create() probes for io_uring IOCTL support at runtime and
+ * falls back to a thread pool when unavailable.
+ *
+ * dm_task_handle_completion() must be called from the main thread; node
+ * operations (add/remove/rename) are not thread-safe.
+ * It returns 1 on success, 0 on failure, -1 if the ioctl buffer was too
+ * small (caller should enlarge the buffer and resubmit).
+ */
+struct dm_async_ctx;
+
+struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel);
+void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
+
+int dm_async_wait_completion(struct dm_async_ctx *ctx,
+			     void **userdata_out, int *result_out);
+
+int dm_task_prepare(struct dm_task *dmt);
+int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
+		   void *userdata);
+int dm_task_handle_completion(struct dm_task *dmt, int ioctl_result);
+
+/*
  * Call this to make or remove the device nodes associated with previously
  * issued commands.
  */

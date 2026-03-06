@@ -12,3 +12,9 @@ dm_tree_node_add_integrity_target
 dm_get_status_integrity
 dm_raid_clear_failed_devices
 dm_raid_count_failed_devices
+dm_async_ctx_create
+dm_async_ctx_destroy
+dm_async_wait_completion
+dm_task_prepare
+dm_task_submit
+dm_task_handle_completion
