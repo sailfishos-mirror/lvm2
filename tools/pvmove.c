@@ -687,10 +687,6 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			return ECMD_FAILED;
 		}
 
-		if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
-			log_error("pvmove in a shared VG requires exclusive lock on named LV.");
-			return ECMD_FAILED;
-		}
 	}
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
@@ -718,6 +714,16 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 
 		flags &= ~PVMOVE_FIRST_TIME;
 	} else {
+		/*
+		 * New pvmove: lock the named LV to verify no other host
+		 * is using it.  Released after LOCKED is in metadata.
+		 */
+		if (vg_is_shared(vg) &&
+		    !lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
+			log_error("pvmove in a shared VG requires exclusive lock on named LV.");
+			return ECMD_FAILED;
+		}
+
 		/* Determine PE ranges to be moved */
 		if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
 						  &pp->pv_name_arg, 0)))
@@ -744,9 +750,14 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
 		goto out;
 
-	if (flags & PVMOVE_FIRST_TIME)
+	if (flags & PVMOVE_FIRST_TIME) {
 		if (!_update_metadata(lv_mirr, lvs_changed))
 			goto_out;
+
+		/* LOCKED in metadata protects the LV now; release the lock */
+		if (vg_is_shared(vg) && lv)
+			lockd_lv(cmd, lv, "un", 0);
+	}
 
 	/* LVs are all in status LOCKED */
 	pp->setup_result = ECMD_PROCESSED;
