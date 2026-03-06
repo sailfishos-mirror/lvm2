@@ -72,6 +72,7 @@ struct dm_task {
 	int enable_checks;
 	int expected_errno;
 	int ioctl_errno;
+	int ioctl_result;
 	int ima_measurement;
 
 	int record_timestamp;
