@@ -17,6 +17,7 @@
 #define LIB_DMTARGETS_H
 
 #include "libdm/libdevmapper.h"
+#include "libdm/ioctl/libdm-async.h"
 
 #include <inttypes.h>
 #include <sys/types.h>
@@ -79,6 +80,9 @@ struct dm_task {
 
 	char *uuid;
 	char *mangled_uuid;
+
+	struct dm_list list;		/* work list linkage for parallel ops */
+	struct dm_task_async async;	/* for parallel deptree ops */
 };
 
 struct cmd_data {

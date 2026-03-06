@@ -1488,6 +1488,33 @@ int dm_task_run(struct dm_task *dmt);
 int dm_task_get_errno(struct dm_task *dmt);
 
 /*
+ * Async ioctl submission API.
+ *
+ * Usage pattern:
+ *   ctx = dm_async_ctx_create(N);          // N parallel ioctls max
+ *   for each dmt:
+ *     dm_task_prepare(dmt);                // build ioctl buffer
+ *     dm_task_submit(dmt, ctx, cb, ud);    // hand off to worker
+ *   dm_async_drain(ctx);                   // wait for all completions
+ *   dm_async_ctx_destroy(ctx);
+ *
+ * dm_async_ctx_create() creates a bounded thread-pool context.
+ * Falls back to synchronous single-slot mode when max_parallel == 1.
+ *
+ * EBUSY retry and buffer-full retry are handled transparently in the
+ * worker before completion.
+ */
+struct dm_async_ctx;
+
+struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel);
+void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
+
+int dm_task_prepare(struct dm_task *dmt);
+int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
+		   int (*complete_fn)(struct dm_task *, void *userdata),
+		   void *userdata);
+
+/*
  * Call this to make or remove the device nodes associated with previously
  * issued commands.
  */
