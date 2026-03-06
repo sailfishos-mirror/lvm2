@@ -2649,6 +2649,109 @@ static int _simple_names_async(int task, int argc, char **argv)
 }
 
 /*
+ * Two-phase async wipe_table for a list of named devices.
+ *   Phase 1: RELOAD each device with a single "error" target
+ *   Phase 2: RESUME all (generates uevents -- shared udev cookie)
+ * Device sizes are queried serially first (lightweight, no RCU).
+ * Returns 1 if all operations succeeded, 0 if any failed.
+ */
+static int _wipe_table_async(int argc, char **argv)
+{
+	struct dm_async_ctx *ctx;
+	struct dm_task *dmt;
+	uint64_t *sizes;
+	uint32_t cookie = 0;
+	uint16_t udev_flags = 0;
+	unsigned submitted = 0;
+	int i, r = 1;
+
+	if (!(sizes = malloc(argc * sizeof(*sizes)))) {
+		log_error("Failed to allocate size array.");
+		return 0;
+	}
+
+	/* Query device sizes serially (lightweight TABLE ioctl). */
+	for (i = 0; i < argc; i++) {
+		sizes[i] = _get_device_size(argv[i]);
+		if (!sizes[i]) {
+			log_error("Cannot get device size for %s.", argv[i]);
+			r = 0;
+		}
+	}
+
+	if (!r)
+		goto out_sizes;
+
+	if (!(ctx = dm_async_ctx_create(DM_ASYNC_PARALLEL))) {
+		r = 0;
+		goto out_sizes;
+	}
+
+	if (_switches[NOUDEVRULES_ARG])
+		udev_flags |= DM_UDEV_DISABLE_DM_RULES_FLAG |
+			      DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG;
+
+	if (_udev_only)
+		udev_flags |= DM_UDEV_DISABLE_LIBRARY_FALLBACK;
+
+	/* Phase 1: RELOAD with error target */
+	for (i = 0; i < argc; i++) {
+		if (!(dmt = dm_task_create(DM_DEVICE_RELOAD))) {
+			r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, argv[i]) ||
+		    !dm_task_add_target(dmt, UINT64_C(0), sizes[i], "error", "")) {
+			dm_task_destroy(dmt); r = 0; continue;
+		}
+		if (!_async_submit(ctx, dmt, NULL, &submitted))
+			r = 0;
+	}
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+	if (!r)
+		goto out_ctx;
+
+	/* Phase 2: RESUME (generates uevent -- shared udev cookie) */
+	if (_switches[FORCE_ARG])
+		_switches[NOLOCKFS_ARG] = _switches[NOFLUSH_ARG] = 1;
+
+	if (_udev_cookie)
+		cookie = _udev_cookie;
+
+	submitted = 0;
+	for (i = 0; i < argc; i++) {
+		if (!(dmt = dm_task_create(DM_DEVICE_RESUME))) {
+			r = 0; continue;
+		}
+		if (!dm_task_set_name(dmt, argv[i])) {
+			dm_task_destroy(dmt); r = 0; continue;
+		}
+		if (_switches[NOLOCKFS_ARG])
+			(void) dm_task_skip_lockfs(dmt);
+		if (_switches[NOFLUSH_ARG])
+			(void) dm_task_no_flush(dmt);
+		if (!dm_task_set_cookie(dmt, &cookie, udev_flags)) {
+			dm_task_destroy(dmt); r = 0; continue;
+		}
+		if (!_async_submit(ctx, dmt, NULL, &submitted))
+			r = 0;
+	}
+	if (!_async_drain(ctx, submitted, NULL))
+		r = 0;
+
+out_ctx:
+	dm_async_ctx_destroy(ctx);
+
+	if (!_udev_cookie)
+		(void) dm_udev_wait(cookie);
+out_sizes:
+	free(sizes);
+
+	return r;
+}
+
+/*
  * Remove all listed devices in parallel using the async ioctl API.
  * Each DM_DEVICE_REMOVE ioctl is submitted to the thread pool so that
  * kernel-side RCU waits overlap instead of stacking up serially.
@@ -7378,6 +7481,8 @@ static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 			return _simple_names_async(DM_DEVICE_SUSPEND, argc, argv);
 		if (!strcmp(cmd->name, "resume"))
 			return _simple_names_async(DM_DEVICE_RESUME, argc, argv);
+		if (!strcmp(cmd->name, "wipe_table"))
+			return _wipe_table_async(argc, argv);
 	}
 
 	do {
