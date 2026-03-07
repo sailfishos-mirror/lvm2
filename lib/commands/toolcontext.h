@@ -296,6 +296,7 @@ struct cmd_context {
 	struct dm_pool *pending_delete_mem;	/* memory pool for pending deletes */
 	struct vdo_convert_params *lvcreate_vcp;/* params for LV to VDO conversion */
 	uint32_t lockopt;			/* LOCKOPT_* from --lockopt string */
+	void *async_ctx;			/* dm_async_ctx for parallel ioctl dispatch */
 };
 
 /*

@@ -90,6 +90,8 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	struct logical_volume *lv;
 	int count = 0, expected_count = 0, r = 1;
 
+	check_and_mark_parallel(cmd, &vg->lvs);
+
 	sigint_allow();
 	dm_list_iterate_items(lvl, &vg->lvs) {
 		if (sigint_caught())
@@ -138,6 +140,11 @@ static int _activate_lvs_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	}
 
 	sigint_restore();
+
+	if (!clear_parallel_deact(cmd, &vg->lvs)) {
+		stack;
+		r = 0;
+	}
 
 	if (expected_count)
 		log_verbose("%sctivated %d logical volumes in volume group %s.",
