@@ -152,6 +152,11 @@ int process_each_pv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			  process_single_pv_fn_t process_single_pv);
 
 
+/* Batch parallel deactivation: mark eligible LVs, create async context */
+void check_and_mark_parallel(struct cmd_context *cmd, struct dm_list *lvs);
+/* Clear LV_NOSCAN markers and drain async context if set */
+int clear_parallel_deact(struct cmd_context *cmd, struct dm_list *lvs);
+
 int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			  struct dm_list *arg_lvnames, const struct dm_list *tags_in,
 			  int stop_on_error, struct processing_handle *handle,

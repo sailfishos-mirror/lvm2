@@ -3413,6 +3413,102 @@ static int _find_lv_arg_position(struct cmd_context *cmd, struct logical_volume 
 	return 0;
 }
 
+/*
+ * Mark LVs eligible for parallel (async) deactivation with LV_NOSCAN.
+ * Creates an async context on cmd when enough candidates are found.
+ *
+ * Returns immediately when activate_ARG indicates activation.
+ *
+ * Safe candidates:
+ *  - Simple visible LVs (linear, stripe) that are active and
+ *    not components, pools, snapshot origins or external origins
+ *  - Non-last thin volumes per pool (last thin deactivates the
+ *    full pool tree synchronously with callbacks)
+ *  - Thins with external origins or thick snapshots have complex
+ *    dep trees and must always deactivate synchronously
+ *
+ * LV_NOSCAN is unused during deactivation, making it safe to
+ * repurpose as a transient marker within a single deactivation pass.
+ */
+void check_and_mark_parallel(struct cmd_context *cmd, struct dm_list *lvs)
+{
+	struct lv_list *lvl;
+	unsigned count = 0;
+
+	/* Only for deactivation -- skip when activating */
+	if (arg_is_set(cmd, activate_ARG) &&
+	    is_change_activating((activation_change_t)
+				 arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
+		return;
+
+	/* Pass 1 (reverse): mark non-last thin volumes per pool.
+	 * First thin found per pool in reverse = last in forward order,
+	 * leave it unmarked. Uses pool LV_NOSCAN as "seen" marker. */
+	dm_list_iterate_back_items(lvl, lvs) {
+		if (!lv_is_thin_volume(lvl->lv))
+			continue;
+		if (!lv_is_visible(lvl->lv))
+			continue;
+		if (first_seg(lvl->lv)->external_lv ||
+		    lv_is_origin(lvl->lv))
+			continue;
+		if (!lv_is_active(lvl->lv))
+			continue;
+		if (first_seg(lvl->lv)->pool_lv->status & LV_NOSCAN) {
+			lvl->lv->status |= LV_NOSCAN;
+			count++;
+		} else
+			first_seg(lvl->lv)->pool_lv->status |= LV_NOSCAN;
+	}
+
+	/* Clear pool "seen" markers */
+	dm_list_iterate_items(lvl, lvs)
+		if (lv_is_thin_volume(lvl->lv) && lv_is_visible(lvl->lv))
+			first_seg(lvl->lv)->pool_lv->status &= ~LV_NOSCAN;
+
+	/* Pass 2: mark simple active linear/stripe visible LVs that
+	 * nothing else links to (no snapshots, no external users). */
+	dm_list_iterate_items(lvl, lvs) {
+		if (lvl->lv->status & LV_NOSCAN)
+			continue; /* already marked as thin batch */
+		if (!lv_is_visible(lvl->lv) ||        /* only visible */
+		    lv_is_origin(lvl->lv) ||	      /* has thick snapshots */
+		    lv_is_external_origin(lvl->lv) || /* used by thin volumes */
+		    !seg_is_striped(first_seg(lvl->lv))) /* only striped */
+			continue;
+		lvl->lv->status |= LV_NOSCAN;
+		count++;
+	}
+
+	if (count >= 4 &&
+	    !(cmd->async_ctx = dm_async_ctx_create(0)))
+		log_warn("WARNING: Async context creation failed, using synchronous deactivation.");
+}
+
+/*
+ * Clear LV_NOSCAN markers and drain any pending async deactivations.
+ * Destroys cmd->async_ctx when done.  Returns 0 on drain failure.
+ */
+int clear_parallel_deact(struct cmd_context *cmd, struct dm_list *lvs)
+{
+	struct lv_list *lvl;
+	int r = 1;
+
+	dm_list_iterate_items(lvl, lvs)
+		lvl->lv->status &= ~LV_NOSCAN;
+
+	if (cmd->async_ctx) {
+		if (!dm_async_drain(cmd->async_ctx, NULL)) {
+			stack;
+			r = 0;
+		}
+		dm_async_ctx_destroy(cmd->async_ctx);
+		cmd->async_ctx = NULL;
+	}
+
+	return r;
+}
+
 int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 			  struct dm_list *arg_lvnames, const struct dm_list *tags_in,
 			  int stop_on_error,
@@ -3568,6 +3664,8 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 	 */
 	label_scan_invalidate_lvs(cmd, &final_lvs);
 
+	check_and_mark_parallel(cmd, &final_lvs);
+
 	dm_list_iterate_items(lvl, &final_lvs) {
 		if (sigint_caught()) {
 			ret_max = ECMD_FAILED;
@@ -3635,6 +3733,11 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 		}
 	}
 	log_set_report_object_name_and_id(NULL, NULL);
+
+	if (!clear_parallel_deact(cmd, &final_lvs) && ret_max == ECMD_PROCESSED) {
+		stack;
+		ret_max = ECMD_FAILED;
+	}
 
 	if (handle->include_historical_lvs && !tags_supplied) {
 		if (dm_list_empty(&_historical_lv.segments))

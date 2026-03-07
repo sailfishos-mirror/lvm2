@@ -2952,6 +2952,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 				return_0;
 		}
 		if (seg->pool_lv &&
+		    /* Skip pool subtree for NOSCAN LVs in batch deactivation */
+		    !(!dm->activation && (lv->status & LV_NOSCAN)) &&
 		    /* When activating and not origin_only detect linear 'overlay' over pool */
 		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, dm->activation ? origin_only : 1))
 			return_0;
@@ -2993,6 +2995,10 @@ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, const struc
 	}
 
 	_set_optional_uuid_suffixes(dtree);
+
+	/* Build leaf-only tree for non-last thin LVs in batch deactivation */
+	if (!dm->activation && (lv->status & LV_NOSCAN))
+		dm_tree_set_skip_deps(dtree, 1);
 
 	if (!_add_lv_to_dtree(dm, dtree, lv, (lv_is_origin(lv) || lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) ? origin_only : 0))
 		goto_bad;
@@ -4061,6 +4067,15 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
 	case DEACTIVATE:
 		if (retry_deactivation())
 			dm_tree_retry_remove(root);
+		/* LV_NOSCAN marks LVs eligible for async deactivation
+		 * (set by check_and_mark_parallel in toollib).
+		 * Unmarked LVs drain pending async ops first. */
+		if (dm->cmd->async_ctx && !(lv->status & LV_NOSCAN))
+			if (!dm_async_drain(dm->cmd->async_ctx, NULL))
+				log_warn("WARNING: Failed to drain async deactivations for %s.",
+					 display_lvname(lv));
+		if (dm->cmd->async_ctx && (lv->status & LV_NOSCAN))
+			dm_tree_set_async_ctx(root, dm->cmd->async_ctx);
 		/* Deactivate LV and all devices it references that nothing else has open. */
 		if (!dm_tree_deactivate_children(root, dlid, DLID_SIZE))
 			goto_out;
