@@ -349,6 +349,7 @@ struct dm_tree {
 	char buf[DM_NAME_LEN + 32];	/* print buffer for device_name (major:minor) */
 	const char * const *optional_uuid_suffixes;	/* uuid suffixes ignored when matching */
 	struct dm_async_ctx *async_ctx; /* caller-owned ctx for parallel deactivation */
+	unsigned skip_deps;		/* add nodes without following kernel deps */
 };
 
 /*
@@ -405,6 +406,11 @@ void dm_tree_set_async_ctx(struct dm_tree_node *dnode,
 			   struct dm_async_ctx *ctx)
 {
 	dnode->dtree->async_ctx = ctx;
+}
+
+void dm_tree_set_skip_deps(struct dm_tree *dtree, unsigned skip)
+{
+	dtree->skip_deps = skip;
 }
 
 void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie)
@@ -1274,8 +1280,8 @@ static struct dm_tree_node *_add_dev(struct dm_tree *dtree,
 	if (!new)
 		goto out;
 
-	/* Can't recurse if not a mapped device or there are no dependencies */
-	if (!node->info.exists || !deps || !deps->count) {
+	/* Skip kernel deps when building leaf-only trees */
+	if (dtree->skip_deps || !node->info.exists || !deps || !deps->count) {
 		if (!_add_to_bottomlevel(node)) {
 			stack;
 			node = NULL;
