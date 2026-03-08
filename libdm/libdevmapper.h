@@ -1713,6 +1713,12 @@ void dm_tree_set_async_ctx(struct dm_tree_node *dnode,
 			   struct dm_async_ctx *ctx);
 
 /*
+ * When set, nodes are added without following kernel deps.
+ * Produces leaf-only trees for deactivation.
+ */
+void dm_tree_set_skip_deps(struct dm_tree *dtree, unsigned skip);
+
+/*
  * List of suffixes to be ignored when matching uuids against existing devices.
  */
 void dm_tree_set_optional_uuid_suffixes(struct dm_tree *dtree, const char **optional_uuid_suffixes);
