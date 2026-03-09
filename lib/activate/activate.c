@@ -2593,8 +2593,10 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
 	}
 	critical_section_dec(cmd, "deactivated");
 
-	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists) {
-		/* Turn into log_error, but we do not log error */
+	/* With async deactivation the device may still be in flight,
+	 * so skip the post-removal check.  Sync path verifies it. */
+	if (!cmd->async_ctx &&
+	    (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists)) {
 		log_debug_activation("Deactivated volume is still %s present.",
 				     display_lvname(lv));
 		r = 0;
