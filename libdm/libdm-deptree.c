@@ -22,7 +22,15 @@
 #include <stdarg.h>
 #include <sys/utsname.h>
 
+#include <stdint.h>
+
 #define MAX_TARGET_PARAMSIZE 500000
+
+/* Pack udev_flags + suspended into a void* context value (no allocation). */
+#define _DEACT_CONTEXT(udev_flags, susp) \
+	((void *)(uintptr_t)((unsigned)(udev_flags) | ((unsigned)(susp) << 16)))
+#define _DEACT_UDEV_FLAGS(b) ((uint16_t)(uintptr_t)(b))
+#define _DEACT_SUSPENDED(b)  (((uintptr_t)(b) >> 16) & 1)
 
 /* Supported segment types */
 enum {
@@ -335,6 +343,7 @@ struct dm_tree_node {
 	void *callback_data;
 
 	int activated;                  /* tracks activation during preload */
+	unsigned removal_queued:1;	/* removal already queued (DAG dedup) */
 };
 
 struct dm_tree {
@@ -1801,6 +1810,122 @@ static int _node_send_messages(struct dm_tree_node *dnode,
 
 
 /*
+ * Process one completed async deactivation task.
+ */
+static int _process_async_completion(struct dm_task *dmt, void *userdata)
+{
+
+	/* Post-processing (ioctl post + node ops) already done by
+	 * dm_task_handle_completion() before calling this callback. */
+
+	log_debug_activation("Deactivated %s (%d:%d).",
+			     dmt->dev_name ? dmt->dev_name : "?",
+			     dmt->major, dmt->minor);
+
+	/* FIXME Until kernel returns actual name so dm-iface.c can handle it */
+	rm_dev_node(dmt->dev_name,
+		    dmt->cookie_set &&
+		    !(_DEACT_UDEV_FLAGS(userdata) & DM_UDEV_DISABLE_DM_RULES_FLAG),
+		    dmt->cookie_set &&
+		    (_DEACT_UDEV_FLAGS(userdata) & DM_UDEV_DISABLE_LIBRARY_FALLBACK));
+
+	if (_DEACT_SUSPENDED(userdata))
+		dec_suspended();
+
+	return 1;
+}
+
+/*
+ * Prepare a DM_DEVICE_REMOVE task without executing it.
+ * Sets dev_name so the task is self-contained.
+ * Caller must call dm_task_submit() to hand off to the async context.
+ */
+static struct dm_task *_prepare_deactivate_node(const char *name,
+						uint32_t major,
+						uint32_t minor,
+						uint32_t *cookie,
+						uint16_t udev_flags,
+						int retry)
+{
+	struct dm_task *dmt;
+
+	if (!(dmt = _create_remove_task(name, major, minor,
+					cookie, udev_flags, retry)))
+		return_NULL;
+
+	if (!dm_task_prepare(dmt))
+		goto_bad;
+
+	/* Set dev_name AFTER prepare so it does not go into dmi->name
+	 * (kernel rejects REMOVE with both name and dev set).
+	 * Needed for rm_dev_node() in the completion handler. */
+	if (!dm_task_set_name(dmt, name))
+		goto_bad;
+
+	return dmt;
+bad:
+	dm_task_destroy(dmt);
+	return NULL;
+}
+
+/*
+ * Prepare and submit a leaf-node remove to the async context.
+ * Task is self-contained (dev_name set) because the tree
+ * will be freed before the caller drains.
+ */
+static int _defer_deactivate_node(struct dm_async_ctx *ctx,
+				  const char *name,
+				  uint32_t major, uint32_t minor,
+				  uint32_t *cookie, uint16_t udev_flags,
+				  int retry, int suspended)
+{
+	struct dm_task *dmt;
+
+	if (!(dmt = _prepare_deactivate_node(name, major, minor,
+					     cookie, udev_flags, retry)))
+		return_0;
+
+	if (!dm_task_submit(dmt, ctx, _process_async_completion,
+			    _DEACT_CONTEXT(udev_flags, suspended))) {
+		log_error("Failed to submit deferred deactivation of %s.",
+			  name);
+		dm_task_destroy(dmt);
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Check if a node has any children that would need deactivation
+ * (DM devices matching the uuid prefix).  Non-DM deps like PVs
+ * don't count -- they can't be deactivated.
+ */
+static int _has_deactivatable_children(struct dm_tree_node *node,
+				       const char *uuid_prefix,
+				       size_t uuid_prefix_len)
+{
+	void *h = NULL;
+	struct dm_tree_node *c;
+	const char *uuid;
+
+	while ((c = dm_tree_next_child(&h, node, 0))) {
+		uuid = dm_tree_node_get_uuid(c);
+		if (uuid && _uuid_prefix_matches(uuid, uuid_prefix,
+						 uuid_prefix_len))
+			return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Parallel deactivation: per-node decision in the loop body.
+ * Leaf nodes (no children, no callback) with async_ctx are
+ * deferred for cross-tree parallelism.  Everything else is
+ * deactivated immediately inline (same as original sync path).
+ */
+/*
  * FIXME Don't attempt to deactivate known internal dependencies.
  */
 static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
@@ -1834,6 +1959,11 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 
 		/* Ignore if it doesn't belong to this VG */
 		if (!_uuid_prefix_matches(uuid, uuid_prefix, uuid_prefix_len))
+			continue;
+
+		/* Skip if removal already queued by an earlier recursive call
+		 * (DAG: node reachable from multiple parents at different levels) */
+		if (child->removal_queued)
 			continue;
 
 		/* Refresh open_count */
@@ -1888,6 +2018,25 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 		    !dm_tree_suspend_children(child, uuid_prefix, uuid_prefix_len))
 			continue;
 
+		child->removal_queued = 1;
+
+		/* Async path: leaf node, no callback, caller has async_ctx */
+		if (dnode->dtree->async_ctx && !child->callback &&
+		    !_has_deactivatable_children(child, uuid_prefix,
+						 uuid_prefix_len)) {
+			if (!_defer_deactivate_node(dnode->dtree->async_ctx,
+						    name, info.major, info.minor,
+						    &child->dtree->cookie,
+						    child->udev_flags,
+						    child->dtree->retry_remove,
+						    info.suspended && info.live_table)) {
+				stack;
+				r = 0;
+			}
+			continue;
+		}
+
+		/* Immediate path: deactivate synchronously */
 		if (!_deactivate_node(name, info.major, info.minor,
 				      &child->dtree->cookie, child->udev_flags,
 				      child->dtree->retry_remove)) {
@@ -1910,8 +2059,11 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 			 * setting r=0.  Or better, skip calling thin_check
 			 * entirely if the device is about to be removed. */
 
-		if (dm_tree_node_num_children(child, 0) &&
-		    !_dm_tree_deactivate_children(child, uuid_prefix, uuid_prefix_len, level + 1))
+		if (_has_deactivatable_children(child, uuid_prefix,
+						uuid_prefix_len) &&
+		    !_dm_tree_deactivate_children(child, uuid_prefix,
+						  uuid_prefix_len,
+						  level + 1))
 			return_0;
 	}
 
