@@ -14,6 +14,7 @@
 
 #include "libdm/misc/dmlib.h"
 #include "libdm/ioctl/libdm-targets.h"
+#include "libdm/ioctl/libdm-async.h"
 #include "libdm-common.h"
 #include "libdm/misc/kdev_t.h"
 #include "libdm/misc/dm-ioctl.h"
@@ -348,6 +349,7 @@ struct dm_tree {
 	uint32_t cookie;
 	char buf[DM_NAME_LEN + 32];	/* print buffer for device_name (major:minor) */
 	const char * const *optional_uuid_suffixes;	/* uuid suffixes ignored when matching */
+	struct dm_async_ctx *async_ctx; /* caller-owned ctx for async deactivation */
 };
 
 /*
@@ -398,6 +400,12 @@ void dm_tree_free(struct dm_tree *dtree)
 	dm_hash_destroy(dtree->uuids);
 	dm_hash_destroy(dtree->devs);
 	dm_pool_destroy(dtree->mem);
+}
+
+void dm_tree_set_async_ctx(struct dm_tree_node *dnode,
+			   struct dm_async_ctx *ctx)
+{
+	dnode->dtree->async_ctx = ctx;
 }
 
 void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie)

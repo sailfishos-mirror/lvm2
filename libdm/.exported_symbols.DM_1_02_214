@@ -3,3 +3,4 @@ dm_async_ctx_create
 dm_async_ctx_destroy
 dm_async_drain
 dm_async_submit
+dm_tree_set_async_ctx
