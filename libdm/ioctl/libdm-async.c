@@ -175,6 +175,35 @@ static void _threads_destroy(struct dm_async_ctx *base)
 	free(ctx);
 }
 
+/*
+ * Drain all deferred async completions from a context.
+ * Called after the batch deactivation loop, before dm_udev_wait().
+ * Does NOT destroy the ctx -- caller owns that.
+ */
+int dm_async_drain(struct dm_async_ctx *ctx)
+{
+	struct dm_task *dmt;
+	void *userdata;
+	int r = 1;
+	unsigned count = 0;
+
+	if (!ctx)
+		return 1;
+
+	while (dm_async_wait_completion(ctx, &dmt, &userdata)) {
+		if (!dm_task_handle_completion(dmt, userdata))
+			r = 0;
+		dm_task_destroy(dmt);
+		count++;
+	}
+
+	if (count)
+		log_debug_activation("Drained %u async completion(s).",
+				     count);
+
+	return r;
+}
+
 struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 {
 	struct async_threads *ctx;

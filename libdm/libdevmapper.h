@@ -1509,6 +1509,13 @@ struct dm_async_ctx;
 struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel);
 void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
 
+/*
+ * Drain all pending completions from an async context.
+ * Call after the batch loop, before dm_udev_wait().
+ * Returns 1 on success, 0 if any operation failed.
+ */
+int dm_async_drain(struct dm_async_ctx *ctx);
+
 int dm_task_prepare(struct dm_task *dmt);
 int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
 		   int (*complete_fn)(struct dm_task *, void *userdata),
