@@ -1703,6 +1703,16 @@ struct dm_tree *dm_tree_create(void);
 void dm_tree_free(struct dm_tree *tree);
 
 /*
+ * Set caller-owned async context for parallel deactivation.
+ * When set, leaf-node removes are deferred to this context
+ * instead of being executed synchronously.  The caller is
+ * responsible for draining completions and destroying the ctx.
+ * Pass NULL to revert to synchronous deactivation.
+ */
+void dm_tree_set_async_ctx(struct dm_tree_node *dnode,
+			   struct dm_async_ctx *ctx);
+
+/*
  * List of suffixes to be ignored when matching uuids against existing devices.
  */
 void dm_tree_set_optional_uuid_suffixes(struct dm_tree *dtree, const char **optional_uuid_suffixes);
@@ -1777,6 +1787,8 @@ int dm_tree_node_num_children(const struct dm_tree_node *node, uint32_t inverted
 /*
  * Deactivate a device plus all dependencies.
  * Ignores devices that don't have a uuid starting with uuid_prefix.
+ * When an async context is set via dm_tree_set_async_ctx(), leaf-node
+ * removes are deferred to that context for parallel execution.
  */
 int dm_tree_deactivate_children(struct dm_tree_node *dnode,
 				const char *uuid_prefix,
