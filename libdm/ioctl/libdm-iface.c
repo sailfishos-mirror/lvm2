@@ -2594,13 +2594,18 @@ int dm_task_handle_completion(struct dm_task *dmt, void *userdata)
 /*
  * Create an async context for parallel ioctl submission.
  * max_parallel is the number of ioctls that may be in-flight simultaneously.
- * Falls back to synchronous single-slot context when max_parallel == 1.
+ * Probes for io_uring IOCTL support at runtime; falls back to thread pool.
  * The caller must have already opened the DM control fd (e.g. by calling
  * dm_task_run() or explicitly via any dm_task that goes through _open_control).
  * Returns a context on success, NULL on failure.
  */
 struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 {
+#ifdef HAVE_IORING_OP_IOCTL
+	/* -1 = untried, 0 = failed (use threads forever), 1 = works */
+	static int _uring_available = -1;
+#endif
+
 	if (!max_parallel)
 		max_parallel = DM_ASYNC_DEFAULT_PARALLEL;
 
@@ -2609,6 +2614,19 @@ struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 
 	if (max_parallel == 1)
 		return dm_async_ctx_alloc_sync(_control_fd);
+
+#ifdef HAVE_IORING_OP_IOCTL
+	if (_uring_available != 0) {
+		struct dm_async_ctx *ctx =
+			dm_async_ctx_alloc_uring(_control_fd, max_parallel);
+		if (ctx) {
+			_uring_available = 1;
+			return ctx;
+		}
+		log_debug_activation("io_uring not available; using thread pool.");
+		_uring_available = 0;
+	}
+#endif
 
 	return dm_async_ctx_alloc_threads(_control_fd, max_parallel);
 }
