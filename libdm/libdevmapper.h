@@ -1494,9 +1494,16 @@ int dm_task_get_errno(struct dm_task *dmt);
  *   ctx = dm_async_ctx_create(N);          // N parallel ioctls max
  *   for each dmt:
  *     dm_task_prepare(dmt);                // build ioctl buffer
+ *     dm_task_set_seq(dmt, N);             // optional ordering
  *     dm_task_submit(dmt, ctx, cb, ud);    // hand off to worker
  *   dm_async_drain(ctx);                   // wait for all completions
  *   dm_async_ctx_destroy(ctx);
+ *
+ * dm_task_set_seq() sets a phase number for ordering: all items at seq N
+ * must complete before any item at seq N+1 begins executing.  Items
+ * within the same seq run in parallel.  An item whose seq <= current_seq
+ * is immediately eligible, so late submissions at already-passed phases
+ * run without waiting.  Default is 0 (unordered, all items run in parallel).
  *
  * dm_async_ctx_create() creates a bounded thread-pool context.
  * Falls back to synchronous single-slot mode when max_parallel == 1.
@@ -1517,6 +1524,7 @@ void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
 int dm_async_drain(struct dm_async_ctx *ctx);
 
 int dm_task_prepare(struct dm_task *dmt);
+void dm_task_set_seq(struct dm_task *dmt, unsigned seq);
 int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
 		   int (*complete_fn)(struct dm_task *, void *userdata),
 		   void *userdata);

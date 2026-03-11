@@ -16,6 +16,7 @@ dm_async_ctx_create
 dm_async_ctx_destroy
 dm_async_drain
 dm_task_prepare
+dm_task_set_seq
 dm_task_submit
 dm_tree_set_async_ctx
 dm_tree_set_skip_deps

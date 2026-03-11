@@ -28,6 +28,7 @@
 /* Inline in struct dm_task for parallel deptree ops */
 struct dm_task_async {
 	int (*complete_fn)(struct dm_task *, void *userdata);	/* completion callback */
+	unsigned seq;			/* depth level for seq-barrier ordering */
 };
 
 /*
@@ -37,6 +38,7 @@ struct dm_work_item {
 	struct dm_list  list;
 	struct dm_task *dmt;
 	void           *userdata; /* caller context, returned via wait */
+	unsigned        seq;      /* sequence phase for ordering */
 };
 
 /*

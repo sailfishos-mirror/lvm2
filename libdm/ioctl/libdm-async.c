@@ -36,13 +36,44 @@ struct async_threads {
 	pthread_mutex_t      lock;
 	pthread_cond_t       work_cond;    /* workers wait for items */
 	pthread_cond_t       done_cond;    /* main waits for completions / slots */
-	struct dm_list       pending;
+	struct dm_list       pending;      /* sorted by seq */
 	struct dm_list       completed;
 	unsigned             n_threads;
 	unsigned             n_inflight;   /* pending + executing */
+	unsigned             current_seq;  /* lowest seq eligible to run */
+	unsigned             seq_running;  /* items at current_seq executing */
+	unsigned             seq_pending;  /* items at current_seq in pending */
 	int                  shutdown;
 	pthread_t            threads[];    /* flex array; must be last */
 };
+
+/*
+ * Advance current_seq to the next phase from the pending list.
+ * Must be called under ctx->lock when seq_running == 0 && seq_pending == 0.
+ */
+static void _advance_seq(struct async_threads *ctx)
+{
+	struct dm_work_item *item;
+	struct dm_list *lh;
+
+	if (dm_list_empty(&ctx->pending))
+		return;
+
+	item = dm_list_item(dm_list_first(&ctx->pending),
+			    struct dm_work_item);
+	ctx->current_seq = item->seq;
+
+	/* Count items at the new current_seq. */
+	ctx->seq_pending = 0;
+	dm_list_iterate(lh, &ctx->pending) {
+		item = dm_list_item(lh, struct dm_work_item);
+		if (item->seq != ctx->current_seq)
+			break;
+		ctx->seq_pending++;
+	}
+
+	pthread_cond_broadcast(&ctx->work_cond);
+}
 
 static void *_worker_fn(void *arg)
 {
@@ -51,7 +82,9 @@ static void *_worker_fn(void *arg)
 
 	pthread_mutex_lock(&ctx->lock);
 	while (!ctx->shutdown) {
-		if (dm_list_empty(&ctx->pending)) {
+		if (dm_list_empty(&ctx->pending) ||
+		    dm_list_item(dm_list_first(&ctx->pending),
+				 struct dm_work_item)->seq > ctx->current_seq) {
 			pthread_cond_wait(&ctx->work_cond, &ctx->lock);
 			continue;
 		}
@@ -59,6 +92,10 @@ static void *_worker_fn(void *arg)
 		item = dm_list_item(dm_list_first(&ctx->pending),
 				    struct dm_work_item);
 		dm_list_del(&item->list);
+		if (item->seq == ctx->current_seq) {
+			ctx->seq_pending--;
+			ctx->seq_running++;
+		}
 		pthread_mutex_unlock(&ctx->lock);
 
 		/* Execute the ioctl outside the lock (with EBUSY retry). */
@@ -66,6 +103,12 @@ static void *_worker_fn(void *arg)
 
 		pthread_mutex_lock(&ctx->lock);
 		dm_list_add(&ctx->completed, &item->list);
+		if (item->seq == ctx->current_seq)
+			ctx->seq_running--;
+
+		if (!ctx->seq_running && !ctx->seq_pending)
+			_advance_seq(ctx);
+
 		pthread_cond_signal(&ctx->done_cond);
 	}
 	pthread_mutex_unlock(&ctx->lock);
@@ -77,6 +120,8 @@ static int _threads_submit(struct dm_async_ctx *base,
 {
 	struct async_threads *ctx = (struct async_threads *)base;
 	struct dm_work_item *item;
+	struct dm_list *lh;
+	unsigned seq = dmt->async.seq;
 
 	if (!(item = malloc(sizeof(*item)))) {
 		log_error("Failed to allocate async work item.");
@@ -85,6 +130,7 @@ static int _threads_submit(struct dm_async_ctx *base,
 	dm_list_init(&item->list);
 	item->dmt      = dmt;
 	item->userdata = userdata;
+	item->seq      = seq;
 
 	pthread_mutex_lock(&ctx->lock);
 
@@ -94,8 +140,23 @@ static int _threads_submit(struct dm_async_ctx *base,
 		return 0;
 	}
 
+	/* Insert sorted by seq (stable: append among equal seq). */
+	lh = ctx->pending.p;
+	while (lh != &ctx->pending &&
+	       dm_list_item(lh, struct dm_work_item)->seq > seq)
+		lh = lh->p;
+	dm_list_add(lh, &item->list);
+
 	ctx->n_inflight++;
-	dm_list_add(&ctx->pending, &item->list);
+
+	/* First item or passed phase: set current_seq. */
+	if (ctx->n_inflight == 1) {
+		ctx->current_seq = seq;
+		ctx->seq_pending = 1;
+		ctx->seq_running = 0;
+	} else if (seq == ctx->current_seq)
+		ctx->seq_pending++;
+
 	pthread_cond_signal(&ctx->work_cond);
 	pthread_mutex_unlock(&ctx->lock);
 	return 1;
@@ -238,4 +299,3 @@ struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 
 	return &ctx->base;
 }
-

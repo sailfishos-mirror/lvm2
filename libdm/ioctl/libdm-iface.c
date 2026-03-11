@@ -2804,6 +2804,11 @@ static int _submit_create_with_table(struct dm_task *dmt,
  *
  * Returns 1 on success, 0 on failure.  May block if the context is full.
  */
+void dm_task_set_seq(struct dm_task *dmt, unsigned seq)
+{
+	dmt->async.seq = seq;
+}
+
 int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
 		   int (*complete_fn)(struct dm_task *, void *userdata),
 		   void *userdata)
