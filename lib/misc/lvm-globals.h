@@ -50,6 +50,7 @@ void init_udev_checking(int checking);
 void init_pv_min_size(uint64_t sectors);
 void init_activation_checks(int checks);
 void init_retry_deactivation(int retry);
+void init_use_async_ioctl(int use);
 void init_unknown_device_name(const char *name);
 void init_io_memory_size(int val);
 
@@ -79,6 +80,7 @@ int udev_checking(void);
 uint64_t pv_min_size(void);
 int activation_checks(void);
 int retry_deactivation(void);
+int use_async_ioctl(void);
 const char *unknown_device_name(void);
 int io_memory_size(void);
 

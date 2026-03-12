@@ -3420,7 +3420,10 @@ void setup_async_lvs(struct cmd_context *cmd, struct dm_list *lvs)
 	struct radix_tree *pool_seen;
 	unsigned count = 0;
 
-	/* Only for deactivation -- skip when activating */
+	/* Only for deactivation -- skip when activating or disabled */
+	if (!use_async_ioctl())
+		return;
+
 	if (arg_is_set(cmd, activate_ARG) &&
 	    is_change_activating((activation_change_t)
 				 arg_uint_value(cmd, activate_ARG, CHANGE_AY)))

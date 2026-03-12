@@ -1518,6 +1518,15 @@ activation {
 	# This configuration option has an automatic default value.
 	# retry_deactivation = 1
 
+	# Configuration option activation/use_async_ioctl.
+	# Use async DM ioctls for bulk operations.
+	# When enabled, eligible LVs are deactivated asynchronously using
+	# async DM ioctls, which can significantly speed up bulk
+	# deactivation (e.g. vgchange -an with many LVs).
+	# Disable for backward compatible sequential behaviour.
+	# This configuration option has an automatic default value.
+	# use_async_ioctl = 1
+
 	# Configuration option activation/missing_stripe_filler.
 	# Method to fill missing stripes when activating an incomplete LV.
 	# Using 'error' will make inaccessible parts of the device return I/O

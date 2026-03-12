@@ -45,6 +45,7 @@ static int _error_message_produced = 0;
 static unsigned _is_static = 0;
 static int _udev_checking = 1;
 static int _retry_deactivation = DEFAULT_RETRY_DEACTIVATION;
+static int _use_async_ioctl = DEFAULT_USE_ASYNC_IOCTL;
 static int _activation_checks = 0;
 static uint64_t _pv_min_size = (DEFAULT_PV_MIN_SIZE_KB * 1024L >> DM_SECTOR_SHIFT);
 static const char *_unknown_device_name = DEFAULT_UNKNOWN_DEVICE_NAME;
@@ -180,6 +181,11 @@ void init_udev_checking(int checking)
 void init_retry_deactivation(int retry)
 {
 	_retry_deactivation = retry;
+}
+
+void init_use_async_ioctl(int use)
+{
+	_use_async_ioctl = use;
 }
 
 void init_activation_checks(int checks)
@@ -337,6 +343,11 @@ int udev_checking(void)
 int retry_deactivation(void)
 {
 	return _retry_deactivation;
+}
+
+int use_async_ioctl(void)
+{
+	return _use_async_ioctl;
 }
 
 int activation_checks(void)
