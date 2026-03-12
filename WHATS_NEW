@@ -1,5 +1,8 @@
 Version 2.03.39 - 
 ==================
+  Add parallel deactivation for bulk LV operations.
+  Add activation/use_async_ioctl configuration option.
+  Add --noasync option to dmsetup to force synchronous ioctl execution.
   Fix pofile generation to include SOURCES2 binaries and update xgettext options.
   Reject lvreduce of CoW snapshot COW store when it would truncate exception data.
   Skip filesystem resize handling for CoW snapshot COW store LVs in lvresize.

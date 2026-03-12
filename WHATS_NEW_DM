@@ -1,5 +1,10 @@
 Version 1.02.213 - 
 ===================
+  Add async DM ioctl API with thread-pool backend for parallel operations.
+  Add dm_task_prepare and dm_task_submit for async ioctl submission.
+  Add dm_async_ctx_create, dm_async_ctx_destroy and dm_async_drain.
+  Add dm_tree_set_async_ctx for parallel tree deactivation.
+  Add dm_tree_set_skip_deps for leaf-only dependency trees.
   Copy dm_device_list_destroy, dm_task_get_device_list.
   Add dm_device_list_equal.
   Copy dm_get_status_writecache, dm_tree_node_add_writecache_target.
