@@ -196,6 +196,7 @@ enum {
 	LENGTH_ARG,
 	MANGLENAME_ARG,
 	NAMEPREFIXES_ARG,
+	NOASYNC_ARG,
 	NOFLUSH_ARG,
 	NOGROUP_ARG,
 	NOHEADINGS_ARG,
@@ -1315,14 +1316,16 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 	else if (!(concise_format = _slurp_stdin()))
 		return_0;
 
-	if (!(_async_ctx = dm_async_ctx_create(0)))
-		goto out;
+	if (!_switches[NOASYNC_ARG]) {
+		if (!(_async_ctx = dm_async_ctx_create(0)))
+			goto out;
 
-	/* Shared udev cookie so all async creates use one semaphore.
-	 * Skip when caller already set one via --udevcookie. */
-	if (!_udev_cookie) {
-		dm_udev_create_cookie(&_udev_cookie);
-		own_cookie = 1;
+		/* Shared udev cookie so all async creates use one semaphore.
+		 * Skip when caller already set one via --udevcookie. */
+		if (!_udev_cookie) {
+			dm_udev_create_cookie(&_udev_cookie);
+			own_cookie = 1;
+		}
 	}
 
 	/* Work through input string c, parsing into sets of 5 fields. */
@@ -6689,6 +6692,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 		{"minor",	  required_argument, 0, MINOR_ARG},
 		{"mode",	  required_argument, 0, MODE_ARG},
 		{"nameprefixes",	no_argument, 0, NAMEPREFIXES_ARG},
+		{"noasync",		no_argument, 0, NOASYNC_ARG},
 		{"noflush",		no_argument, 0, NOFLUSH_ARG},
 		{"nogroup",		no_argument, 0, NOGROUP_ARG},
 		{"noheadings",		no_argument, 0, NOHEADINGS_ARG},
@@ -7022,7 +7026,7 @@ static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 	 * Create a shared udev cookie upfront so all async ioctls
 	 * share one semaphore -- each _simple()/_error_device() call
 	 * picks it up from the global _udev_cookie. */
-	if (argc > 1) {
+	if (argc > 1 && !_switches[NOASYNC_ARG]) {
 		if ((!strcmp(cmd->name, "remove") &&
 		     !_switches[FORCE_ARG] && !_switches[DEFERRED_ARG] &&
 		     !_switches[RETRY_ARG]) ||
