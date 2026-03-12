@@ -1294,7 +1294,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
 			len += strlen(t->params) + 1 + ALIGNMENT;
 			count++;
 		}
-	else if (dmt->head)
+	else if (dmt->head && dmt->type != DM_DEVICE_CREATE)
 		log_debug_activation(INTERNAL_ERROR "dm '%s' ioctl should not define parameters.",
 				     _cmd_data_v4[dmt->type].name);
 	switch (dmt->type) {
@@ -1611,6 +1611,38 @@ static int _check_uevent_generated(struct dm_ioctl *dmi)
 }
 #endif
 
+/*
+ * Create a RELOAD task and populate it with table data.
+ * Used by both _create_and_load_v4() and the async create chain.
+ * The target list (head/tail) is moved -- caller must NULL its own copy.
+ * Returns the new task on success, NULL on failure.
+ */
+static struct dm_task *_new_reload_task(const char *name,
+					struct target *head,
+					struct target *tail,
+					int read_only,
+					int secure_data,
+					int ima_measurement)
+{
+	struct dm_task *task;
+
+	if (!(task = dm_task_create(DM_DEVICE_RELOAD)))
+		return_NULL;
+
+	if (name && !dm_task_set_name(task, name)) {
+		dm_task_destroy(task);
+		return_NULL;
+	}
+
+	task->read_only = read_only;
+	task->head = head;
+	task->tail = tail;
+	task->secure_data = secure_data;
+	task->ima_measurement = ima_measurement;
+
+	return task;
+}
+
 static int _create_and_load_v4(struct dm_task *dmt)
 {
 	struct dm_info info;
@@ -1652,27 +1684,16 @@ static int _create_and_load_v4(struct dm_task *dmt)
 	dm_task_destroy(task);
 
 	/* Next load the table */
-	if (!(task = dm_task_create(DM_DEVICE_RELOAD))) {
+	if (!(task = _new_reload_task(dmt->dev_name, dmt->head, dmt->tail,
+				      dmt->read_only, dmt->secure_data,
+				      dmt->ima_measurement))) {
 		stack;
-		_udev_complete(dmt);
-		goto revert;
-	}
-
-	/* Copy across relevant fields */
-	if (dmt->dev_name && !dm_task_set_name(task, dmt->dev_name)) {
-		stack;
-		dm_task_destroy(task);
 		_udev_complete(dmt);
 		goto revert;
 	}
 
 	task->major = info.major;
 	task->minor = info.minor;
-	task->read_only = dmt->read_only;
-	task->head = dmt->head;
-	task->tail = dmt->tail;
-	task->secure_data = dmt->secure_data;
-	task->ima_measurement = dmt->ima_measurement;
 
 	r = dm_task_run(task);
 	if (!r)
@@ -2599,8 +2620,188 @@ void dm_async_ctx_destroy(struct dm_async_ctx *ctx)
 }
 
 /*
+ * Internal wrapper for async CREATE-with-table chaining.
+ * When dm_task_submit() sees a CREATE task with targets (head != NULL),
+ * it steals the targets, cookie and read_only setting into this struct.
+ * The bare CREATE is submitted first; on completion, internal callbacks
+ * chain RELOAD (with the stolen targets) and then RESUME (with the
+ * cookie).  The caller's original callback is invoked after RESUME.
+ */
+struct device_create_ctx {
+	struct dm_async_ctx *ctx;
+	int (*user_fn)(struct dm_task *, void *);
+	void               *user_data;
+	struct target      *head;
+	struct target      *tail;
+	uint32_t            event_nr;
+	int                 cookie_set;
+	int                 read_only;
+	int                 secure_data;
+	int                 ima_measurement;
+	char               *dev_name;
+};
+
+static void _free_target_list(struct target *head, int secure_data)
+{
+	struct target *t, *n;
+
+	for (t = head; t; t = n) {
+		n = t->next;
+		if (secure_data)
+			_dm_zfree_string(t->params);
+		else
+			dm_free(t->params);
+		dm_free(t->type);
+		dm_free(t);
+	}
+}
+
+static void _async_create_revert(const char *dev_name)
+{
+	struct dm_task *dmt;
+
+	if (!(dmt = dm_task_create(DM_DEVICE_REMOVE)))
+		return;
+
+	if (dm_task_set_name(dmt, dev_name))
+		if (!dm_task_run(dmt))
+			log_error("Failed to revert device creation.");
+
+	dm_task_destroy(dmt);
+}
+
+static void _async_create_cleanup(struct dm_task *dmt,
+				  struct device_create_ctx *acc,
+				  int revert)
+{
+	if (revert)
+		_async_create_revert(acc->dev_name);
+	if (dmt)
+		dm_task_destroy(dmt);
+	_free_target_list(acc->head, acc->secure_data);
+	dm_free(acc->dev_name);
+	dm_free(acc);
+}
+
+/* Callback after RELOAD: submit RESUME with cookie */
+static int _async_create_resume(struct dm_task *dmt, void *userdata)
+{
+	struct device_create_ctx *acc = userdata;
+	struct dm_task *resume;
+
+	if (!(resume = dm_task_create(DM_DEVICE_RESUME))) {
+		_async_create_cleanup(NULL, acc, 1);
+		return_0;
+	}
+
+	if (!dm_task_set_name(resume, acc->dev_name)) {
+		_async_create_cleanup(resume, acc, 1);
+		return_0;
+	}
+
+	resume->event_nr = acc->event_nr;
+	resume->cookie_set = acc->cookie_set;
+
+	if (!dm_task_prepare(resume) ||
+	    !dm_task_submit(resume, acc->ctx,
+			    acc->user_fn, acc->user_data)) {
+		_async_create_cleanup(resume, acc, 1);
+		return_0;
+	}
+
+	/* Targets already consumed by RELOAD; clear before free */
+	acc->head = NULL;
+	dm_free(acc->dev_name);
+	dm_free(acc);
+	return 1;
+}
+
+/* Callback after CREATE: submit RELOAD with stolen targets */
+static int _async_create_reload(struct dm_task *dmt, void *userdata)
+{
+	struct device_create_ctx *acc = userdata;
+	struct dm_task *reload;
+
+	if (!(reload = _new_reload_task(acc->dev_name, acc->head, acc->tail,
+					acc->read_only, acc->secure_data,
+					acc->ima_measurement))) {
+		_async_create_cleanup(NULL, acc, 1);
+		return_0;
+	}
+
+	acc->head = NULL;
+	acc->tail = NULL;
+
+	if (!dm_task_prepare(reload) ||
+	    !dm_task_submit(reload, acc->ctx,
+			    _async_create_resume, acc)) {
+		_async_create_cleanup(reload, acc, 1);
+		return_0;
+	}
+
+	return 1;
+}
+
+/*
+ * Wrap a CREATE-with-table into an async chain: steal the targets and
+ * cookie from dmt into a device_create_ctx, rebuild dmt as a bare CREATE,
+ * and redirect complete_fn/userdata to the internal chain.
+ * Returns 1 on success, 0 on failure.
+ */
+static int _submit_create_with_table(struct dm_task *dmt,
+				     struct dm_async_ctx *ctx,
+				     int (**complete_fn)(struct dm_task *, void *),
+				     void **userdata)
+{
+	struct device_create_ctx *acc;
+
+	if (!(acc = dm_zalloc(sizeof(*acc)))) {
+		log_error("Failed to allocate async create context.");
+		return 0;
+	}
+
+	acc->ctx = ctx;
+	acc->user_fn = *complete_fn;
+	acc->user_data = *userdata;
+	acc->head = dmt->head;
+	acc->tail = dmt->tail;
+	acc->event_nr = dmt->event_nr;
+	acc->cookie_set = dmt->cookie_set;
+	acc->read_only = dmt->read_only;
+	acc->secure_data = dmt->secure_data;
+	acc->ima_measurement = dmt->ima_measurement;
+
+	if (!(acc->dev_name = dm_strdup(dmt->dev_name))) {
+		dm_free(acc);
+		return 0;
+	}
+
+	/* Bare CREATE: no targets, no cookie */
+	dmt->head = NULL;
+	dmt->tail = NULL;
+	dmt->event_nr = dmt->event_nr & DM_UDEV_FLAGS_MASK;
+	dmt->cookie_set = 0;
+
+	/* Rebuild dmi as bare CREATE */
+	if (!dm_task_prepare(dmt)) {
+		_async_create_cleanup(NULL, acc, 0);
+		return_0;
+	}
+
+	*complete_fn = _async_create_reload;
+	*userdata = acc;
+
+	return 1;
+}
+
+/*
  * Submit a prepared task for async execution.
  * dmt->dmi.v4 must already be built by dm_task_prepare().
+ *
+ * Special case: if dmt is a CREATE with targets (head != NULL), the
+ * targets are stolen and the operation is split into CREATE -> RELOAD ->
+ * RESUME automatically.  The caller's callback fires after RESUME.
+ *
  * Returns 1 on success, 0 on failure.  May block if the context is full.
  */
 int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
@@ -2616,6 +2817,11 @@ int dm_task_submit(struct dm_task *dmt, struct dm_async_ctx *ctx,
 		dm_task_handle_completion(done, done_ud);
 		dm_task_destroy(done);
 	}
+
+	/* CREATE with targets: split into CREATE -> RELOAD -> RESUME chain */
+	if (dmt->type == DM_DEVICE_CREATE && dmt->head &&
+	    !_submit_create_with_table(dmt, ctx, &complete_fn, &userdata))
+		return 0;
 
 	dm_list_init(&dmt->list);
 	dmt->async.complete_fn = complete_fn;
