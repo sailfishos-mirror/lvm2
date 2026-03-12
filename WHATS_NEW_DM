@@ -1,5 +1,11 @@
 Version 1.02.214 - 
 ===================
+  Add --noasync option to dmsetup to force synchronous ioctl execution.
+  Add dm_tree_set_skip_deps for leaf-only dependency trees.
+  Add dm_tree_set_async_ctx for parallel tree deactivation.
+  Add dm_async_submit for async ioctl submission (prepares internally).
+  Add dm_async_ctx_create, dm_async_ctx_destroy and dm_async_drain.
+  Add async DM ioctl API with thread-pool backend for parallel operations.
   Distinguish deferred remove from missing uevent in log message.
   Document dmsetup -vvvv verbosity levels and DM_DEBUG_WITH_LINE_NUMBERS.
   Add dm_udev_create_cookie stub for non-udev builds.

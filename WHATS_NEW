@@ -1,5 +1,7 @@
 Version 2.03.40 - 
 ==================
+  Add parallel deactivation for bulk LV operations.
+  Add activation/use_async_ioctl configuration option.
 
 Version 2.03.39 - 13th March 2026
 =================================
