@@ -679,10 +679,12 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 		if (test_mode())
 			return 1;
 
-		/*
-		 * FIXME Run --abort internally here.
-		 */
-		log_error("ABORTING: Temporary pvmove mirror activation failed. Run pvmove --abort.");
+		log_error("Temporary pvmove mirror activation failed. Reverting.");
+
+		if (!pvmove_abort_initial(lv_mirr->vg->cmd, lv_mirr->vg,
+					 lv_mirr, lvs_changed))
+			log_error("ABORTING: Failed to revert pvmove. Run pvmove --abort.");
+
 		return 0;
 	}
 
