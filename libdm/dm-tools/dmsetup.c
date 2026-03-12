@@ -445,11 +445,25 @@ struct dmsetup_report_obj {
 	struct dm_stats *stats;
 };
 
+/*
+ * Global async context.  When set, _task_run() submits the task for
+ * deferred execution instead of running it synchronously.  The caller
+ * must skip dm_task_destroy() and dm_udev_wait() -- ownership of dmt
+ * transfers to the async pool.  Set/cleared by the parallelisation
+ * wrappers (_perform_command_for_all_repeatable_args, _create_concise,
+ * _remove_all).
+ */
+static struct dm_async_ctx *_async_ctx;
+
 static int _task_run(struct dm_task *dmt)
 {
 	int r;
 	uint64_t delta;
 	struct dm_timestamp *ts;
+
+	if (_async_ctx)
+		return dm_task_prepare(dmt) &&
+		       dm_task_submit(dmt, _async_ctx, NULL, NULL);
 
 	if (_initial_timestamp)
 		dm_task_set_record_timestamp(dmt);
@@ -1213,6 +1227,12 @@ static int _create_one_device(const char *name, const char *file)
 	r = 1;
 
 out:
+	if (_async_ctx) {
+		if (!r) /* submit failed; still own dmt */
+			dm_task_destroy(dmt);
+		return r;
+	}
+
 	if (!_udev_cookie)
 		(void) dm_udev_wait(cookie);
 
@@ -1274,12 +1294,15 @@ static char *_slurp_stdin(void)
 	return buf;
 }
 
+static uint64_t _get_device_size(const char *name);
+
 static int _create_concise(const struct command *cmd, int argc, char **argv)
 {
 	char *concise_format;
 	char *c, *n;
 	char *fields[5] = { NULL };	/* name,uuid,minor,flags,table */
-	int f = 0;
+	int own_cookie = 0;
+	int f = 0, r = 0;
 
 	if (_switches[TABLE_ARG] || _switches[MINOR_ARG] || _switches[UUID_ARG] ||
 	    _switches[NOTABLE_ARG] || _switches[INACTIVE_ARG]){
@@ -1291,6 +1314,16 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 		concise_format = argv[0];
 	else if (!(concise_format = _slurp_stdin()))
 		return_0;
+
+	if (!(_async_ctx = dm_async_ctx_create(0)))
+		goto out;
+
+	/* Shared udev cookie so all async creates use one semaphore.
+	 * Skip when caller already set one via --udevcookie. */
+	if (!_udev_cookie) {
+		dm_udev_create_cookie(&_udev_cookie);
+		own_cookie = 1;
+	}
 
 	/* Work through input string c, parsing into sets of 5 fields. */
 	/* Strip out any characters quoted by backslashes in-place. */
@@ -1305,7 +1338,7 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 				*n = '\0';
 				log_error("Parsed %d fields: name: %s uuid: %s minor: %s flags: %s table: %s",
 					  f + 1, fields[0], fields[1], fields[2], fields[3], fields[4]);
-				goto out;
+				goto drain;
 			}
 
 			/* Don't interpret next character */
@@ -1351,7 +1384,7 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 				log_error("Five comma-separated fields are required for each device");
 				log_error("Parsed %d fields: name: %s uuid: %s minor: %s flags: %s table: %s",
 					  f + 1, fields[0], fields[1], fields[2], fields[3], fields[4]);
-				goto out;
+				goto drain;
 			}
 
 			/* Set up parameters the same way as when specified directly on command line */
@@ -1370,15 +1403,15 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 			else if (*fields[3] && strcmp(fields[3], "rw")) {
 				log_error("Invalid flags parameter '%s' must be 'ro' or 'rw' or empty.", fields[3]);
 				_uuid = NULL;
-				goto out;
+				goto drain;
 			}
 
 			_table = fields[4];
 
-			/* Create the device */
+			/* Create the device (async when _async_ctx is set) */
 			if (!_create_one_device(fields[0], NULL)) {
 				_uuid = _table = NULL;
-				goto out;
+				goto drain;
 			}
 
 			/* Clear parameters ready for any further devices */
@@ -1407,16 +1440,29 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 		log_error("Incomplete entry: five comma-separated fields are required for each device");
 		log_error("Parsed %d fields: name: %s uuid: %s minor: %s flags: %s table: %s",
 			  f + 1, fields[0], fields[1], fields[2], fields[3], fields[4]);
-		goto out;
+		goto drain;
 	}
 
-	return 1;
+	r = 1;
+
+drain:
+	if (!dm_async_drain(_async_ctx)) {
+		stack;
+		r = 0;
+	}
+	dm_async_ctx_destroy(_async_ctx);
+	_async_ctx = NULL;
+
+	if (own_cookie) {
+		(void) dm_udev_wait(_udev_cookie);
+		_udev_cookie = 0;
+	}
 
 out:
 	if (!argc)
 		free(concise_format);
 
-	return 0;
+	return r;
 }
 
 static int _create(CMD_ARGS)
@@ -2073,6 +2119,12 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
 	r = _task_run(dmt);
 
 out:
+	if (_async_ctx) {
+		if (!r)
+			dm_task_destroy(dmt);
+		return r;
+	}
+
 	if (!_udev_cookie && udev_wait_flag)
 		(void) dm_udev_wait(cookie);
 
@@ -2182,7 +2234,8 @@ static uint64_t _get_device_size(const char *name)
 	if (_switches[CHECKS_ARG] && !dm_task_enable_checks(dmt))
 		goto_out;
 
-	if (!_task_run(dmt))
+	/* Must run synchronously -- caller reads results inline */
+	if (!dm_task_run(dmt))
 		goto_out;
 
 	if (!dm_task_get_info(dmt, &info) || !info.exists)
@@ -2238,6 +2291,9 @@ static int _error_device(CMD_ARGS)
 
 	if (!_task_run(dmt))
 		goto_bad;
+
+	if (_async_ctx)
+		return 1; /* RESUME done in separate pass */
 
 	if (_switches[FORCE_ARG])
 		/* Avoid hang on flushing with --force */
@@ -6932,16 +6988,88 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 	return 1;
 }
 
+/*
+ * wipe_table pass 2: RESUME all devices after async RELOAD drain.
+ */
+static int _wipe_resume_all(int argc, char **argv)
+{
+	int i, r = 1;
+
+	if (_switches[FORCE_ARG])
+		_switches[NOLOCKFS_ARG] = _switches[NOFLUSH_ARG] = 1;
+
+	for (i = 0; i < argc; i++)
+		if (!_simple(DM_DEVICE_RESUME, argv[i], 0, 0)) {
+			stack;
+			r = 0;
+		}
+
+	if (!dm_async_drain(_async_ctx)) {
+		stack;
+		r = 0;
+	}
+
+	return r;
+}
+
 static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 {
+	int own_cookie = 0;
+	char **saved_argv = argv;
+	int saved_argc = argc, r = 1;
+
+	/* Parallel operations when multiple devices named.
+	 * Create a shared udev cookie upfront so all async ioctls
+	 * share one semaphore -- each _simple()/_error_device() call
+	 * picks it up from the global _udev_cookie. */
+	if (argc > 1) {
+		if ((!strcmp(cmd->name, "remove") &&
+		     !_switches[FORCE_ARG] && !_switches[DEFERRED_ARG] &&
+		     !_switches[RETRY_ARG]) ||
+		    !strcmp(cmd->name, "suspend") ||
+		    !strcmp(cmd->name, "resume") ||
+		    !strcmp(cmd->name, "wipe_table"))
+			_async_ctx = dm_async_ctx_create(0);
+
+		if (_async_ctx && !_udev_cookie) {
+			dm_udev_create_cookie(&_udev_cookie);
+			own_cookie = 1;
+		}
+	}
+
 	do {
 		if (!cmd->fn(cmd, subcommand, argc, argv++, NULL, multiple_devices)) {
-			log_error("Command failed.");
-			return 0;
+			stack;
+			r = 0;
+			break;
 		}
 	} while (cmd->repeatable_cmd && argc-- > 1);
 
-	return 1;
+	if (_async_ctx) {
+		if (!dm_async_drain(_async_ctx)) {
+			stack;
+			r = 0;
+		}
+
+		if (!strcmp(cmd->name, "wipe_table"))
+			if (!_wipe_resume_all(saved_argc - argc, saved_argv)) {
+				stack;
+				r = 0;
+			}
+
+		dm_async_ctx_destroy(_async_ctx);
+		_async_ctx = NULL;
+
+		if (own_cookie) {
+			(void) dm_udev_wait(_udev_cookie);
+			_udev_cookie = 0;
+		}
+	}
+
+	if (!r)
+		log_error("Command failed.");
+
+	return r;
 }
 
 static int _do_report_wait(void)
