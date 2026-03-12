@@ -1,5 +1,11 @@
 Version 1.02.214 - 
 ===================
+  Add --noasync option to dmsetup to force synchronous ioctl execution.
+  Add dm_tree_set_skip_deps for leaf-only dependency trees.
+  Add dm_tree_set_async_ctx for async tree deactivation.
+  Add dm_async_submit for async ioctl submission (prepares internally).
+  Add dm_async_ctx_create, dm_async_ctx_destroy and dm_async_drain.
+  Add async DM ioctl API with thread-pool backend.
   Detect external resume during suspend tree walk.
   Fix sorting for DM_REPORT_FIELD_TYPE_{PERCENT,STRING_LIST} reporting fields.
   Fix libdm rm_dev_node to work correctly for REMOVE-by-major:minor tasks.
