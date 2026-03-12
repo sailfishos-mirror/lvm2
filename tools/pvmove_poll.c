@@ -48,17 +48,41 @@ static int _is_pvmove_image_removable(struct logical_volume *mimage_lv,
 }
 
 static int _detach_pvmove_mirror(struct cmd_context *cmd,
-				 struct logical_volume *lv_mirr)
+				 struct logical_volume *lv_mirr,
+				 int keep_source)
 {
 	uint32_t mimage_to_remove = 0;
 
-	if (arg_is_set(cmd, abort_ARG) &&
+	if (keep_source &&
 	    (seg_type(first_seg(lv_mirr), 0) == AREA_LV))
 		mimage_to_remove = 1; /* remove the second mirror leg */
 
 	if (!lv_remove_mirrors(cmd, lv_mirr, 1, 0, _is_pvmove_image_removable,
 			       &mimage_to_remove, PVMOVE))
 		return_0;
+
+	return 1;
+}
+
+/* Remove pvmove LV from metadata and commit; shared by abort and finish paths */
+static int _remove_pvmove_lv(struct cmd_context *cmd, struct volume_group *vg,
+			      struct logical_volume *lv_mirr)
+{
+	if (!lv_remove(lv_mirr)) {
+		log_error("ABORTING: Removal of temporary pvmove LV %s failed.",
+			  display_lvname(lv_mirr));
+		return 0;
+	}
+
+	if (!vg_write(vg) || !vg_commit(vg)) {
+		log_error("ABORTING: Failed to write metadata to disk.");
+		return 0;
+	}
+
+	lockd_lvremove_done(cmd, lv_mirr, NULL, 0);
+
+	if (vg->needs_lockd_free_lvs)
+		lockd_free_removed_lvs(cmd, vg, 1);
 
 	return 1;
 }
@@ -78,6 +102,38 @@ int pvmove_update_metadata(struct cmd_context *cmd, struct volume_group *vg,
 	return 1;
 }
 
+int pvmove_abort_initial(struct cmd_context *cmd, struct volume_group *vg,
+			 struct logical_volume *lv_mirr,
+			 struct dm_list *lvs_changed)
+{
+	/* Deactivate pvmove LV if partially activated */
+	if (lv_is_active(lv_mirr) && !deactivate_lv(cmd, lv_mirr))
+		log_warn("WARNING: Failed to deactivate %s.", display_lvname(lv_mirr));
+
+	if (!dm_list_empty(lvs_changed)) {
+		if (!_detach_pvmove_mirror(cmd, lv_mirr, 1)) {
+			log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
+
+		if (!lv_is_error(lv_mirr)) {
+			log_error(INTERNAL_ERROR "Failed to replace %s with error segment.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
+	}
+
+	if (!_remove_pvmove_lv(cmd, vg, lv_mirr))
+		return_0;
+
+	/* Reload participant LVs back to original PV mappings */
+	if (!refresh_pvmoved_lvs(lvs_changed))
+		log_warn("WARNING: Failed to refresh LVs after pvmove revert.");
+
+	return 1;
+}
+
 int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		  struct logical_volume *lv_mirr, struct dm_list *lvs_changed)
 {
@@ -86,7 +142,7 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	struct lvinfo info;
 
 	if (!dm_list_empty(lvs_changed) &&
-	    !_detach_pvmove_mirror(cmd, lv_mirr)) {
+	    !_detach_pvmove_mirror(cmd, lv_mirr, arg_count(cmd, abort_ARG))) {
 		log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
 			  display_lvname(lv_mirr));
 		return 0;
@@ -154,40 +210,8 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	 */
 
 	log_verbose("Removing temporary pvmove LV.");
-	/*
-	 * Use lv_remove() rather than lv_remove_single() because lv_mirr has
-	 * already been deactivated above and pvmove_finish() owns the final
-	 * vg_write/vg_commit below.  lv_remove_single() would re-deactivate
-	 * and commit internally, causing a double commit.
-	 * TODO: refactor pvmove_finish() to use lv_remove_single() and let it
-	 * own the commit, removing the explicit vg_write/vg_commit below.
-	 */
-	if (!lv_remove(lv_mirr)) {
-		log_error("ABORTING: Removal of temporary volume %s failed.",
-			  display_lvname(lv_mirr));
-		return 0;
-	}
-
-	/* Store it on disks */
-	log_verbose("Writing out final volume group after pvmove.");
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		log_error("ABORTING: Failed to write new data locations to disk.");
-		return 0;
-	}
-
-	/*
-	 * Unlock the cluster lock and queue the lock space for freeing only
-	 * after a successful metadata commit.  lv_remove() only frees PEs and
-	 * does not call lockd_lvremove_done(); we must do it explicitly here.
-	 * Releasing the lock before the commit would leave the cluster
-	 * unprotected if the commit failed while pvmove0 still existed in
-	 * metadata.  lv_remove_single() handles this correctly -- see the
-	 * TODO above.
-	 */
-	lockd_lvremove_done(cmd, lv_mirr, NULL, 0);
-
-	if (vg->needs_lockd_free_lvs)
-		lockd_free_removed_lvs(cmd, vg, 1);
+	if (!_remove_pvmove_lv(cmd, vg, lv_mirr))
+		return_0;
 
 	/* Allows the pvmove operation to complete even if 'orphaned' temporary volumes
 	 * cannot be deactivated due to being held open by another process.
