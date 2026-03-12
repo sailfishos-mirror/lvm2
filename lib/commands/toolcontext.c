@@ -787,6 +787,7 @@ static int _process_config(struct cmd_context *cmd)
 	cmd->default_settings.issue_discards = find_config_tree_bool(cmd, devices_issue_discards_CFG, NULL);
 
 	init_retry_deactivation(find_config_tree_bool(cmd, activation_retry_deactivation_CFG, NULL));
+	init_use_async_ioctl(find_config_tree_bool(cmd, activation_use_async_ioctl_CFG, NULL));
 
 	init_activation_checks(find_config_tree_bool(cmd, activation_checks_CFG, NULL));
 

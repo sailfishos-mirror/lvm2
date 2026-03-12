@@ -1443,6 +1443,13 @@ cfg(activation_retry_deactivation_CFG, "retry_deactivation", activation_CFG_SECT
 	"failing. This may happen because a process run from a quick udev rule\n"
 	"temporarily opened the device.\n")
 
+cfg(activation_use_async_ioctl_CFG, "use_async_ioctl", activation_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_ASYNC_IOCTL, vsn(2, 3, 37), NULL, 0, NULL,
+	"Use async DM ioctls for parallel operations.\n"
+	"When enabled, eligible LVs are deactivated in parallel using\n"
+	"async DM ioctls, which can significantly speed up bulk\n"
+	"deactivation (e.g. vgchange -an with many LVs).\n"
+	"Disable for backward compatible sequential behaviour.\n")
+
 cfg(activation_missing_stripe_filler_CFG, "missing_stripe_filler", activation_CFG_SECTION, CFG_DEFAULT_COMMENTED | CFG_ADVANCED, CFG_TYPE_STRING, DEFAULT_STRIPE_FILLER, vsn(1, 0, 0), NULL, 0, NULL,
 	"Method to fill missing stripes when activating an incomplete LV.\n"
 	"Using 'error' will make inaccessible parts of the device return I/O\n"
