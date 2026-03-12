@@ -641,6 +641,8 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 {
 	struct lv_list *lvl;
 	struct logical_volume *lv = NULL;
+	unsigned active_count = 0;
+	unsigned inactive_count = 0;
 
 	/*
 	 * Find the first active LV from lvs_changed for lv_update_and_reload().
@@ -653,9 +655,11 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 	 */
 	dm_list_iterate_items(lvl, lvs_changed) {
 		if (lv_is_active(lvl->lv)) {
-			lv = lvl->lv;
-			break;
-		}
+			if (!lv)
+				lv = lvl->lv;
+			active_count++;
+		} else
+			inactive_count++;
 	}
 
 	if (!lv) {
@@ -664,12 +668,15 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 		 * Write and commit metadata without suspend/resume:
 		 * there are no kernel tables to reload.
 		 */
-		log_verbose("No active LVs affected by pvmove, committing metadata only.");
+		log_verbose("No active LVs affected by pvmove (%u inactive), "
+			    "committing metadata only.", inactive_count);
 		if (!vg_write(lv_mirr->vg))
 			return_0;
 		if (!vg_commit(lv_mirr->vg))
 			return_0;
 	} else {
+		log_verbose("Suspending %s to reload %u active LV%s via pvmove dependency tracking.",
+			    display_lvname(lv), active_count, active_count != 1 ? "s" : "");
 		if (!lv_update_and_reload(lv))
 			return_0;
 	}
