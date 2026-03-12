@@ -2983,13 +2983,20 @@ int lockd_query_lv(struct cmd_context *cmd, const struct logical_volume *lv, int
 	if (!_lvmlockd_connected)
 		return 0;
 
-	/* types that cannot be active concurrently will always be ex. */
-	if (lv_is_external_origin(lv) ||
-	    lv_is_thin_type(lv) ||
-	    lv_is_mirror_type(lv) ||
-	    lv_is_raid_type(lv) ||
-	    lv_is_vdo_type(lv) ||
-	    lv_is_cache_type(lv)) {
+	/*
+	 * Types that cannot be active concurrently are always exclusive.
+	 * Sub-components (mirror images, raid images, etc.) have no lock
+	 * resource in lvmlockd, so assume exclusive.  Top-level LVs that
+	 * have their own lock must be queried to distinguish "exclusive
+	 * lock held" from "no lock held at all."
+	 */
+	if ((lv_is_external_origin(lv) ||
+	     lv_is_thin_type(lv) ||
+	     lv_is_mirror_type(lv) ||
+	     lv_is_raid_type(lv) ||
+	     lv_is_vdo_type(lv) ||
+	     lv_is_cache_type(lv)) &&
+	    !lockd_lv_uses_lock(lv)) {
 		*ex = 1;
 		return 1;
 	}
