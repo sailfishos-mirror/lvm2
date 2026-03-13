@@ -2681,16 +2681,15 @@ void dm_async_ctx_destroy(struct dm_async_ctx *ctx)
 int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
 		    dm_async_complete_fn complete_fn, void *userdata)
 {
-	struct dm_task *done;
-	void *done_ud;
+	unsigned n_inflight;
 
 	/* Build ioctl buffer if the caller has not already done so */
 	if (!dmt->dmi.v4 && !dm_task_prepare(dmt))
 		return_0;
 
 	/* Back-pressure: process any ready completions before submitting */
-	while (ctx->fn_try_wait(ctx, &done, &done_ud))
-		dm_task_handle_completion(ctx, done, done_ud);
+	if (!dm_async_drain(ctx, &n_inflight))
+		stack;
 
 	dm_list_init(&dmt->list);
 	dmt->async_complete_fn = complete_fn;

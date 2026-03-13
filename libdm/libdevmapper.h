@@ -1494,7 +1494,7 @@ int dm_task_get_errno(struct dm_task *dmt);
  *   ctx = dm_async_ctx_create(N);          // N parallel ioctls max
  *   for each dmt:
  *     dm_async_submit(ctx, dmt, cb, ud);   // prepare + submit
- *   dm_async_drain(ctx);                   // wait for all completions
+ *   dm_async_drain(ctx, NULL);             // wait for all completions
  *   dm_async_ctx_destroy(ctx);
  *
  * dm_async_ctx_create() creates a bounded thread-pool context.
@@ -1546,6 +1546,17 @@ void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
  */
 int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
 		    dm_async_complete_fn complete_fn, void *userdata);
+/*
+ * Drain completions from an async context.
+ * Call after the batch loop, before dm_udev_wait().
+ * Returns 1 on success, 0 if any operation failed.
+ *
+ * n_inflight == NULL:  blocking -- drain ALL pending completions.
+ * n_inflight != NULL:  non-blocking -- drain only ready completions,
+ *                      set *n_inflight to tasks still pending (0 = done).
+ */
+int dm_async_drain(struct dm_async_ctx *ctx, unsigned *n_inflight);
+
 
 /*
  * Call this to make or remove the device nodes associated with previously

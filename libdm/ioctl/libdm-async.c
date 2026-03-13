@@ -289,6 +289,57 @@ static void _threads_destroy(struct dm_async_ctx *base)
 	dm_free(ctx);
 }
 
+/*
+ * Drain async completions from a context.
+ * Called after the batch deactivation loop, before dm_udev_wait().
+ * Does NOT destroy the ctx -- caller owns that.
+ *
+ * n_inflight == NULL:  blocking -- drain ALL pending completions.
+ * n_inflight != NULL:  non-blocking -- drain only ready completions,
+ *                      set *n_inflight to tasks still pending (0 = done).
+ */
+int dm_async_drain(struct dm_async_ctx *ctx, unsigned *n_inflight)
+{
+	struct dm_task *dmt;
+	void *userdata;
+	int r = 1;
+	unsigned count = 0;
+
+	if (!ctx) {
+		if (n_inflight)
+			*n_inflight = 0;
+		return 1;
+	}
+
+	if (n_inflight) {
+		/* Non-blocking: drain only ready completions */
+		while (ctx->fn_try_wait(ctx, &dmt, &userdata)) {
+			if (!dm_task_handle_completion(ctx, dmt, userdata)) {
+				stack;
+				r = 0;
+			}
+			count++;
+		}
+
+		*n_inflight = ctx->fn_inflight(ctx);
+	} else {
+		/* Blocking: drain everything */
+		while (dm_async_wait_completion(ctx, &dmt, &userdata)) {
+			if (!dm_task_handle_completion(ctx, dmt, userdata)) {
+				stack;
+				r = 0;
+			}
+			count++;
+		}
+	}
+
+	if (count)
+		log_debug_activation("Drained %u async completion(s).",
+				     count);
+
+	return r;
+}
+
 struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 {
 	struct async_threads *ctx;
