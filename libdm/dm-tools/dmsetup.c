@@ -1263,6 +1263,7 @@ static char *_slurp_stdin(void)
 				return NULL;
 			}
 			buf = newbuf;
+			pos = buf + total;
 		}
 	} while (1);
 
