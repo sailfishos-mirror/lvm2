@@ -2211,6 +2211,117 @@ int dm_ioctl_exec(int fd, struct dm_task *dmt, struct dm_ioctl *dmi)
 }
 
 /*
+ * Enable for debug build. Used for discovering who holds device open.
+ * TODO: maybe worth of some API  --show-holders ??
+ */
+//#define DM_DEBUG_EBUSY_HOLDERS 1
+
+#ifdef DM_DEBUG_EBUSY_HOLDERS
+/*
+ * Scan /proc for processes holding the dm device open.
+ * Called on EBUSY during DM_DEVICE_REMOVE to identify the holder.
+ */
+static void _debug_show_holders(struct dm_ioctl *dmi)
+{
+	char path[PATH_MAX];
+	char link[PATH_MAX];
+	char dm_path[64];
+	char comm[256];
+	char cmdline[256];
+	DIR *proc_dir, *fd_dir;
+	struct dirent *proc_entry, *fd_entry;
+	struct stat st;
+	ssize_t len, i;
+	FILE *fp;
+	int minor;
+	int found = 0;
+
+	/*
+	 * dmi->dev is 0 after failed ioctl - kernel does not fill it.
+	 * Resolve the minor from the device node instead.
+	 */
+	snprintf(path, sizeof(path), "%s/%s", dm_dir(), dmi->name);
+	if (stat(path, &st) < 0) {
+		log_warn("DM_DEBUG_EBUSY: cannot stat %s: %s",
+			 path, strerror(errno));
+		return;
+	}
+	minor = MINOR(st.st_rdev);
+	snprintf(dm_path, sizeof(dm_path), "/dev/dm-%d", minor);
+
+	proc_dir = opendir("/proc");
+	if (!proc_dir)
+		return;
+
+	log_warn("DM_DEBUG_EBUSY: scanning /proc for holders of %s (dm-%d, %s)",
+		 dm_path, minor, dmi->name);
+
+	while ((proc_entry = readdir(proc_dir))) {
+		/* skip non-numeric entries */
+		if (proc_entry->d_name[0] < '0' || proc_entry->d_name[0] > '9')
+			continue;
+
+		snprintf(path, sizeof(path), "/proc/%s/fd", proc_entry->d_name);
+		fd_dir = opendir(path);
+		if (!fd_dir)
+			continue;
+
+		while ((fd_entry = readdir(fd_dir))) {
+			if (fd_entry->d_name[0] == '.')
+				continue;
+
+			snprintf(path, sizeof(path), "/proc/%s/fd/%s",
+				 proc_entry->d_name, fd_entry->d_name);
+			len = readlink(path, link, sizeof(link) - 1);
+			if (len < 0)
+				continue;
+			link[len] = '\0';
+
+			if (strcmp(link, dm_path))
+				continue;
+
+			/* found a holder - read comm and cmdline */
+			comm[0] = '\0';
+			snprintf(path, sizeof(path), "/proc/%s/comm",
+				 proc_entry->d_name);
+			if ((fp = fopen(path, "r"))) {
+				if (fgets(comm, sizeof(comm), fp)) {
+					len = strlen(comm);
+					if (len > 0 && comm[len - 1] == '\n')
+						comm[len - 1] = '\0';
+				}
+				fclose(fp);
+			}
+
+			cmdline[0] = '\0';
+			snprintf(path, sizeof(path), "/proc/%s/cmdline",
+				 proc_entry->d_name);
+			if ((fp = fopen(path, "r"))) {
+				len = fread(cmdline, 1, sizeof(cmdline) - 1, fp);
+				if (len > 0) {
+					cmdline[len] = '\0';
+					for (i = 0; i < len - 1; i++)
+						if (!cmdline[i])
+							cmdline[i] = ' ';
+				}
+				fclose(fp);
+			}
+
+			log_warn("DM_DEBUG_EBUSY:   pid=%s fd=%s comm=%s cmdline=%s",
+				 proc_entry->d_name, fd_entry->d_name,
+				 comm, cmdline);
+			found++;
+		}
+		closedir(fd_dir);
+	}
+	closedir(proc_dir);
+
+	if (!found)
+		log_warn("DM_DEBUG_EBUSY:   no /proc/*/fd holders found");
+}
+#endif /* DM_DEBUG_EBUSY_HOLDERS */
+
+/*
  * Execute ioctl with EBUSY retry for remove operations.
  *
  * The dmi buffer is reused across retries without rebuilding.
@@ -2236,6 +2347,10 @@ static int _dm_ioctl_exec_retry(int fd, struct dm_task *dmt)
 		if (r >= 0)
 			break;
 
+#ifdef DM_DEBUG_EBUSY_HOLDERS
+		if (!retries)
+			_debug_show_holders(dmt->dmi.v4);
+#endif
 	} while (dmt->retry_remove &&
 		 (dmt->ioctl_errno == EBUSY) &&
 		 (dmt->type == DM_DEVICE_REMOVE) &&
