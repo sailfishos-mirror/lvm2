@@ -2850,6 +2850,11 @@ int dm_async_get_fd(struct dm_async_ctx *ctx)
 	return ctx->fn_get_fd(ctx);
 }
 
+void dm_task_set_seq(struct dm_task *dmt, unsigned seq)
+{
+	dmt->async_seq = seq;
+}
+
 /*
  * Submit a task for async execution.
  * Calls dm_task_prepare() internally unless the caller already called it

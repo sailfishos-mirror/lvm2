@@ -39,12 +39,15 @@ struct async_threads {
 	pthread_cond_t       work_cond;    /* workers wait for items */
 	pthread_cond_t       done_cond;    /* main waits for completions / slots */
 	pthread_cond_t       retry_cond;   /* retry thread waits for items */
-	struct dm_list       pending;
+	struct dm_list       pending;      /* sorted by seq */
 	struct dm_list       completed;
 	struct dm_list       retry;        /* EBUSY tasks awaiting delay */
 	unsigned             n_threads;
 	unsigned             n_inflight;   /* pending + executing + retry */
 	unsigned             n_retry;      /* tasks in retry queue */
+	unsigned             current_seq;  /* lowest seq eligible to run */
+	unsigned             seq_running;  /* items at current_seq executing */
+	unsigned             seq_pending;  /* items at current_seq in pending */
 	int                  shutdown;
 	int                  event_fd;     /* eventfd, readable on completion */
 	pthread_t            retry_thread; /* dedicated retry delay thread */
@@ -75,6 +78,36 @@ static struct dm_task *_first_completed(struct async_threads *ctx)
 	return NULL;
 }
 
+/*
+ * Advance current_seq to the next phase from the pending list.
+ * Must be called under ctx->lock when no tasks at current_seq
+ * are running, pending, or awaiting retry.
+ */
+static void _advance_seq(struct async_threads *ctx)
+{
+	struct dm_task *dmt;
+	struct dm_list *lh;
+
+	if (ctx->n_retry)
+		return;   /* retries still pending at current_seq */
+
+	if (!(dmt = _first_pending(ctx)))
+		return;
+
+	ctx->current_seq = dmt->async_seq;
+
+	/* Count items at the new current_seq. */
+	ctx->seq_pending = 0;
+	dm_list_iterate(lh, &ctx->pending) {
+		dmt = dm_list_item(lh, struct dm_task);
+		if (dmt->async_seq != ctx->current_seq)
+			break;
+		ctx->seq_pending++;
+	}
+
+	pthread_cond_broadcast(&ctx->work_cond);
+}
+
 static void *_worker_fn(void *arg)
 {
 	struct async_threads *ctx = arg;
@@ -82,12 +115,18 @@ static void *_worker_fn(void *arg)
 
 	pthread_mutex_lock(&ctx->lock);
 	while (!ctx->shutdown) {
-		if (!(dmt = _first_pending(ctx))) {
+		if (!(dmt = _first_pending(ctx)) ||
+		    dmt->async_seq > ctx->current_seq) {
 			pthread_cond_wait(&ctx->work_cond, &ctx->lock);
 			continue;
 		}
 
 		dm_list_del(&dmt->list);
+		if (dmt->async_seq == ctx->current_seq) {
+			if (ctx->seq_pending)
+				ctx->seq_pending--;
+			ctx->seq_running++;
+		}
 		pthread_mutex_unlock(&ctx->lock);
 
 		/* Execute a single ioctl outside the lock. */
@@ -95,6 +134,12 @@ static void *_worker_fn(void *arg)
 
 		pthread_mutex_lock(&ctx->lock);
 		dm_list_add(&ctx->completed, &dmt->list);
+		if (dmt->async_seq == ctx->current_seq)
+			ctx->seq_running--;
+
+		if (!ctx->seq_running && !ctx->seq_pending)
+			_advance_seq(ctx);
+
 		pthread_cond_signal(&ctx->done_cond);
 		{
 			uint64_t one = 1;
@@ -103,6 +148,19 @@ static void *_worker_fn(void *arg)
 	}
 	pthread_mutex_unlock(&ctx->lock);
 	return NULL;
+}
+
+/* Insert dmt into pending list sorted by seq. Must hold ctx->lock. */
+static void _insert_pending(struct async_threads *ctx, struct dm_task *dmt)
+{
+	struct dm_list *lh;
+	unsigned seq = dmt->async_seq;
+
+	lh = ctx->pending.p;
+	while (lh != &ctx->pending &&
+	       dm_list_item(lh, struct dm_task)->async_seq > seq)
+		lh = lh->p;
+	dm_list_add(lh, &dmt->list);
 }
 
 /*
@@ -145,7 +203,12 @@ static void *_retry_fn(void *arg)
 		dm_list_iterate_items_safe(dmt, tmp, &ctx->retry) {
 			dm_list_del(&dmt->list);
 			ctx->n_retry--;
-			dm_list_add(&ctx->pending, &dmt->list);
+
+			/* Insert sorted by seq into pending */
+			_insert_pending(ctx, dmt);
+
+			if (dmt->async_seq == ctx->current_seq)
+				ctx->seq_pending++;
 		}
 
 		pthread_cond_broadcast(&ctx->work_cond);
@@ -159,6 +222,7 @@ static int _threads_submit(struct dm_async_ctx *base,
 			   struct dm_task *dmt, void *userdata)
 {
 	struct async_threads *ctx = (struct async_threads *)base;
+	unsigned seq = dmt->async_seq;
 
 	dmt->async_userdata = userdata;
 
@@ -180,7 +244,16 @@ static int _threads_submit(struct dm_async_ctx *base,
 		return 1;
 	}
 
-	dm_list_add(&ctx->pending, &dmt->list);
+	_insert_pending(ctx, dmt);
+
+	/* First item or passed phase: set current_seq. */
+	if (ctx->n_inflight == 1) {
+		ctx->current_seq = seq;
+		ctx->seq_pending = 1;
+		ctx->seq_running = 0;
+	} else if (seq == ctx->current_seq)
+		ctx->seq_pending++;
+
 	pthread_cond_signal(&ctx->work_cond);
 	pthread_mutex_unlock(&ctx->lock);
 	return 1;
@@ -422,4 +495,3 @@ struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 
 	return &ctx->base;
 }
-

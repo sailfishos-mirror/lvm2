@@ -3,5 +3,6 @@ dm_async_ctx_destroy
 dm_async_drain
 dm_async_get_fd
 dm_async_submit
+dm_task_set_seq
 dm_tree_set_async_ctx
 dm_tree_set_skip_deps
