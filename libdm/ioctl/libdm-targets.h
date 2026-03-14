@@ -83,6 +83,7 @@ struct dm_task {
 	struct dm_list list;		/* work list linkage for async ops */
 	dm_async_complete_fn async_complete_fn;	/* completion callback */
 	void *async_userdata;		/* caller context, returned via wait */
+	unsigned async_seq;		/* depth level for seq-barrier ordering */
 };
 
 struct cmd_data {

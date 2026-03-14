@@ -1483,6 +1483,7 @@ int dm_task_get_errno(struct dm_task *dmt);
  * Usage pattern:
  *   ctx = dm_async_ctx_create(N);          // N async ioctls max
  *   for each dmt:
+ *     dm_task_set_seq(dmt, level);         // optional phase ordering
  *     dm_async_submit(ctx, dmt, cb, ud);   // prepare + submit
  *   dm_async_drain(ctx, NULL);             // wait for all completions
  *   dm_async_ctx_destroy(ctx);
@@ -1555,6 +1556,16 @@ int dm_async_drain(struct dm_async_ctx *ctx, unsigned *n_inflight);
  * Returns -1 if context has no pollable fd (e.g. sync backend).
  */
 int dm_async_get_fd(struct dm_async_ctx *ctx);
+
+/*
+ * Set a phase number for ordered async execution.
+ * All items at seq N must complete before any item at seq N+1
+ * begins executing.  Items within the same seq run concurrently.
+ * An item whose seq <= current_seq is immediately eligible, so
+ * late submissions at already-passed phases run without waiting.
+ * Default is 0 (all items run concurrently, no ordering).
+ */
+void dm_task_set_seq(struct dm_task *dmt, unsigned seq);
 
 /*
  * Call this to make or remove the device nodes associated with previously

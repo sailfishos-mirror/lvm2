@@ -3004,6 +3004,10 @@ int dm_async_get_fd(struct dm_async_ctx *ctx)
 	return ctx->fn_get_fd(ctx);
 }
 
+void dm_task_set_seq(struct dm_task *dmt, unsigned seq)
+{
+	dmt->async_seq = seq;
+}
 
 void dm_hold_control_dev(int hold_open)
 {
