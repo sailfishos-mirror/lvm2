@@ -2542,13 +2542,185 @@ repeat_ioctl:
 /* ------------------------------------------------------------------ */
 
 /*
+ * Async CREATE-with-table chaining.
+ *
+ * dm_task_prepare() splits a CREATE-with-targets into three steps:
+ * bare CREATE (async) -> RELOAD (sync in callback) -> RESUME (async).
+ *
+ * Only RELOAD is pre-built here (it takes the stolen targets).
+ * RESUME is built in the completion callback after RELOAD succeeds,
+ * mirroring _create_and_load_v4().
+ *
+ * The splitting modifies two dmt fields for the bare CREATE
+ * (event_nr is stripped to flags-only, cookie_set is cleared);
+ * these originals are saved in acc so RESUME can restore them.
+ * All other fields (uid, gid, mode, add_node, read_ahead) stay
+ * on dmt untouched -- the callback reads them directly.
+ *
+ * Prepare sets dmt->async_complete_fn to the internal chain callback.
+ * dm_async_submit() detects this (non-NULL complete_fn) and saves
+ * the caller's callback into acc->caller_fn/caller_data instead of
+ * overwriting the chain.
+ */
+struct device_create_ctx {
+	struct dm_task		*reload;
+	uint32_t		event_nr;	/* original (with cookie) */
+	int			cookie_set;
+	dm_async_complete_fn	caller_fn;
+	void			*caller_data;
+};
+
+static void _async_create_cleanup(struct device_create_ctx *acc,
+				  const char *dev_name)
+{
+	uint16_t base;
+
+	/* Revert first: _revert_create increments the cookie sem for
+	 * the REMOVE uevent.  Only then complete the cookie for the
+	 * never-happened RESUME (decrement).  This avoids a transient
+	 * sem=0 window that could let dm_udev_wait return early. */
+	if (dev_name)
+		_revert_create(dev_name, acc->cookie_set, acc->event_nr);
+
+	if (acc->cookie_set &&
+	    (base = acc->event_nr & ~DM_UDEV_FLAGS_MASK))
+		dm_udev_complete(base | (DM_COOKIE_MAGIC <<
+					 DM_UDEV_FLAGS_SHIFT));
+
+	if (acc->reload)
+		dm_task_destroy(acc->reload);
+	dm_free(acc);
+}
+
+/*
+ * Callback after bare CREATE: run RELOAD sync (fast, no uevent),
+ * build RESUME task, submit it async (triggers uevent).
+ */
+static int _async_create_load_and_resume(struct dm_async_ctx *ctx,
+					 struct dm_task *dmt,
+					 int result, void *userdata)
+{
+	struct device_create_ctx *acc = userdata;
+	struct dm_task *reload = acc->reload;
+	struct dm_task *resume;
+	struct dm_info info;
+
+	if (!result) {
+		_async_create_cleanup(acc, dmt->dev_name);
+		return_0;
+	}
+
+	/* Get kernel-assigned dev from CREATE result -- mirrors
+	 * _create_and_load_v4() dm_task_get_info() check. */
+	if (!dm_task_get_info(dmt, &info) || !info.exists) {
+		_async_create_cleanup(acc, dmt->dev_name);
+		return_0;
+	}
+
+	reload->major = info.major;
+	reload->minor = info.minor;
+
+	/* RELOAD sync -- fast kernel ioctl, no uevent */
+	if (!dm_task_run(reload)) {
+		_async_create_cleanup(acc, dmt->dev_name);
+		return_0;
+	}
+
+	dm_task_destroy(reload);
+	acc->reload = NULL;
+
+	/* Build RESUME now -- mirrors _create_and_load_v4().
+	 * Most fields (uid, gid, mode, ...) are still on dmt from CREATE. */
+	if (!(resume = dm_task_create(DM_DEVICE_RESUME)) ||
+	    !dm_task_set_name(resume, dmt->dev_name)) {
+		if (resume)
+			dm_task_destroy(resume);
+		_async_create_cleanup(acc, dmt->dev_name);
+		return_0;
+	}
+
+	resume->event_nr = acc->event_nr;
+	resume->cookie_set = acc->cookie_set;
+	resume->add_node = dmt->add_node;
+	resume->uid = dmt->uid;
+	resume->gid = dmt->gid;
+	resume->mode = dmt->mode;
+	resume->read_ahead = dmt->read_ahead;
+	resume->read_ahead_flags = dmt->read_ahead_flags;
+
+	/* Submit RESUME async -- triggers uevent.
+	 * On success async context owns resume (freed after completion). */
+	if (!dm_async_submit(ctx, resume,
+			     acc->caller_fn, acc->caller_data)) {
+		dm_task_destroy(resume);
+		_async_create_cleanup(acc, dmt->dev_name);
+		return_0;
+	}
+
+	dm_free(acc);
+
+	/* coverity[leaked_storage] 'resume' ownership transferred to async ctx */
+	return 1;
+}
+
+/*
+ * Split a CREATE-with-table for async: steal targets into RELOAD task,
+ * save cookie for deferred RESUME, strip dmt to bare CREATE.
+ * Sets dmt->async_complete_fn to the internal chain callback;
+ * dm_async_submit() will save the caller's callback into acc.
+ * Called from dm_task_prepare() which builds the dmi after we return.
+ */
+static int _prepare_create_with_table(struct dm_task *dmt)
+{
+	struct device_create_ctx *acc;
+
+	if (!(acc = dm_zalloc(sizeof(*acc)))) {
+		log_error("Failed to allocate async create context.");
+		return 0;
+	}
+
+	/* Pre-build RELOAD with stolen targets (major/minor set in callback) */
+	if (!(acc->reload = _new_reload_task(dmt->dev_name, dmt->head,
+					     dmt->tail, dmt->read_only,
+					     dmt->secure_data,
+					     dmt->ima_measurement, -1, -1))) {
+		dm_free(acc);
+		return_0;
+	}
+	dmt->head = NULL;
+	dmt->tail = NULL;
+
+	/* Save fields that get modified on dmt for the bare CREATE */
+	acc->event_nr = dmt->event_nr;
+	acc->cookie_set = dmt->cookie_set;
+
+	/* Strip cookie from bare CREATE (RESUME will own it) */
+	dmt->event_nr = dmt->event_nr & DM_UDEV_FLAGS_MASK;
+	dmt->cookie_set = 0;
+
+	dmt->async_complete_fn = _async_create_load_and_resume;
+	dmt->async_userdata = acc;
+
+	return 1;
+}
+
+/*
  * Build the dmi ioctl buffer without submitting it.
  * Stores the result in dmt->dmi.v4.
- * Call before dm_async_submit().  Returns 1 on success, 0 on failure.
+ * Normally called internally by dm_async_submit().  May also be called
+ * directly when the caller needs the built dmi buffer before submit.
+ * Returns 1 on success, 0 on failure.
  */
 int dm_task_prepare(struct dm_task *dmt)
 {
 	struct dm_ioctl *dmi;
+
+	/* Split CREATE-with-table into bare CREATE + chained RELOAD/RESUME.
+	 * Sets dmt->async_complete_fn so dm_async_submit() knows to save
+	 * the caller's callback into the chain context. */
+	if ((dmt->type == DM_DEVICE_CREATE) && dmt->head)
+		if (!_prepare_create_with_table(dmt))
+			return_0;
 
 	if (!_validate_task_type(dmt))
 		return_0;
@@ -2674,8 +2846,11 @@ void dm_async_ctx_destroy(struct dm_async_ctx *ctx)
 }
 
 /*
- * Submit a prepared task for async execution.
- * dmt->dmi.v4 must already be built by dm_task_prepare().
+ * Submit a task for async execution.
+ * Calls dm_task_prepare() internally unless the caller already called it
+ * (detected by dmt->dmi.v4 != NULL).
+ * If prepare set up an internal chain (dmt->async_complete_fn != NULL),
+ * the caller's callback is saved into the chain context instead.
  * Returns 1 on success, 0 on failure.  May block if the context is full.
  */
 int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
@@ -2692,10 +2867,18 @@ int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
 		stack;
 
 	dm_list_init(&dmt->list);
-	dmt->async_complete_fn = complete_fn;
-	dmt->async_userdata    = userdata;
 
-	return ctx->fn_submit(ctx, dmt, userdata);
+	if (dmt->async_complete_fn) {
+		/* Prepare wired an internal chain -- save caller's callback */
+		struct device_create_ctx *acc = dmt->async_userdata;
+		acc->caller_fn = complete_fn;
+		acc->caller_data = userdata;
+	} else {
+		dmt->async_complete_fn = complete_fn;
+		dmt->async_userdata    = userdata;
+	}
+
+	return ctx->fn_submit(ctx, dmt, dmt->async_userdata);
 }
 
 /*
