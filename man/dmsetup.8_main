@@ -582,6 +582,11 @@ Type of headings line to use for columnar output.
 \fBfull\fP or \fB2\fP \(en Full column names.
 .
 .TP
+.B --noasync
+Disable async ioctl submission for multi-device operations.
+All ioctls are issued sequentially.
+.
+.TP
 .B --noflush
 Do not flush outstanding I/O when suspending a device, or do not
 commit thin-pool metadata when obtaining thin-pool status.

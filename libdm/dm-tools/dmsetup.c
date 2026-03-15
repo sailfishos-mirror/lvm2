@@ -201,6 +201,7 @@ enum {
 	LENGTH_ARG,
 	MANGLENAME_ARG,
 	NAMEPREFIXES_ARG,
+	NOASYNC_ARG,
 	NOFLUSH_ARG,
 	NOGROUP_ARG,
 	NOHEADINGS_ARG,
@@ -453,6 +454,61 @@ struct dmsetup_report_obj {
 	struct dm_split_name *split_name;
 	struct dm_stats *stats;
 };
+
+/*
+ * Global async context.  When set, _task_run_async() submits the task
+ * for deferred execution instead of running it synchronously.
+ * Ownership of dmt transfers to the async pool on success -- caller
+ * must skip dm_task_destroy() and dm_udev_wait().
+ * On failure the caller retains ownership.
+ * Only _simple() and _create_one_device() use the async path;
+ * all other callers use _task_run() which is always synchronous.
+ * Set/cleared by the async wrappers
+ * (_perform_command_for_all_repeatable_args, _create,
+ * _remove_all).
+ */
+static struct dm_async_ctx *_async_ctx;
+
+/* Submit dmt to the async pool.  Ownership transfers on success. */
+static int _task_run_async(struct dm_task *dmt)
+{
+	if (dm_async_submit(_async_ctx, dmt, NULL, NULL))
+		return 1;
+
+	dm_task_destroy(dmt);
+
+	return_0;
+}
+
+/* Create async context for async ioctl dispatch. */
+static int _async_start(void)
+{
+	if (_switches[NOASYNC_ARG])
+		return 1; /* no async */
+
+	if (!(_async_ctx = dm_async_ctx_create(0)))
+		return_0;
+
+	return 1;
+}
+
+/* Drain async context and destroy it. */
+static int _async_finish(void)
+{
+	int r = 1;
+
+	if (_async_ctx) {
+		if (!dm_async_drain(_async_ctx, NULL)) {
+			stack;
+			r = 0;
+		}
+
+		dm_async_ctx_destroy(_async_ctx);
+		_async_ctx = NULL;
+	}
+
+	return r;
+}
 
 static int _task_run(struct dm_task *dmt)
 {
@@ -1215,6 +1271,9 @@ static int _create_one_device(const char *name, const char *file)
 	else if (!dm_task_set_cookie(dmt, &cookie, udev_flags))
 		goto_out;
 
+	if (_async_ctx)
+		return _task_run_async(dmt);
+
 	if (!_task_run(dmt))
 		goto_out;
 
@@ -1436,11 +1495,35 @@ static int _create(CMD_ARGS)
 	const char *file = NULL;
 
 	if (_switches[CONCISE_ARG]) {
+		uint32_t saved_cookie = _udev_cookie;
+		int r;
+
 		if (argc > 1) {
 			log_error("dmsetup create --concise takes at most one argument");
 			return 0;
 		}
-		return _create_concise(cmd, argc, argv);
+
+		/* Share one cookie across all creates in the batch. */
+		if (!_udev_cookie)
+			if (!dm_udev_create_cookie(&_udev_cookie))
+				stack;
+
+		if (!_async_start())
+			stack;
+
+		r = _create_concise(cmd, argc, argv);
+
+		if (!_async_finish()) {
+			stack;
+			r = 0;
+		}
+
+		if (!saved_cookie && _udev_cookie) {
+			(void) dm_udev_wait(_udev_cookie);
+			_udev_cookie = saved_cookie;
+		}
+
+		return r;
 	}
 
 	if (!argc) {
@@ -2085,6 +2168,9 @@ static int _simple(int task, const char *name, uint32_t event_nr, int display)
 	if (_switches[DEFERRED_ARG] && (task == DM_DEVICE_REMOVE || task == DM_DEVICE_REMOVE_ALL))
 		dm_task_deferred_remove(dmt);
 
+	if (_async_ctx)
+		return _task_run_async(dmt);
+
 	r = _task_run(dmt);
 
 out:
@@ -2258,6 +2344,9 @@ static int _error_device(CMD_ARGS)
 		/* Avoid hang on flushing with --force */
 		_switches[NOLOCKFS_ARG] = _switches[NOFLUSH_ARG] = 1;
 
+	/* RESUME goes async if _async_ctx set.
+	 * CLEAR fallback only fires in sync mode; async failures
+	 * are harmless (--force removes anyway, wipe_table is idempotent). */
 	if (!_simple(DM_DEVICE_RESUME, name, 0, 0)) {
 		_simple(DM_DEVICE_CLEAR, name, 0, 0);
 		goto_bad;
@@ -2272,17 +2361,6 @@ bad:
 
 static int _remove(CMD_ARGS)
 {
-	if (_switches[FORCE_ARG] && argc) {
-		/*
-		 * 'remove --force' option is doing 2 operations on the same device
-		 * this is not compatible with the use of --udevcookie/DM_UDEV_COOKIE.
-		 * Udevd collision could be partially avoided with --retry.
-		 */
-		if (_udev_cookie)
-			log_warn("WARNING: Use of cookie and --force is not compatible.");
-		(void) _error_device(cmd, NULL, argc, argv, NULL, 0);
-	}
-
 	return _simple(DM_DEVICE_REMOVE, argc ? argv[0] : NULL, 0, 0);
 }
 
@@ -6751,6 +6829,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 		{"minor",	  required_argument, 0, MINOR_ARG},
 		{"mode",	  required_argument, 0, MODE_ARG},
 		{"nameprefixes",	no_argument, 0, NAMEPREFIXES_ARG},
+		{"noasync",		no_argument, 0, NOASYNC_ARG},
 		{"noflush",		no_argument, 0, NOFLUSH_ARG},
 		{"nogroup",		no_argument, 0, NOGROUP_ARG},
 		{"noheadings",		no_argument, 0, NOHEADINGS_ARG},
@@ -7060,16 +7139,89 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 	return 1;
 }
 
+static int _wipe_all(const struct command *cmd, int argc, char **argv)
+{
+	uint32_t saved_cookie = _udev_cookie;
+	int r = 1;
+	int i;
+
+	/* Own cookie for wipe phase; overwrites caller's (restored below). */
+	if (!dm_udev_create_cookie(&_udev_cookie))
+		stack;
+
+	if (!_switches[NOASYNC_ARG])
+		(void) _async_start();
+
+	for (i = 0; i < argc; i++)
+		if (!_error_device(cmd, NULL, 1, &argv[i], NULL, 0)) {
+			stack;
+			r = 0;
+		}
+
+	if (!_async_finish()) {
+		stack;
+		r = 0;
+	}
+
+	(void) dm_udev_wait(_udev_cookie);
+
+	if (saved_cookie != _udev_cookie)
+		_udev_cookie = saved_cookie;
+
+	return r;
+}
+
 static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 {
+	uint32_t saved_cookie = _udev_cookie;
+	int r = 1;
+
+	if (_switches[FORCE_ARG] && !strcmp(cmd->name, "remove")) {
+		/* Phase 1 for --force remove: wipe tables to error target first. */
+		if (!_wipe_all(cmd, argc, argv)) {
+			stack;
+			r = 0;
+		}
+		/* Phase 2: run the remove command for each device. */
+	}
+
+	if (argc > 1 && !_switches[NOASYNC_ARG]) {
+		if (!strcmp(cmd->name, "remove") ||
+		    !strcmp(cmd->name, "suspend") ||
+		    !strcmp(cmd->name, "resume") ||
+		    !strcmp(cmd->name, "wipe_table")) {
+			/* Share one cookie across all tasks in the batch. */
+			if (!_udev_cookie)
+				if (!dm_udev_create_cookie(&_udev_cookie))
+					stack;
+
+			if (!_async_start())
+				stack;
+		}
+	}
+
 	do {
 		if (!cmd->fn(cmd, subcommand, argc, argv++, NULL, multiple_devices)) {
-			log_error("Command failed.");
-			return 0;
+			stack;
+			r = 0;
+			break;
 		}
 	} while (cmd->repeatable_cmd && argc-- > 1);
 
-	return 1;
+	if (!_async_finish()) {
+		stack;
+		r = 0;
+	}
+
+	if (!saved_cookie && _udev_cookie) {
+		(void) dm_udev_wait(_udev_cookie);
+		_udev_cookie = saved_cookie;
+	}
+
+	if (!r)
+		log_error("Command failed.");
+
+	return r;
 }
 
 static int _do_report_wait(void)
