@@ -2644,8 +2644,22 @@ out:
  */
 struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel)
 {
-	if (!max_parallel)
-		max_parallel = DM_ASYNC_DEFAULT_PARALLEL;
+	long ncpus;
+
+	if (!max_parallel) {
+		ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+		/* Threads are I/O-bound (kernel RCU ~10-20ms sleep),
+		 * so we need many more threads than CPUs.
+		 * Cap at 16384 -- larger values are nonsensical. */
+		if (ncpus < 1 || ncpus > 16384 ||
+		    ncpus * 2 < DM_ASYNC_DEFAULT_PARALLEL)
+			max_parallel = DM_ASYNC_DEFAULT_PARALLEL;
+		else
+			max_parallel = (unsigned) ncpus * 2;
+		log_debug_activation("Using %u parallel slots for async ioctl (CPUs: %ld).",
+				     max_parallel, ncpus);
+	}
 
 	if (!_open_control())
 		return NULL;
