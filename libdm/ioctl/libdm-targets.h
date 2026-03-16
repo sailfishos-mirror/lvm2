@@ -96,6 +96,9 @@ struct cmd_data {
 #define DM_IOCTL_RETRIES              25
 #define DM_RETRY_USLEEP_DELAY         200000
 
+/* Return the ioctl command number for a validated task type. */
+unsigned dm_task_ioctl_cmd(const struct dm_task *dmt);
+
 /* Execute a single DM ioctl (no retry, no logging). */
 int dm_ioctl_exec(int fd, struct dm_task *dmt, struct dm_ioctl *dmi);
 
