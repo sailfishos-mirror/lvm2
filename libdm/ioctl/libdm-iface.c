@@ -141,6 +141,12 @@ static int _validate_task_type(struct dm_task *dmt)
 	return 1;
 }
 
+/* Return the ioctl command number for a validated task type. */
+unsigned dm_task_ioctl_cmd(const struct dm_task *dmt)
+{
+	return _cmd_data_v4[dmt->type].cmd;
+}
+
 #define ALIGNMENT 8
 
 /* FIXME Rejig library to record & use errno instead */
