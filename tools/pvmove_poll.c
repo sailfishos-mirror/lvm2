@@ -130,10 +130,9 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 			else {
 				log_debug_activation("  Deactivating unused component: %s",
 						     display_lvname(lvl->lv));
-				if (!deactivate_lv(cmd, lvl->lv)) {
-					log_error("Failed to deactivate component %s.", display_lvname(lvl->lv));
-					return 0;
-				}
+				if (!deactivate_lv(cmd, lvl->lv))
+					log_warn("WARNING: Failed to deactivate component %s.",
+						 display_lvname(lvl->lv));
 			}
 		}
 	}
@@ -147,7 +146,22 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		return 0;
 	}
 
+	/*
+	 * LV locks are held throughout pvmove -- no re-acquisition
+	 * needed.  Removing pvmove0 releases its cluster lock via
+	 * lockd_lvremove_done().  Participant LV locks remain held
+	 * for normal operation after LOCKED is cleared.
+	 */
+
 	log_verbose("Removing temporary pvmove LV.");
+	/*
+	 * Use lv_remove() rather than lv_remove_single() because lv_mirr has
+	 * already been deactivated above and pvmove_finish() owns the final
+	 * vg_write/vg_commit below.  lv_remove_single() would re-deactivate
+	 * and commit internally, causing a double commit.
+	 * TODO: refactor pvmove_finish() to use lv_remove_single() and let it
+	 * own the commit, removing the explicit vg_write/vg_commit below.
+	 */
 	if (!lv_remove(lv_mirr)) {
 		log_error("ABORTING: Removal of temporary volume %s failed.",
 			  display_lvname(lv_mirr));
@@ -160,6 +174,20 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		log_error("ABORTING: Failed to write new data locations to disk.");
 		return 0;
 	}
+
+	/*
+	 * Unlock the cluster lock and queue the lock space for freeing only
+	 * after a successful metadata commit.  lv_remove() only frees PEs and
+	 * does not call lockd_lvremove_done(); we must do it explicitly here.
+	 * Releasing the lock before the commit would leave the cluster
+	 * unprotected if the commit failed while pvmove0 still existed in
+	 * metadata.  lv_remove_single() handles this correctly -- see the
+	 * TODO above.
+	 */
+	lockd_lvremove_done(cmd, lv_mirr, NULL, 0);
+
+	if (vg->needs_lockd_free_lvs)
+		lockd_free_removed_lvs(cmd, vg, 1);
 
 	/* Allows the pvmove operation to complete even if 'orphaned' temporary volumes
 	 * cannot be deactivated due to being held open by another process.
