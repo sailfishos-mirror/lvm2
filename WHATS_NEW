@@ -1,5 +1,16 @@
 Version 2.03.40 - 
 ==================
+  Use lockd_lv lock probes for pvmove holder availability in shared VGs.
+  Auto-revert metadata when initial pvmove mirror activation fails.
+  Refuse activation of pvmove-locked LV when pvmove runs on another node.
+  Allow pvmove --abort without args when using lvmlockd.
+  Add cluster lock lifecycle for pvmove LV in shared VGs.
+  Allow lvremove -f to remove pvmove-locked LVs after interrupted pvmove.
+  Handle active pvmove during vgchange -an with force flags.
+  Fix pvmove completion to use suspend+resume for DM table reload.
+  Fix deactivation cascade during active pvmove.
+  Support inactive LVs in pvmove with metadata-only mirror insertion.
+  Kill orphaned polling process on pvmove --abort.
 
 Version 2.03.39 - 13rd March 2026
 =================================
