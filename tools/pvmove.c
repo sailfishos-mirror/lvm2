@@ -335,6 +335,87 @@ static int _pvmove_lv_check_moveable(const struct logical_volume *lv,
 	return 1;
 }
 
+/*
+ * Check whether the holder LV's lock state allows pvmove.
+ * Returns:  1 moveable,
+ *           0 unmoveable but other LVs may proceed (sets *lv_skipped),
+ *          -1 unmoveable hard error (named LV).
+ *
+ * In shared VGs: try to acquire EX lock on the holder.
+ *   If the holder is already locally active, we hold EX from activation.
+ *   If the holder is inactive, try lockd_lv(EX) to test for remote locks.
+ *     lockd_lv fails (-EAGAIN): another host holds a lock.
+ *       Named pvmove (-n): hard error (-1) -- user asked for this LV.
+ *       Unnamed pvmove: unmoveable (0) -- move other LVs on the PV.
+ *     lockd_lv succeeds: no remote lock, add to locked_lvs for later unlock.
+ * Inactive holders (no lock, not active): proceed with metadata-only insertion.
+ */
+static int _pvmove_lv_check_holder_lock(struct cmd_context *cmd,
+					struct volume_group *vg,
+					struct logical_volume *lv,
+					const char *lv_name,
+					const struct logical_volume *holder,
+					int *lv_skipped,
+					struct dm_list *locked_lvs)
+{
+	if (vg_is_shared(vg) &&
+	    !(lv_name && !strcmp(holder->name, lv_name))) {
+		/*
+		 * Skip the lock attempt when lv_name matches the holder:
+		 * the caller already holds an EX lock on the named LV.
+		 */
+		if (lv_is_active(holder))
+			return 1; /* Locally active - we hold EX from activation. */
+
+		/*
+		 * Inactive holder in shared VG: try to acquire EX lock.
+		 * If another host holds a lock, lockd_lv returns 0 (-EAGAIN).
+		 */
+		if (!lockd_lv(cmd, (struct logical_volume *)holder, "ex", LDLV_PERSISTENT)) {
+			if (lv_name) {
+				log_error("Cannot pvmove LV %s: holder %s is locked on another node.",
+					  display_lvname(lv), display_lvname(holder));
+				return -1;
+			}
+			*lv_skipped = 1;
+			log_print_unless_silent("Skipping LV %s - holder %s is locked on another node.",
+						display_lvname(lv), display_lvname(holder));
+			return 0;
+		}
+
+		/*
+		 * Lock acquired - track for later unlock after metadata
+		 * commit (LOCKED flag will protect the LV).
+		 */
+		if (locked_lvs) {
+			struct lv_list *lvl;
+
+			if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
+				log_error("Failed to allocate LV list entry.");
+				lockd_lv(cmd, (struct logical_volume *)holder, "un", LDLV_PERSISTENT);
+				return -1;
+			}
+			lvl->lv = (struct logical_volume *)holder;
+			dm_list_add(locked_lvs, &lvl->list);
+		}
+
+		return 1;
+	}
+
+	if (lv_is_active(holder))
+		return 1;
+
+	/* Holder is not active anywhere - metadata-only insertion */
+	if (holder != lv)
+		log_verbose("Holder %s is inactive, inserting pvmove mirrors for %s in metadata only.",
+			    display_lvname(holder), display_lvname(lv));
+	else
+		log_verbose("LV %s is inactive, inserting pvmove mirrors in metadata only.",
+			    display_lvname(lv));
+
+	return 1;
+}
+
 /* Populate pvmove mirror LV with segments for the required copies */
 static int _set_up_pvmove_lv(struct cmd_context *cmd,
 			     struct volume_group *vg,
@@ -344,7 +425,7 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 			     struct dm_list *allocatable_pvs,
 			     alloc_policy_t alloc,
 			     struct dm_list **lvs_changed,
-			     unsigned *exclusive)
+			     struct dm_list *locked_lvs)
 {
 	struct logical_volume *lv;
 	struct lv_segment *seg;
@@ -353,7 +434,6 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 	uint32_t log_count = 0;
 	int lv_found = 0;
 	int lv_skipped = 0;
-	int needs_exclusive = *exclusive;
 	const struct logical_volume *holder;
 	const char *new_lv_name;
 
@@ -398,16 +478,6 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 			return_0;
 
 		seg = first_seg(lv);
-		if (!needs_exclusive) {
-			/* Presence of exclusive LV decides whether pvmove must be also exclusive */
-			if (!seg_only_exclusive(seg)) {
-				holder = lv_lock_holder(lv);
-				if (seg_only_exclusive(first_seg(holder)) || lv_is_origin(holder) || lv_is_cow(holder))
-					needs_exclusive = 1;
-			} else
-				needs_exclusive = 1;
-		}
-
 		if (seg_is_raid(seg) || seg_is_mirrored(seg)) {
 			dm_list_init(&trim_list);
 
@@ -452,39 +522,33 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 			continue;
 
 		if (lv_is_locked(lv)) {
+			if (lv_name) {
+				log_error("LV %s is locked by another pvmove.",
+					  display_lvname(lv));
+				return 0;
+			}
 			lv_skipped = 1;
-			log_print_unless_silent("Skipping locked LV %s.", display_lvname(lv));
+			log_print_unless_silent("Skipping LV %s: locked by another pvmove.",
+						display_lvname(lv));
 			continue;
 		}
 
 		holder = lv_lock_holder(lv);
 
-		if (needs_exclusive) {
-			/* With exclusive pvmove skip LV when:
-			 *  - is active remotely
-			 *  - is not active locally and cannot be activated exclusively locally
-			 *
-			 * Note: lvm2 can proceed with exclusive pvmove for 'just' locally active LVs
-			 * in the case it's NOT active anywhere else, since LOCKED LVs cannot be
-			 * later activated by user.
-			 */
-			if ((!lv_is_active(holder) && !activate_lv(cmd, holder))) {
-				lv_skipped = 1;
-				log_print_unless_silent("Skipping LV %s which is not locally exclusive%s.",
-							display_lvname(lv),
-							/* Report missing cmirrord cases that mattered.
-							 * With exclusive LV types cmirrord would not help. */
-							(*exclusive &&
-							 !lv_is_origin(holder) &&
-							 !seg_only_exclusive(first_seg(holder))) ?
-							" and clustered mirror (cmirror) not detected" : "");
+		if (!_pvmove_lv_check_moveable(holder, source_pvl))
+			return_0;
+
+		/*
+		 * Safe against TOCTOU: the VG EX lock (READ_FOR_UPDATE)
+		 * blocks activation on other nodes between this check
+		 * and _insert_pvmove_mirrors below.
+		 */
+		{
+			int r = _pvmove_lv_check_holder_lock(cmd, vg, lv, lv_name, holder, &lv_skipped, locked_lvs);
+			if (r < 0)
+				return_0;
+			if (!r)
 				continue;
-			}
-		} else if (!activate_lv(cmd, holder)) {
-			lv_skipped = 1;
-			log_print_unless_silent("Skipping LV %s which cannot be activated.",
-						display_lvname(lv));
-			continue;
 		}
 
 		if (!_insert_pvmove_mirrors(cmd, lv_mirr, source_pvl, lv,
@@ -521,15 +585,12 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (needs_exclusive)
-		*exclusive = 1;
-
 	return 1;
 }
 
 /*
  * Validate a resume of an in-progress pvmove: find participating LVs,
- * warn about ignored args.
+ * check that the named LV (if any) matches, warn about ignored args.
  * Returns 1 on success (lvs_changed populated), 0 on error.
  */
 static int _pvmove_validate_resume(struct cmd_context *cmd,
@@ -547,6 +608,24 @@ static int _pvmove_validate_resume(struct cmd_context *cmd,
 		return 0;
 	}
 
+	if (lv_name) {
+		struct lv_list *lvl;
+		int name_matches = 0;
+
+		dm_list_iterate_items(lvl, *lvs_changed)
+			if (!strcmp(lvl->lv->name, lv_name) ||
+			    _sub_lv_of(lvl->lv, lv_name)) {
+				name_matches = 1;
+				break;
+			}
+
+		if (!name_matches) {
+			log_error("LV %s is not part of the in-progress pvmove on %s.",
+				  lv_name, pv_name);
+			return 0;
+		}
+	}
+
 	if (pv_count || lv_name)
 		log_warn("WARNING: Ignoring remaining command line arguments.");
 
@@ -561,15 +640,39 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 			    struct dm_list *lvs_changed)
 {
 	struct lv_list *lvl;
-	struct logical_volume *lv = lv_mirr;
+	struct logical_volume *lv = NULL;
 
+	/*
+	 * Find the first active LV from lvs_changed for lv_update_and_reload().
+	 * The suspend/resume of an active LV with track_pvmove_deps=1
+	 * (via !lv_is_pvmove) discovers and reloads ALL active participating
+	 * LVs through the pvmove dependency tree.
+	 *
+	 * If no LV is active, mirrors exist only in metadata and will
+	 * take effect when LVs are activated.
+	 */
 	dm_list_iterate_items(lvl, lvs_changed) {
-		lv = lvl->lv;
-		break;
+		if (lv_is_active(lvl->lv)) {
+			lv = lvl->lv;
+			break;
+		}
 	}
 
-	if (!lv_update_and_reload(lv))
-		return_0;
+	if (!lv) {
+		/*
+		 * No active LV participates in this pvmove.
+		 * Write and commit metadata without suspend/resume:
+		 * there are no kernel tables to reload.
+		 */
+		log_verbose("No active LVs affected by pvmove, committing metadata only.");
+		if (!vg_write(lv_mirr->vg))
+			return_0;
+		if (!vg_commit(lv_mirr->vg))
+			return_0;
+	} else {
+		if (!lv_update_and_reload(lv))
+			return_0;
+	}
 
 	/* Activate pvmove mirror to start the data copy */
 	if (!activate_lv(lv_mirr->vg->cmd, lv_mirr)) {
@@ -611,13 +714,16 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	struct dm_list *source_pvl;
 	struct dm_list *allocatable_pvs;
 	struct dm_list *lvs_changed;
-	struct logical_volume *lv_mirr;
+	struct dm_list locked_lvs;
+	struct logical_volume *lv_mirr = NULL;
 	struct logical_volume *lv = NULL;
-	struct lv_list *lvl;
-	const struct logical_volume *lvh;
 	const char *pv_name = pv_dev_name(pv);
-	unsigned exclusive = 0;
+	struct lv_list *lvl;
+	int lv_locked = 0;
+	int lv_mirr_locked = 0;
 	int r = ECMD_FAILED;
+
+	dm_list_init(&locked_lvs);
 
 	if (!vg) {
 		log_error(INTERNAL_ERROR "Missing volume group.");
@@ -647,9 +753,21 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 
 		if (!_pvmove_lv_check_moveable(lv, NULL))
 			return ECMD_FAILED;
+
+		if (lv_is_locked(lv)) {
+			log_error("LV %s is already locked by another pvmove.",
+				  display_lvname(lv));
+			return ECMD_FAILED;
+		}
 	}
 
 	/*
+	 * FIXME: The named-LV requirement for shared VGs is artificially
+	 * conservative.  pvmove always works on identified per-LV extents, so
+	 * moving all LVs from a PV should be safe once each participating LV
+	 * is locked exclusively before being moved.  Remove this restriction
+	 * once the no-name path acquires per-LV locks in shared VGs.
+	 *
 	 * We would need to avoid any PEs used by LVs that are active (ex) on
 	 * other hosts.  For LVs that are active on multiple hosts (sh), we
 	 * would need to used cluster mirrors.
@@ -664,32 +782,49 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			log_error("pvmove not allowed on internal sanlock LV.");
 			return ECMD_FAILED;
 		}
-
-		if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
-			log_error("pvmove in a shared VG requires exclusive lock on named LV.");
-			return ECMD_FAILED;
-		}
 	}
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
 		/* Resume path */
 		if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name,
 					     pp->pv_count, pv_name, &lvs_changed))
-			goto out;
+			goto_out;
 
-		dm_list_iterate_items(lvl, lvs_changed) {
-			lvh = lv_lock_holder(lvl->lv);
-			/* Exclusive LV decides whether pvmove must be also exclusive */
-			if (lv_is_origin(lvh) || seg_only_exclusive(first_seg(lvh)))
-				exclusive = 1;
+		/* Re-acquire cluster lock before activating (shared VGs) */
+		if (vg_is_shared(vg) && lv_mirr->lock_args) {
+			if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+				log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
+				goto out;
+			}
+			lv_mirr_locked = 1;
 		}
 
 		/* Ensure mirror LV is active */
 		if (!activate_lv(cmd, lv_mirr)) {
 			log_error("ABORTING: Temporary mirror activation failed.");
+			/*
+			 * Keep the cluster lock held: pvmove state is already
+			 * committed in metadata from a previous run.  Releasing
+			 * the lock would leave the metadata unprotected.
+			 */
+			lv_mirr_locked = 0;
 			goto out;
 		}
 	} else {
+		/* New pvmove path */
+
+		/*
+		 * Lock the named LV to verify no other host is using it.
+		 * Released after LOCKED status is committed in metadata.
+		 */
+		if (vg_is_shared(vg)) {
+			if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
+				log_error("pvmove in a shared VG requires exclusive lock on named LV.");
+				return ECMD_FAILED;
+			}
+			lv_locked = 1;
+		}
+
 		/* Determine PE ranges to be moved */
 		if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
 						  &pp->pv_name_arg, 0)))
@@ -708,30 +843,74 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 						LVM_READ | LVM_WRITE,
 						ALLOC_CONTIGUOUS, vg))) {
 			log_error("Creation of temporary pvmove LV failed.");
-			goto_out;
+			goto out;
 		}
 
 		lv_mirr->status |= (PVMOVE | LOCKED);
 
-		if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
-				       allocatable_pvs, pp->alloc,
-				       &lvs_changed, &exclusive))
-			goto_out;
+		/* In shared VGs, acquire cluster lock for pvmove LV */
+		if (vg_is_shared(vg)) {
+			if (!lockd_init_lv_args(cmd, vg, lv_mirr,
+						vg->lock_type, NULL, &lv_mirr->lock_args)) {
+				log_error("Failed to initialize lock for pvmove LV.");
+				goto out;
+			}
+			if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+				log_error("Failed to acquire cluster lock for pvmove LV.");
+				goto out;
+			}
+			lv_mirr_locked = 1;
+		}
 
-		/* Lock lvs_changed and activate (with old metadata) */
-		if (!activate_lvs(cmd, lvs_changed, exclusive))
+		if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
+				       allocatable_pvs, pp->alloc, &lvs_changed,
+				       &locked_lvs))
 			goto_out;
 
 		if (!_update_metadata(lv_mirr, lvs_changed))
 			goto_out;
+
+		/*
+		 * LOCKED in metadata protects the LVs now.
+		 * Release the named LV lock and any locks acquired
+		 * on inactive holder LVs during _pvmove_lv_check_holder_lock().
+		 */
+		if (lv_locked) {
+			if (lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
+				lv_locked = 0;
+			else
+				log_warn("WARNING: Failed to unlock LV %s.",
+					 display_lvname(lv));
+		}
+
+		dm_list_iterate_items(lvl, &locked_lvs)
+			if (!lockd_lv(cmd, lvl->lv, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock LV %s.",
+					 display_lvname(lvl->lv));
+		dm_list_init(&locked_lvs);
 	}
 
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
-		goto out;
+		goto_out;
 
 	pp->setup_result = ECMD_PROCESSED;
 	r = ECMD_PROCESSED;
 out:
+	if (r != ECMD_PROCESSED) {
+		if (lv_locked)
+			if (!lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock LV %s.",
+					 display_lvname(lv));
+		if (lv_mirr_locked)
+			if (!lockd_lv(cmd, lv_mirr, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock pvmove LV %s.",
+					 display_lvname(lv_mirr));
+		dm_list_iterate_items(lvl, &locked_lvs)
+			if (!lockd_lv(cmd, lvl->lv, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock LV %s.",
+					 display_lvname(lvl->lv));
+	}
+
 	return r;
 }
 
