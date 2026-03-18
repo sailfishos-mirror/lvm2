@@ -653,6 +653,16 @@ static response poll_init(client_handle h, struct lvmpolld_state *ls, request re
 
 	DEBUGLOG(ls, "%s: %s=%s", PD_LOG_PREFIX, "ID", id);
 
+	/* Kill the polling lvpoll process for this LV before starting abort */
+	if (abort_polling) {
+		pid_t killed_pid = pdst_kill_pdlv(ls->id_to_pdlv_poll, id);
+
+		if (killed_pid)
+			INFO(ls, "%s: %s (PID %d) %s", PD_LOG_PREFIX,
+			     "Sent SIGTERM to polling cmd", killed_pid,
+			     "before starting abort");
+	}
+
 	pdst = abort_polling ? ls->id_to_pdlv_abort : ls->id_to_pdlv_poll;
 
 	pdst_lock(pdst);
