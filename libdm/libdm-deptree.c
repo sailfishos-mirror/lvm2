@@ -3366,6 +3366,81 @@ static int _dm_tree_wait_and_revert_activated(struct dm_tree_node *dnode)
 	return _dm_tree_revert_activated(dnode);
 }
 
+/* Replace child's segments with an error target and reload. */
+static int _replace_with_error_target(struct dm_tree_node *child,
+				      uint64_t size)
+{
+	dm_list_init(&child->props.segs);
+	child->props.segment_count = 0;
+
+	if (!dm_tree_node_add_error_target(child, size) ||
+	    !_load_node(child))
+		return_0;
+
+	return 1;
+}
+
+/*
+ * Handle integrity load failure under RAID with redundancy.
+ * Replace with error target so RAID activates degraded.
+ * RAID detects I/O errors and marks the leg faulty;
+ * dmeventd can then handle repair.
+ */
+static int _integrity_load_fallback(struct dm_tree_node *child,
+				    uint64_t size)
+{
+	if (!_replace_with_error_target(child, size))
+		return_0;
+
+	log_warn("WARNING: Failed to load integrity target for %s,"
+		 " activating RAID degraded.", _node_name(child));
+
+	return 1;
+}
+
+/*
+ * Attempt to handle a child table load failure.
+ * Returns 1 if a fallback was applied, 0 otherwise.
+ */
+static int _fallback_to_error(struct dm_tree_node *parent,
+			      struct dm_tree_node *child)
+{
+	struct load_segment *seg, *pseg;
+
+	if (!parent->props.segment_count)
+		return 0; /* nothing to check, likely root node */
+
+	/* Check parent is RAID with redundancy */
+	dm_list_iterate_items(pseg, &parent->props.segs)
+		switch (pseg->type) {
+		case SEG_RAID1:
+		case SEG_RAID10:
+		case SEG_RAID4:
+		case SEG_RAID5_N:
+		case SEG_RAID5_LA:
+		case SEG_RAID5_RA:
+		case SEG_RAID5_LS:
+		case SEG_RAID5_RS:
+		case SEG_RAID6_N_6:
+		case SEG_RAID6_ZR:
+		case SEG_RAID6_NR:
+		case SEG_RAID6_NC:
+		case SEG_RAID6_LS_6:
+		case SEG_RAID6_RS_6:
+		case SEG_RAID6_LA_6:
+		case SEG_RAID6_RA_6:
+			/* Check child has an integrity segment */
+			dm_list_iterate_items(seg, &child->props.segs)
+				if (seg->type == SEG_INTEGRITY)
+					return _integrity_load_fallback(child, seg->size);
+			break;
+		default:
+			break;
+		}
+
+	return 0;
+}
+
 int dm_tree_preload_children(struct dm_tree_node *dnode,
 			     const char *uuid_prefix,
 			     size_t uuid_prefix_len)
@@ -3421,11 +3496,13 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 
 		if (!child->info.inactive_table &&
 		    child->props.segment_count &&
-		    !_load_node(child)) {
+		    !_load_node(child) &&
+		    !_fallback_to_error(dnode, child)) {
 			stack;
 			/*
-			 * If the table load fails, try to device in the kernel
-			 * together with other created and preloaded devices.
+			 * If the table load fails, try to deactivate
+			 * the device in the kernel together with other
+			 * created and preloaded devices.
 			 */
 			if (!_dm_tree_wait_and_revert_activated(dnode))
 				stack;
