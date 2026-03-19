@@ -1,5 +1,6 @@
 Version 2.03.40 -
 ==================
+  Activate RAID degraded when kernel rejects integrity target on a leg.
   Reset warned flag in dmeventd raid plugin when device fully syncs.
   Fix inverted range comparison in libdm reserved value check.
   Fix percent_check threshold stuck above 100% in dmeventd thin/vdo plugins.
