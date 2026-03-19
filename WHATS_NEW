@@ -1,5 +1,6 @@
 Version 2.03.40 - 
 ==================
+  Activate RAID degraded when kernel rejects integrity target on a leg.
 
 Version 2.03.39 - 13th March 2026
 =================================
