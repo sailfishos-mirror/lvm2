@@ -1547,6 +1547,14 @@ int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
  */
 int dm_async_drain(struct dm_async_ctx *ctx, unsigned *n_inflight);
 
+/*
+ * Return fd that becomes readable when completions are available.
+ * Suitable for poll()/select()/epoll().  After poll() indicates
+ * readability, call dm_async_drain(ctx, &n_inflight) to process
+ * ready completions and re-arm the fd.
+ * Returns -1 if context has no pollable fd (e.g. sync backend).
+ */
+int dm_async_get_fd(struct dm_async_ctx *ctx);
 
 /*
  * Call this to make or remove the device nodes associated with previously

@@ -2884,6 +2884,12 @@ void dm_async_ctx_destroy(struct dm_async_ctx *ctx)
 		ctx->fn_destroy(ctx);
 }
 
+int dm_async_get_fd(struct dm_async_ctx *ctx)
+{
+	return ctx->fn_get_fd(ctx);
+}
+
+
 void dm_hold_control_dev(int hold_open)
 {
 	_hold_control_fd_open = hold_open ? 1 : 0;
