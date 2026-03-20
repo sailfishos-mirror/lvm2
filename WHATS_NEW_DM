@@ -1,5 +1,6 @@
 Version 1.02.214 - 
 ===================
+  Add dm_async_get_fd for poll/epoll integration with async ioctl context.
   Add --noasync option to dmsetup to force synchronous ioctl execution.
   Add dm_tree_set_skip_deps for leaf-only dependency trees.
   Add dm_tree_set_async_ctx for async tree deactivation.
