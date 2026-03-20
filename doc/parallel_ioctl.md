@@ -65,6 +65,22 @@ post-processing -- EBUSY resubmission, DM_BUFFER_FULL re-allocations,
 device-node ops, udev cookie signalling, and completion callbacks --
 runs on the main thread inside `dm_async_drain()`.
 
+### Pollable fd
+
+```c
+int dm_async_get_fd(struct dm_async_ctx *ctx);
+```
+
+Returns an fd that becomes readable when completions are available.
+The caller can `poll()`/`epoll()` on this fd alongside other
+descriptors (e.g. a udev monitor fd), then call
+`dm_async_drain(ctx, &n_inflight)` to process ready completions
+and re-arm the fd.
+
+Returns -1 for backends with no pollable fd (sync backend).
+The thread-pool backend uses an `eventfd`; workers write to it
+on each completion.
+
 ### Phase ordering
 
 ```c
@@ -191,6 +207,12 @@ independently later:
   protection for the global suspended-device counter and the
   per-task node-ops list.  Only matters if post-processing ever
   moves off the main thread; currently it does not.
+
+- **Pollable drain fd** -- `dm_async_get_fd()` returns an eventfd
+  that becomes readable when completions arrive.  Enables integrating
+  async drain into a `poll()`/`epoll()` event loop alongside other
+  fds (e.g. udev monitor).  Building block for replacing SysV
+  semaphore cookies with fd-based udev notification.
 
 - **/proc scan on EBUSY** -- debug aid that scans `/proc` to log
   which processes hold a device open when `DM_DEVICE_REMOVE` gets
