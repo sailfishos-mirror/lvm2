@@ -392,6 +392,33 @@ int lv_info(struct cmd_context *cmd, const struct logical_volume *lv, int use_la
 	return 1;
 }
 
+struct dm_info {
+	int exists;
+	int suspended;
+	int live_table;
+	int inactive_table;
+	int open_count;
+	unsigned event_nr;
+	unsigned major;
+	unsigned minor;
+	int read_only;
+	int target_count;
+	int deferred_remove;
+	int internal_suspend;
+};
+
+struct dm_task;
+
+/*
+ * On success (return 1) the entire *info struct is initialized.
+ * On failure (return 0) *info is untouched.
+ */
+int dm_task_get_info(struct dm_task *dmt, struct dm_info *info)
+{
+	__coverity_writeall__(info);
+	return 1;
+}
+
 /*
  * lv_info - get logical volume information
  * Returns 1 if info structure has been populated, else 0 on failure.
