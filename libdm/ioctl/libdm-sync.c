@@ -76,6 +76,11 @@ static unsigned _sync_inflight(struct dm_async_ctx *base)
 	return ((struct async_sync *)base)->has_result ? 1 : 0;
 }
 
+static int _sync_get_fd(struct dm_async_ctx *base)
+{
+	return -1;   /* no pollable fd for sync backend */
+}
+
 static void _sync_destroy(struct dm_async_ctx *base)
 {
 	struct async_sync *ctx = (struct async_sync *)base;
@@ -106,5 +111,6 @@ struct dm_async_ctx *dm_async_ctx_alloc_sync(int fd)
 	ctx->base.fn_try_wait  = _sync_try_wait;
 	ctx->base.fn_inflight  = _sync_inflight;
 	ctx->base.fn_destroy   = _sync_destroy;
+	ctx->base.fn_get_fd    = _sync_get_fd;
 	return &ctx->base;
 }
