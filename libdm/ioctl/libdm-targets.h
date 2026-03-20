@@ -72,12 +72,17 @@ struct dm_task {
 	int enable_checks;
 	int expected_errno;
 	int ioctl_errno;
+	int ioctl_result;
 	int ima_measurement;
 
 	int record_timestamp;
 
 	char *uuid;
 	char *mangled_uuid;
+
+	struct dm_list list;		/* work list linkage for parallel ops */
+	dm_async_complete_fn async_complete_fn;	/* completion callback */
+	void *async_userdata;		/* caller context, returned via wait */
 };
 
 struct cmd_data {

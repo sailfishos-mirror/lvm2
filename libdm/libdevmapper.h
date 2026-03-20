@@ -1488,6 +1488,66 @@ int dm_task_run(struct dm_task *dmt);
 int dm_task_get_errno(struct dm_task *dmt);
 
 /*
+ * Async ioctl submission API.
+ *
+ * Usage pattern:
+ *   ctx = dm_async_ctx_create(N);          // N parallel ioctls max
+ *   for each dmt:
+ *     dm_async_submit(ctx, dmt, cb, ud);   // prepare + submit
+ *   dm_async_drain(ctx);                   // wait for all completions
+ *   dm_async_ctx_destroy(ctx);
+ *
+ * dm_async_ctx_create() creates a bounded thread-pool context.
+ * Falls back to synchronous single-slot mode when max_parallel == 1.
+ *
+ * EBUSY retry and buffer-full retry are handled transparently in the
+ * worker before completion.
+ */
+struct dm_async_ctx;
+
+/*
+ * Completion callback invoked from dm_async_drain() in the caller's
+ * thread for every submitted task, whether it succeeded or failed.
+ * Only the ioctl itself runs asynchronously; all post-processing
+ * and this callback run synchronously in the calling context.
+ * Called exactly once per dm_async_submit().
+ *
+ * @ctx:      the async context that owns this task
+ * @dmt:      the completed task -- valid only for the duration of this
+ *            call; the caller must not use it afterwards (it is destroyed
+ *            immediately after the callback returns)
+ * @result:   1 if the ioctl succeeded, 0 on failure
+ * @userdata: the opaque pointer passed to dm_async_submit()
+ *
+ * The callback must not block -- blocking here serializes completions
+ * and defeats the purpose of the async API.
+ *
+ * Return 1 to indicate the callback itself succeeded, 0 on error.
+ * Returning 0 causes dm_async_drain() to report failure.
+ */
+typedef int (*dm_async_complete_fn)(struct dm_async_ctx *ctx,
+				    struct dm_task *dmt, int result,
+				    void *userdata);
+
+struct dm_async_ctx *dm_async_ctx_create(unsigned max_parallel);
+void                 dm_async_ctx_destroy(struct dm_async_ctx *ctx);
+
+/*
+ * Submit a task for asynchronous execution.
+ *
+ * Takes ownership of @dmt: the caller must not use or destroy it after
+ * this call.  The task will be destroyed automatically after the
+ * completion callback runs (or after drain, if no callback is set).
+ *
+ * @complete_fn may be NULL if no per-task notification is needed.
+ * @userdata is passed through to @complete_fn unchanged.
+ *
+ * Returns 1 on successful submission, 0 on failure (dmt is destroyed).
+ */
+int dm_async_submit(struct dm_async_ctx *ctx, struct dm_task *dmt,
+		    dm_async_complete_fn complete_fn, void *userdata);
+
+/*
  * Call this to make or remove the device nodes associated with previously
  * issued commands.
  */
