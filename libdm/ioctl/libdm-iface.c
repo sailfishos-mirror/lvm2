@@ -2845,6 +2845,11 @@ void dm_async_ctx_destroy(struct dm_async_ctx *ctx)
 		ctx->fn_destroy(ctx);
 }
 
+int dm_async_get_fd(struct dm_async_ctx *ctx)
+{
+	return ctx->fn_get_fd(ctx);
+}
+
 /*
  * Submit a task for async execution.
  * Calls dm_task_prepare() internally unless the caller already called it

@@ -23,8 +23,10 @@
 
 #include <pthread.h>
 #include <sys/ioctl.h>
+#include <sys/eventfd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <errno.h>
 
 /* ------------------------------------------------------------------ */
@@ -44,6 +46,7 @@ struct async_threads {
 	unsigned             n_inflight;   /* pending + executing + retry */
 	unsigned             n_retry;      /* tasks in retry queue */
 	int                  shutdown;
+	int                  event_fd;     /* eventfd, readable on completion */
 	pthread_t            retry_thread; /* dedicated retry delay thread */
 	pthread_t            threads[];    /* flex array; must be last */
 };
@@ -93,6 +96,10 @@ static void *_worker_fn(void *arg)
 		pthread_mutex_lock(&ctx->lock);
 		dm_list_add(&ctx->completed, &dmt->list);
 		pthread_cond_signal(&ctx->done_cond);
+		{
+			uint64_t one = 1;
+			(void) write(ctx->event_fd, &one, sizeof(one));
+		}
 	}
 	pthread_mutex_unlock(&ctx->lock);
 	return NULL;
@@ -241,6 +248,11 @@ static unsigned _threads_inflight(struct dm_async_ctx *base)
 	return n;
 }
 
+static int _threads_get_fd(struct dm_async_ctx *base)
+{
+	return ((struct async_threads *)base)->event_fd;
+}
+
 static void _leak_list(struct dm_async_ctx *base,
 		       struct dm_list *head, unsigned *leaked)
 {
@@ -282,6 +294,9 @@ static void _threads_destroy(struct dm_async_ctx *base)
 		log_warn("WARNING: Destroyed async context with %u undrained task(s).",
 			 leaked);
 
+	if (ctx->event_fd >= 0 && close(ctx->event_fd))
+		log_sys_debug("close", "eventfd");
+
 	pthread_mutex_destroy(&ctx->lock);
 	pthread_cond_destroy(&ctx->work_cond);
 	pthread_cond_destroy(&ctx->done_cond);
@@ -312,7 +327,18 @@ int dm_async_drain(struct dm_async_ctx *ctx, unsigned *n_inflight)
 	}
 
 	if (n_inflight) {
-		/* Non-blocking: drain only ready completions */
+		/* Non-blocking: drain only ready completions.
+		 * Clear eventfd first so poll() re-arms after we return. */
+		int efd = ctx->fn_get_fd(ctx);
+
+		if (efd >= 0) {
+			uint64_t val;
+			ssize_t ret = read(efd, &val, sizeof(val));
+			if (ret < 0 && errno != EAGAIN)
+				log_debug_activation("eventfd read error: %s.",
+						     strerror(errno));
+		}
+
 		while (ctx->fn_try_wait(ctx, &dmt, &userdata)) {
 			if (!dm_task_handle_completion(ctx, dmt, userdata)) {
 				stack;
@@ -357,7 +383,14 @@ struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 	ctx->base.fn_try_wait  = _threads_try_wait;
 	ctx->base.fn_inflight  = _threads_inflight;
 	ctx->base.fn_destroy   = _threads_destroy;
+	ctx->base.fn_get_fd    = _threads_get_fd;
 	ctx->n_threads       = max_parallel;
+	ctx->event_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+	if (ctx->event_fd < 0) {
+		log_sys_error("eventfd", "async context");
+		dm_free(ctx);
+		return NULL;
+	}
 	dm_list_init(&ctx->pending);
 	dm_list_init(&ctx->completed);
 	dm_list_init(&ctx->retry);
@@ -366,6 +399,8 @@ struct dm_async_ctx *dm_async_ctx_alloc_threads(int fd, unsigned max_parallel)
 	    pthread_cond_init(&ctx->done_cond, NULL) ||
 	    pthread_cond_init(&ctx->retry_cond, NULL)) {
 		log_error("Failed to initialise async thread pool primitives.");
+		if (close(ctx->event_fd))
+			log_sys_debug("close", "eventfd");
 		dm_free(ctx);
 		return NULL;
 	}

@@ -34,6 +34,7 @@ struct dm_async_ctx {
 			    struct dm_task **dmt_out, void **userdata_out);
 	unsigned (*fn_inflight)(struct dm_async_ctx *ctx);
 	void (*fn_destroy)(struct dm_async_ctx *ctx);
+	int  (*fn_get_fd)(struct dm_async_ctx *ctx);
 	int   fd;   /* DM control fd, captured at context creation */
 };
 
