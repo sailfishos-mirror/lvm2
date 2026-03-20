@@ -719,6 +719,11 @@ static unsigned _uring_inflight(struct dm_async_ctx *base)
 	return ((struct async_uring *)base)->n_inflight;
 }
 
+static int _uring_get_fd(struct dm_async_ctx *base)
+{
+	return ((struct async_uring *)base)->ring_fd;
+}
+
 static void _uring_destroy(struct dm_async_ctx *base)
 {
 	struct async_uring *ctx = (struct async_uring *)base;
@@ -781,6 +786,7 @@ struct dm_async_ctx *dm_async_ctx_alloc_uring(int fd, unsigned max_parallel)
 	ctx->base.fn_try_wait  = _uring_try_wait;
 	ctx->base.fn_inflight  = _uring_inflight;
 	ctx->base.fn_destroy   = _uring_destroy;
+	ctx->base.fn_get_fd    = _uring_get_fd;
 
 	/* Map SQ ring. */
 	sq_sz  = params.sq_off.array + params.sq_entries * sizeof(unsigned);
