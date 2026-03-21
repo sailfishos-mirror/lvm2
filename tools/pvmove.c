@@ -926,13 +926,61 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 					     pp->pv_count, pv_name, &lvs_changed))
 			goto_out;
 
-		/* Re-acquire cluster lock before activating (shared VGs) */
+		/* Re-acquire cluster locks before activating (shared VGs) */
 		if (vg_is_shared(vg) && lv_mirr->lock_args) {
+			struct lv_list *lvl2;
+			int already_done;
+
 			if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
 				log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
 				goto out;
 			}
 			lv_mirr_locked = 1;
+
+			/*
+			 * Re-acquire EX locks on all participant holders.
+			 * Normally persistent locks survive in lvmlockd,
+			 * but they may be lost after lvmlockd restart.
+			 */
+			dm_list_iterate_items(lvl, lvs_changed) {
+				const struct logical_volume *holder = lv_lock_holder(lvl->lv);
+				struct lv_list *new_lvl;
+
+				if (!lockd_lv_uses_lock(holder))
+					continue;
+
+				/* Dedup: skip if same holder already processed */
+				already_done = 0;
+				dm_list_iterate_items(lvl2, lvs_changed) {
+					if (lvl2 == lvl)
+						break;
+					if (lv_lock_holder(lvl2->lv) == holder) {
+						already_done = 1;
+						break;
+					}
+				}
+				if (already_done)
+					continue;
+
+				if (!lockd_lv(cmd, (struct logical_volume *)holder,
+					      "ex", LDLV_PERSISTENT)) {
+					log_error("ABORTING: Failed to re-acquire lock for %s.",
+						  display_lvname(holder));
+					goto out;
+				}
+
+				/* Track for error-path cleanup */
+				if (!(new_lvl = dm_pool_alloc(cmd->mem, sizeof(*new_lvl)))) {
+					log_error("Failed to allocate LV list entry.");
+					if (!lockd_lv(cmd, (struct logical_volume *)holder,
+						      "un", LDLV_PERSISTENT))
+						log_warn("WARNING: Failed to unlock LV %s.",
+							 display_lvname(holder));
+					goto out;
+				}
+				new_lvl->lv = (struct logical_volume *)holder;
+				dm_list_add(&locked_lvs, &new_lvl->list);
+			}
 		}
 
 		/* Ensure mirror LV is active */
