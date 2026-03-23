@@ -898,26 +898,13 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	}
 
 	/*
-	 * FIXME: The named-LV requirement for shared VGs is artificially
-	 * conservative.  pvmove always works on identified per-LV extents, so
-	 * moving all LVs from a PV should be safe once each participating LV
-	 * is locked exclusively before being moved.  Remove this restriction
-	 * once the no-name path acquires per-LV locks in shared VGs.
-	 *
-	 * We would need to avoid any PEs used by LVs that are active (ex) on
-	 * other hosts.  For LVs that are active on multiple hosts (sh), we
-	 * would need to used cluster mirrors.
+	 * In shared VGs, unnamed pvmove acquires per-LV EX locks in
+	 * _lv_is_allowed_pvmove() -- LVs locked remotely are skipped.
+	 * Sanlock internal LVs must not be moved.
 	 */
-	if (vg_is_shared(vg)) {
-		if (!lv) {
-			log_error("pvmove in a shared VG requires a named LV.");
-			return ECMD_FAILED;
-		}
-
-		if (lv_is_lockd_sanlock_lv(lv)) {
-			log_error("pvmove not allowed on internal sanlock LV.");
-			return ECMD_FAILED;
-		}
+	if (vg_is_shared(vg) && lv && lv_is_lockd_sanlock_lv(lv)) {
+		log_error("pvmove not allowed on internal sanlock LV.");
+		return ECMD_FAILED;
 	}
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {

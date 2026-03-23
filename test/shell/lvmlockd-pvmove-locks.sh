@@ -163,20 +163,66 @@ lvchange -an $vg/$lv1
 lvremove -ff $vg
 
 # ===================================================================
-# Test 4: Remotely-locked LV is skipped during unnamed pvmove in shared VG
+# Test 4: Unnamed pvmove in shared VG skips remotely-locked LV
 #
-# Unnamed pvmove (no -n) in a shared VG is not yet supported
-# (tools/pvmove.c rejects it immediately).  When that restriction is
-# lifted, this test should verify that lockd_lv("ex") failing on a
-# remotely-locked LV causes pvmove to skip it while moving others.
-# See the FIXME in tools/pvmove.c for the missing per-LV locking in the
-# unnamed shared-VG path.
+# lv1 and lv2 both on dev1.  Inject remote EX on lv2.
+# Unnamed pvmove from dev1 must:
+#   - Acquire EX on lv1's holder (succeeds, no remote lock)
+#   - Skip lv2 (remote EX blocks lockd_lv)
+#   - Move lv1 to dev5; lv2 stays on dev1
 #
-# NOTE: The holder lock probe in _pvmove_lv_check_holder_lock() is
-# also unreachable for named pvmove because _set_up_pvmove_lv()
-# filters to LVs matching lv_name, so holder always equals the
-# named LV.  These paths are for future unnamed pvmove support.
+# Exercises _lv_is_allowed_pvmove() unnamed path in shared VGs.
 # ===================================================================
+
+lvcreate -an -l4 -n $lv1 $vg "$dev1"
+lvcreate -an -l4 -n $lv2 $vg "$dev1"
+lv2_uuid=$(get lv_field $vg/$lv2 lv_uuid)
+
+# Inject remote EX on lv2 -- simulates another node holding it
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv2_uuid" --lock-mode ex
+
+# Unnamed pvmove: must skip lv2 (remotely locked), move lv1
+pvmove -i0 "$dev1" "$dev5"
+
+check lv_on $vg $lv1 "$dev5"
+check lv_on $vg $lv2 "$dev1"
+
+# Clear remote lock
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv2_uuid" --lock-mode un
+
+get lv_field $vg name -a | not grep "pvmove"
+
+lvremove -ff $vg
+
+# ===================================================================
+# Test 4b: Unnamed pvmove fails when ALL LVs are remotely locked
+#
+# lv1 and lv2 both on dev1.  Inject remote EX on both.
+# Unnamed pvmove from dev1 must fail: all LVs skipped, empty mirror,
+# "All data on source PV skipped" error.
+# ===================================================================
+
+lvcreate -an -l4 -n $lv1 $vg "$dev1"
+lvcreate -an -l4 -n $lv2 $vg "$dev1"
+lv1_uuid=$(get lv_field $vg/$lv1 lv_uuid)
+lv2_uuid=$(get lv_field $vg/$lv2 lv_uuid)
+
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv1_uuid" --lock-mode ex
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv2_uuid" --lock-mode ex
+
+not pvmove -i0 "$dev1" "$dev5" 2>&1 | tee err
+grep -i "skipped" err
+
+# Both LVs must still be on dev1
+check lv_on $vg $lv1 "$dev1"
+check lv_on $vg $lv2 "$dev1"
+
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv1_uuid" --lock-mode un
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$lv2_uuid" --lock-mode un
+
+get lv_field $vg name -a | not grep "pvmove"
+
+lvremove -ff $vg
 
 # ===================================================================
 # Test 5: Normal pvmove completion releases pvmove0 lock space

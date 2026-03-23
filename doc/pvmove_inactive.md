@@ -450,7 +450,7 @@ remote activation.  pvmove must run on the node where LVs are active.
 `test/shell/pvmove-inactive.sh`:
 
 Tests 1-4 use `-n` and run in both shared (lvmlockd) and non-shared configs.
-Tests 5-8 move all LVs from a PV without naming them; non-shared only.
+Tests 5-8 move all LVs from a PV without naming them.
 
 - Test 1: pvmove -n moves only named inactive LV; other LVs not touched
 - Test 2: pvmove abort with background daemon (-i +100 to delay poll)
@@ -481,7 +481,8 @@ Tests 5-8 move all LVs from a PV without naming them; non-shared only.
           restartable after remote lock release
 - Test 3: pvmove --abort releases pvmove0 lock space (lockd_lvremove_done
           + lockd_free_removed_lvs path); LV lock remains held
-- Test 4: (pending unnamed pvmove support in shared VG -- FIXME in pvmove.c)
+- Test 4: Unnamed pvmove in shared VG: remotely-locked LV skipped, other moved
+- Test 4b: Unnamed pvmove fails when ALL LVs remotely locked (empty mirror)
 - Test 5: Normal pvmove completion releases pvmove0 lock space; LV lock
           persists for normal operation
 - Test 6: Named pvmove refused when remote EX held on named LV; clears

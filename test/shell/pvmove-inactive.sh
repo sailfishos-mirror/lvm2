@@ -209,10 +209,9 @@ aux kill_tagged_processes
 
 # ===================================================================
 # Tests 5-8 move all LVs from a PV without naming them.
-# pvmove in a shared VG currently requires a named LV (see FIXME in
-# tools/pvmove.c), so these tests only run in non-clustered configs.
+# In shared VGs, per-LV EX locks are acquired in _lv_is_allowed_pvmove();
+# LVs locked remotely are skipped.
 # ===================================================================
-[ "${LVM_TEST_LVMLOCKD:-0}" = 0 ] || { vgremove -ff $vg; exit 0; }
 
 # ===================================================================
 # Test 5: Mix of active and inactive LVs
