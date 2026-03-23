@@ -849,6 +849,169 @@ static int _copy_id_components(struct cmd_context *cmd,
 	return 1;
 }
 
+/*
+ * Resume an in-progress pvmove: validate, re-acquire cluster locks
+ * and activate the pvmove mirror.
+ *
+ * On activation failure, *lv_mirr_locked is cleared so the caller
+ * does NOT release the lock -- pvmove metadata is already committed
+ * and the lock must stay held.
+ */
+static int _pvmove_resume(struct cmd_context *cmd,
+			  struct volume_group *vg,
+			  struct logical_volume *lv_mirr,
+			  const char *lv_name,
+			  const char *pv_name,
+			  int pv_count,
+			  struct dm_list **lvs_changed,
+			  struct dm_list *locked_lvs,
+			  int *lv_mirr_locked)
+{
+	struct lv_list *lvl, *lvl2;
+	int already_done;
+
+	if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name,
+				     pv_count, pv_name, lvs_changed))
+		return_0;
+
+	/* Re-acquire cluster locks before activating (shared VGs) */
+	if (vg_is_shared(vg) && lv_mirr->lock_args) {
+		if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+			log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
+			return 0;
+		}
+		*lv_mirr_locked = 1;
+
+		/*
+		 * Re-acquire EX locks on all participant holders.
+		 * Normally persistent locks survive in lvmlockd,
+		 * but they may be lost after lvmlockd restart.
+		 */
+		dm_list_iterate_items(lvl, *lvs_changed) {
+			const struct logical_volume *holder = lv_lock_holder(lvl->lv);
+			struct lv_list *new_lvl;
+
+			if (!lockd_lv_uses_lock(holder))
+				continue;
+
+			/* Dedup: skip if same holder already processed */
+			already_done = 0;
+			dm_list_iterate_items(lvl2, *lvs_changed) {
+				if (lvl2 == lvl)
+					break;
+				if (lv_lock_holder(lvl2->lv) == holder) {
+					already_done = 1;
+					break;
+				}
+			}
+			if (already_done)
+				continue;
+
+			if (!lockd_lv(cmd, (struct logical_volume *)holder,
+				      "ex", LDLV_PERSISTENT)) {
+				log_error("ABORTING: Failed to re-acquire lock for %s.",
+					  display_lvname(holder));
+				return 0;
+			}
+
+			/* Track for error-path cleanup */
+			if (!(new_lvl = dm_pool_alloc(cmd->mem, sizeof(*new_lvl)))) {
+				log_error("Failed to allocate LV list entry.");
+				if (!lockd_lv(cmd, (struct logical_volume *)holder,
+					      "un", LDLV_PERSISTENT))
+					log_warn("WARNING: Failed to unlock LV %s.",
+						 display_lvname(holder));
+				return 0;
+			}
+			new_lvl->lv = (struct logical_volume *)holder;
+			dm_list_add(locked_lvs, &new_lvl->list);
+		}
+	}
+
+	/* Ensure mirror LV is active */
+	if (!activate_lv(cmd, lv_mirr)) {
+		log_error("ABORTING: Temporary mirror activation failed.");
+		/*
+		 * Keep the cluster lock held: pvmove state is already
+		 * committed in metadata from a previous run.  Releasing
+		 * the lock would leave the metadata unprotected.
+		 */
+		*lv_mirr_locked = 0;
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * Create a new pvmove: build source/allocatable PV lists, create the
+ * temporary pvmove mirror LV, set up mirror segments and activate.
+ *
+ * On success, *lv_mirr_p is set to the new pvmove LV.
+ */
+static int _pvmove_create(struct cmd_context *cmd,
+			  struct volume_group *vg,
+			  struct physical_volume *pv,
+			  struct pvmove_params *pp,
+			  const char *lv_name,
+			  struct logical_volume **lv_mirr_p,
+			  struct dm_list **lvs_changed,
+			  struct dm_list *locked_lvs,
+			  int *lv_mirr_locked)
+{
+	struct dm_list *source_pvl;
+	struct dm_list *allocatable_pvs;
+	struct logical_volume *lv_mirr;
+
+	/* Determine PE ranges to be moved */
+	if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
+					  &pp->pv_name_arg, 0)))
+		return_0;
+
+	if (pp->alloc == ALLOC_INHERIT)
+		pp->alloc = vg->alloc;
+
+	/* Get PVs we can use for allocation */
+	if (!(allocatable_pvs = _get_allocatable_pvs(cmd, pp->pv_count, pp->pv_names,
+						     vg, pv, pp->alloc)))
+		return_0;
+
+	/* FIXME Cope with non-contiguous => splitting existing segments */
+	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
+					LVM_READ | LVM_WRITE,
+					ALLOC_CONTIGUOUS, vg))) {
+		log_error("Creation of temporary pvmove LV failed.");
+		return 0;
+	}
+
+	*lv_mirr_p = lv_mirr;
+	lv_mirr->status |= (PVMOVE | LOCKED);
+
+	/* In shared VGs, acquire cluster lock for pvmove LV */
+	if (vg_is_shared(vg)) {
+		if (!lockd_init_lv_args(cmd, vg, lv_mirr,
+					vg->lock_type, NULL, &lv_mirr->lock_args)) {
+			log_error("Failed to initialize lock for pvmove LV.");
+			return 0;
+		}
+		if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+			log_error("Failed to acquire cluster lock for pvmove LV.");
+			return 0;
+		}
+		*lv_mirr_locked = 1;
+	}
+
+	if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
+			       allocatable_pvs, pp->alloc, lvs_changed,
+			       locked_lvs))
+		return_0;
+
+	if (!_update_metadata(lv_mirr, *lvs_changed))
+		return_0;
+
+	return 1;
+}
+
 static int _pvmove_setup_single(struct cmd_context *cmd,
 				struct volume_group *vg,
 				struct physical_volume *pv,
@@ -856,8 +1019,6 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 {
 	struct pvmove_params *pp = (struct pvmove_params *) handle->custom_handle;
 	const char *lv_name = NULL;
-	struct dm_list *source_pvl;
-	struct dm_list *allocatable_pvs;
 	struct dm_list *lvs_changed;
 	struct dm_list locked_lvs;
 	struct logical_volume *lv_mirr = NULL;
@@ -908,82 +1069,11 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	}
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
-		/* Resume path */
-		if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name,
-					     pp->pv_count, pv_name, &lvs_changed))
+		if (!_pvmove_resume(cmd, vg, lv_mirr, lv_name, pv_name,
+				    pp->pv_count, &lvs_changed,
+				    &locked_lvs, &lv_mirr_locked))
 			goto_out;
-
-		/* Re-acquire cluster locks before activating (shared VGs) */
-		if (vg_is_shared(vg) && lv_mirr->lock_args) {
-			struct lv_list *lvl2;
-			int already_done;
-
-			if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
-				log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
-				goto out;
-			}
-			lv_mirr_locked = 1;
-
-			/*
-			 * Re-acquire EX locks on all participant holders.
-			 * Normally persistent locks survive in lvmlockd,
-			 * but they may be lost after lvmlockd restart.
-			 */
-			dm_list_iterate_items(lvl, lvs_changed) {
-				const struct logical_volume *holder = lv_lock_holder(lvl->lv);
-				struct lv_list *new_lvl;
-
-				if (!lockd_lv_uses_lock(holder))
-					continue;
-
-				/* Dedup: skip if same holder already processed */
-				already_done = 0;
-				dm_list_iterate_items(lvl2, lvs_changed) {
-					if (lvl2 == lvl)
-						break;
-					if (lv_lock_holder(lvl2->lv) == holder) {
-						already_done = 1;
-						break;
-					}
-				}
-				if (already_done)
-					continue;
-
-				if (!lockd_lv(cmd, (struct logical_volume *)holder,
-					      "ex", LDLV_PERSISTENT)) {
-					log_error("ABORTING: Failed to re-acquire lock for %s.",
-						  display_lvname(holder));
-					goto out;
-				}
-
-				/* Track for error-path cleanup */
-				if (!(new_lvl = dm_pool_alloc(cmd->mem, sizeof(*new_lvl)))) {
-					log_error("Failed to allocate LV list entry.");
-					if (!lockd_lv(cmd, (struct logical_volume *)holder,
-						      "un", LDLV_PERSISTENT))
-						log_warn("WARNING: Failed to unlock LV %s.",
-							 display_lvname(holder));
-					goto out;
-				}
-				new_lvl->lv = (struct logical_volume *)holder;
-				dm_list_add(&locked_lvs, &new_lvl->list);
-			}
-		}
-
-		/* Ensure mirror LV is active */
-		if (!activate_lv(cmd, lv_mirr)) {
-			log_error("ABORTING: Temporary mirror activation failed.");
-			/*
-			 * Keep the cluster lock held: pvmove state is already
-			 * committed in metadata from a previous run.  Releasing
-			 * the lock would leave the metadata unprotected.
-			 */
-			lv_mirr_locked = 0;
-			goto out;
-		}
 	} else {
-		/* New pvmove path */
-
 		if (lv) {
 			if (!_lv_is_pvmoveable(lv, NULL))
 				return_ECMD_FAILED;
@@ -1002,57 +1092,10 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			}
 		}
 
-		/* Determine PE ranges to be moved */
-		if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
-						  &pp->pv_name_arg, 0)))
+		if (!_pvmove_create(cmd, vg, pv, pp, lv_name,
+				    &lv_mirr, &lvs_changed,
+				    &locked_lvs, &lv_mirr_locked))
 			goto_out;
-
-		if (pp->alloc == ALLOC_INHERIT)
-			pp->alloc = vg->alloc;
-
-		/* Get PVs we can use for allocation */
-		if (!(allocatable_pvs = _get_allocatable_pvs(cmd, pp->pv_count, pp->pv_names,
-							     vg, pv, pp->alloc)))
-			goto_out;
-
-		/* FIXME Cope with non-contiguous => splitting existing segments */
-		if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
-						LVM_READ | LVM_WRITE,
-						ALLOC_CONTIGUOUS, vg))) {
-			log_error("Creation of temporary pvmove LV failed.");
-			goto out;
-		}
-
-		lv_mirr->status |= (PVMOVE | LOCKED);
-
-		/* In shared VGs, acquire cluster lock for pvmove LV */
-		if (vg_is_shared(vg)) {
-			if (!lockd_init_lv_args(cmd, vg, lv_mirr,
-						vg->lock_type, NULL, &lv_mirr->lock_args)) {
-				log_error("Failed to initialize lock for pvmove LV.");
-				goto out;
-			}
-			if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
-				log_error("Failed to acquire cluster lock for pvmove LV.");
-				goto out;
-			}
-			lv_mirr_locked = 1;
-		}
-
-		if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
-				       allocatable_pvs, pp->alloc, &lvs_changed,
-				       &locked_lvs))
-			goto_out;
-
-		if (!_update_metadata(lv_mirr, lvs_changed))
-			goto_out;
-
-		/*
-		 * Keep the named LV lock and holder locks held throughout
-		 * pvmove.  The LV's own cluster lock guards it against
-		 * remote activation -- no separate pvmove0 probe needed.
-		 * Locks are released only on error (goto out cleanup).
-		 */
 	}
 
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
