@@ -434,23 +434,6 @@ static int _lv_is_allowed_pvmove(struct cmd_context *cmd,
 			return 2;
 		}
 
-		/*
-		 * Lock acquired - track for error-path cleanup.
-		 * Lock stays held throughout pvmove.
-		 */
-		if (locked_lvs) {
-			struct lv_list *lvl;
-
-			if (!(lvl = dm_pool_alloc(cmd->mem, sizeof(*lvl)))) {
-				log_error("Failed to allocate LV list entry.");
-				if (!lockd_lv(cmd, (struct logical_volume *)holder, "un", LDLV_PERSISTENT))
-					log_warn("WARNING: Failed to unlock LV %s.", display_lvname(holder));
-				return 0;
-			}
-			lvl->lv = (struct logical_volume *)holder;
-			dm_list_add(locked_lvs, &lvl->list);
-		}
-
 		return 1;
 	}
 
@@ -512,42 +495,24 @@ static int _finalize_pvmove_lv(struct cmd_context *cmd,
 }
 
 /*
- * Find bottom-level striped LVs on source PVs that are moveable.
- * Checks each candidate for moveability and holder lock state
- * before adding to the list.
- *   - Named pvmove: locked/unmoveable is a hard error (return 0).
- *   - Unnamed pvmove: locked or remotely-held LVs are skipped.
- *
- * lv_skipped is a sticky flag tracking whether any LV was skipped
- * (locked or remotely held).  Used later for a better error message
- * when no LVs end up moveable (empty pvmove mirror).
- *
- * Safe against TOCTOU: the VG EX lock (READ_FOR_UPDATE)
- * blocks activation on other nodes between the holder lock
- * check and mirror insertion.
+ * Find bottom-level striped LVs on source PVs.
  */
 static int _find_moving_lvs(struct cmd_context *cmd,
 			    struct volume_group *vg,
-			    const struct logical_volume *lv_mirr,
 			    struct dm_list *source_pvl,
-			    const char *lv_name,
-			    struct dm_list *moving_lvs,
-			    int *lv_skipped,
-			    struct dm_list *locked_lvs)
+			    struct logical_volume *lv_move,
+			    struct dm_list *moving_lvs)
 {
 	struct logical_volume *lv;
-	const struct logical_volume *holder;
 	struct lv_list *lvl, *new_lvl;
 	int lv_found = 0;
-	int r;
 
 	dm_list_iterate_items(lvl, &vg->lvs) {
 		lv = lvl->lv;
-		if (lv == lv_mirr)
-			continue;
 
-		if (lv_name) {
-			if (strcmp(lv->name, lv_name) && !_sub_lv_of(lv, lv_name))
+		/* Only striped sub-LVs of lv_move should be moved */
+		if (lv_move) {
+			if (strcmp(lv->name, lv_move->name) && !_sub_lv_of(lv, lv_move->name))
 				continue;
 			lv_found = 1;
 		}
@@ -558,30 +523,6 @@ static int _find_moving_lvs(struct cmd_context *cmd,
 		if (!lv_is_on_pvs(lv, source_pvl))
 			continue;
 
-		if (lv_is_locked(lv)) {
-			if (lv_name) {
-				log_error("LV %s is locked by another pvmove.",
-					  display_lvname(lv));
-				return 0;
-			}
-			*lv_skipped = 1;
-			log_print_unless_silent("Skipping LV %s: locked by another pvmove.",
-						display_lvname(lv));
-			continue;
-		}
-
-		holder = lv_lock_holder(lv);
-
-		if (!_lv_is_pvmoveable(holder, source_pvl))
-			return_0;
-
-		if (!(r = _lv_is_allowed_pvmove(cmd, vg, lv, lv_name,
-						holder, lv_skipped,
-						locked_lvs)))
-			return_0;
-		if (r == 2)
-			continue;
-
 		if (!(new_lvl = dm_pool_alloc(cmd->mem, sizeof(*new_lvl)))) {
 			log_error("Failed to allocate LV list entry.");
 			return 0;
@@ -590,9 +531,137 @@ static int _find_moving_lvs(struct cmd_context *cmd,
 		dm_list_add(moving_lvs, &new_lvl->list);
 	}
 
-	if (lv_name && !lv_found) {
-		log_error("Logical volume %s not found.", lv_name);
+	if (lv_move && !lv_found) {
+		log_error("Logical volume %s not found.", display_lvname(lv_move));
 		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * If processing a named LV (lv_move), then the inability to move part of it is a command failure.
+ * Otherwise, unmovable LVs are skipped (removed from moving_lvs).
+ */
+static int _skip_unmovable_lvs(struct cmd_context *cmd, struct volume_group *vg,
+			       struct logical_volume *lv_move, struct dm_list *source_pvl,
+			       struct dm_list *moving_lvs)
+{
+	struct logical_volume *lv;
+	const struct logical_volume *lv_top;
+	struct lv_list *lvl, *lvl2;
+
+	if (lv_move && lv_is_lockd_sanlock_lv(lv_move)) {
+		log_error("pvmove not allowed on internal sanlock LV.");
+		return 0;
+	}
+
+	dm_list_iterate_items_safe(lvl, lvl2, moving_lvs) {
+		lv = lvl->lv;
+
+		if (lv_is_locked(lv)) {
+			if (lv_move) {
+				log_error("LV %s is locked by another pvmove.", display_lvname(lv_move));
+				return 0;
+			} else {
+				log_warn("WARNING: Not moving LV %s: locked by another pvmove.", display_lvname(lv));
+				dm_list_del(&lvl->list);
+				continue;
+			}
+		}
+
+		/* Note: "lock holder" terminology is outdated, it's really the top LV when "lv" is a sub LV */
+		lv_top = lv_lock_holder(lv);
+
+		if (!_lv_is_pvmoveable(lv_top, source_pvl)) {
+			if (lv_move) {
+				log_error("LV %s is not moveable.", display_lvname(lv_move));
+				return 0;
+			} else {
+				log_warn("WARNING: Not moving LV %s: not moveable.", display_lvname(lv));
+				dm_list_del(&lvl->list);
+				continue;
+			}
+		}
+	}
+	return 1;
+}
+
+/*
+ * If processing a named LV, then a remotely locked LV is a command failure.
+ *
+ * If any moving_lvs entries are active on remote nodes (lockd_lv ex fails),
+ * then skip them (remove from moving_lvs).
+ *
+ * Warn about LVs that are skipped because it means that the PV is still used,
+ * and the PV cannot be removed even if pvmove completes successfully.
+ */
+static int _skip_remote_lvs(struct cmd_context *cmd, struct volume_group *vg,
+			    struct logical_volume *lv_move, struct dm_list *moving_lvs)
+{
+	struct logical_volume *lv;
+	const struct logical_volume *lv_top;
+	struct lv_list *lvl, *lvl2;
+	int ex, sh;
+
+	if (lv_move) {
+		/* Get the top-level LV in case the user has named a sub LV to move */
+		lv_top = lv_lock_holder(lv_move);
+
+		if (lv_is_active(lv_top)) {
+			ex = 0;
+			if (!lockd_query_lv(cmd, lv_top, &ex, &sh) || !ex) {
+				log_error("Cannot pvmove LV %s. LV %s exclusive lock is not held.",
+					  display_lvname(lv_move), display_lvname(lv_top));
+				return 0;
+			}
+		} else {
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_top, "ex", LDLV_PERSISTENT)) {
+				log_error("Cannot pvmove LV %s. LV %s exclusive lock failed.",
+					  display_lvname(lv_move), display_lvname(lv_top));
+				return 0;
+			}
+			/*
+			 * The ex LV lock is only held if the LV is directly activated.
+			 * The link between this LV and the pvmove LV, and the ex lock
+			 * on the pvmove LV prevents other nodes from activating this LV
+			 * while it is being moved.
+			 */
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_top, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock LV %s after remote check.", display_lvname(lv_top));
+		}
+		return 1;
+	}
+
+	dm_list_iterate_items_safe(lvl, lvl2, moving_lvs) {
+		lv = lvl->lv;
+
+		lv_top = lv_lock_holder(lv);
+
+		if (lv_is_active(lv_top)) {
+			ex = 0;
+			if (!lockd_query_lv(cmd, lv_top, &ex, &sh) || !ex) {
+				log_warn("WARNING: Not moving LV %s. LV %s exclusive lock is not held.",
+					 display_lvname(lv), display_lvname(lv_top));
+				dm_list_del(&lvl->list);
+				continue;
+			}
+		} else {
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_top, "ex", LDLV_PERSISTENT)) {
+				log_warn("WARNING: Not moving LV %s. LV %s exclusive lock failed.",
+					  display_lvname(lv), display_lvname(lv_top));
+				dm_list_del(&lvl->list);
+				continue;
+			}
+			/*
+			 * The ex LV lock is only held if the LV is directly activated.
+			 * The link between this LV and the pvmove LV, and the ex lock
+			 * on the pvmove LV prevents other nodes from activating this LV
+			 * while it is being moved.
+			 */
+			if (!lockd_lv(cmd, (struct logical_volume *)lv_top, "un", LDLV_PERSISTENT))
+				log_warn("WARNING: Failed to unlock LV %s after remote check.", display_lvname(lv_top));
+		}
 	}
 
 	return 1;
@@ -607,30 +676,31 @@ static int _find_moving_lvs(struct cmd_context *cmd,
  * FIXME: Eliminating entire PVs places too many restrictions
  *        on allocation.
  */
-static int _trim_allocatable_for_moving(struct volume_group *vg,
+static int _trim_allocatable_pvs_for_raid(struct volume_group *vg,
+					struct logical_volume *lv_move,
 					struct dm_list *moving_lvs,
-					const char *lv_name,
 					struct dm_list *allocatable_pvs,
 					alloc_policy_t alloc)
 {
 	struct lv_list *lvl, *lvl2;
-	const struct logical_volume *holder;
+	const struct logical_volume *lv_top;
 	struct lv_segment *seg;
 	int already_done;
 
 	dm_list_iterate_items(lvl, moving_lvs) {
-		holder = lv_lock_holder(lvl->lv);
+		/* Note: "lock holder" is old terminology, it is really just the top LV of a sub LV. */
+		lv_top = lv_lock_holder(lvl->lv);
 
-		seg = first_seg(holder);
+		seg = first_seg(lv_top);
 		if (!seg_is_raid(seg) && !seg_is_mirrored(seg))
 			continue;
 
-		/* Dedup: skip if same holder already processed */
+		/* Dedup: skip if same lv_top already processed */
 		already_done = 0;
 		dm_list_iterate_items(lvl2, moving_lvs) {
 			if (lvl2 == lvl)
 				break;
-			if (lv_lock_holder(lvl2->lv) == holder) {
+			if (lv_lock_holder(lvl2->lv) == lv_top) {
 				already_done = 1;
 				break;
 			}
@@ -638,8 +708,9 @@ static int _trim_allocatable_for_moving(struct volume_group *vg,
 		if (already_done)
 			continue;
 
-		if (!_trim_allocatable_for_raid((struct logical_volume *)holder,
-						lv_name, allocatable_pvs, alloc))
+		if (!_trim_allocatable_for_raid((struct logical_volume *)lv_top,
+						lv_move ? lv_move->name : NULL,
+						allocatable_pvs, alloc))
 			return_0;
 	}
 
@@ -656,8 +727,7 @@ static int _populate_pvmove_lv(struct cmd_context *cmd,
 			       struct dm_list *moving_lvs,
 			       struct dm_list *allocatable_pvs,
 			       alloc_policy_t alloc,
-			       struct dm_list **lvs_changed,
-			       int lv_skipped)
+			       struct dm_list **lvs_changed)
 {
 	struct lv_list *lvl;
 
@@ -675,50 +745,7 @@ static int _populate_pvmove_lv(struct cmd_context *cmd,
 	}
 
 	if (!_finalize_pvmove_lv(cmd, lv_mirr, allocatable_pvs,
-				 alloc, lv_skipped))
-		return_0;
-
-	return 1;
-}
-
-/*
- * Set up pvmove mirror LV with segments for the required copies.
- *
- * Phase order:
- *   1. Find moveable LVs -- filters out locked, unmoveable and
- *      remotely-held LVs in a single pass.
- *   2. Trim allocatable PVs -- runs after find so it only trims
- *      for holders of LVs that will actually be moved, avoiding
- *      unnecessary PV exclusions for skipped LVs.
- *   3. Populate pvmove LV -- inserts mirrors and converts to
- *      mirrored target using the trimmed allocation pool.
- */
-static int _set_up_pvmove_lv(struct cmd_context *cmd,
-			     struct volume_group *vg,
-			     struct logical_volume *lv_mirr,
-			     struct dm_list *source_pvl,
-			     const char *lv_name,
-			     struct dm_list *allocatable_pvs,
-			     alloc_policy_t alloc,
-			     struct dm_list **lvs_changed,
-			     struct dm_list *locked_lvs)
-{
-	struct dm_list moving_lvs;
-	int lv_skipped = 0;
-
-	dm_list_init(&moving_lvs);
-
-	if (!_find_moving_lvs(cmd, vg, lv_mirr, source_pvl, lv_name,
-			      &moving_lvs, &lv_skipped, locked_lvs))
-		return_0;
-
-	if (!_trim_allocatable_for_moving(vg, &moving_lvs, lv_name,
-					  allocatable_pvs, alloc))
-		return_0;
-
-	if (!_populate_pvmove_lv(cmd, lv_mirr, source_pvl, &moving_lvs,
-				 allocatable_pvs, alloc, lvs_changed,
-				 lv_skipped))
+				 alloc, 0))
 		return_0;
 
 	return 1;
@@ -727,19 +754,20 @@ static int _set_up_pvmove_lv(struct cmd_context *cmd,
 /*
  * Validate a resume of an in-progress pvmove: find participating LVs,
  * check that the named LV (if any) matches, warn about ignored args.
- * Returns 1 on success (lvs_changed populated), 0 on error.
+ * Returns 1 on success, 0 on error.
  */
 static int _pvmove_validate_resume(struct cmd_context *cmd,
 				   struct volume_group *vg,
 				   struct logical_volume *lv_mirr,
 				   const char *lv_name,
 				   int pv_count,
-				   const char *pv_name,
-				   struct dm_list **lvs_changed)
+				   const char *pv_name)
 {
+	struct dm_list *lvs_changed;
+
 	log_print_unless_silent("Detected pvmove in progress for %s.", pv_name);
 
-	if (!(*lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
+	if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
 		log_error("ABORTING: Failed to generate list of moving LVs.");
 		return 0;
 	}
@@ -748,7 +776,7 @@ static int _pvmove_validate_resume(struct cmd_context *cmd,
 		struct lv_list *lvl;
 		int name_matches = 0;
 
-		dm_list_iterate_items(lvl, *lvs_changed)
+		dm_list_iterate_items(lvl, lvs_changed)
 			if (!strcmp(lvl->lv->name, lv_name) ||
 			    _sub_lv_of(lvl->lv, lv_name)) {
 				name_matches = 1;
@@ -772,8 +800,7 @@ static int _pvmove_validate_resume(struct cmd_context *cmd,
  * Called to set up initial pvmove LV only.
  * (Not called after first or any other section completes.)
  */
-static int _update_metadata(struct logical_volume *lv_mirr,
-			    struct dm_list *lvs_changed)
+static int _update_metadata_and_activate(struct logical_volume *lv_mirr, struct dm_list *changed_lvs)
 {
 	struct lv_list *lvl;
 	struct logical_volume *lv = NULL;
@@ -781,7 +808,7 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 	unsigned inactive_count = 0;
 
 	/*
-	 * Find the first active LV from lvs_changed for lv_update_and_reload().
+	 * Find the first active LV from changed_lvs for lv_update_and_reload().
 	 * The suspend/resume of an active LV with track_pvmove_deps=1
 	 * (via !lv_is_pvmove) discovers and reloads ALL active participating
 	 * LVs through the pvmove dependency tree.
@@ -789,7 +816,7 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 	 * If no LV is active, mirrors exist only in metadata and will
 	 * take effect when LVs are activated.
 	 */
-	dm_list_iterate_items(lvl, lvs_changed) {
+	dm_list_iterate_items(lvl, changed_lvs) {
 		if (lv_is_active(lvl->lv)) {
 			if (!lv)
 				lv = lvl->lv;
@@ -825,7 +852,7 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 		log_error("Temporary pvmove mirror activation failed. Reverting.");
 
 		if (!pvmove_abort_initial(lv_mirr->vg->cmd, lv_mirr->vg,
-					 lv_mirr, lvs_changed))
+					 lv_mirr, changed_lvs))
 			log_error("ABORTING: Failed to revert pvmove. Run pvmove --abort.");
 
 		return 0;
@@ -850,131 +877,60 @@ static int _copy_id_components(struct cmd_context *cmd,
 }
 
 /*
- * Resume an in-progress pvmove: validate, re-acquire cluster locks
+ * Resume an in-progress pvmove: validate, re-acquire cluster lock
  * and activate the pvmove mirror.
- *
- * On activation failure, *lv_mirr_locked is cleared so the caller
- * does NOT release the lock -- pvmove metadata is already committed
- * and the lock must stay held.
  */
 static int _pvmove_resume(struct cmd_context *cmd,
+			  struct pvmove_params *pp,
 			  struct volume_group *vg,
 			  struct logical_volume *lv_mirr,
 			  const char *lv_name,
 			  const char *pv_name,
-			  int pv_count,
-			  struct dm_list **lvs_changed,
-			  struct dm_list *locked_lvs,
-			  int *lv_mirr_locked)
+			  int pv_count)
 {
 	struct lv_list *lvl, *lvl2;
 	int already_done;
 
-	if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name,
-				     pv_count, pv_name, lvs_changed))
+	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
 		return_0;
 
-	/* Re-acquire cluster locks before activating (shared VGs) */
-	if (vg_is_shared(vg) && lv_mirr->lock_args) {
-		if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
-			log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
-			return 0;
-		}
-		*lv_mirr_locked = 1;
+	if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name, pv_count, pv_name))
+		return_0;
 
-		/*
-		 * Re-acquire EX locks on all participant holders.
-		 * Normally persistent locks survive in lvmlockd,
-		 * but they may be lost after lvmlockd restart.
-		 */
-		dm_list_iterate_items(lvl, *lvs_changed) {
-			const struct logical_volume *holder = lv_lock_holder(lvl->lv);
-			struct lv_list *new_lvl;
+	/*
+	 * Nothing related to the existing pvmove/lv_mirr should be active
+	 * on this machine at this point.
+	 *
+	 * TODO: perform some sanity checks to verify this?
+	 */
 
-			if (!lockd_lv_uses_lock(holder))
-				continue;
-
-			/* Dedup: skip if same holder already processed */
-			already_done = 0;
-			dm_list_iterate_items(lvl2, *lvs_changed) {
-				if (lvl2 == lvl)
-					break;
-				if (lv_lock_holder(lvl2->lv) == holder) {
-					already_done = 1;
-					break;
-				}
-			}
-			if (already_done)
-				continue;
-
-			if (!lockd_lv(cmd, (struct logical_volume *)holder,
-				      "ex", LDLV_PERSISTENT)) {
-				log_error("ABORTING: Failed to re-acquire lock for %s.",
-					  display_lvname(holder));
-				return 0;
-			}
-
-			/* Track for error-path cleanup */
-			if (!(new_lvl = dm_pool_alloc(cmd->mem, sizeof(*new_lvl)))) {
-				log_error("Failed to allocate LV list entry.");
-				if (!lockd_lv(cmd, (struct logical_volume *)holder,
-					      "un", LDLV_PERSISTENT))
-					log_warn("WARNING: Failed to unlock LV %s.",
-						 display_lvname(holder));
-				return 0;
-			}
-			new_lvl->lv = (struct logical_volume *)holder;
-			dm_list_add(locked_lvs, &new_lvl->list);
-		}
+	/*
+	 * In a shared VG, an ex lock on the pvmove LV must be held while pvmove
+	 * is moving any data, so this lock must be acquired before activating
+	 * lv_mirr at which point data will begin moving again.
+	 */
+	if (vg_is_shared(vg) && !lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+		log_error("ABORTING: Failed to re-acquire cluster lock for pvmove LV.");
+		return 0;
 	}
 
-	/* Ensure mirror LV is active */
+	/*
+	 * Activating the pvmove LV (lv_mirr) will resume the movement of data.
+	 */
 	if (!activate_lv(cmd, lv_mirr)) {
-		log_error("ABORTING: Temporary mirror activation failed.");
-		/*
-		 * Keep the cluster lock held: pvmove state is already
-		 * committed in metadata from a previous run.  Releasing
-		 * the lock would leave the metadata unprotected.
-		 */
-		*lv_mirr_locked = 0;
+		if (vg_is_shared(vg) && !lockd_lv(cmd, lv_mirr, "un", LDLV_PERSISTENT))
+			log_warn("WARNING: Failed to unlock pvmove LV");
+		log_error("ABORTING: Failed to activate pvmove LV %s.", lv_mirr->name);
 		return 0;
 	}
 
 	return 1;
 }
 
-/*
- * Create a new pvmove: build source/allocatable PV lists, create the
- * temporary pvmove mirror LV, set up mirror segments and activate.
- *
- * On success, *lv_mirr_p is set to the new pvmove LV.
- */
-static int _pvmove_create(struct cmd_context *cmd,
-			  struct volume_group *vg,
-			  struct physical_volume *pv,
-			  struct pvmove_params *pp,
-			  const char *lv_name,
-			  struct logical_volume **lv_mirr_p,
-			  struct dm_list **lvs_changed,
-			  struct dm_list *locked_lvs,
-			  int *lv_mirr_locked)
+static int _create_pvmove_lv(struct cmd_context *cmd, struct volume_group *vg,
+			     struct logical_volume **lv_mirr_p)
 {
-	struct dm_list *source_pvl;
-	struct dm_list *allocatable_pvs;
 	struct logical_volume *lv_mirr;
-
-	/* Determine PE ranges to be moved */
-	if (!(source_pvl = create_pv_list(cmd->mem, vg, 1,
-					  &pp->pv_name_arg, 0)))
-		return_0;
-
-	if (pp->alloc == ALLOC_INHERIT)
-		pp->alloc = vg->alloc;
-
-	/* Get PVs we can use for allocation */
-	if (!(allocatable_pvs = _get_allocatable_pvs(cmd, pp->pv_count, pp->pv_names,
-						     vg, pv, pp->alloc)))
-		return_0;
 
 	/* FIXME Cope with non-contiguous => splitting existing segments */
 	if (!(lv_mirr = lv_create_empty("pvmove%d", NULL,
@@ -986,28 +942,110 @@ static int _pvmove_create(struct cmd_context *cmd,
 
 	*lv_mirr_p = lv_mirr;
 	lv_mirr->status |= (PVMOVE | LOCKED);
+	return 1;
+}
 
-	/* In shared VGs, acquire cluster lock for pvmove LV */
-	if (vg_is_shared(vg)) {
-		if (!lockd_init_lv_args(cmd, vg, lv_mirr,
-					vg->lock_type, NULL, &lv_mirr->lock_args)) {
-			log_error("Failed to initialize lock for pvmove LV.");
-			return 0;
-		}
-		if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
-			log_error("Failed to acquire cluster lock for pvmove LV.");
-			return 0;
-		}
-		*lv_mirr_locked = 1;
+static void _lockd_pvmove_undo(struct cmd_context *cmd, struct volume_group *vg,
+			       struct logical_volume *lv_mirr, int *lv_mirr_locked)
+{
+	if (!vg_is_shared(vg) || !lv_mirr)
+		return;
+
+	if (*lv_mirr_locked) {
+		*lv_mirr_locked = 0;
+		lockd_lv(cmd, lv_mirr, "un", LDLV_PERSISTENT);
 	}
+	if (lv_mirr->lock_args &&
+	    !lockd_free_lv(cmd, vg, lv_mirr->name, &lv_mirr->lvid.id[1], lv_mirr->lock_args))
+		log_error("Failed to free pvmove LV lock.");
+}
 
-	if (!_set_up_pvmove_lv(cmd, vg, lv_mirr, source_pvl, lv_name,
-			       allocatable_pvs, pp->alloc, lvs_changed,
-			       locked_lvs))
+static int _lockd_pvmove_new(struct cmd_context *cmd, struct volume_group *vg,
+				struct logical_volume *lv_mirr, int *lv_mirr_locked)
+{
+	if (!lockd_init_lv_args(cmd, vg, lv_mirr, vg->lock_type, NULL, &lv_mirr->lock_args)) {
+		log_error("Failed to initialize lock for pvmove LV.");
+		return 0;
+	}
+	if (!lockd_lv(cmd, lv_mirr, "ex", LDLV_PERSISTENT)) {
+		log_error("Failed to acquire cluster lock for pvmove LV.");
+		if (!lockd_free_lv(cmd, vg, lv_mirr->name, &lv_mirr->lvid.id[1], lv_mirr->lock_args))
+			log_error("Failed to free pvmove LV lock.");
+		return 0;
+	}
+	*lv_mirr_locked = 1;
+	return 1;
+}
+
+/*
+ * Create a new pvmove: build source/allocatable PV lists, create the
+ * temporary pvmove mirror LV, set up mirror segments and activate.
+ */
+static int _pvmove_create(struct cmd_context *cmd,
+			  struct pvmove_params *pp,
+			  struct volume_group *vg,
+			  struct physical_volume *pv,
+			  struct logical_volume *lv_move)
+{
+	struct dm_list *source_pvl;
+	struct dm_list *allocatable_pvs;
+	struct dm_list moving_lvs;
+	struct dm_list *changed_lvs = NULL;
+	struct logical_volume *lv_mirr = NULL;
+	int lv_mirr_locked = 0;
+
+	if (pp->alloc == ALLOC_INHERIT)
+		pp->alloc = vg->alloc;
+
+	dm_list_init(&moving_lvs);
+
+	/* Determine PE ranges to be moved */
+	if (!(source_pvl = create_pv_list(cmd->mem, vg, 1, &pp->pv_name_arg, 0)))
 		return_0;
 
-	if (!_update_metadata(lv_mirr, *lvs_changed))
+	/* Get PVs we can use for allocation */
+	if (!(allocatable_pvs = _get_allocatable_pvs(cmd, pp->pv_count, pp->pv_names, vg, pv, pp->alloc)))
 		return_0;
+
+	/* Get LVs that are using the PVs being moved */
+	if (!_find_moving_lvs(cmd, vg, source_pvl, lv_move, &moving_lvs))
+		return_0;
+
+	/* Skip LVs that are not movable (remove from moving_lvs) */
+	if (!_skip_unmovable_lvs(cmd, vg, lv_move, source_pvl, &moving_lvs))
+		return_0;
+
+	/* Skip LVs that are active on other nodes (remove from moving_lvs) */
+	if (vg_is_shared(vg) && !_skip_remote_lvs(cmd, vg, lv_move, &moving_lvs))
+		return_0;
+
+	/* Create a new mirror LV named "pvmove%d" */
+	if (!_create_pvmove_lv(cmd, vg, &lv_mirr))
+		return_0;
+
+	/* Eliminate entries from allocatable_pvs based on raid LV restrictions */
+	if (!_trim_allocatable_pvs_for_raid(vg, lv_move, &moving_lvs,
+					    allocatable_pvs, pp->alloc))
+		return_0;
+
+	/* Insert mirrors and convert to mirrored target */
+	if (!_populate_pvmove_lv(cmd, lv_mirr, source_pvl, &moving_lvs,
+				 allocatable_pvs, pp->alloc, &changed_lvs))
+		return_0;
+
+	/* Create an "id" that polling will use to refer to this pvmove */
+	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
+		return_0;
+
+	/* Allocate an LV lock for the new pvmove LV, and acquire an ex lock on it */
+	if (vg_is_shared(vg) && !_lockd_pvmove_new(cmd, vg, lv_mirr, &lv_mirr_locked))
+		return_0;
+
+	/* Write VG metadata, and activate pvmove LV (lv_mirr) to start the data copying */
+	if (!_update_metadata_and_activate(lv_mirr, changed_lvs)) {
+		_lockd_pvmove_undo(cmd, vg, lv_mirr, &lv_mirr_locked);
+		return_0;
+	}
 
 	return 1;
 }
@@ -1019,17 +1057,10 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 {
 	struct pvmove_params *pp = (struct pvmove_params *) handle->custom_handle;
 	const char *lv_name = NULL;
-	struct dm_list *lvs_changed;
-	struct dm_list locked_lvs;
 	struct logical_volume *lv_mirr = NULL;
-	struct logical_volume *lv = NULL;
+	struct logical_volume *lv_move = NULL;
 	const char *pv_name = pv_dev_name(pv);
-	struct lv_list *lvl;
-	int lv_locked = 0;
-	int lv_mirr_locked = 0;
 	int r = ECMD_FAILED;
-
-	dm_list_init(&locked_lvs);
 
 	if (!vg) {
 		log_error(INTERNAL_ERROR "Missing volume group.");
@@ -1052,73 +1083,26 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 			return ECMD_FAILED;
 		}
 
-		if (!(lv = find_lv(vg, lv_name))) {
+		if (!(lv_move = find_lv(vg, lv_name))) {
 			log_error("Logical volume %s not found.", lv_name);
 			return ECMD_FAILED;
 		}
 	}
 
 	/*
-	 * In shared VGs, unnamed pvmove acquires per-LV EX locks in
-	 * _lv_is_allowed_pvmove() -- LVs locked remotely are skipped.
-	 * Sanlock internal LVs must not be moved.
+	 * Resume a pvmove that was previously created, or create a new pvmove.
 	 */
-	if (vg_is_shared(vg) && lv && lv_is_lockd_sanlock_lv(lv)) {
-		log_error("pvmove not allowed on internal sanlock LV.");
-		return ECMD_FAILED;
-	}
-
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
-		if (!_pvmove_resume(cmd, vg, lv_mirr, lv_name, pv_name,
-				    pp->pv_count, &lvs_changed,
-				    &locked_lvs, &lv_mirr_locked))
+		if (!_pvmove_resume(cmd, pp, vg, lv_mirr, lv_name, pv_name, pp->pv_count))
 			goto_out;
 	} else {
-		if (lv) {
-			if (!_lv_is_pvmoveable(lv, NULL))
-				return_ECMD_FAILED;
-
-			/*
-			 * Lock the named LV to verify no other host is using it.
-			 * Lock stays held throughout pvmove -- the LV's own
-			 * cluster lock guards it against remote activation.
-			 */
-			if (vg_is_shared(vg)) {
-				if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT)) {
-					log_error("pvmove in a shared VG requires exclusive lock on named LV.");
-					return ECMD_FAILED;
-				}
-				lv_locked = 1;
-			}
-		}
-
-		if (!_pvmove_create(cmd, vg, pv, pp, lv_name,
-				    &lv_mirr, &lvs_changed,
-				    &locked_lvs, &lv_mirr_locked))
+		if (!_pvmove_create(cmd, pp, vg, pv, lv_move))
 			goto_out;
 	}
-
-	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
-		goto_out;
 
 	pp->setup_result = ECMD_PROCESSED;
 	r = ECMD_PROCESSED;
 out:
-	if (r != ECMD_PROCESSED) {
-		if (lv_locked)
-			if (!lockd_lv(cmd, lv, "un", LDLV_PERSISTENT))
-				log_warn("WARNING: Failed to unlock LV %s.",
-					 display_lvname(lv));
-		if (lv_mirr_locked)
-			if (!lockd_lv(cmd, lv_mirr, "un", LDLV_PERSISTENT))
-				log_warn("WARNING: Failed to unlock pvmove LV %s.",
-					 display_lvname(lv_mirr));
-		dm_list_iterate_items(lvl, &locked_lvs)
-			if (!lockd_lv(cmd, lvl->lv, "un", LDLV_PERSISTENT))
-				log_warn("WARNING: Failed to unlock LV %s.",
-					 display_lvname(lvl->lv));
-	}
-
 	return r;
 }
 
