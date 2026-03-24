@@ -84,6 +84,9 @@ static int _remove_pvmove_lv(struct cmd_context *cmd, struct volume_group *vg,
 	if (vg->needs_lockd_free_lvs)
 		lockd_free_removed_lvs(cmd, vg, 1);
 
+	/* Mark lockd cleanup done so callers (e.g. _lockd_pvmove_undo) skip it */
+	lv_mirr->lock_args = NULL;
+
 	return 1;
 }
 
