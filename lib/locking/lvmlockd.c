@@ -3466,6 +3466,34 @@ void lockd_lvcreate_done(struct cmd_context *cmd, struct volume_group *vg, struc
 		log_error("Failed to unlock thin pool %s", lp->lockd_name);
 }
 
+/*
+ * If the lv is being pvmoved ("lv_is_locked"), then the
+ * associated pvmove LV must be active.
+ *
+ * lv_is_locked() means the LOCKED flag is set for the LV
+ * in VG metadata, which means the LV is linked to a pvmove
+ * operation, so the LV can only be used from the same host
+ * where the associated pvmove is active.
+ *
+ * The host with the active pvmove LV has an ex lock on the pvmove LV,
+ * and has exclusive access to all the LVs linked to that pvmove LV.
+ */
+static int _lv_pvmove_is_active(struct logical_volume *lv)
+{
+	const struct logical_volume *pvmove_lv = find_pvmove_lv_in_lv((const struct logical_volume *)lv);
+
+	/* allow lockd_lv on the pvmove LV */
+	if (lv == pvmove_lv)
+		return 1;
+
+	if (!pvmove_lv || !lv_is_active(pvmove_lv)) {
+		log_error("Locking LV %s requires associated pvmove to be active for %s",
+			  display_lvname(lv), display_lvname(pvmove_lv));
+		return 0;
+	}
+	return 1;
+}
+
 int lockd_lvremove_lock(struct cmd_context *cmd, struct logical_volume *lv,
 			struct logical_volume **lv_other, int *other_unlock)
 {
@@ -3486,6 +3514,9 @@ int lockd_lvremove_lock(struct cmd_context *cmd, struct logical_volume *lv,
 		else
 			return_0;
 		if (!lv_pool)
+			return_0;
+
+		if (lv_is_locked(lv_pool) && !_lv_pvmove_is_active(lv_pool))
 			return_0;
 
 		if (!lv_pool->lockd_thin_pool_locked) {
@@ -3521,6 +3552,9 @@ int lockd_lvremove_lock(struct cmd_context *cmd, struct logical_volume *lv,
 		if (!first_seg(lv))
 			return_0;
 		if (!(lv_pool = seg_lv(first_seg(lv), 0)))
+			return_0;
+
+		if (lv_is_locked(lv_pool) && !_lv_pvmove_is_active(lv_pool))
 			return_0;
 
 		log_debug("lockd_lvremove_lock vdo pool %s for %s", lv_pool->name, lv->name);
@@ -3712,6 +3746,9 @@ static int _lockd_lv_thin(struct cmd_context *cmd, struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_locked(pool_lv) && !_lv_pvmove_is_active(pool_lv))
+		return_0;
+
 	if (cmd->lockd_creating_thin_pool && (flags & LDLV_CREATING_THIN_POOL)) {
 		/* do it */
 		log_debug("lockd_lv_thin creating_thin_pool");
@@ -3822,6 +3859,9 @@ static int _lockd_lv_vdo(struct cmd_context *cmd, struct logical_volume *lv,
 		return 0;
 	}
 
+	if (lv_is_locked(pool_lv) && !_lv_pvmove_is_active(pool_lv))
+		return_0;
+
 	/*
 	 * Locking a locked lv (pool in this case) is a no-op.
 	 * Unlock when the pool is no longer active.
@@ -3887,6 +3927,9 @@ int lockd_lv(struct cmd_context *cmd, struct logical_volume *lv,
 
 	if (lv_is_vdo_type(lv))
 		return _lockd_lv_vdo(cmd, lv, def_mode, flags);
+
+	if (lv_is_locked(lv) && !_lv_pvmove_is_active(lv))
+		return_0;
 
 	/*
 	 * An LV with NULL lock_args does not have a lock of its own.

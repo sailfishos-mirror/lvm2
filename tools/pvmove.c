@@ -381,77 +381,6 @@ static int _trim_allocatable_for_raid(struct logical_volume *lv,
 }
 
 /*
- * Check whether the holder LV's lock state allows pvmove.
- *
- * Returns:  0 hard error (caller must abort),
- *           1 moveable (caller adds LV to moving list),
- *           2 skip this LV (caller continues to next LV).
- *
- * lv_skipped is a sticky flag: once set, it stays set across all LVs.
- * It records the fact that at least one LV was skipped (remotely locked).
- * Used only for a more informative error message when no LVs end up
- * being moved (empty pvmove mirror).
- *
- * In shared VGs: try to acquire EX lock on the holder.
- *   If the holder is already locally active, we hold EX from activation.
- *   If the holder is inactive, try lockd_lv(EX) to test for remote locks.
- *     lockd_lv fails (-EAGAIN): another host holds a lock.
- *       Named pvmove (-n): hard error (0) -- user asked for this LV.
- *       Unnamed pvmove: skip (2) -- move other LVs on the PV.
- *     lockd_lv succeeds: no remote lock, add to locked_lvs for later unlock.
- * Inactive holders (no lock, not active): proceed with metadata-only insertion.
- */
-static int _lv_is_allowed_pvmove(struct cmd_context *cmd,
-				 struct volume_group *vg,
-				 struct logical_volume *lv,
-				 const char *lv_name,
-				 const struct logical_volume *holder,
-				 int *lv_skipped,
-				 struct dm_list *locked_lvs)
-{
-	if (vg_is_shared(vg) &&
-	    !(lv_name && !strcmp(holder->name, lv_name))) {
-		/*
-		 * Skip the lock attempt when lv_name matches the holder:
-		 * the caller already holds an EX lock on the named LV.
-		 */
-		if (lv_is_active(holder))
-			return 1; /* Locally active - we hold EX from activation. */
-
-		/*
-		 * Inactive holder in shared VG: try to acquire EX lock.
-		 * If another host holds a lock, lockd_lv returns 0 (-EAGAIN).
-		 */
-		if (!lockd_lv(cmd, (struct logical_volume *)holder, "ex", LDLV_PERSISTENT)) {
-			if (lv_name) {
-				log_error("Cannot pvmove LV %s: holder %s is locked on another node.",
-					  display_lvname(lv), display_lvname(holder));
-				return 0;
-			}
-			*lv_skipped = 1;
-			log_print_unless_silent("Skipping LV %s - holder %s is locked on another node.",
-						display_lvname(lv), display_lvname(holder));
-			return 2;
-		}
-
-		return 1;
-	}
-
-	if (lv_is_active(holder))
-		return 1;
-
-	/* Holder is not active anywhere - metadata-only insertion */
-	if (holder != lv)
-		log_verbose("Holder %s is inactive, inserting pvmove mirrors for %s in metadata only.",
-			    display_lvname(holder), display_lvname(lv));
-	else
-		log_verbose("LV %s is inactive, inserting pvmove mirrors in metadata only.",
-			    display_lvname(lv));
-
-	return 1;
-}
-
-/*
  * Finalize the pvmove mirror LV: check that it has segments,
  * convert to mirrored target and split parent segments.
  *
@@ -601,8 +530,9 @@ static int _skip_remote_lvs(struct cmd_context *cmd, struct volume_group *vg,
 {
 	struct logical_volume *lv;
 	const struct logical_volume *lv_top;
-	struct lv_list *lvl, *lvl2;
+	struct lv_list *lvl, *lvl2, *lvl3;
 	int ex, sh;
+	int already_done;
 
 	if (lv_move) {
 		/* Get the top-level LV in case the user has named a sub LV to move */
@@ -637,6 +567,19 @@ static int _skip_remote_lvs(struct cmd_context *cmd, struct volume_group *vg,
 		lv = lvl->lv;
 
 		lv_top = lv_lock_holder(lv);
+
+		/* skip checking lv_top if the same lv was already checked for a previous moving_lvs entry */
+		already_done = 0;
+		dm_list_iterate_items(lvl3, moving_lvs) {
+			if (lvl3 == lvl)
+				break;
+			if (lv_lock_holder(lvl3->lv) == lv_top) {
+				already_done = 1;
+				break;
+			}
+		}
+		if (already_done)
+			continue;
 
 		if (lv_is_active(lv_top)) {
 			ex = 0;
@@ -888,21 +831,11 @@ static int _pvmove_resume(struct cmd_context *cmd,
 			  const char *pv_name,
 			  int pv_count)
 {
-	struct lv_list *lvl, *lvl2;
-	int already_done;
-
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
 		return_0;
 
 	if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name, pv_count, pv_name))
 		return_0;
-
-	/*
-	 * Nothing related to the existing pvmove/lv_mirr should be active
-	 * on this machine at this point.
-	 *
-	 * TODO: perform some sanity checks to verify this?
-	 */
 
 	/*
 	 * In a shared VG, an ex lock on the pvmove LV must be held while pvmove
