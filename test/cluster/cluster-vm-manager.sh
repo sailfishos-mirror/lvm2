@@ -876,6 +876,58 @@ cluster_vm_destroy() {
 }
 
 #
+# Storage export setup
+#
+
+cluster_vm_setup_storage_export() {
+    local node0_ip="$1"
+    local cluster_id="$2"
+
+    if [ -z "$node0_ip" ] || [ -z "$cluster_id" ]; then
+        cluster_die "cluster_vm_setup_storage_export: node0_ip and cluster_id are required"
+    fi
+
+    cluster_log "Setting up storage export on node 0 ($node0_ip)"
+
+    # Copy required scripts to node 0
+    local remote_dir="/root/cluster-scripts"
+    cluster_vm_ssh "$node0_ip" "mkdir -p $remote_dir"
+
+    cluster_log "Copying cluster scripts to node 0"
+    cluster_vm_scp "$SCRIPT_DIR/cluster-test-lib.sh" "${CLUSTER_SSH_USER}@${node0_ip}:${remote_dir}/"
+    cluster_vm_scp "$SCRIPT_DIR/cluster-storage-exporter.sh" "${CLUSTER_SSH_USER}@${node0_ip}:${remote_dir}/"
+
+    # Make scripts executable
+    cluster_vm_ssh "$node0_ip" "chmod +x ${remote_dir}/*.sh"
+
+    # Execute storage setup on node 0 with required environment variables
+    cluster_log "Executing storage export setup on node 0"
+    cluster_vm_ssh "$node0_ip" "
+        export CLUSTER_STORAGE_TYPE='${CLUSTER_STORAGE_TYPE}'
+        export CLUSTER_NUM_DEVICES='${CLUSTER_NUM_DEVICES}'
+        export CLUSTER_DEVICE_SIZE='${CLUSTER_DEVICE_SIZE}'
+        export CLUSTER_DEVICE_SECTOR_SIZE='${CLUSTER_DEVICE_SECTOR_SIZE:-512}'
+        export CLUSTER_BACKING_TYPE='${CLUSTER_BACKING_TYPE}'
+        export NODE0_IP='${node0_ip}'
+        export CLUSTER_DEBUG='${CLUSTER_DEBUG:-0}'
+
+        cd ${remote_dir}
+        ./cluster-storage-exporter.sh '${cluster_id}'
+    " || {
+        cluster_error "Failed to setup storage export on node 0"
+        return 1
+    }
+
+    cluster_log "Storage export setup complete on node 0"
+    cluster_log "  Storage type: ${CLUSTER_STORAGE_TYPE}"
+    cluster_log "  Backing type: ${CLUSTER_BACKING_TYPE}"
+    cluster_log "  Number of devices: ${CLUSTER_NUM_DEVICES}"
+    cluster_log "  Device size: ${CLUSTER_DEVICE_SIZE}MB"
+
+    return 0
+}
+
+#
 # Batch operations
 #
 
@@ -900,6 +952,9 @@ cluster_vms_create_all() {
 
     cluster_vm_setup_ssh "$node0_ip"
     cluster_vm_install_packages "$node0_ip" 0
+
+    # Set up storage export on node 0
+    cluster_vm_setup_storage_export "$node0_ip" "$cluster_id"
 
     node_ips+=("$node0_ip")
 
@@ -949,6 +1004,26 @@ cluster_vms_destroy_all() {
 
     local num_nodes="${CLUSTER_NUM_NODES:-3}"
 
+    # Clean up storage on node 0 before destroying VMs
+    local node0_vm_name=$(cluster_vm_get_name "$cluster_id" 0)
+    if virsh dominfo "$node0_vm_name" &>/dev/null; then
+        # Get node 0 IP
+        local node0_ip=$(cluster_vm_get_ip "$node0_vm_name" 2>/dev/null || true)
+        if [ -n "$node0_ip" ]; then
+            cluster_log "Cleaning up storage on node 0 ($node0_ip)"
+            # Execute storage cleanup on node 0
+            cluster_vm_ssh "$node0_ip" "
+                export CLUSTER_DEBUG='${CLUSTER_DEBUG:-0}'
+                cd /root/cluster-scripts 2>/dev/null || cd /tmp
+                if [ -f cluster-storage-exporter.sh ]; then
+                    source ./cluster-test-lib.sh
+                    source ./cluster-storage-exporter.sh
+                    cluster_storage_cleanup '${cluster_id}' '${CLUSTER_STORAGE_TYPE:-both}'
+                fi
+            " 2>/dev/null || cluster_warn "Failed to cleanup storage on node 0 (VM may be down)"
+        fi
+    fi
+
     # Destroy all nodes (0 through N)
     for node_num in $(seq 0 "$num_nodes"); do
         local vm_name=$(cluster_vm_get_name "$cluster_id" "$node_num")
@@ -968,4 +1043,5 @@ export -f cluster_vm_setup_ssh cluster_vm_ssh cluster_vm_scp
 export -f cluster_vm_install_packages
 export -f cluster_vm_deploy_lvm_source cluster_vm_deploy_sanlock_source
 export -f cluster_vm_setup_lock_manager
+export -f cluster_vm_setup_storage_export
 export -f cluster_vms_create_all cluster_vms_destroy_all
