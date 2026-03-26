@@ -297,6 +297,9 @@ static int _lv_is_pvmoveable(const struct logical_volume *lv,
 	struct logical_volume *lv_cachevol;
 	struct logical_volume *lv_orig;
 
+	if (lv_is_lockd_sanlock_lv(lv))
+		return 0;
+
 	if (lv_is_locked(lv)) {
 		log_error("LV %s is already locked by another pvmove.",
 			  display_lvname(lv));
@@ -479,11 +482,6 @@ static int _skip_unmovable_lvs(struct cmd_context *cmd, struct volume_group *vg,
 	struct logical_volume *lv;
 	const struct logical_volume *lv_top;
 	struct lv_list *lvl, *lvl2;
-
-	if (lv_move && lv_is_lockd_sanlock_lv(lv_move)) {
-		log_error("pvmove not allowed on internal sanlock LV.");
-		return 0;
-	}
 
 	dm_list_iterate_items_safe(lvl, lvl2, moving_lvs) {
 		lv = lvl->lv;
