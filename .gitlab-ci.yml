@@ -28,6 +28,7 @@ approve1:
   allow_failure: false
 
 
+# TODO: Need to test this for MRs without deployment, or better, creating and publishing artifacts in test environment
 pages:
   image: elecnix/ikiwiki
   stage: test

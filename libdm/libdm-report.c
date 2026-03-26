@@ -4624,6 +4624,7 @@ static int _row_compare(const void *a, const void *b)
 	uint32_t cnt;
 
 	for (cnt = 0; cnt < rowa->rh->keys_count; cnt++) {
+		int cmp;
 		sfa = (*rowa->sort_fields)[cnt];
 		sfb = (*rowb->sort_fields)[cnt];
 		if (sfa->props->flags &
@@ -4636,39 +4637,19 @@ static int _row_compare(const void *a, const void *b)
 			    *(const uint64_t *) sfb->sort_value;
 
 			if (numa == numb)
-				continue;
-
-			if (sfa->props->flags & FLD_ASCENDING) {
-				return (numa > numb) ? 1 : -1;
-			} else {	/* FLD_DESCENDING */
-				return (numa < numb) ? 1 : -1;
-			}
+				cmp = 0;
+			else
+				cmp = (numa > numb) ? 1 : -1;
 		} else if (sfa->props->flags & DM_REPORT_FIELD_TYPE_STRING_LIST) {
-			int cmp = strcmp(((const struct str_list_sort_value *) sfa->sort_value)->value,
+			cmp = strcmp(((const struct str_list_sort_value *) sfa->sort_value)->value,
 					((const struct str_list_sort_value *) sfb->sort_value)->value);
-
-			if (!cmp)
-				continue;
-
-			if (sfa->props->flags & FLD_ASCENDING) {
-				return (cmp > 0) ? 1 : -1;
-			} else {	/* FLD_DESCENDING */
-				return (cmp < 0) ? 1 : -1;
-			}
 		} else {
 			/* DM_REPORT_FIELD_TYPE_STRING and others */
-			int cmp = strcmp((const char *) sfa->sort_value,
+			cmp = strcmp((const char *) sfa->sort_value,
 					(const char *) sfb->sort_value);
-
-			if (!cmp)
-				continue;
-
-			if (sfa->props->flags & FLD_ASCENDING) {
-				return (cmp > 0) ? 1 : -1;
-			} else {	/* FLD_DESCENDING */
-				return (cmp < 0) ? 1 : -1;
-			}
 		}
+		if (cmp)
+			return cmp * (sfa->props->flags & FLD_ASCENDING ? 1 : -1);
 	}
 
 	return 0;		/* Identical */
