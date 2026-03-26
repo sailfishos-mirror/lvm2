@@ -214,14 +214,40 @@ cluster_state_save() {
         echo "# Generated: $(date)"
         echo "CLUSTER_ID=\"$cluster_id\""
 
-        # Export all CLUSTER_* variables
+        # Explicitly save important configuration variables
+        # (using explicit list to ensure they're saved even if not exported)
+        [ -n "${CLUSTER_NUM_NODES:-}" ] && echo "CLUSTER_NUM_NODES=$CLUSTER_NUM_NODES"
+        [ -n "${CLUSTER_STORAGE_TYPE:-}" ] && echo "CLUSTER_STORAGE_TYPE=\"$CLUSTER_STORAGE_TYPE\""
+        [ -n "${CLUSTER_NUM_DEVICES:-}" ] && echo "CLUSTER_NUM_DEVICES=$CLUSTER_NUM_DEVICES"
+        [ -n "${CLUSTER_DEVICE_SIZE:-}" ] && echo "CLUSTER_DEVICE_SIZE=$CLUSTER_DEVICE_SIZE"
+        [ -n "${CLUSTER_BACKING_TYPE:-}" ] && echo "CLUSTER_BACKING_TYPE=\"$CLUSTER_BACKING_TYPE\""
+        [ -n "${CLUSTER_MULTIPATH_ENABLE:-}" ] && echo "CLUSTER_MULTIPATH_ENABLE=$CLUSTER_MULTIPATH_ENABLE"
+        [ -n "${CLUSTER_LOCK_TYPE:-}" ] && echo "CLUSTER_LOCK_TYPE=\"$CLUSTER_LOCK_TYPE\""
+        [ -n "${CLUSTER_SSH_KEY_DIR:-}" ] && echo "CLUSTER_SSH_KEY_DIR=\"$CLUSTER_SSH_KEY_DIR\""
+        [ -n "${CLUSTER_SSH_USER:-}" ] && echo "CLUSTER_SSH_USER=\"$CLUSTER_SSH_USER\""
+        [ -n "${CLUSTER_USE_SOURCE:-}" ] && echo "CLUSTER_USE_SOURCE=$CLUSTER_USE_SOURCE"
+        [ -n "${SANLOCK_USE_SOURCE:-}" ] && echo "SANLOCK_USE_SOURCE=$SANLOCK_USE_SOURCE"
+
+        # Also save any other CLUSTER_* variables that are exported
         env | grep '^CLUSTER_' | while IFS='=' read -r key value; do
-            # Properly escape the value
+            # Skip ones we already saved explicitly
+            case "$key" in
+                CLUSTER_ID|CLUSTER_NUM_NODES|CLUSTER_STORAGE_TYPE|CLUSTER_NUM_DEVICES|\
+                CLUSTER_DEVICE_SIZE|CLUSTER_BACKING_TYPE|CLUSTER_MULTIPATH_ENABLE|\
+                CLUSTER_LOCK_TYPE|CLUSTER_SSH_KEY_DIR|CLUSTER_SSH_USER|CLUSTER_USE_SOURCE)
+                    continue
+                    ;;
+            esac
             printf '%s=%q\n' "$key" "$value"
         done
 
         # Export SANLOCK_* variables
         env | grep '^SANLOCK_' | while IFS='=' read -r key value; do
+            case "$key" in
+                SANLOCK_USE_SOURCE)
+                    continue
+                    ;;
+            esac
             printf '%s=%q\n' "$key" "$value"
         done
 

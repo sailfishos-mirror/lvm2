@@ -318,9 +318,17 @@ cluster_vm_install_packages() {
 
         # Always install initiator tools
         if [[ "$pkg_mgr" =~ ^(dnf|yum)$ ]]; then
-            packages+=(iscsi-initiator-utils nvme-cli sg3_utils device-mapper-multipath)
+            packages+=(iscsi-initiator-utils nvme-cli sg3_utils)
+            # Add multipath if enabled
+            if [ "${CLUSTER_MULTIPATH_ENABLE:-0}" = "1" ]; then
+                packages+=(device-mapper-multipath)
+            fi
         else
-            packages+=(open-iscsi nvme-cli sg3-utils multipath-tools)
+            packages+=(open-iscsi nvme-cli sg3-utils)
+            # Add multipath if enabled
+            if [ "${CLUSTER_MULTIPATH_ENABLE:-0}" = "1" ]; then
+                packages+=(multipath-tools)
+            fi
         fi
 
         # LVM packages or build dependencies
@@ -928,6 +936,56 @@ cluster_vm_setup_storage_export() {
 }
 
 #
+# Storage import setup
+#
+
+cluster_vm_setup_storage_import() {
+    local node_ip="$1"
+    local node_num="$2"
+    local node0_ip="$3"
+    local cluster_id="$4"
+
+    if [ -z "$node_ip" ] || [ -z "$node_num" ] || [ -z "$node0_ip" ] || [ -z "$cluster_id" ]; then
+        cluster_die "cluster_vm_setup_storage_import: all arguments are required"
+    fi
+
+    cluster_log "Setting up storage import on node $node_num ($node_ip)"
+
+    # Copy storage importer script to test node
+    local remote_dir="/root/cluster-scripts"
+    cluster_vm_ssh "$node_ip" "mkdir -p $remote_dir"
+
+    cluster_debug "Copying cluster-storage-importer.sh to node $node_num"
+    cluster_vm_scp "$SCRIPT_DIR/cluster-storage-importer.sh" "${CLUSTER_SSH_USER}@${node_ip}:${remote_dir}/"
+
+    # Copy cluster-test-lib.sh (needed by storage importer)
+    cluster_debug "Copying cluster-test-lib.sh to node $node_num"
+    cluster_vm_scp "$SCRIPT_DIR/cluster-test-lib.sh" "${CLUSTER_SSH_USER}@${node_ip}:${remote_dir}/"
+
+    # Make scripts executable
+    cluster_vm_ssh "$node_ip" "chmod +x ${remote_dir}/*.sh"
+
+    # Execute storage import on test node with required environment variables
+    cluster_log "Executing storage import on node $node_num"
+    cluster_vm_ssh "$node_ip" "
+        export CLUSTER_STORAGE_TYPE='${CLUSTER_STORAGE_TYPE}'
+        export CLUSTER_MULTIPATH_ENABLE='${CLUSTER_MULTIPATH_ENABLE:-0}'
+        export NODE0_IP='${node0_ip}'
+        export THIS_NODE_IP='${node_ip}'
+        export CLUSTER_DEBUG='${CLUSTER_DEBUG:-0}'
+
+        cd ${remote_dir}
+        ./cluster-storage-importer.sh '${cluster_id}' '${node_num}'
+    " || {
+        cluster_error "Failed to import storage on node $node_num"
+        return 1
+    }
+
+    cluster_log "Storage import complete on node $node_num"
+    return 0
+}
+
+#
 # Batch operations
 #
 
@@ -985,7 +1043,18 @@ cluster_vms_create_all() {
 
     cluster_log "All VMs created, node IPs: ${CLUSTER_NODE_IPS[*]}"
 
+    # Import storage on test nodes from node 0
+    cluster_log "Setting up storage import on test nodes"
+    for node_num in $(seq 1 "$num_nodes"); do
+        local node_ip="${CLUSTER_NODE_IPS[$node_num]}"
+        cluster_vm_setup_storage_import "$node_ip" "$node_num" "$node0_ip" "$cluster_id" || {
+            cluster_error "Failed to setup storage import on node $node_num"
+            return 1
+        }
+    done
+
     # Now set up lock managers (requires all node IPs for DLM/corosync)
+    cluster_log "Setting up lock managers on test nodes"
     for node_num in $(seq 1 "$num_nodes"); do
         local node_ip="${CLUSTER_NODE_IPS[$node_num]}"
         cluster_vm_setup_lock_manager "$node_ip" "$node_num"
@@ -1043,5 +1112,5 @@ export -f cluster_vm_setup_ssh cluster_vm_ssh cluster_vm_scp
 export -f cluster_vm_install_packages
 export -f cluster_vm_deploy_lvm_source cluster_vm_deploy_sanlock_source
 export -f cluster_vm_setup_lock_manager
-export -f cluster_vm_setup_storage_export
+export -f cluster_vm_setup_storage_export cluster_vm_setup_storage_import
 export -f cluster_vms_create_all cluster_vms_destroy_all
