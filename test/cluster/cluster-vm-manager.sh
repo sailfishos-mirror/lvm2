@@ -309,22 +309,22 @@ cluster_vm_install_packages() {
         # Node 0: Storage exporter packages
         cluster_log "Installing storage exporter packages on node 0"
         if [[ "$pkg_mgr" =~ ^(dnf|yum)$ ]]; then
-            packages+=(targetcli python3-rtslib nvme-cli sg3_utils)
+            packages+=(targetcli python3-rtslib nvme-cli sg3_utils jq)
         else
-            packages+=(targetcli-fb nvme-cli sg3-utils)
+            packages+=(targetcli-fb nvme-cli sg3-utils jq)
         fi
     else
         # Test nodes (1..N): Install based on configuration
 
         # Always install initiator tools
         if [[ "$pkg_mgr" =~ ^(dnf|yum)$ ]]; then
-            packages+=(iscsi-initiator-utils nvme-cli sg3_utils)
+            packages+=(iscsi-initiator-utils nvme-cli sg3_utils jq)
             # Add multipath if enabled
             if [ "${CLUSTER_MULTIPATH_ENABLE:-0}" = "1" ]; then
                 packages+=(device-mapper-multipath)
             fi
         else
-            packages+=(open-iscsi nvme-cli sg3-utils)
+            packages+=(open-iscsi nvme-cli sg3-utils jq)
             # Add multipath if enabled
             if [ "${CLUSTER_MULTIPATH_ENABLE:-0}" = "1" ]; then
                 packages+=(multipath-tools)
