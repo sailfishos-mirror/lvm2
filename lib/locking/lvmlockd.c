@@ -3639,10 +3639,21 @@ int lockd_lvremove_lock(struct cmd_context *cmd, struct logical_volume *lv,
 		 * path where the LV is not removed, or the transient lock
 		 * will be unlocked before free_lv.
 		 */
-		log_debug("lockd_lvremove_lock %s", lv->name);
+		/*
+		 * LOCKED LVs participate in an in-progress pvmove.
+		 * Skip the lockd_lv call -- the pvmove activity guard
+		 * in lockd_lv() would reject it when pvmove is not
+		 * active locally (e.g. after interrupted pvmove --abort).
+		 * The VG write lock already protects the removal.
+		 */
+		if (lv_is_locked(lv)) {
+			log_debug("lockd_lvremove_lock skip locked %s.", lv->name);
+		} else {
+			log_debug("lockd_lvremove_lock %s.", lv->name);
 
-		if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT))
-			return_0;
+			if (!lockd_lv(cmd, lv, "ex", LDLV_PERSISTENT))
+				return_0;
+		}
 	}
 
 	return 1;
