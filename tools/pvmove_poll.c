@@ -85,17 +85,18 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	struct lv_list *lvl;
 	struct lvinfo info;
 
-	if (!dm_list_empty(lvs_changed) &&
-	    !_detach_pvmove_mirror(cmd, lv_mirr)) {
-		log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
-			  display_lvname(lv_mirr));
-		return 0;
-	}
+	if (!dm_list_empty(lvs_changed)) {
+		if (!_detach_pvmove_mirror(cmd, lv_mirr)) {
+			log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
 
-	if (!lv_is_error(lv_mirr)) {
-		log_error(INTERNAL_ERROR "ABORTING: Failed to replace %s with error segment.",
-			  display_lvname(lv_mirr));
-		return 0;
+		if (!lv_is_error(lv_mirr)) {
+			log_error(INTERNAL_ERROR "ABORTING: Failed to replace %s with error segment.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
 	}
 
 	if (!lv_update_and_reload(lv_mirr))
