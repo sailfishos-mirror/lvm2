@@ -363,6 +363,49 @@ static int _trim_allocatable_for_raid(struct logical_volume *lv,
 	return 1;
 }
 
+/*
+ * Finalize the pvmove mirror LV: check that it has segments,
+ * convert to mirrored target and split parent segments.
+ *
+ * lv_skipped: at least one LV was skipped (locked/inactive) --
+ * used for a more informative error message when mirror is empty.
+ */
+static int _finalize_pvmove_lv(struct cmd_context *cmd,
+			       struct logical_volume *lv_mirr,
+			       struct dm_list *allocatable_pvs,
+			       alloc_policy_t alloc,
+			       int lv_skipped)
+{
+	uint32_t log_count = 0;
+
+	/* Is temporary mirror empty? */
+	if (!lv_mirr->le_count) {
+		/* lv_skipped: at least one LV was skipped (locked/remote) */
+		if (lv_skipped)
+			log_error("All data on source PV skipped. "
+				  "It contains locked, hidden or "
+				  "non-top level LVs only.");
+		log_error("No data to move for %s.", lv_mirr->vg->name);
+		return 0;
+	}
+
+	if (!lv_add_mirrors(cmd, lv_mirr, 1, 1, 0,
+			    get_default_region_size(cmd),
+			    log_count, allocatable_pvs, alloc,
+			    (arg_is_set(cmd, atomic_ARG)) ?
+			    MIRROR_BY_SEGMENTED_LV : MIRROR_BY_SEG)) {
+		log_error("Failed to convert pvmove LV to mirrored.");
+		return 0;
+	}
+
+	if (!split_parent_segments_for_layer(cmd, lv_mirr)) {
+		log_error("Failed to split segments being moved.");
+		return 0;
+	}
+
+	return 1;
+}
+
 /* Create new LV with mirror segments for the required copies */
 static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 						struct volume_group *vg,
@@ -376,7 +419,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	struct logical_volume *lv_mirr, *lv;
 	struct lv_segment *seg;
 	struct lv_list *lvl;
-	uint32_t log_count = 0;
 	int lv_found = 0;
 	int lv_skipped = 0;
 	int needs_exclusive = *exclusive;
@@ -514,29 +556,9 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		return NULL;
 	}
 
-	/* Is temporary mirror empty? */
-	if (!lv_mirr->le_count) {
-		if (lv_skipped)
-			log_error("All data on source PV skipped. "
-				  "It contains locked, hidden or "
-				  "non-top level LVs only.");
-		log_error("No data to move for %s.", vg->name);
+	if (!_finalize_pvmove_lv(cmd, lv_mirr, allocatable_pvs,
+				 alloc, lv_skipped))
 		return NULL;
-	}
-
-	if (!lv_add_mirrors(cmd, lv_mirr, 1, 1, 0,
-			    get_default_region_size(cmd),
-			    log_count, allocatable_pvs, alloc,
-			    (arg_is_set(cmd, atomic_ARG)) ?
-			    MIRROR_BY_SEGMENTED_LV : MIRROR_BY_SEG)) {
-		log_error("Failed to convert pvmove LV to mirrored.");
-		return NULL;
-	}
-
-	if (!split_parent_segments_for_layer(cmd, lv_mirr)) {
-		log_error("Failed to split segments being moved.");
-		return NULL;
-	}
 
 	if (needs_exclusive)
 		*exclusive = 1;
