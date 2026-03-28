@@ -566,26 +566,11 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	return lv_mirr;
 }
 
-static int _activate_lv(struct cmd_context *cmd, struct logical_volume *lv_mirr,
-			unsigned exclusive)
-{
-	int r = 0;
-
-	r = activate_lv(cmd, lv_mirr);
-
-	if (!r)
-		stack;
-
-	return r;
-}
-
 /*
  * Called to set up initial pvmove LV only.
  * (Not called after first or any other section completes.)
  */
-static int _update_metadata(struct logical_volume *lv_mirr,
-			    struct dm_list *lvs_changed,
-			    unsigned exclusive)
+static int _update_metadata_and_activate(struct logical_volume *lv_mirr, struct dm_list *lvs_changed)
 {
 	struct lv_list *lvl;
 	struct logical_volume *lv = lv_mirr;
@@ -600,7 +585,7 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 		return_0;
 
 	/* Ensure mirror LV is active */
-	if (!_activate_lv(lv_mirr->vg->cmd, lv_mirr, exclusive)) {
+	if (!activate_lv(lv_mirr->vg->cmd, lv_mirr)) {
 		if (test_mode())
 			return 1;
 
@@ -728,7 +713,7 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 		}
 
 		/* Ensure mirror LV is active */
-		if (!_activate_lv(cmd, lv_mirr, exclusive)) {
+		if (!activate_lv(cmd, lv_mirr)) {
 			log_error("ABORTING: Temporary mirror activation failed.");
 			goto out;
 		}
@@ -766,7 +751,7 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 		goto_out;
 
 	if (flags & PVMOVE_FIRST_TIME)
-		if (!_update_metadata(lv_mirr, lvs_changed, exclusive))
+		if (!_update_metadata_and_activate(lv_mirr, lvs_changed))
 			goto_out;
 
 	/* LVs are all in status LOCKED */
