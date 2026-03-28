@@ -121,119 +121,6 @@ static struct dm_list *_get_allocatable_pvs(struct cmd_context *cmd, int argc,
 }
 
 /*
- * If @lv_name's a RAID SubLV, check for any PVs
- * on @trim_list holding it's sibling (rimage/rmeta)
- * and remove it from the @trim_list in order to allow
- * for pvmove collocation of DataLV/MetaLV pairs.
- */
-static int _remove_sibling_pvs_from_trim_list(struct logical_volume *lv,
-					      const char *lv_name,
-					      struct dm_list *trim_list)
-{
-	struct logical_volume *sibling_lv = NULL;
-	struct lv_segment *raid_seg = first_seg(lv);
-	struct dm_list sibling_pvs, *pvh1, *pvh2;
-	struct pv_list *pvl1, *pvl2;
-	uint32_t s;
-
-	/* Early return when collocation is not applicable */
-	if (!lv_name || !*lv_name ||
-	    !seg_is_raid(raid_seg) ||
-	    seg_is_raid0(raid_seg) ||
-	    !strcmp(lv->name, lv_name))
-		return 1;
-
-	/* Search within RAID sub-LVs and find sibling */
-	for (s = 0; s < raid_seg->area_count; s++) {
-		/* Check if this rimage matches lv_name */
-		if (seg_lv(raid_seg, s) && !strcmp(seg_lv(raid_seg, s)->name, lv_name)) {
-			/* Found rimage, sibling is rmeta at same index */
-			if (raid_seg->meta_areas)
-				sibling_lv = seg_metalv(raid_seg, s);
-			break;
-		}
-		/* Check if this rmeta matches lv_name */
-		if (raid_seg->meta_areas && seg_metalv(raid_seg, s) &&
-		    !strcmp(seg_metalv(raid_seg, s)->name, lv_name)) {
-			/* Found rmeta, sibling is rimage at same index */
-			sibling_lv = seg_lv(raid_seg, s);
-			break;
-		}
-	}
-
-	if (!sibling_lv) {
-		log_debug("No sibling found for %s (not a RAID sub-LV).", lv_name);
-		return 1; /* Not an error - might not be a RAID sub-LV */
-	}
-
-	/* Get PV list for the sibling LV */
-	dm_list_init(&sibling_pvs);
-	if (!get_pv_list_for_lv(lv->vg->cmd->mem, sibling_lv, &sibling_pvs)) {
-		log_error("Can't find PVs for sibling LV %s.", sibling_lv->name);
-		return 0;
-	}
-
-	/* Remove sibling PVs from trim_list */
-	dm_list_iterate(pvh1, &sibling_pvs) {
-		pvl1 = dm_list_item(pvh1, struct pv_list);
-
-		dm_list_iterate(pvh2, trim_list) {
-			pvl2 = dm_list_item(pvh2, struct pv_list);
-
-			if (pvl1->pv == pvl2->pv) {
-				log_debug("Removing PV %s from trim list (sibling of %s).",
-					  pvl2->pv->dev->pvid, lv_name);
-				dm_list_del(&pvl2->list);
-				break;  /* PV found and removed, continue with next sibling PV */
-			}
-		}
-	}
-
-	return 1;
-}
-
-/*
- * _trim_allocatable_pvs
- * @alloc_list
- * @trim_list
- *
- * Remove PVs in 'trim_list' from 'alloc_list'.
- *
- * Returns: 1 on success, 0 on error
- */
-static int _trim_allocatable_pvs(struct dm_list *alloc_list,
-				 struct dm_list *trim_list,
-				 alloc_policy_t alloc)
-{
-	struct dm_list *pvht, *pvh, *trim_pvh;
-	struct pv_list *pvl, *trim_pvl;
-
-	if (!alloc_list) {
-		log_error(INTERNAL_ERROR "alloc_list is NULL.");
-		return 0;
-	}
-
-	if (!trim_list || dm_list_empty(trim_list))
-		return 1; /* alloc_list stays the same */
-
-	dm_list_iterate_safe(pvh, pvht, alloc_list) {
-		pvl = dm_list_item(pvh, struct pv_list);
-
-		dm_list_iterate(trim_pvh, trim_list) {
-			trim_pvl = dm_list_item(trim_pvh, struct pv_list);
-
-			/* Don't allocate onto a trim PV */
-			if ((alloc != ALLOC_ANYWHERE) &&
-			    (pvl->pv == trim_pvl->pv)) {
-				dm_list_del(&pvl->list);
-				break;  /* goto next in alloc_list */
-			}
-		}
-	}
-	return 1;
-}
-
-/*
  * Replace any LV segments on given PV with temporary mirror.
  * Affected LVs are added to lvs_changed.
  */
@@ -351,42 +238,33 @@ static int _lv_is_pvmoveable(const struct logical_volume *lv,
 }
 
 /*
- * For RAID or mirror LVs, exclude PVs used by the LV from
- * allocatable_pvs to maintain redundancy during pvmove.
- *
- * FIXME: Eliminating entire PVs places too many restrictions
- *        on allocation.
- */
-static int _trim_allocatable_for_raid(struct logical_volume *lv,
-				      const char *lv_name,
-				      struct dm_list *allocatable_pvs,
-				      alloc_policy_t alloc)
-{
-	struct dm_list trim_list;
-
-	dm_list_init(&trim_list);
-
-	if (!get_pv_list_for_lv(lv->vg->cmd->mem, lv, &trim_list))
-		return_0;
-
-	/*
-	 * Remove any PVs holding SubLV siblings to allow
-	 * for collocation (e.g. *rmeta_0 -> *rimage_0).
-	 *
-	 * Callee checks for lv_name and valid raid segment type.
-	 */
-	if (!_remove_sibling_pvs_from_trim_list(lv, lv_name, &trim_list))
-		return_0;
-
-	if (!_trim_allocatable_pvs(allocatable_pvs, &trim_list, alloc))
-		return_0;
-
-	return 1;
-}
-
-/*
  * Finalize the pvmove mirror LV: check that it has segments,
  * convert to mirrored target and split parent segments.
+ *
+ * RAID/mirror redundancy during pvmove:
+ *
+ * When moving RAID sub-LVs, the mirror allocation must avoid placing
+ * the new copy on a PV that already holds a sibling sub-LV of the
+ * same RAID array (otherwise redundancy is broken).
+ *
+ * This is handled per-segment inside the allocator via parallel_areas,
+ * built by build_parallel_areas_from_lv() in lv_manip.c.  Each pvmove
+ * segment links back to its source sub-LV through pvmove_source_seg.
+ * _add_raid_exclusion_pvs() uses that link to find the RAID parent,
+ * then adds PVs of all sibling sub-LVs to the segment's avoidance
+ * list -- except the same-index partner (rmeta<->rimage collocation).
+ *
+ * The call path is:
+ *   lv_add_mirrors(MIRROR_BY_SEG)
+ *     -> _add_mirrors_that_preserve_segments()  [mirror.c]
+ *       -> build_parallel_areas_from_lv(lv_mirr, use_pvmove_parent=1)
+ *            per segment: _add_raid_exclusion_pvs()  [lv_manip.c]
+ *       -> allocate_extents(parallel_areas)
+ *
+ * Because parallel_areas is per-segment, each RAID LV gets its own
+ * exclusion constraint -- unlike global PV exclusion which would
+ * remove PVs from allocatable_pvs for ALL LVs at once, potentially
+ * blocking moves that are individually valid.
  */
 static int _finalize_pvmove_lv(struct cmd_context *cmd,
 			       struct logical_volume *lv_mirr,
@@ -615,55 +493,6 @@ static int _skip_remote_lvs(struct cmd_context *cmd,
 				dm_list_add(&remote_tops, &lvl3->list);
 			}
 		}
-	}
-
-	return 1;
-}
-
-/*
- * Trim allocatable PVs to maintain RAID/mirror redundancy.
- *
- * For each unique RAID or mirror holder of the moving LVs,
- * remove PVs used by sibling sub-LVs from the allocation pool.
- *
- * FIXME: Eliminating entire PVs places too many restrictions
- *        on allocation.
- */
-static int _trim_allocatable_pvs_for_raid(struct logical_volume *lv_move,
-					  struct dm_list *moving_lvs,
-					  struct dm_list *allocatable_pvs,
-					  alloc_policy_t alloc)
-{
-	struct lv_list *lvl, *lvl2;
-	const struct logical_volume *lv_top;
-	struct lv_segment *seg;
-	int already_done;
-
-	dm_list_iterate_items(lvl, moving_lvs) {
-		/* Note: "lock holder" is old terminology, it is really just the top LV of a sub LV. */
-		lv_top = lv_lock_holder(lvl->lv);
-
-		seg = first_seg(lv_top);
-		if (!seg_is_raid(seg) && !seg_is_mirrored(seg))
-			continue;
-
-		/* Dedup: skip if same lv_top already processed */
-		already_done = 0;
-		dm_list_iterate_items(lvl2, moving_lvs) {
-			if (lvl2 == lvl)
-				break;
-			if (lv_lock_holder(lvl2->lv) == lv_top) {
-				already_done = 1;
-				break;
-			}
-		}
-		if (already_done)
-			continue;
-
-		if (!_trim_allocatable_for_raid((struct logical_volume *)lv_top,
-						lv_move ? lv_move->name : NULL,
-						allocatable_pvs, alloc))
-			return_0;
 	}
 
 	return 1;
@@ -972,11 +801,6 @@ static int _pvmove_create(struct cmd_context *cmd,
 
 	/* Create a new mirror LV named "pvmove%d" */
 	if (!(lv_mirr = _create_pvmove_lv(cmd, vg)))
-		return_0;
-
-	/* Eliminate entries from allocatable_pvs based on raid LV restrictions */
-	if (!_trim_allocatable_pvs_for_raid(lv_move, &moving_lvs,
-					    allocatable_pvs, pp->alloc))
 		return_0;
 
 	/* Insert mirrors and convert to mirrored target */
