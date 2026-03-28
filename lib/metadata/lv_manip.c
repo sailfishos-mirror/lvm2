@@ -7543,6 +7543,93 @@ static int _add_pvs(struct cmd_context *cmd, struct pv_segment *peg,
 }
 
 /*
+ * Add all PVs of an LV to the segment PV avoidance list.
+ * PVs already in the list are skipped (dedup).
+ */
+static int _add_pvs_from_lv(struct cmd_context *cmd,
+			     struct logical_volume *lv,
+			     struct seg_pvs *spvs)
+{
+	struct dm_list sub_pvs;
+	struct pv_list *pvl;
+	struct dm_list *pvh, *tmp;
+
+	dm_list_init(&sub_pvs);
+
+	if (!get_pv_list_for_lv(cmd->mem, lv, &sub_pvs))
+		return_0;
+
+	dm_list_iterate_safe(pvh, tmp, &sub_pvs) {
+		pvl = dm_list_item(pvh, struct pv_list);
+
+		if (!find_pv_in_pv_list(&spvs->pvs, pvl->pv)) {
+			dm_list_del(&pvl->list);
+			dm_list_add(&spvs->pvs, &pvl->list);
+		}
+	}
+
+	return 1;
+}
+
+/*
+ * For pvmove of RAID/mirror sub-LVs, add PVs used by sibling
+ * sub-LVs to the segment avoidance list to maintain redundancy.
+ *
+ * Skip the source sub-LV (already in avoidance list) and its
+ * same-index partner (rmeta<->rimage collocation allowed).
+ */
+static int _add_raid_exclusion_pvs(struct cmd_context *cmd,
+				   struct logical_volume *source_lv,
+				   struct seg_pvs *spvs)
+{
+	const struct logical_volume *parent_lv = lv_lock_holder(source_lv);
+	struct logical_volume *sibling_lv = NULL;
+	struct lv_segment *raid_seg;
+	uint32_t s;
+
+	if (parent_lv == source_lv)
+		return 1;
+
+	raid_seg = first_seg(parent_lv);
+
+	if (!seg_is_raid(raid_seg) && !seg_is_mirrored(raid_seg))
+		return 1;
+
+	/* Find same-index sibling to allow collocation (RAID with meta) */
+	if (seg_is_raid(raid_seg) &&
+	    !seg_is_raid0(raid_seg) &&
+	    raid_seg->meta_areas) {
+		for (s = 0; s < raid_seg->area_count; s++) {
+			if (seg_lv(raid_seg, s) == source_lv) {
+				sibling_lv = seg_metalv(raid_seg, s);
+				break;
+			}
+
+			if (seg_metalv(raid_seg, s) == source_lv) {
+				sibling_lv = seg_lv(raid_seg, s);
+				break;
+			}
+		}
+	}
+
+	/* Add PVs of all sub-LVs except source and its sibling */
+	for (s = 0; s < raid_seg->area_count; s++) {
+		if (seg_lv(raid_seg, s) != source_lv &&
+		    seg_lv(raid_seg, s) != sibling_lv)
+			if (!_add_pvs_from_lv(cmd, seg_lv(raid_seg, s), spvs))
+				return_0;
+
+		if (seg_is_raid(raid_seg) && raid_seg->meta_areas &&
+		    seg_metalv(raid_seg, s) != source_lv &&
+		    seg_metalv(raid_seg, s) != sibling_lv)
+			if (!_add_pvs_from_lv(cmd, seg_metalv(raid_seg, s), spvs))
+				return_0;
+	}
+
+	return 1;
+}
+
+/*
  * build_parallel_areas_from_lv
  * @lv
  * @use_pvmove_parent_lv
@@ -7606,6 +7693,12 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 				  use_pvmove_parent_lv ? seg->pvmove_source_seg : NULL,
 				  &spvs->len,
 				  0, 0, -1, 0, _add_pvs, (void *) spvs))
+			return_NULL;
+
+		/* For RAID/mirror pvmove, also exclude PVs of sibling sub-LVs */
+		if (use_pvmove_parent_lv &&
+		    !_add_raid_exclusion_pvs(cmd,
+					     seg->pvmove_source_seg->lv, spvs))
 			return_NULL;
 
 		current_le = spvs->le + spvs->len;
