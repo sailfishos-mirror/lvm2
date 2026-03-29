@@ -291,6 +291,78 @@ static int _sub_lv_of(struct logical_volume *lv, const char *lv_name)
 	return _sub_lv_of(seg->lv, lv_name);
 }
 
+/* Return 0 if the top-level LV cannot be pvmoved. source_pvl may be NULL. */
+static int _lv_is_pvmoveable(const struct logical_volume *lv,
+			     struct dm_list *source_pvl)
+{
+	struct logical_volume *lv_cachevol;
+
+	if (lv_is_converting(lv) || lv_is_merging(lv)) {
+		log_error("Unable to pvmove when %s volume %s is present.",
+			  lv_is_converting(lv) ? "converting" : "merging",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (lv_is_writecache_cachevol(lv)) {
+		log_error("Unable to pvmove device used for writecache.");
+		return 0;
+	}
+
+	if (lv_is_writecache(lv)) {
+		lv_cachevol = first_seg(lv)->writecache;
+		if (source_pvl && lv_is_on_pvs(lv_cachevol, source_pvl)) {
+			log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
+			return 0;
+		}
+	}
+
+	if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
+		log_error("Unable to pvmove device used for raid with integrity.");
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * For RAID or mirror LVs, exclude PVs used by the LV from
+ * allocatable_pvs to maintain redundancy during pvmove.
+ *
+ * FIXME: Eliminating entire PVs places too many restrictions
+ *        on allocation.
+ */
+static int _trim_allocatable_for_raid(struct logical_volume *lv,
+				      const char *lv_name,
+				      struct dm_list *allocatable_pvs,
+				      alloc_policy_t alloc)
+{
+	struct lv_segment *seg = first_seg(lv);
+	struct dm_list trim_list;
+
+	if (!seg_is_raid(seg) && !seg_is_mirrored(seg))
+		return 1;
+
+	dm_list_init(&trim_list);
+
+	if (!get_pv_list_for_lv(lv->vg->cmd->mem, lv, &trim_list))
+		return_0;
+
+	/*
+	 * Remove any PVs holding SubLV siblings to allow
+	 * for collocation (e.g. *rmeta_0 -> *rimage_0).
+	 *
+	 * Callee checks for lv_name and valid raid segment type.
+	 */
+	if (!_remove_sibling_pvs_from_trim_list(lv, lv_name, &trim_list))
+		return_0;
+
+	if (!_trim_allocatable_pvs(allocatable_pvs, &trim_list, alloc))
+		return_0;
+
+	return 1;
+}
+
 /* Create new LV with mirror segments for the required copies */
 static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 						struct volume_group *vg,
@@ -304,7 +376,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	struct logical_volume *lv_mirr, *lv;
 	struct lv_segment *seg;
 	struct lv_list *lvl;
-	struct dm_list trim_list;
 	uint32_t log_count = 0;
 	int lv_found = 0;
 	int lv_skipped = 0;
@@ -339,9 +410,6 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 	 * majority of cases, however, this method will suffice and
 	 * in the cases where it does not, the user can issue the
 	 * pvmove on a per-LV basis.
-	 *
-	 * FIXME: Eliminating entire PVs places too many restrictions
-	 *        on allocation.
 	 */
 	dm_list_iterate_items(lvl, &vg->lvs) {
 		lv = lvl->lv;
@@ -359,31 +427,8 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 		if (!lv_is_on_pvs(lv, source_pvl))
 			continue;
 
-		if (lv_is_converting(lv) || lv_is_merging(lv)) {
-			log_error("Unable to pvmove when %s volume %s is present.",
-				  lv_is_converting(lv) ? "converting" : "merging",
-				  display_lvname(lv));
+		if (!_lv_is_pvmoveable(lv, source_pvl))
 			return NULL;
-		}
-
-		if (lv_is_writecache_cachevol(lv)) {
-			log_error("Unable to pvmove device used for writecache.");
-			return NULL;
-		}
-
-		if (lv_is_writecache(lv)) {
-			struct logical_volume *lv_cachevol = first_seg(lv)->writecache;
-			if (lv_is_on_pvs(lv_cachevol, source_pvl)) {
-				log_error("Unable to move device used for writecache cachevol %s.", display_lvname(lv_cachevol));
-				return NULL;
-			}
-
-		}
-
-		if (lv_is_raid(lv) && lv_raid_has_integrity(lv)) {
-			log_error("Unable to pvmove device used for raid with integrity.");
-			return NULL;
-		}
 
 		seg = first_seg(lv);
 		if (!needs_exclusive) {
@@ -396,25 +441,8 @@ static struct logical_volume *_set_up_pvmove_lv(struct cmd_context *cmd,
 				needs_exclusive = 1;
 		}
 
-		if (seg_is_raid(seg) || seg_is_mirrored(seg)) {
-			dm_list_init(&trim_list);
-
-			if (!get_pv_list_for_lv(vg->cmd->mem, lv, &trim_list))
-				return_NULL;
-
-			/*
-			 * Remove any PVs holding SubLV siblings to allow
-			 * for collocation (e.g. *rmeta_0 -> *rimage_0).
-			 *
-			 * Callee checks for lv_name and valid raid segment type.
-			 */
-			if (!_remove_sibling_pvs_from_trim_list(lv, lv_name, &trim_list))
-				return_NULL;
-
-			if (!_trim_allocatable_pvs(allocatable_pvs,
-						   &trim_list, alloc))
-				return_NULL;
-		}
+		if (!_trim_allocatable_for_raid(lv, lv_name, allocatable_pvs, alloc))
+			return_NULL;
 	}
 
 	/*
