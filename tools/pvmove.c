@@ -961,10 +961,13 @@ int pvmove(struct cmd_context *cmd, int argc, char **argv)
 		return ECMD_FAILED;
 	}
 
-	if (lvmlockd_use() && !argc) {
+	if (lvmlockd_use() && !argc && !is_abort) {
 		/*
 		 * FIXME: move process_each_vg from polldaemon up to here,
 		 * then we can remove this limitation.
+		 * Abort without args is allowed: poll_for_all_vgs() iterates
+		 * VGs with READ_FOR_UPDATE and finds pvmove LVs via their
+		 * cluster locks.
 		 */
 		log_error("Specify pvmove args when using lvmlockd.");
 		return ECMD_FAILED;
