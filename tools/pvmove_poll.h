@@ -24,6 +24,10 @@ int pvmove_update_metadata(struct cmd_context *cmd, struct volume_group *vg,
 			   struct logical_volume *lv_mirr,
 			   struct dm_list *lvs_changed, unsigned flags);
 
+int pvmove_abort_initial(struct cmd_context *cmd, struct volume_group *vg,
+			 struct logical_volume *lv_mirr,
+			 struct dm_list *lvs_changed);
+
 int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		  struct logical_volume *lv_mirr, struct dm_list *lvs_changed);
 
