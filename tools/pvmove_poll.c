@@ -48,17 +48,41 @@ static int _is_pvmove_image_removable(struct logical_volume *mimage_lv,
 }
 
 static int _detach_pvmove_mirror(struct cmd_context *cmd,
-				 struct logical_volume *lv_mirr)
+				 struct logical_volume *lv_mirr,
+				 int keep_source)
 {
 	uint32_t mimage_to_remove = 0;
 
-	if (arg_is_set(cmd, abort_ARG) &&
+	if (keep_source &&
 	    (seg_type(first_seg(lv_mirr), 0) == AREA_LV))
 		mimage_to_remove = 1; /* remove the second mirror leg */
 
 	if (!lv_remove_mirrors(cmd, lv_mirr, 1, 0, _is_pvmove_image_removable,
 			       &mimage_to_remove, PVMOVE))
 		return_0;
+
+	return 1;
+}
+
+/* Remove pvmove LV from metadata and commit; shared by abort and finish paths */
+static int _remove_pvmove_lv(struct cmd_context *cmd, struct volume_group *vg,
+			      struct logical_volume *lv_mirr)
+{
+	if (!lv_remove(lv_mirr)) {
+		log_error("ABORTING: Removal of temporary pvmove LV %s failed.",
+			  display_lvname(lv_mirr));
+		return 0;
+	}
+
+	if (!vg_write(vg) || !vg_commit(vg)) {
+		log_error("ABORTING: Failed to write metadata to disk.");
+		return 0;
+	}
+
+	lockd_lvremove_done(cmd, lv_mirr, NULL, 0);
+
+	if (vg->needs_lockd_free_lvs)
+		lockd_free_removed_lvs(cmd, vg, 1);
 
 	return 1;
 }
@@ -78,6 +102,38 @@ int pvmove_update_metadata(struct cmd_context *cmd, struct volume_group *vg,
 	return 1;
 }
 
+int pvmove_abort_initial(struct cmd_context *cmd, struct volume_group *vg,
+			 struct logical_volume *lv_mirr,
+			 struct dm_list *lvs_changed)
+{
+	/* Deactivate pvmove LV if partially activated */
+	if (lv_is_active(lv_mirr) && !deactivate_lv(cmd, lv_mirr))
+		log_warn("WARNING: Failed to deactivate %s.", display_lvname(lv_mirr));
+
+	if (!dm_list_empty(lvs_changed)) {
+		if (!_detach_pvmove_mirror(cmd, lv_mirr, 1)) {
+			log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
+
+		if (!lv_is_error(lv_mirr)) {
+			log_error(INTERNAL_ERROR "Failed to replace %s with error segment.",
+				  display_lvname(lv_mirr));
+			return 0;
+		}
+	}
+
+	if (!_remove_pvmove_lv(cmd, vg, lv_mirr))
+		return_0;
+
+	/* Reload participant LVs back to original PV mappings */
+	if (!refresh_pvmoved_lvs(lvs_changed))
+		log_warn("WARNING: Failed to refresh LVs after pvmove revert.");
+
+	return 1;
+}
+
 int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		  struct logical_volume *lv_mirr, struct dm_list *lvs_changed)
 {
@@ -86,7 +142,7 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	struct lvinfo info;
 
 	if (!dm_list_empty(lvs_changed)) {
-		if (!_detach_pvmove_mirror(cmd, lv_mirr)) {
+		if (!_detach_pvmove_mirror(cmd, lv_mirr, arg_count(cmd, abort_ARG))) {
 			log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
 				  display_lvname(lv_mirr));
 			return 0;
@@ -105,9 +161,12 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 	 * Process all LVs that were changed during pvmove.
 	 *
 	 * First pass: refresh ALL LVs to ensure they are properly resumed.
+	 * Warn on failure but continue -- metadata is already committed
+	 * and pvmove0 must be cleaned up.  Affected LVs can be refreshed
+	 * manually with lvchange --refresh.
 	 */
 	if (!refresh_pvmoved_lvs(lvs_changed))
-		return_0;
+		log_warn("WARNING: Failed to refresh LVs after pvmove.");
 
 	sync_local_dev_names(cmd);
 
@@ -131,10 +190,9 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 			else {
 				log_debug_activation("  Deactivating unused component: %s",
 						     display_lvname(lvl->lv));
-				if (!deactivate_lv(cmd, lvl->lv)) {
-					log_error("Failed to deactivate component %s.", display_lvname(lvl->lv));
-					return 0;
-				}
+				if (!deactivate_lv(cmd, lvl->lv))
+					log_warn("WARNING: Failed to deactivate component %s.",
+						 display_lvname(lvl->lv));
 			}
 		}
 	}
@@ -148,19 +206,16 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		return 0;
 	}
 
-	log_verbose("Removing temporary pvmove LV.");
-	if (!lv_remove(lv_mirr)) {
-		log_error("ABORTING: Removal of temporary volume %s failed.",
-			  display_lvname(lv_mirr));
-		return 0;
-	}
+	/*
+	 * LV locks are held throughout pvmove -- no re-acquisition
+	 * needed.  Removing pvmove0 releases its cluster lock via
+	 * lockd_lvremove_done().  Participant LV locks remain held
+	 * for normal operation after LOCKED is cleared.
+	 */
 
-	/* Store it on disks */
-	log_verbose("Writing out final volume group after pvmove.");
-	if (!vg_write(vg) || !vg_commit(vg)) {
-		log_error("ABORTING: Failed to write new data locations to disk.");
-		return 0;
-	}
+	log_verbose("Removing temporary pvmove LV.");
+	if (!_remove_pvmove_lv(cmd, vg, lv_mirr))
+		return_0;
 
 	/* Allows the pvmove operation to complete even if 'orphaned' temporary volumes
 	 * cannot be deactivated due to being held open by another process.
