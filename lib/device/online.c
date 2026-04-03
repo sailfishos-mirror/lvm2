@@ -247,6 +247,7 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
 {
 	char path[PATH_MAX];
 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
+	char *bufp;
 	char file_vgname[NAME_LEN];
 	char file_devname[NAME_LEN];
 	char devname[NAME_LEN];
@@ -302,8 +303,9 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
 		return 0;
 	}
 
+	bufp = buf;
 	while (len > 0) {
-		rv = write(fd, buf, len);
+		rv = write(fd, bufp, len);
 		if (rv < 0) {
 			/* file exists so it still works in part */
 			log_warn("Cannot write online file for %s to %s error %d",
@@ -312,6 +314,7 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
 				log_sys_debug("close", path);
 			return 1;
 		}
+		bufp += rv;
 		len -= rv;
 	}
 
