@@ -29,6 +29,9 @@ SOURCES =\
 	datastruct/radix-tree.c \
 	datastruct/str_list.c \
 	device/bcache.c \
+	device/bcache-io-async.c \
+	device/bcache-io-engine.c \
+	device/bcache-io-sync.c \
 	device/bcache-utils.c \
 	device/dev-cache.c \
 	device/device_id.c \

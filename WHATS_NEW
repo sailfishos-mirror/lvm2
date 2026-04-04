@@ -1,5 +1,11 @@
 Version 2.03.40 -
 ==================
+  Change bcache short read messages from warning to debug level.
+  Refactor bcache to use extracted I/O backends with pluggable interface.
+  Extract write clamping logic to helper function in bcache core.
+  Move last_byte tracking from global to struct bcache.
+  Update io_engine->issue() to accept fd instead of di parameter.
+  Extract bcache I/O backends to separate files (async, sync).
   Prevent redundant device access attempts after I/O errors via DEV_SCAN_NOT_READ.
   Reset warned flag in dmeventd raid plugin when device fully syncs.
   Fix inverted range comparison in libdm reserved value check.
