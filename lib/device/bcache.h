@@ -33,15 +33,40 @@ typedef uint64_t sector_t;
 typedef void io_complete_fn(void *context, int io_error);
 
 struct io_engine {
-	void (*destroy)(struct io_engine *e);
-	bool (*issue)(struct io_engine *e, enum dir d, int di,
+	/*
+	 * Tear down the engine.  Returns true if every in-flight request was
+	 * reaped, so the caller may free the buffers handed to issue().
+	 * Returns false if outstanding I/O could not be drained (teardown was
+	 * interrupted); those buffers must then be left allocated because the
+	 * kernel may still be reading or writing them.
+	 */
+	bool (*destroy)(struct io_engine *e);
+	bool (*issue)(struct io_engine *e, enum dir d, int fd,
 		      sector_t sb, sector_t se, void *data, void *context);
 	bool (*wait)(struct io_engine *e, io_complete_fn fn);
 	unsigned (*max_io)(struct io_engine *e);
 };
 
-struct io_engine *create_async_io_engine(void);
+/*
+ * Default queue depth for async and uring backends.  This value is also
+ * returned via bcache_max_prefetches() which tells the caller how many
+ * devices to submit I/O for concurrently.  There will be an open file
+ * descriptor for each, so keep it low enough to avoid reaching the
+ * default max open file limit (1024) when scanning >1024 devices.
+ */
+#define BCACHE_MAX_IO 256
+
+struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(void);
+
+/*
+ * Create I/O engine with backend selection.
+ * hint: "auto", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
+ */
+struct io_engine *bcache_create_io_engine(const char *hint);
+
+#define log_bcache_sys_warn(en, x, y) \
+	log_warn("WARNING: bcache %s %s failed: %s", en, x, strerror(y))
 
 /*----------------------------------------------------------------*/
 
