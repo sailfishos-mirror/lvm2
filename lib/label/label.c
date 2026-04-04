@@ -792,19 +792,8 @@ int label_scan_setup_bcache(void)
 
 	_current_bcache_size_bytes = cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
 
-	if (use_aio()) {
-		if (!(ioe = create_async_io_engine())) {
-			log_warn("Failed to set up async io, using sync io.");
-			init_use_aio(0);
-		}
-	}
-
-	if (!ioe) {
-		if (!(ioe = create_sync_io_engine())) {
-			log_error("Failed to set up sync io.");
-			return 0;
-		}
-	}
+	if (!(ioe = bcache_create_io_engine("auto")))
+		return_0;
 
 	if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {
 		log_error("Failed to set up io layer with %d blocks.", cache_blocks);
