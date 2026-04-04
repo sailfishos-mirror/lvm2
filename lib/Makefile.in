@@ -32,6 +32,7 @@ SOURCES =\
 	device/bcache-io-async.c \
 	device/bcache-io-engine.c \
 	device/bcache-io-sync.c \
+	device/bcache-io-threads.c \
 	device/bcache-utils.c \
 	device/dev-cache.c \
 	device/device_id.c \

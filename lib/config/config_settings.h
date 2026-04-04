@@ -1197,7 +1197,8 @@ cfg(global_use_aio_CFG, "use_aio", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CF
 
 cfg(global_io_backend_CFG, "io_backend", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_IO_BACKEND, vsn(2, 3, 40), NULL, 0, NULL,
 	"Select I/O backend for bcache device reads.\n"
-	"auto - Automatically select based on use_aio setting.\n"
+	"auto - Automatically select best available (defaults to threads).\n"
+	"threads - Multi-threaded async I/O using pthread worker pool.\n"
 	"async - Asynchronous I/O using libaio (Linux AIO).\n"
 	"sync - Synchronous I/O (simple fallback).\n")
 

@@ -1,5 +1,10 @@
 Version 2.03.40 -
 ==================
+  Default to pthread I/O backend for bcache instead of libaio.
+  Add pthread-based I/O backend for bcache to eliminate libaio io_destroy penalty.
+  Add bcache I/O backend factory with auto-selection (threads, aio, sync).
+  Support runtime backend selection with fallback chain.
+  Maintain backward compatibility with use_aio configuration option.
   Change bcache short read messages from warning to debug level.
   Refactor bcache to use extracted I/O backends with pluggable interface.
   Extract write clamping logic to helper function in bcache core.
