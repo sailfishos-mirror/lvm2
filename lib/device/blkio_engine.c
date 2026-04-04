@@ -124,8 +124,8 @@ int blkio_completion_status(const char *engine, enum dir d,
 /*
  * Create an I/O engine selected by hint.
  *
- * Auto-selection: use the best available async engine.
- * Explicit hints: "libaio" ("async", "aio"), "sync", "auto", or NULL
+ * Auto-selection: use the best async engine: threads -> libaio.
+ * Explicit hints: "threads", "libaio" ("async", "aio"), "sync", "auto", or NULL
  * Fallback: sync always succeeds
  */
 struct engine_hint {
@@ -136,6 +136,7 @@ struct engine_hint {
 };
 
 static const struct engine_hint _engine_hints[] = {
+	{ "threads", "threads", create_threads_io_engine, true },
 	{ "libaio", "libaio", create_async_io_engine, true },
 	{ "async", "libaio", create_async_io_engine, false },
 	{ "aio", "libaio", create_async_io_engine, false },

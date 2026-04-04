@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Add pthread-based I/O engine to eliminate libaio io_destroy penalty.
   Deprecate use_aio; use_aio=0 still selects sync I/O.
   Add io_engine config to select the I/O engine.
   Log io engine short reads at debug level rather than warning.
