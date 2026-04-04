@@ -28,6 +28,9 @@ SOURCES =\
 	datastruct/radix-tree.c \
 	datastruct/str_list.c \
 	device/blkio.c \
+	device/blkio_async.c \
+	device/blkio_engine.c \
+	device/blkio_sync.c \
 	device/blkio_utils.c \
 	device/dev-cache.c \
 	device/device_id.c \

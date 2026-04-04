@@ -796,19 +796,8 @@ int label_scan_setup_blkio(void)
 
 	_current_blkio_size_bytes = (uint64_t)cache_blocks * BLKIO_BLOCK_SIZE_IN_SECTORS * SECTOR_SIZE;
 
-	if (use_aio()) {
-		if (!(ioe = create_async_io_engine())) {
-			log_warn("Failed to set up async io, using sync io.");
-			init_use_aio(0);
-		}
-	}
-
-	if (!ioe) {
-		if (!(ioe = create_sync_io_engine())) {
-			log_error("Failed to set up sync io.");
-			return 0;
-		}
-	}
+	if (!(ioe = blkio_create_io_engine("auto")))
+		return_0;
 
 	if (!(scan_blkio = blkio_create(BLKIO_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {
 		log_error("Failed to set up blkio with %d blocks.", cache_blocks);

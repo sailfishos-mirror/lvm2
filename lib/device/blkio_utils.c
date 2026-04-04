@@ -291,4 +291,3 @@ bool blkio_set_bytes(struct blkio *bio, int di, uint64_t start, size_t len, uint
 
 	return _update_bytes(&u, di, start, len);
 }
-

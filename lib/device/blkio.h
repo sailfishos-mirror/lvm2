@@ -32,18 +32,68 @@ enum dir {
 typedef uint64_t block_address;
 typedef uint64_t sector_t;
 
+struct blkio_byte_range {
+	uint64_t offset;
+	uint64_t len;
+};
+
+static inline struct blkio_byte_range
+blkio_sector_range_bytes(sector_t sb, sector_t se)
+{
+	struct blkio_byte_range range;
+
+	range.offset = sb << SECTOR_SHIFT;
+	range.len = (se - sb) << SECTOR_SHIFT;
+	return range;
+}
+
 typedef void io_complete_fn(void *context, int io_error);
 
 struct io_engine {
-	void (*destroy)(struct io_engine *ioe);
-	bool (*issue)(struct io_engine *ioe, enum dir d, int di,
-		      sector_t sb, sector_t se, void *data, void *context);
+	/*
+	 * Tear down the engine.  Returns true if every in-flight request was
+	 * reaped, so the caller may free the buffers handed to issue().
+	 * Returns false if outstanding I/O could not be drained (teardown was
+	 * interrupted); those buffers must then be left allocated because the
+	 * kernel may still be reading or writing them.
+	 */
+	bool (*destroy)(struct io_engine *ioe);
+	/*
+	 * Submit I/O.  Returns 0 on success, or a negative errno if the
+	 * request could not be issued.
+	 */
+	int (*issue)(struct io_engine *ioe, enum dir d, int fd,
+		     sector_t sb, sector_t se, void *data, void *context);
 	bool (*wait)(struct io_engine *ioe, io_complete_fn fn);
 	unsigned (*max_io)(struct io_engine *ioe);
 };
 
-struct io_engine *create_async_io_engine(void);
+/*
+ * Default queue depth for async and uring engines.  This value is also
+ * returned via blkio_max_prefetches() which tells the caller how many
+ * devices to submit I/O for concurrently.  There will be an open file
+ * descriptor for each, so keep it low enough to avoid reaching the
+ * default max open file limit (1024) when scanning >1024 devices.
+ */
+#define BLKIO_MAX_IO 256
+
+struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(void);
+
+/*
+ * Create an I/O engine selected by hint.
+ * hint: "auto", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
+ */
+struct io_engine *blkio_create_io_engine(const char *hint);
+
+/*
+ * After fork() the child must not touch kernel state owned by the parent's
+ * engine; it may only release its private copy of the engine.
+ */
+bool blkio_engine_is_forked(pid_t creator_pid);
+
+#define log_blkio_sys_warn(en, x, y) \
+	log_warn("WARNING: %s io engine %s failed: %s.", en, x, strerror(y))
 
 /*----------------------------------------------------------------*/
 
