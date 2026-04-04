@@ -69,8 +69,8 @@ int bcache_io_completion_status(const char *backend, enum dir d,
 /*
  * Create I/O engine with backend selection.
  *
- * Auto-selection: libaio (if use_aio=1) -> sync (default)
- * Explicit hints: "libaio" ("async", "aio"), "sync", "auto", or NULL
+ * Auto-selection: threads (default) or libaio (if use_aio=1)
+ * Explicit hints: "threads", "libaio" ("async", "aio"), "sync", "auto", or NULL
  * Fallback: sync always succeeds
  */
 struct io_engine *bcache_create_io_engine(const char *hint)
@@ -79,9 +79,15 @@ struct io_engine *bcache_create_io_engine(const char *hint)
 
 	/* Determine backend: explicit hint or auto-selection */
 	if (!hint || !*hint || !strcmp(hint, "auto")) {
-		/* Auto: use libaio if use_aio=1 */
+		/* Auto: use libaio if use_aio=1, otherwise threads */
 		if (use_aio())
 			engine = create_async_io_engine(0);
+		if (!engine)
+			engine = create_threads_io_engine(0);
+	} else if (!strcmp(hint, "threads")) {
+		engine = create_threads_io_engine(0);
+		if (!engine)
+			log_warn("WARNING: Requested threads I/O backend unavailable; using sync.");
 	} else if (!strcmp(hint, "libaio") || !strcmp(hint, "async") || !strcmp(hint, "aio")) {
 		engine = create_async_io_engine(0);
 		if (!engine)

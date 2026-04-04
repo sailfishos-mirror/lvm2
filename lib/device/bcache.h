@@ -58,10 +58,11 @@ struct io_engine {
 
 struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(void);
+struct io_engine *create_threads_io_engine(unsigned n_threads);
 
 /*
  * Create I/O engine with backend selection.
- * hint: "auto", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
+ * hint: "auto", "threads", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
  */
 struct io_engine *bcache_create_io_engine(const char *hint);
 
