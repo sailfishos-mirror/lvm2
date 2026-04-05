@@ -748,6 +748,8 @@ BLKID_PC
 BLKDEACTIVATE
 READLINE_LIBS
 READLINE_CFLAGS
+URING_LIBS
+URING_CFLAGS
 AIO_LIBS
 AIO_CFLAGS
 MODPROBE_CMD
@@ -900,6 +902,7 @@ enable_static_link
 enable_shared
 with_blkid
 with_libnvme
+with_liburing
 with_systemd
 with_udev
 with_user
@@ -1050,6 +1053,8 @@ systemdsystemunitdir
 systemdutildir
 AIO_CFLAGS
 AIO_LIBS
+URING_CFLAGS
+URING_LIBS
 READLINE_CFLAGS
 READLINE_LIBS'
 
@@ -1736,6 +1741,7 @@ Optional Packages:
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --without-blkid         do not build with blkid library
   --without-libnvme       do not build with libnvme library
+  --without-liburing      do not build with liburing library
   --without-systemd       do not build with systemd library
   --without-udev          do not build with udev library
   --with-user=USER        set the owner of installed files [USER=]
@@ -1900,6 +1906,9 @@ Some influential environment variables:
               value of systemdutildir for systemd, overriding pkg-config
   AIO_CFLAGS  C compiler flags for AIO
   AIO_LIBS    linker flags for AIO
+  URING_CFLAGS
+              C compiler flags for URING, overriding pkg-config
+  URING_LIBS  linker flags for URING, overriding pkg-config
   READLINE_CFLAGS
               C compiler flags for readline
   READLINE_LIBS
@@ -6797,6 +6806,17 @@ esac
 fi
 
 done
+if test "$with_liburing" != "no"
+then :
+  ac_fn_c_check_header_compile "$LINENO" "liburing.h" "ac_cv_header_liburing_h" "#define _GNU_SOURCE 1
+"
+if test "x$ac_cv_header_liburing_h" = xyes
+then :
+  printf "%s\n" "#define HAVE_LIBURING_H 1" >>confdefs.h
+
+fi
+
+fi
 case "$host_os" in #(
   linux*) :
            for ac_header in asm/byteorder.h linux/fs.h malloc.h
@@ -9017,6 +9037,16 @@ then :
   withval=$with_libnvme;
 else case e in #(
   e) with_libnvme="yes" ;;
+esac
+fi
+
+
+# Check whether --with-liburing was given.
+if test ${with_liburing+y}
+then :
+  withval=$with_liburing;
+else case e in #(
+  e) with_liburing="yes" ;;
 esac
 fi
 
@@ -16643,6 +16673,101 @@ printf '%s\n' "#define LVM_CONFIGURE_LINE \"$CONFIGURE_LINE\"" >>confdefs.h
 # there seems to be no pkg-config support available
 AIO_CFLAGS=${AIO_CFLAGS:-}
 AIO_LIBS=${AIO_LIBS:--laio}
+
+
+
+################################################################################
+# liburing support (optional, for io_uring backend)
+if test "$with_liburing" != "no"
+then :
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for liburing" >&5
+printf %s "checking for liburing... " >&6; }
+
+if test -n "$URING_CFLAGS"; then
+    pkg_cv_URING_CFLAGS="$URING_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "liburing") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_URING_CFLAGS=`$PKG_CONFIG --cflags "liburing" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$URING_LIBS"; then
+    pkg_cv_URING_LIBS="$URING_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "liburing") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_URING_LIBS=`$PKG_CONFIG --libs "liburing" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+                URING_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "liburing" 2>&1`
+        else
+                URING_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "liburing" 2>&1`
+        fi
+        # Put the nasty error message in config.log where it belongs
+        echo "$URING_PKG_ERRORS" >&5
+
+        HAVE_LIBURING_PC=no
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+        HAVE_LIBURING_PC=no
+else
+        URING_CFLAGS=$pkg_cv_URING_CFLAGS
+        URING_LIBS=$pkg_cv_URING_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+        HAVE_LIBURING_PC=yes
+fi
+       if test "$HAVE_LIBURING_PC" = no
+then :
+  if test "$ac_cv_header_liburing_h" = yes
+then :
+  URING_CFLAGS=${URING_CFLAGS:-}
+                     URING_LIBS=${URING_LIBS:--luring}
+else case e in #(
+  e) URING_CFLAGS=
+                     URING_LIBS= ;;
+esac
+fi
+fi
+else case e in #(
+  e) URING_CFLAGS=
+       URING_LIBS= ;;
+esac
+fi
 
 
 

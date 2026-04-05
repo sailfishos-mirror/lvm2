@@ -1,5 +1,8 @@
 Version 2.03.40 -
 ==================
+  Add optional io_uring backend for bcache (requires liburing, kernel 5.1+).
+  Support io_backend configuration to select uring, threads, aio, or sync.
+  Add configure --with-liburing/--without-liburing to control io_uring support.
   Default to pthread I/O backend for bcache instead of libaio.
   Add pthread-based I/O backend for bcache to eliminate libaio io_destroy penalty.
   Add bcache I/O backend factory with auto-selection (threads, aio, sync).

@@ -22,8 +22,8 @@
 /*
  * Create I/O engine with backend selection.
  *
- * Auto-selection: threads (default) or async (if use_aio=1)
- * Explicit hints: "threads", "async", "aio", "sync", "auto", or NULL
+ * Auto-selection: uring -> threads (default) or async (if use_aio=1)
+ * Explicit hints: "uring", "threads", "async", "aio", "sync", "auto", or NULL
  * Fallback: sync always succeeds
  */
 struct io_engine *bcache_create_io_engine(const char *hint)
@@ -32,11 +32,15 @@ struct io_engine *bcache_create_io_engine(const char *hint)
 
 	/* Determine backend: explicit hint or auto-selection */
 	if (!hint || !*hint || !strcmp(hint, "auto")) {
-		/* Auto: use async if use_aio=1, otherwise threads */
+		/* Auto: use async if use_aio=1, otherwise try uring first, then threads */
 		if (use_aio())
 			engine = create_async_io_engine(0);
 		if (!engine)
+			engine = create_uring_io_engine(0);
+		if (!engine)
 			engine = create_threads_io_engine(0);
+	} else if (!strcmp(hint, "uring")) {
+		engine = create_uring_io_engine(0);
 	} else if (!strcmp(hint, "threads")) {
 		engine = create_threads_io_engine(0);
 	} else if (!strcmp(hint, "async") || !strcmp(hint, "aio")) {

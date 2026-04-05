@@ -1197,9 +1197,10 @@ cfg(global_use_aio_CFG, "use_aio", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CF
 
 cfg(global_io_backend_CFG, "io_backend", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_IO_BACKEND, vsn(2, 3, 40), NULL, 0, NULL,
 	"Select I/O backend for bcache device reads.\n"
-	"auto - Automatically select best available (defaults to threads).\n"
-	"threads - Multi-threaded async I/O using pthread worker pool.\n"
-	"async - Asynchronous I/O using libaio (Linux AIO).\n"
+	"auto - Automatically select best available (recommended).\n"
+	"uring - io_uring asynchronous I/O (Linux 5.1+, requires liburing).\n"
+	"threads - Multi-threaded I/O using pthread pool.\n"
+	"async - Linux AIO using libaio (legacy, slow io_destroy, also accepts \"aio\").\n"
 	"sync - Synchronous I/O (simple fallback).\n")
 
 cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 124), NULL, 0, NULL,

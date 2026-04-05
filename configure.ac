@@ -104,6 +104,8 @@ AC_CHECK_HEADERS([assert.h ctype.h dirent.h errno.h fcntl.h float.h \
 AC_CHECK_HEADERS(termios.h sys/statvfs.h sys/timerfd.h sys/vfs.h linux/magic.h linux/fiemap.h)
 AC_CHECK_HEADERS(xfs/xfs.h, LVM_NO_XFS_WARN=, LVM_NO_XFS_WARN=y, [#define _GNU_SOURCE 1])
 AC_CHECK_HEADERS(libaio.h,LVM_NEEDS_LIBAIO_WARN=,LVM_NEEDS_LIBAIO_WARN=y)
+AS_IF([test "$with_liburing" != "no"],
+      [AC_CHECK_HEADERS(liburing.h, [], [], [#define _GNU_SOURCE 1])])
 AS_CASE(["$host_os"],
 	[linux*], [AC_CHECK_HEADERS([asm/byteorder.h linux/fs.h malloc.h], [], [AC_MSG_ERROR(bailing out)])],
 	[darwin*], [AC_CHECK_HEADERS([machine/endian.h sys/disk.h], [], [AC_MSG_ERROR(bailing out)])])
@@ -221,6 +223,8 @@ AC_ARG_WITH(blkid, [AS_HELP_STRING([--without-blkid], [do not build with blkid l
 	    [], with_blkid="yes")
 AC_ARG_WITH(libnvme, [AS_HELP_STRING([--without-libnvme], [do not build with libnvme library])],
 	    [], with_libnvme="yes")
+AC_ARG_WITH(liburing, [AS_HELP_STRING([--without-liburing], [do not build with liburing library])],
+	    [], with_liburing="yes")
 AC_ARG_WITH(systemd, [AS_HELP_STRING([--without-systemd], [do not build with systemd library])],
 	    [], with_systemd="yes")
 AC_ARG_WITH(udev, [AS_HELP_STRING([--without-udev], [do not build with udev library])],
@@ -1907,6 +1911,21 @@ AIO_CFLAGS=${AIO_CFLAGS:-}
 AIO_LIBS=${AIO_LIBS:--laio}
 AC_ARG_VAR([AIO_CFLAGS], [C compiler flags for AIO])
 AC_ARG_VAR([AIO_LIBS], [linker flags for AIO])
+
+################################################################################
+# liburing support (optional, for io_uring backend)
+AS_IF([test "$with_liburing" != "no"],
+      [PKG_CHECK_MODULES([URING], [liburing], [HAVE_LIBURING_PC=yes], [HAVE_LIBURING_PC=no])
+       AS_IF([test "$HAVE_LIBURING_PC" = no],
+             [AS_IF([test "$ac_cv_header_liburing_h" = yes],
+                    [URING_CFLAGS=${URING_CFLAGS:-}
+                     URING_LIBS=${URING_LIBS:--luring}],
+                    [URING_CFLAGS=
+                     URING_LIBS=])])],
+      [URING_CFLAGS=
+       URING_LIBS=])
+AC_ARG_VAR([URING_CFLAGS], [C compiler flags for liburing])
+AC_ARG_VAR([URING_LIBS], [linker flags for liburing])
 
 AC_ARG_VAR([READLINE_CFLAGS], [C compiler flags for readline])
 AC_ARG_VAR([READLINE_LIBS], [linker flags for readline])
