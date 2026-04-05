@@ -21,6 +21,10 @@
 #include <errno.h>
 #include <liburing.h>
 
+#ifdef HAVE_VALGRIND
+#include <valgrind/memcheck.h>
+#endif
+
 #define URING_SUBMIT_BATCH 64
 
 struct io_context {
@@ -275,6 +279,17 @@ static bool _uring_wait(struct io_engine *ioe, io_complete_fn fn)
 
 		range = blkio_sector_range_bytes(ioc->sb, ioc->se);
 		expected = range.len;
+
+#ifdef HAVE_VALGRIND
+		/*
+		 * Tell valgrind the buffer is now initialized after io_uring read.
+		 * Valgrind doesn't track io_uring's async buffer writes, so without
+		 * this annotation it reports uninitialized data even though the
+		 * kernel wrote it.
+		 */
+		if ((cqe->res >= 0) && (ioc->d == DIR_READ))
+			VALGRIND_MAKE_MEM_DEFINED(ioc->data, cqe->res);
+#endif
 
 		io_error = blkio_completion_status(_uring, ioc->d,
 						       range.offset,
