@@ -81,10 +81,11 @@ struct io_engine {
 struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(void);
 struct io_engine *create_threads_io_engine(unsigned n_threads);
+struct io_engine *create_uring_io_engine(unsigned queue_depth);
 
 /*
  * Create an I/O engine selected by hint.
- * hint: "auto", "threads", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
+ * hint: "auto", "threads", "iouring" (or "uring"), "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
  */
 struct io_engine *blkio_create_io_engine(const char *hint);
 
