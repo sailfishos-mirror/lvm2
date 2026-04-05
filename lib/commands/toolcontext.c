@@ -847,6 +847,7 @@ static int _process_config(struct cmd_context *cmd)
 		return_0;
 
 	init_io_memory_size(find_config_tree_int(cmd, global_io_memory_size_CFG, NULL));
+	init_io_backend(find_config_tree_str(cmd, global_io_backend_CFG, NULL));
 
 	return 1;
 }
