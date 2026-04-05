@@ -69,9 +69,11 @@ int bcache_io_completion_status(const char *backend, enum dir d,
 /*
  * Create I/O engine with backend selection.
  *
- * Auto-selection: threads (default) or libaio (if use_aio=1)
- * Explicit hints: "threads", "libaio" ("async", "aio"), "sync", "auto", or NULL
- * Fallback: sync always succeeds
+ * Auto-selection: iouring -> threads; use_aio=1 tries libaio only if both fail.
+ * Explicit hints: "iouring" ("uring"), "threads", "libaio" ("async", "aio"),
+ *                 "sync", "auto", or NULL
+ * Sync is always attempted if no engine was created, even with use_aio=1.
+ * Engine allocation can still fail.
  */
 struct io_engine *bcache_create_io_engine(const char *hint)
 {
@@ -79,11 +81,16 @@ struct io_engine *bcache_create_io_engine(const char *hint)
 
 	/* Determine backend: explicit hint or auto-selection */
 	if (!hint || !*hint || !strcmp(hint, "auto")) {
-		/* Auto: use libaio if use_aio=1, otherwise threads */
-		if (use_aio())
-			engine = create_async_io_engine(0);
+		/* Prefer newer async backends; use legacy libaio only as a fallback. */
+		engine = create_uring_io_engine(0);
 		if (!engine)
 			engine = create_threads_io_engine(0);
+		if (!engine && use_aio())
+			engine = create_async_io_engine(0);
+	} else if (!strcmp(hint, "iouring") || !strcmp(hint, "uring")) {
+		engine = create_uring_io_engine(0);
+		if (!engine)
+			log_warn("WARNING: Requested iouring I/O backend unavailable; using sync.");
 	} else if (!strcmp(hint, "threads")) {
 		engine = create_threads_io_engine(0);
 		if (!engine)

@@ -1213,7 +1213,8 @@ cfg(global_io_backend_CFG, "io_backend", global_CFG_SECTION, CFG_DEFAULT_COMMENT
 	"auto - LVM will automatically choose, may change over time.\n"
 	"sync - Use synchronous i/o. Same as deprecated use_aio=0.\n"
 	"libaio - Use async i/o via libaio. Same as deprecated use_aio=1.\n"
-	"threads - Use async i/o via pthreads.\n")
+	"threads - Use async i/o via pthreads.\n"
+	"iouring - Use async i/o via liburing.\n")
 
 cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 124), NULL, 0, NULL,
 	"Use lvmlockd for locking among hosts using LVM on shared storage.\n"

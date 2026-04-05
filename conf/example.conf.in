@@ -1208,10 +1208,15 @@ global {
 	# This configuration option has an automatic default value.
 	# event_activation = @DEFAULT_EVENT_ACTIVATION@
 
-	# Configuration option global/use_aio.
-	# Use async I/O when reading and writing devices.
+	# Configuration option global/io_backend.
+	# Select I/O backend for bcache device reads.
+	# auto - LVM will automatically choose, may change over time.
+	# sync - Use synchronous i/o. Same as deprecated use_aio=0.
+	# libaio - Use async i/o via libaio. Same as deprecated use_aio=1.
+	# threads - Use async i/o via pthreads.
+	# iouring - Use async i/o via liburing.
 	# This configuration option has an automatic default value.
-	# use_aio = 1
+	# io_backend = "auto"
 
 	# Configuration option global/use_lvmlockd.
 	# Use lvmlockd for locking among hosts using LVM on shared storage.

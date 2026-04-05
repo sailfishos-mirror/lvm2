@@ -32,6 +32,7 @@ SOURCES =\
 	device/bcache-io-engine.c \
 	device/bcache-io-sync.c \
 	device/bcache-io-threads.c \
+	device/bcache-io-uring.c \
 	device/bcache-utils.c \
 	device/dev-cache.c \
 	device/device_id.c \
@@ -150,7 +151,7 @@ LIB_STATIC = $(LIB_NAME).a
 CFLOW_LIST = $(SOURCES)
 CFLOW_LIST_TARGET = $(LIB_NAME).cflow
 
-PROGS_CFLAGS = $(BLKID_CFLAGS) $(LIBNVME_CFLAGS) $(UDEV_CFLAGS)
+PROGS_CFLAGS = $(BLKID_CFLAGS) $(LIBNVME_CFLAGS) $(UDEV_CFLAGS) $(URING_CFLAGS)
 
 include $(top_builddir)/make.tmpl
 
