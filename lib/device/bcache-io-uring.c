@@ -21,6 +21,10 @@
 #include <errno.h>
 #include <liburing.h>
 
+#ifdef HAVE_VALGRIND
+#include <valgrind/memcheck.h>
+#endif
+
 #define SECTOR_SHIFT 9L
 #define URING_SUBMIT_BATCH 64
 
@@ -275,6 +279,19 @@ static bool _uring_wait(struct io_engine *e, io_complete_fn fn)
 		}
 
 		expected = (ioc->se - ioc->sb) << SECTOR_SHIFT;
+
+		if (cqe->res >= 0) {
+#ifdef HAVE_VALGRIND
+			/*
+			 * Tell valgrind the buffer is now initialized after io_uring read.
+			 * Valgrind doesn't track io_uring's async buffer writes, so without
+			 * this annotation it reports uninitialized data even though the
+			 * kernel wrote it.
+			 */
+			if (ioc->d == DIR_READ)
+				VALGRIND_MAKE_MEM_DEFINED(ioc->data, cqe->res);
+#endif
+		}
 
 		io_error = bcache_io_completion_status(_uring, ioc->d,
 						       (uint64_t)(ioc->sb << SECTOR_SHIFT),
