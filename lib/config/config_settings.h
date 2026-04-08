@@ -1194,6 +1194,12 @@ cfg(global_lvmetad_update_wait_time_CFG, "lvmetad_update_wait_time", global_CFG_
 cfg(global_use_aio_CFG, "use_aio", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_AIO, vsn(2, 2, 183), NULL, 0, NULL,
 	"Use async I/O when reading and writing devices.\n")
 
+cfg(global_io_backend_CFG, "io_backend", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_IO_BACKEND, vsn(2, 3, 40), NULL, 0, NULL,
+	"Select I/O backend for bcache device reads.\n"
+	"auto - Automatically select based on use_aio setting.\n"
+	"async - Asynchronous I/O using libaio (Linux AIO).\n"
+	"sync - Synchronous I/O (simple fallback).\n")
+
 cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 124), NULL, 0, NULL,
 	"Use lvmlockd for locking among hosts using LVM on shared storage.\n"
 	"Applicable only if LVM is compiled with lockd support in which\n"

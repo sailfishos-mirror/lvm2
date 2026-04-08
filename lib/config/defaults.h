@@ -326,6 +326,8 @@
 
 #define DEFAULT_IO_MEMORY_SIZE_KB 8192
 
+#define DEFAULT_IO_BACKEND "auto"
+
 #define DEFAULT_MD_COMPONENT_CHECKS "auto"
 
 #define DEFAULT_DEVICES_FILE "system.devices"

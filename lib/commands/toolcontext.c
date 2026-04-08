@@ -1780,6 +1780,7 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 		goto_out;
 
 	init_use_aio(find_config_tree_bool(cmd, global_use_aio_CFG, NULL));
+	init_io_backend(find_config_tree_str(cmd, global_io_backend_CFG, NULL));
 
 	if (!_init_dev_cache(cmd))
 		goto_out;

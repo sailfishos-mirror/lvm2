@@ -49,6 +49,7 @@ static int _activation_checks = 0;
 static uint64_t _pv_min_size = (DEFAULT_PV_MIN_SIZE_KB * 1024L >> DM_SECTOR_SHIFT);
 static const char *_unknown_device_name = DEFAULT_UNKNOWN_DEVICE_NAME;
 static int _io_memory_size_kb = DEFAULT_IO_MEMORY_SIZE_KB;
+static const char *_io_backend = NULL;
 
 void init_verbose(int level)
 {
@@ -367,4 +368,14 @@ int io_memory_size(void)
 void init_io_memory_size(int val)
 {
 	_io_memory_size_kb = val;
+}
+
+void init_io_backend(const char *backend)
+{
+	_io_backend = backend;
+}
+
+const char *io_backend(void)
+{
+	return _io_backend;
 }

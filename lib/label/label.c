@@ -792,7 +792,7 @@ int label_scan_setup_bcache(void)
 
 	_current_bcache_size_bytes = cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
 
-	if (!(ioe = bcache_create_io_engine("auto")))
+	if (!(ioe = bcache_create_io_engine(io_backend())))
 		return_0;
 
 	if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {
