@@ -109,14 +109,46 @@ not grep scan: tmptest
 # test that 'pvs' submits only three reads, one for each PV in hints
 # for initial scan, and one more in vg_read rescan check
 
+# Test I/O syscalls for different engines
 if which strace && ! aux with_sanitizer; then
-strace -e io_submit pvs 2>&1|tee tmptest
-test "$(grep -c io_submit tmptest)" -eq 3
+for engine in async uring threads; do
+	# A successful command may have fallen back to sync.
+	pvs -vvv --config "global/io_engine=\"$engine\"" >tmptest 2>&1
+	if ! grep -q "Created.*$engine" tmptest; then
+		continue
+	fi
 
-# test that 'pvs -a' submits seven reads, one for each device,
-# and one more in vg_read rescan check
-strace -e io_submit pvs -a 2>&1|tee tmptest
-test "$(grep -c io_submit tmptest)" -eq 7
+	if [ "$engine" = "async" ]; then
+		# Test io_submit syscalls for async engine (legacy AIO)
+		strace -e io_submit pvs --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(grep -c '^io_submit(' tmptest)" -eq 3
+
+		# test that 'pvs -a' submits seven reads, one for each device,
+		# and one more in vg_read rescan check
+		strace -e io_submit pvs -a --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(grep -c '^io_submit(' tmptest)" -eq 7
+	elif [ "$engine" = "uring" ]; then
+		# io_uring batches the queued reads: one enter submits the
+		# initial scan, another submits the vg_read rescan.  A blocking
+		# wait may add an enter with zero submissions, so sum the SQEs
+		# submitted rather than counting syscalls.
+		strace -e io_uring_enter pvs --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(awk -F'[(,]' '/^io_uring_enter\(/ { s += $3 } END { print s + 0 }' tmptest)" -eq 3
+		grep -q '^io_uring_enter([^,]*, 2, 0,' tmptest
+
+		strace -e io_uring_enter pvs -a --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(awk -F'[(,]' '/^io_uring_enter\(/ { s += $3 } END { print s + 0 }' tmptest)" -eq 7
+		grep -q '^io_uring_enter([^,]*, 6, 0,' tmptest
+	else
+		# Worker threads read with pread64(); -f is needed to trace
+		# them.  Count only call starts, not strace resume lines.
+		strace -f -e pread64 pvs --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(grep -c 'pread64(' tmptest)" -eq 3
+
+		strace -f -e pread64 pvs -a --config "global/io_engine=\"$engine\"" 2>&1|tee tmptest
+		test "$(grep -c 'pread64(' tmptest)" -eq 7
+	fi
+done
 fi
 
 #
