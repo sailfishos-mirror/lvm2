@@ -109,14 +109,27 @@ not grep scan: tmptest
 # test that 'pvs' submits only three reads, one for each PV in hints
 # for initial scan, and one more in vg_read rescan check
 
+# Test I/O syscalls for different backends
 if which strace; then
-strace -e io_submit pvs 2>&1|tee tmptest
-test "$(grep -c io_submit tmptest)" -eq 3
+for backend in async; do
+	# Skip if backend is not available
+	if ! pvs --config "global/io_backend=\"$backend\"" >/dev/null 2>&1; then
+		continue
+	fi
 
-# test that 'pvs -a' submits seven reads, one for each device,
-# and one more in vg_read rescan check
-strace -e io_submit pvs -a 2>&1|tee tmptest
-test "$(grep -c io_submit tmptest)" -eq 7
+	if [ "$backend" = "async" ]; then
+		# Test io_submit syscalls for async backend (legacy AIO)
+		strace -e io_submit pvs --config "global/io_backend=\"$backend\"" 2>&1|tee tmptest
+		test "$(grep -c io_submit tmptest)" -eq 3
+
+		# test that 'pvs -a' submits seven reads, one for each device,
+		# and one more in vg_read rescan check
+		strace -e io_submit pvs -a --config "global/io_backend=\"$backend\"" 2>&1|tee tmptest
+		test "$(grep -c io_submit tmptest)" -eq 7
+	fi
+	# TODO: add uring backend test (io_uring_enter)
+	# TODO: add threads backend test (if needed)
+done
 fi
 
 #
