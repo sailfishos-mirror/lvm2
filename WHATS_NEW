@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Add io_backend config to select the bcache I/O backend.
   Log bcache short reads at debug level rather than warning.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
