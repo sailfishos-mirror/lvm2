@@ -685,7 +685,8 @@ static int _poll_daemon(struct cmd_context *cmd, struct poll_operation_id *id,
 		 * because it will redundantly continue performing the
 		 * caller's task (that the parent already performed)
 		 */
-		/* FIXME Attempt proper cleanup */
+		lvmcache_destroy(cmd, 1, 0);
+		label_scan_destroy(cmd);
 		_exit(lvm_return_code(ret));
 	}
 
