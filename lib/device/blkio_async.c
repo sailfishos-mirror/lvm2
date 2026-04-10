@@ -16,6 +16,8 @@
 #include "lib/device/blkio.h"
 #include "lib/misc/lvm-signal.h"
 
+#ifdef HAVE_LIBAIO_H
+
 #include <libaio.h>
 #include <errno.h>
 #include <sys/stat.h>
@@ -384,3 +386,13 @@ struct io_engine *create_async_io_engine(unsigned queue_depth)
 	/* coverity[leaked_storage] 'e' is not leaking */
 	return &e->e;
 }
+
+#else /* !HAVE_LIBAIO_H */
+
+struct io_engine *create_async_io_engine(unsigned queue_depth)
+{
+	log_debug("async io engine not available (built without libaio support).");
+	return NULL;
+}
+
+#endif

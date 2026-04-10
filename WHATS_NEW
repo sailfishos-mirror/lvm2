@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Add configure --with-libaio/--without-libaio to control async engine support.
   Add optional io_uring io engine (requires liburing, kernel 5.1+).
   Default the I/O engine to io_uring, then threads, then libaio, then sync.
   Add configure --with-liburing/--without-liburing to control io_uring support.
