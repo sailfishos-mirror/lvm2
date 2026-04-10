@@ -1,5 +1,6 @@
 Version 2.03.40 -
 ==================
+  Add configure --with-libaio/--without-libaio to control async backend support.
   Add optional io_uring backend for bcache (requires liburing, kernel 5.1+).
   Support io_backend configuration to select uring, threads, aio, or sync.
   Add configure --with-liburing/--without-liburing to control io_uring support.

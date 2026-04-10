@@ -901,6 +901,7 @@ enable_silent_rules
 enable_static_link
 enable_shared
 with_blkid
+with_libaio
 with_libnvme
 with_liburing
 with_systemd
@@ -1740,6 +1741,7 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --without-blkid         do not build with blkid library
+  --without-libaio        do not build with libaio library
   --without-libnvme       do not build with libnvme library
   --without-liburing      do not build with liburing library
   --without-systemd       do not build with systemd library
@@ -6793,26 +6795,23 @@ esac
 fi
 
 done
-       for ac_header in libaio.h
-do :
+if test "$with_libaio" != "no"
+then :
   ac_fn_c_check_header_compile "$LINENO" "libaio.h" "ac_cv_header_libaio_h" "$ac_includes_default"
 if test "x$ac_cv_header_libaio_h" = xyes
 then :
   printf '%s\n' "#define HAVE_LIBAIO_H 1" >>confdefs.h
- LVM_NEEDS_LIBAIO_WARN=
-else case e in #(
-  e) LVM_NEEDS_LIBAIO_WARN=y ;;
-esac
+
 fi
 
-done
+fi
 if test "$with_liburing" != "no"
 then :
   ac_fn_c_check_header_compile "$LINENO" "liburing.h" "ac_cv_header_liburing_h" "#define _GNU_SOURCE 1
 "
 if test "x$ac_cv_header_liburing_h" = xyes
 then :
-  printf "%s\n" "#define HAVE_LIBURING_H 1" >>confdefs.h
+  printf '%s\n' "#define HAVE_LIBURING_H 1" >>confdefs.h
 
 fi
 
@@ -9027,6 +9026,16 @@ then :
   withval=$with_blkid;
 else case e in #(
   e) with_blkid="yes" ;;
+esac
+fi
+
+
+# Check whether --with-libaio was given.
+if test ${with_libaio+y}
+then :
+  withval=$with_libaio;
+else case e in #(
+  e) with_libaio="yes" ;;
 esac
 fi
 
@@ -16669,10 +16678,16 @@ printf '%s\n' "#define LVM_CONFIGURE_LINE \"$CONFIGURE_LINE\"" >>confdefs.h
 
 
 ################################################################################
-# Allow users to override default location for libaio
-# there seems to be no pkg-config support available
-AIO_CFLAGS=${AIO_CFLAGS:-}
-AIO_LIBS=${AIO_LIBS:--laio}
+# libaio support (optional, for bcache async backend)
+if test "$with_libaio" != "no"
+then :
+  AIO_CFLAGS=${AIO_CFLAGS:-}
+       AIO_LIBS=${AIO_LIBS:--laio}
+else case e in #(
+  e) AIO_CFLAGS=
+       AIO_LIBS= ;;
+esac
+fi
 
 
 
@@ -16682,17 +16697,17 @@ if test "$with_liburing" != "no"
 then :
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for liburing" >&5
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for liburing" >&5
 printf %s "checking for liburing... " >&6; }
 
 if test -n "$URING_CFLAGS"; then
     pkg_cv_URING_CFLAGS="$URING_CFLAGS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
   ($PKG_CONFIG --exists --print-errors "liburing") 2>&5
   ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
   pkg_cv_URING_CFLAGS=`$PKG_CONFIG --cflags "liburing" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes
@@ -16706,10 +16721,10 @@ if test -n "$URING_LIBS"; then
     pkg_cv_URING_LIBS="$URING_LIBS"
  elif test -n "$PKG_CONFIG"; then
     if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
+    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"liburing\""; } >&5
   ($PKG_CONFIG --exists --print-errors "liburing") 2>&5
   ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
   test $ac_status = 0; }; then
   pkg_cv_URING_LIBS=`$PKG_CONFIG --libs "liburing" 2>/dev/null`
 		      test "x$?" != "x0" && pkg_failed=yes
@@ -16723,8 +16738,8 @@ fi
 
 
 if test $pkg_failed = yes; then
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
 
 if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
         _pkg_short_errors_supported=yes
@@ -16741,14 +16756,14 @@ fi
 
         HAVE_LIBURING_PC=no
 elif test $pkg_failed = untried; then
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
         HAVE_LIBURING_PC=no
 else
         URING_CFLAGS=$pkg_cv_URING_CFLAGS
         URING_LIBS=$pkg_cv_URING_LIBS
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
+        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
         HAVE_LIBURING_PC=yes
 fi
        if test "$HAVE_LIBURING_PC" = no
@@ -18257,12 +18272,6 @@ if test -n "$VDO_CONFIGURE_WARN"
 then :
   { printf '%s\n' "$as_me:${as_lineno-$LINENO}: WARNING: Unrecognized 'vdoformat' tool is REQUIRED for VDO logical volume creation!" >&5
 printf '%s\n' "$as_me: WARNING: Unrecognized 'vdoformat' tool is REQUIRED for VDO logical volume creation!" >&2;}
-fi
-
-if test -n "$LVM_NEEDS_LIBAIO_WARN"
-then :
-  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: WARNING: Only libdm part can be build without libaio:  make [install_]device-mapper" >&5
-printf '%s\n' "$as_me: WARNING: Only libdm part can be build without libaio:  make [install_]device-mapper" >&2;}
 fi
 
 if test -n "$LVM_NO_XFS_WARN"
