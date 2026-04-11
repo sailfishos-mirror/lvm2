@@ -334,6 +334,7 @@ struct fixture {
 static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_blocks)
 {
 	struct fixture *f = malloc(sizeof(*f));
+	unsigned i;
 
 	T_ASSERT(f);
 
@@ -343,6 +344,15 @@ static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_bloc
 	_expect(f->me, E_MAX_IO);
 	f->cache = bcache_create(block_size, nr_cache_blocks, &f->me->e);
 	T_ASSERT(f->cache);
+
+	/*
+	 * Register mock fds with identity mapping (_fd_table[i] = i)
+	 * so tests can use di values directly.  The mock engine does
+	 * not perform real I/O, but _issue_low_level() needs a valid
+	 * fd table entry before calling engine->issue().
+	 */
+	for (i = 0; i < 1024; i++)
+		T_ASSERT(bcache_set_fd(i) == (int) i);
 
 	return f;
 }
