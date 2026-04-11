@@ -28,6 +28,7 @@
 struct sync_io {
 	struct dm_list list;
 	void *context;
+	int io_error;
 };
 
 struct sync_engine {
@@ -58,6 +59,7 @@ static int _sync_issue(struct io_engine *ioe, const struct blkio_io *io,
 	uint64_t len;
 	struct sync_engine *e = _to_sync(ioe);
 	struct sync_io *sio = malloc(sizeof(*sio));
+	int io_error = 0;
 
 	if (!sio) {
 		log_warn("WARNING: sync io engine unable to allocate io buffer.");
@@ -83,8 +85,8 @@ static int _sync_issue(struct io_engine *ioe, const struct blkio_io *io,
 				 blkio_dir_name(io->d), (unsigned long long)offset,
 				 (unsigned long long)(len - pos),
 				 strerror(errno));
-			free(sio);
-			return false;
+			io_error = -errno;
+			break;
 		}
 
 		if (rv == 0)
@@ -93,7 +95,7 @@ static int _sync_issue(struct io_engine *ioe, const struct blkio_io *io,
 		pos += rv;
 	}
 
-	if (pos < len) {
+	if (!io_error && pos < len) {
 		if (pos >= (1 << SECTOR_SHIFT)) {
 			/* minimum acceptable read is 1 sector */
 			log_debug_devs("blkio sync %s offset %llu requested %llu got %llu.",
@@ -103,13 +105,14 @@ static int _sync_issue(struct io_engine *ioe, const struct blkio_io *io,
 			log_warn("WARNING: blkio sync %s offset %llu requested %llu got %llu.",
 				 blkio_dir_name(io->d), (unsigned long long)offset,
 				 (unsigned long long)len, (unsigned long long)pos);
-			free(sio);
-			return false;
+			io_error = -ENODATA;
 		}
 	}
 
-	dm_list_add(&e->complete, &sio->list);
+	/* Always queue completion - errors reported via callback in wait() */
 	sio->context = context;
+	sio->io_error = io_error;
+	dm_list_add(&e->complete, &sio->list);
 
 	return 0;
 }
@@ -120,7 +123,7 @@ static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
 	struct sync_engine *e = _to_sync(ioe);
 
 	dm_list_iterate_items_safe(io, tmp, &e->complete) {
-		fn(io->context, 0);
+		fn(io->context, io->io_error);
 		dm_list_del(&io->list);
 		free(io);
 	}
