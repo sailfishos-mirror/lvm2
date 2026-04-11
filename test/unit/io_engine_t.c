@@ -86,7 +86,7 @@ static void *_fix_init(void)
 	struct fixture *f = malloc(sizeof(*f));
 
 	T_ASSERT(f);
-	f->e = create_async_io_engine();
+	f->e = create_async_io_engine(0);
 	T_ASSERT(f->e);
 	if (posix_memalign((void **) &f->data, PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
 		test_fail("posix_memalign failed");
@@ -153,7 +153,7 @@ static void _test_read(void *fixture)
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, DIR_READ, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+	T_ASSERT(f->e->issue(f->e, DIR_READ, f->fd, 0, BLOCK_SIZE_SECTORS, f->data, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
@@ -176,7 +176,7 @@ static void _test_write(void *fixture)
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, DIR_WRITE, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+	T_ASSERT(f->e->issue(f->e, DIR_WRITE, f->fd, 0, BLOCK_SIZE_SECTORS, f->data, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
@@ -230,7 +230,7 @@ static void _test_destroy_after_fork(void *fixture)
 	pid_t pid;
 	int status;
 
-	e = create_async_io_engine();
+	e = create_async_io_engine(0);
 	T_ASSERT(e);
 
 	pid = fork();
@@ -297,7 +297,7 @@ static void _test_wait_eintr(void *fixture)
 	pid_t child;
 	int status;
 
-	e = create_async_io_engine();
+	e = create_async_io_engine(0);
 	T_ASSERT(e);
 
 	/*

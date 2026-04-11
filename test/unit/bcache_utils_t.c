@@ -105,7 +105,7 @@ static void *_fix_init(struct io_engine *engine)
 
 static void *_async_init(void)
 {
-	struct io_engine *e = create_async_io_engine();
+	struct io_engine *e = create_async_io_engine(0);
 	T_ASSERT(e);
 	return _fix_init(e);
 }
