@@ -24,6 +24,10 @@
 
 /* Default async concurrency when caller passes 0 to dm_async_ctx_create(). */
 #define DM_ASYNC_DEFAULT_INFLIGHT     16
+/* Upper bound on auto-sized thread pool (2 * CPUs, capped here). */
+#define DM_ASYNC_MAX_INFLIGHT        128
+/* Threads per CPU for auto-sizing (I/O-bound on kernel RCU sleeps). */
+#define DM_ASYNC_THREADS_PER_CPU       2
 
 /*
  * Opaque async context exposed publicly as a forward declaration.

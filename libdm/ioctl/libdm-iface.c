@@ -2674,8 +2674,20 @@ out:
  */
 struct dm_async_ctx *dm_async_ctx_create(unsigned max_inflight)
 {
-	if (!max_inflight)
-		max_inflight = DM_ASYNC_DEFAULT_INFLIGHT;
+	long ncpus;
+
+	if (!max_inflight) {
+		ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+		if (ncpus <= (DM_ASYNC_DEFAULT_INFLIGHT / DM_ASYNC_THREADS_PER_CPU))
+			max_inflight = DM_ASYNC_DEFAULT_INFLIGHT;
+		else
+			max_inflight = (ncpus >= (DM_ASYNC_MAX_INFLIGHT / DM_ASYNC_THREADS_PER_CPU))
+				? DM_ASYNC_MAX_INFLIGHT
+				: ncpus * DM_ASYNC_THREADS_PER_CPU;
+		log_debug_activation("Using %u async slots (CPUs: %ld).",
+				     max_inflight, ncpus);
+	}
 
 	if (!_open_control())
 		return NULL;
