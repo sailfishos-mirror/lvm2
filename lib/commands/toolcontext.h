@@ -60,6 +60,7 @@ struct profile_params;
 struct archive_params;
 struct backup_params;
 struct arg_values;
+struct radix_tree;
 
 struct config_tree_list {
 	struct dm_list list;
@@ -296,6 +297,8 @@ struct cmd_context {
 	struct dm_pool *pending_delete_mem;	/* memory pool for pending deletes */
 	struct vdo_convert_params *lvcreate_vcp;/* params for LV to VDO conversion */
 	uint32_t lockopt;			/* LOCKOPT_* from --lockopt string */
+	void *async_ctx;			/* dm_async_ctx for async ioctl dispatch */
+	struct radix_tree *async_lv_set;	/* LV UUIDs eligible for async ioctl */
 };
 
 /*

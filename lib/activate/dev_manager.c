@@ -27,6 +27,7 @@
 #include "lib/misc/lvm-exec.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/misc/lvm-signal.h"
+#include "lib/datastruct/radix-tree.h"
 
 #include <limits.h>
 #include <dirent.h>
@@ -2396,6 +2397,15 @@ static uint16_t _get_udev_flags(struct dev_manager *dm, const struct logical_vol
 	return udev_flags;
 }
 
+/* Check if LV is eligible for async ioctl (keyed by LV UUID). */
+static int _lv_is_async(const struct logical_volume *lv)
+{
+	return lv->vg->cmd->async_lv_set &&
+	       radix_tree_lookup_ptr(lv->vg->cmd->async_lv_set,
+				     &lv->lvid.id[1],
+				     sizeof(lv->lvid.id[1])) != NULL;
+}
+
 static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 			    const struct logical_volume *lv, int origin_only);
 static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
@@ -2939,6 +2949,8 @@ static int _add_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 				return_0;
 		}
 		if (seg->pool_lv &&
+		    /* Skip pool subtree for async-eligible LVs in batch operation */
+		    !(!dm->activation && _lv_is_async(lv)) &&
 		    /* When activating and not origin_only detect linear 'overlay' over pool */
 		    !_add_lv_to_dtree(dm, dtree, seg->pool_lv, dm->activation ? origin_only : 1))
 			return_0;
@@ -2980,6 +2992,10 @@ static struct dm_tree *_create_partial_dtree(struct dev_manager *dm, const struc
 	}
 
 	_set_optional_uuid_suffixes(dtree);
+
+	/* Build leaf-only tree for async-eligible LVs in batch operation */
+	if (!dm->activation && _lv_is_async(lv))
+		dm_tree_set_skip_deps(dtree, 1);
 
 	if (!_add_lv_to_dtree(dm, dtree, lv, (lv_is_origin(lv) || lv_is_thin_volume(lv) || lv_is_thin_pool(lv)) ? origin_only : 0))
 		goto_bad;
@@ -4048,6 +4064,15 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
 	case DEACTIVATE:
 		if (retry_deactivation())
 			dm_tree_retry_remove(root);
+		/* Async-eligible LVs (set by setup_async_lvs)
+		 * use async ioctl; others drain pending ops first. */
+		if (dm->cmd->async_ctx) {
+			if (_lv_is_async(lv))
+				dm_tree_set_async_ctx(root, dm->cmd->async_ctx);
+			else if (!dm_async_drain(dm->cmd->async_ctx, NULL))
+				log_warn("WARNING: Failed to drain async operations for %s.",
+					 display_lvname(lv));
+		}
 		/* Deactivate LV and all devices it references that nothing else has open. */
 		if (!dm_tree_deactivate_children(root, dlid, DLID_SIZE))
 			goto_out;
