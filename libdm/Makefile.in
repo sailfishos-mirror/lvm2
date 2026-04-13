@@ -43,6 +43,7 @@ SOURCES =\
 	vdo/vdo_reader.c \
 	vdo/vdo_status.c \
 	vdo/vdo_stats.c \
+	$(interface)/libdm-async.c \
 	$(interface)/libdm-iface.c
 
 INCLUDES = -I$(srcdir)/$(interface)

@@ -39,6 +39,7 @@ struct dm_async_ctx {
 	unsigned (*fn_inflight)(struct dm_async_ctx *ctx);
 	void (*fn_destroy)(struct dm_async_ctx *ctx);
 	int   fd;   /* DM control fd, captured at context creation */
+	int   submit_drain_error; /* sticky: completion failed during submit back-pressure */
 };
 
 /*
