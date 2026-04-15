@@ -17,6 +17,13 @@
 #include "daemon-io.h"
 
 #include <errno.h>
+/* 
+ * #include <unistd.h>
+ */
+#include <poll.h>
+
+/* Maximum incoming message size (16 MiB) to prevent unbounded allocation */
+#define DAEMON_MAX_MSG_SIZE (16 * 1024 * 1024)
 
 /*
  * Read a single message from a (socket) filedescriptor. Messages are delimited
@@ -27,6 +34,7 @@
  * See also write_buffer about blocking (read_buffer has identical behaviour).
  */
 int buffer_read(int fd, struct buffer *buffer) {
+	struct pollfd pfd = { .fd = fd, .events = POLLIN };
 	int result;
 
 	if (!buffer_realloc(buffer, 32)) /* ensure we have some space */
@@ -41,6 +49,10 @@ int buffer_read(int fd, struct buffer *buffer) {
 				buffer->mem[buffer->used] = 0;
 				break; /* success, we have the full message now */
 			}
+			if (buffer->used > DAEMON_MAX_MSG_SIZE) {
+				errno = EOVERFLOW;
+				return 0;
+			}
 			if ((buffer->allocated - buffer->used < 32) &&
 			    !buffer_realloc(buffer, 1024))
 				return 0;
@@ -49,11 +61,8 @@ int buffer_read(int fd, struct buffer *buffer) {
 			return 0; /* we should never encounter EOF here */
 		} else if (result < 0 && (errno == EAGAIN ||
 					  errno == EINTR || errno == EIO)) {
-			fd_set in;
-			FD_ZERO(&in);
-			FD_SET(fd, &in);
 			/* ignore the result, this is just a glorified sleep */
-			select(FD_SETSIZE, &in, NULL, NULL, NULL);
+			poll(&pfd, 1, -1);
 		} else if (result < 0)
 			return 0;
 	}
@@ -67,6 +76,7 @@ int buffer_read(int fd, struct buffer *buffer) {
  */
 int buffer_write(int fd, const struct buffer *buffer) {
 	static const struct buffer _terminate = { .mem = (char *) "\n##\n", .used = 4 };
+	struct pollfd pfd = { .fd = fd, .events = POLLOUT };
 	const struct buffer *use;
 	int done, written, result;
 
@@ -78,11 +88,8 @@ int buffer_write(int fd, const struct buffer *buffer) {
 				written += result;
 			else if (result < 0 && (errno == EAGAIN ||
 						errno == EINTR || errno == EIO)) {
-				fd_set out;
-				FD_ZERO(&out);
-				FD_SET(fd, &out);
 				/* ignore the result, this is just a glorified sleep */
-				select(FD_SETSIZE, NULL, &out, NULL, NULL);
+				poll(&pfd, 1, -1);
 			} else if (result < 0)
 				return 0; /* too bad */
 		}
