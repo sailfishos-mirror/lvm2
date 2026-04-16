@@ -4033,11 +4033,11 @@ void vg_set_fid(struct volume_group *vg,
 static int _convert_key_to_string(const char *key, size_t key_len,
 				  unsigned sub_key, char *buf, size_t buf_len)
 {
-	memcpy(buf, key, key_len);
-	buf += key_len;
-	buf_len -= key_len;
-	if ((dm_snprintf(buf, buf_len, "_%u", sub_key) == -1))
-		return_0;
+	if (dm_snprintf(buf, buf_len, "%.*s_%u",
+			(int) key_len, key, sub_key) < 0) {
+		log_error("Cannot create key from %s.", key);
+		return 0;
+	}
 
 	return 1;
 }
