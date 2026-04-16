@@ -289,6 +289,7 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 			 struct dm_event_daemon_message *msg)
 {
 	int ret;
+	int retries = 0;
 	struct pollfd pfd;
 	size_t bytes = 0;
 	size_t size = 2 * sizeof(uint32_t) + msg->size;
@@ -326,15 +327,24 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 	pfd.fd = fifos->client;
 	pfd.events = POLLOUT;
 	while (bytes < size) {
-		do {
-			/* Watch daemon write FIFO to be ready for output. */
-			ret = poll(&pfd, 1, -1);
-			if ((ret < 0) && (errno != EINTR)) {
+		/* Watch daemon write FIFO to be ready for output. */
+		ret = poll(&pfd, 1, 10);
+
+		if ((ret < 0) && (errno != EINTR)) {
+			log_error("Unable to talk to event daemon.");
+			return 0;
+		}
+
+		if (ret < 1) {
+			if (++retries > 3000) {
+				/* ~30s elapsed with no progress */
 				log_error("Unable to talk to event daemon.");
 				return 0;
 			}
-		} while (ret < 1);
+			continue;
+		}
 
+		retries = 0;
 		ret = write(fifos->client, buf + bytes, size - bytes);
 		if (ret < 0) {
 			if ((errno == EINTR) || (errno == EAGAIN))
