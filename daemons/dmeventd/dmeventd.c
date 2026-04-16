@@ -1169,6 +1169,7 @@ static int _event_wait(struct thread_status *thread)
 			dm_task_set_event_nr(thread->wait_task, info.event_nr);
 	} else {
 		switch (dm_task_get_errno(thread->wait_task)) {
+		case ENODEV:
 		case ENXIO:
 disappeared:
 			log_error("%s disappeared, detaching.",
