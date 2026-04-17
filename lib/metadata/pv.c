@@ -173,7 +173,7 @@ uint32_t pv_mda_count(const struct physical_volume *pv)
 
 	info = lvmcache_info_from_pv_id(&pv->id, pv->dev, 0);
 
-	return info ? lvmcache_mda_count(info) : UINT64_C(0);
+	return info ? lvmcache_mda_count(info) : 0;
 }
 
 static int _count_unignored(struct metadata_area *mda, void *baton)
@@ -329,7 +329,7 @@ uint64_t pv_used(const struct physical_volume *pv)
 	uint64_t used;
 
 	if (!pv->pe_count)
-		used = 0LL;
+		used = 0;
 	else
 		used = (uint64_t) pv->pe_alloc_count * pv->pe_size;
 
@@ -386,7 +386,7 @@ unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned mda_ignor
 	}
 
 	/*
-	 * Do not allow disabling of the the last PV in a VG.
+	 * Do not allow disabling of the last PV in a VG.
 	 */
 	if (pv_mda_used_count(pv) == vg_mda_used_count(pv->vg)) {
 		log_error("Cannot disable all metadata areas in volume group %s.",
