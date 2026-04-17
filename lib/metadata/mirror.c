@@ -1723,7 +1723,7 @@ static int _form_mirror(struct cmd_context *cmd, struct alloc_handle *ah,
 	/*
 	 * create mirror image LVs
 	 */
-	img_lvs = alloca(sizeof(*img_lvs) * (mirrors + 1));
+	img_lvs = alloca(sizeof(*img_lvs) * mirrors);
 	memset(img_lvs, 0, sizeof(*img_lvs) * mirrors);
 
 	if (!_create_mimage_lvs(ah, mirrors, stripes, stripe_size, lv, img_lvs, log))
