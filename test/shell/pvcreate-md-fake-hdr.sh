@@ -41,7 +41,7 @@ aux mdadm_create --metadata=1.0 --level=1 --raid-devices=2 "$dev1" "$dev2"
 
 mddev=$(< MD_DEV)
 pvdev=$(< MD_DEV_PV)
-sleep 3
+sleep 2
 mdadm --stop "$mddev"
 
 # copy fake PV/VG header PV3 -> PV2 (which is however md raid1 leg)
@@ -76,8 +76,8 @@ pvs "$dev3" "$dev2" || true
 dmsetup info -c
 dmsetup table
 
-# even after 3 second of possible hidden raid array assembling
-sleep 3
+# even after 2 second of possible hidden raid array assembling
+sleep 2
 dmsetup info -c
 
 # if for any reason array went up - stop it again
@@ -96,8 +96,10 @@ sleep 1
 # and let 'fake hdr' to be fixed from master/primary leg
 # (when mdadm supports repair)
 if mdadm --action=repair "$mddev" ; then
-	sleep 1
+	sleep .5
 	pvscan -vvvv
 	# should be showing correctly PV3 & PV4
 	pvs "$dev3" "$dev4"
 fi
+
+mdadm --stop "$mddev" || true
