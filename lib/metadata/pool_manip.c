@@ -398,8 +398,9 @@ struct lv_segment *find_pool_seg(const struct lv_segment *seg)
 		return NULL;
 	}
 
-	if ((lv_is_thin_type(seg->lv) && !seg_is_pool(pool_seg))) {
-		log_error("%s on %s is not a %s pool segment",
+	if ((lv_is_thin_type(seg->lv) || lv_is_cache_type(seg->lv)) &&
+	    !seg_is_pool(pool_seg)) {
+		log_error("%s on %s is not a %s pool segment.",
 			  display_lvname(pool_seg->lv), display_lvname(seg->lv),
 			  lv_is_thin_type(seg->lv) ? "thin" : "cache");
 		return NULL;
