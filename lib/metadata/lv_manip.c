@@ -6555,13 +6555,10 @@ static int _fs_extend_allow(struct cmd_context *cmd, struct logical_volume *lv,
 static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 		      struct lvresize_params *lp)
 {
-	struct fs_info fsinfo;
-	struct fs_info fsinfo2;
+	struct fs_info fsinfo = { 0 };
+	struct fs_info fsinfo2 =  { 0 };
 	uint64_t newsize_bytes_lv;
 	int ret = 0;
-
-	memset(&fsinfo, 0, sizeof(fsinfo));
-	memset(&fsinfo2, 0, sizeof(fsinfo));
 
 	if (!fs_get_info(cmd, lv, &fsinfo))
 		goto_out;
