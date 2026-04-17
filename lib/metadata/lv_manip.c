@@ -1773,10 +1773,16 @@ int lv_refresh_suspend_resume(const struct logical_volume *lv)
 	/*
 	 * Remove any transiently activated error
 	 * devices which aren't used any more.
+	 * Flush the activation udev cookie first so the
+	 * missing device removal uses a separate cookie.
 	 */
-	if (lv_is_raid(lv) && !lv_deactivate_any_missing_subdevs(lv)) {
-		log_error("Failed to remove temporary SubLVs from %s", display_lvname(lv));
-		return 0;
+	if (lv_is_raid(lv)) {
+		sync_local_dev_names(lv->vg->cmd);
+		if (!lv_deactivate_any_missing_subdevs(lv)) {
+			log_error("Failed to remove temporary SubLVs from %s.",
+				  display_lvname(lv));
+			return 0;
+		}
 	}
 
 	return 1;

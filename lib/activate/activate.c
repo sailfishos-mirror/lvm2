@@ -2790,10 +2790,18 @@ int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv)
 	return r;
 }
 
-/* Remove any existing, closed mapped device by @name */
+/*
+ * Remove any existing, closed mapped device by @name.
+ *
+ * TODO: missing devices should be tracked in the DM tree and removed
+ * automatically by the CLEAN action instead of this name-guessing hack.
+ * Current approach may leak devices if they are dropped via lvconvert
+ * or other operations that don't call lv_deactivate_any_missing_subdevs().
+ */
 static int _remove_dm_dev_by_name(const char *name)
 {
 	int r = 0;
+	uint32_t cookie;
 	struct dm_task *dmt;
 	struct dm_info info;
 
@@ -2811,8 +2819,11 @@ static int _remove_dm_dev_by_name(const char *name)
 		if (!(dmt = dm_task_create(DM_DEVICE_REMOVE)))
 			return_0;
 
-		if (dm_task_set_name(dmt, name))
+		cookie = fs_get_cookie();
+		if (dm_task_set_name(dmt, name) &&
+		    dm_task_set_cookie(dmt, &cookie, 0))
 			r = dm_task_run(dmt);
+		fs_set_cookie(cookie);
 	}
 
 	dm_task_destroy(dmt);
