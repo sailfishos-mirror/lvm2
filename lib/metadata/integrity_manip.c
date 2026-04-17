@@ -334,11 +334,15 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv, char **remove_image
 
 		log_debug("Removing unused integrity LVs %s %s", lv_iorig->name, lv_imeta->name);
 
-		if (!lv_remove(lv_iorig))
+		if (!lv_remove(lv_iorig)) {
 			log_error("Failed to remove unused iorig LV %s.", lv_iorig->name);
+			return 0;
+		}
 
-		if (!lv_remove(lv_imeta))
+		if (!lv_remove(lv_imeta)) {
 			log_error("Failed to remove unused imeta LV %s.", lv_imeta->name);
+			return 0;
+		}
 	}
 
 	if (!vg_write(vg) || !vg_commit(vg))
