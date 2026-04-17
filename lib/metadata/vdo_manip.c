@@ -191,9 +191,9 @@ static int _sysfs_get_kvdo_value(const char *dm_name, const struct dm_info *dmin
 	}
 	temp[size] = 0;
 	errno = 0;
-	*value = strtoll(temp, NULL, 0);
+	*value = strtoull(temp, NULL, 0);
 	if (errno) {
-		log_sys_debug("strtool", path);
+		log_sys_debug("strtoull", path);
 		goto bad;
 	}
 
