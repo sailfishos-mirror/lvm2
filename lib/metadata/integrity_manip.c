@@ -291,7 +291,7 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv, char **remove_image
 		if (!remove_layer_from_lv(lv_image, lv_iorig))
 			return_0;
 
-		if (!remove_seg_from_segs_using_this_lv(seg_image->integrity_meta_dev, seg_image))
+		if (!remove_seg_from_segs_using_this_lv(lv_imeta, seg_image))
 			return_0;
 
 		iorig_lvs[s] = lv_iorig;
@@ -802,7 +802,7 @@ bad:
 			lv_iorig = seg_lv(seg_image, 0);
 			if (lv_image->status & INTEGRITY) {
 				if (!remove_layer_from_lv(lv_image, lv_iorig) ||
-				    !remove_seg_from_segs_using_this_lv(seg_image->integrity_meta_dev,
+				    !remove_seg_from_segs_using_this_lv(imeta_lvs[s],
 									seg_image)) {
 					log_error("Aborting. Cannot remove integrity layer from LV %s.", display_lvname(lv_image));
 					return 0;
