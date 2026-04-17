@@ -1237,8 +1237,8 @@ uint32_t lv_raid_data_copies(const struct segment_type *segtype, uint32_t area_c
 /* Return data images count for @total_rimages depending on @seg's type */
 static uint32_t _data_rimages_count(const struct lv_segment *seg, const uint32_t total_rimages)
 {
-	if (!seg_is_thin(seg) && total_rimages <= seg->segtype->parity_devs)
-		return_0;
+	if (total_rimages <= seg->segtype->parity_devs)
+		return 0;
 
 	return total_rimages - seg->segtype->parity_devs;
 }
