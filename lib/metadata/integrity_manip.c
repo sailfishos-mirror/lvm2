@@ -990,7 +990,7 @@ int lv_integrity_mismatches(struct cmd_context *cmd,
 		.seg_status.type = SEG_STATUS_NONE,
 	};
 
-	if (lv_is_raid(lv) && lv_raid_has_integrity((struct logical_volume *)lv))
+	if (lv_is_raid(lv) && lv_raid_has_integrity(lv))
 		return lv_raid_integrity_total_mismatches(cmd, lv, mismatches);
 
 	if (!lv_is_integrity(lv))
