@@ -708,11 +708,7 @@ int vg_remove_direct(struct volume_group *vg)
 
 int vg_remove(struct volume_group *vg)
 {
-	int ret;
-
-	ret = vg_remove_direct(vg);
-
-	return ret;
+	return vg_remove_direct(vg);
 }
 
 int check_dev_block_size_for_vg(struct device *dev, const struct volume_group *vg,
