@@ -195,7 +195,7 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
 		}
 
 		lv_size_bytes = lv_iorig->size * 512;
-		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, 0);
+		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, vg->extent_size);
 		meta_sectors = meta_bytes / 512;
 		meta_extents = meta_sectors / vg->extent_size;
 		if (!meta_extents)
