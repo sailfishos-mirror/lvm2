@@ -538,6 +538,9 @@ int thin_pool_prepare_metadata(struct logical_volume *metadata_lv,
 	if (fclose(f))
 		log_sys_debug("fclose", md_path);
 
+	if (!deactivate_lv(cmd, metadata_lv))
+		stack;
+
 	return r;
 }
 
