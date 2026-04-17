@@ -931,7 +931,7 @@ int cache_set_metadata_format(struct lv_segment *seg, cache_metadata_format_t fo
 	}
 
 	/* See what is a 'best' available cache metadata format
-	 * when the specified format is other then always existing CMFormat 1 */
+	 * when the specified format is other than always existing CMFormat 1 */
 	if (format != CACHE_METADATA_FORMAT_1) {
 		best = _get_default_cache_metadata_format(seg->lv->vg->cmd);
 

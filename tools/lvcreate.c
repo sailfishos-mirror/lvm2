@@ -852,7 +852,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	} else if (arg_is_set(cmd, snapshot_ARG) &&
 		   (arg_is_set(cmd, virtualoriginsize_ARG) ||
 		   !arg_is_set(cmd, virtualsize_ARG)))
-		/* Snapshot has higher priority then thin */
+		/* Snapshot has higher priority than thin */
 		segtype_str = SEG_TYPE_NAME_SNAPSHOT; /* --thinpool makes thin volume */
 	else if (arg_is_set(cmd, cache_ARG) || arg_is_set(cmd, cachepool_ARG))
 		segtype_str = SEG_TYPE_NAME_CACHE;

@@ -839,7 +839,7 @@ int update_pool_metadata_min_max(struct cmd_context *cmd,
 
 	if (*metadata_size > max_metadata_size) {
 		if (metadata_lv) {
-			log_print_unless_silent("Size %s of pool metadata volume %s is bigger then maximum usable size %s.",
+			log_print_unless_silent("Size %s of pool metadata volume %s is bigger than maximum usable size %s.",
 						display_size(cmd, *metadata_size),
 						display_lvname(metadata_lv),
 						display_size(cmd, max_metadata_size));

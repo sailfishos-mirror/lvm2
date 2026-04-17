@@ -3932,13 +3932,13 @@ static int _dm_tree_node_add_cache_target_impl(struct dm_tree_node *node,
 	}
 
 	if (data_block_size < DM_CACHE_MIN_DATA_BLOCK_SIZE) {
-		log_error("Data block size %u is lower then %u sectors.",
+		log_error("Data block size %u is lower than %u sectors.",
 			  data_block_size, DM_CACHE_MIN_DATA_BLOCK_SIZE);
 		return 0;
 	}
 
 	if (data_block_size > DM_CACHE_MAX_DATA_BLOCK_SIZE) {
-		log_error("Data block size %u is higher then %u sectors.",
+		log_error("Data block size %u is higher than %u sectors.",
 			  data_block_size, DM_CACHE_MAX_DATA_BLOCK_SIZE);
 		return 0;
 	}
@@ -4203,7 +4203,7 @@ static struct load_segment *_get_single_load_segment(struct dm_tree_node *node,
 static int _thin_validate_device_id(uint32_t device_id)
 {
 	if (device_id > DM_THIN_MAX_DEVICE_ID) {
-		log_error("Device id %u is higher then %u.",
+		log_error("Device id %u is higher than %u.",
 			  device_id, DM_THIN_MAX_DEVICE_ID);
 		return 0;
 	}
@@ -4242,13 +4242,13 @@ int dm_tree_node_add_thin_pool_target_v1(struct dm_tree_node *node,
 	uint64_t devsize = 0;
 
 	if (data_block_size < DM_THIN_MIN_DATA_BLOCK_SIZE) {
-		log_error("Data block size %u is lower then %u sectors.",
+		log_error("Data block size %u is lower than %u sectors.",
 			  data_block_size, DM_THIN_MIN_DATA_BLOCK_SIZE);
 		return 0;
 	}
 
 	if (data_block_size > DM_THIN_MAX_DATA_BLOCK_SIZE) {
-		log_error("Data block size %u is higher then %u sectors.",
+		log_error("Data block size %u is higher than %u sectors.",
 			  data_block_size, DM_THIN_MAX_DATA_BLOCK_SIZE);
 		return 0;
 	}

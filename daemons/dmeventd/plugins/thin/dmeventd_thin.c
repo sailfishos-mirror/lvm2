@@ -261,7 +261,7 @@ void process_event(struct dm_task *dmt,
 			needs_policy = 1;
 		state->metadata_percent_check = (state->metadata_percent / CHECK_STEP + 1) * CHECK_STEP;
 		if (state->metadata_percent_check == DM_PERCENT_100)
-			state->metadata_percent_check--; /* Can't get bigger then 100% */
+			state->metadata_percent_check--; /* Can't get bigger than 100% */
 	} else
 		state->metadata_percent_check = CHECK_MINIMUM;
 
@@ -276,7 +276,7 @@ void process_event(struct dm_task *dmt,
 			needs_policy = 1;
 		state->data_percent_check = (state->data_percent / CHECK_STEP + 1) * CHECK_STEP;
 		if (state->data_percent_check == DM_PERCENT_100)
-			state->data_percent_check--; /* Can't get bigger then 100% */
+			state->data_percent_check--; /* Can't get bigger than 100% */
 	} else
 		state->data_percent_check = CHECK_MINIMUM;
 

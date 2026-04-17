@@ -1942,7 +1942,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume 
 	/* Do not monitor snapshot that already covers origin */
 	if (monitor && lv_is_cow_covering_origin(lv)) {
 		log_debug_activation("Skipping monitor of snapshot larger "
-				     "then origin %s.", display_lvname(lv));
+				     "than origin %s.", display_lvname(lv));
 		return 1;
 	}
 

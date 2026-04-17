@@ -501,7 +501,7 @@ defines the default cache mode.
 The size of data blocks managed by dm-cache can be specified with the
 --chunksize option when caching is started.  The default unit is KiB.  The
 value must be a multiple of 32 KiB between 32 KiB and 1 GiB. Cache chunks
-bigger then 512KiB shall be only used when necessary.
+bigger than 512KiB shall be only used when necessary.
 .P
 Using a chunk size that is too large can result in wasteful use of the
 cache, in which small reads and writes cause large sections of an LV to be

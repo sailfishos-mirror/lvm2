@@ -1601,7 +1601,7 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 	else if ((type == NODE_ADD) && _count_node_ops[NODE_DEL])
 		/*
 		 * Ignore previous DEL operation on added node.
-		 * (No other operations for this device then DEL could be stacked here).
+		 * (No other operations for this device than DEL could be stacked here).
 		 */
 		dm_list_iterate_safe(noph, nopht, &_node_ops) {
 			nop = dm_list_item(noph, struct node_op_parms);

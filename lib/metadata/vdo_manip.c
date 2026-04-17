@@ -440,7 +440,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 			log_error("Cannot create fully fitting VDO volume, "
 				  "--virtualsize has to be specified.");
 
-		log_error("Size %s for VDO volume cannot be smaller then extent size %s.",
+		log_error("Size %s for VDO volume cannot be smaller than extent size %s.",
 			  display_size(data_lv->vg->cmd, vdo_logical_size),
 			  display_size(data_lv->vg->cmd, extent_size));
 		return 0;

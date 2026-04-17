@@ -1056,7 +1056,7 @@ int fs_get_blkid(const char *pathname, struct fs_info *fsi)
 
 		/*
 		 * For swap, FSLASTBLOCK is reported by blkid since v2.41 so use that directly.
-		 * Otherwise, we do have FSSIZE reported since v2.39. Then. then last block is calculated as:
+		 * Otherwise, we do have FSSIZE reported since v2.39. The last block is then calculated as:
 		 *    FSSIZE (== size of the usable swap area) + FSBLOCKSIZE (== size of the swap header)
 		 */
 		if (!strcmp(fsi->fstype, "swap"))

@@ -915,7 +915,7 @@ int update_thin_pool_params(struct cmd_context *cmd,
 			log_verbose("Setting chunk size %s.", display_size(cmd, *chunk_size));
 		} else if (*chunk_size < estimate_chunk_size) {
 			/* Suggest bigger chunk size */
-			log_warn("WARNING: Chunk size is smaller then suggested minimum size %s.",
+			log_warn("WARNING: Chunk size is smaller than suggested minimum size %s.",
 				 display_size(cmd, estimate_chunk_size));
 		}
 	}

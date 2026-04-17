@@ -1128,7 +1128,7 @@ uint32_t extents_from_percent_size(struct volume_group *vg, const struct dm_list
 	case PERCENT_NONE:
 		if (!roundup && (size % vg->extent_size)) {
 			if (!(size -= size % vg->extent_size)) {
-				log_error("Specified size is smaller then physical extent boundary.");
+				log_error("Specified size is smaller than physical extent boundary.");
 				return 0;
 			}
 			log_print_unless_silent("Rounding size to boundary between physical extents: %s.",

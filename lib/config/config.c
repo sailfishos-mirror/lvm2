@@ -1681,7 +1681,7 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
 	/*
 	 * Persistent filter loading is based on timestamp,
 	 * so we need to know the newest timestamp to make right decision
-	 * whether the .cache isn't older then any of configs
+	 * whether the .cache isn't older than any of configs
 	 */
 	cs = dm_config_get_custom(cft);
 	csn = dm_config_get_custom(newdata);
@@ -2591,7 +2591,7 @@ uint64_t get_default_allocation_cache_pool_max_chunks_CFG(struct cmd_context *cm
 		/* Still warn the user when the value is tweaked above recommended level */
 		/* Maybe drop to log_verbose... */
 		log_warn_suppress(_warn_max_chunks++, "WARNING: Configured cache_pool_max_chunks value "
-				  FMTu64 " is higher then recommended " FMTu64 ".",
+				  FMTu64 " is higher than recommended " FMTu64 ".",
 				  max_chunks, default_max_chunks);
 
 	return max_chunks;

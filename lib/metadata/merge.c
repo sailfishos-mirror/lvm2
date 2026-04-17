@@ -451,7 +451,7 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
 				seg_error("region size is zero");
 			/* Avoid regionsize check in case of 'mirrored' mirror log or larger than mlog regionsize will fail */
 			else if (!strstr(seg->lv->name, "_mlog") && (seg->region_size > seg->lv->size))
-				seg_error("region size is bigger then LV itself");
+				seg_error("region size is bigger than LV itself");
 			else if (!is_power_of_2(seg->region_size))
 				seg_error("region size is non power of 2");
 		}

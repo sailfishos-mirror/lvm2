@@ -5741,7 +5741,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 		/* Segment size in extents must be divisible by stripes */
 		stripes_extents = lp->stripes;
 		if (lp->stripe_size > vg->extent_size)
-			/* Strip size is bigger then extent size needs more extents */
+			/* Strip size is bigger than extent size needs more extents */
 			stripes_extents *= (lp->stripe_size / vg->extent_size);
 
 		size_rest = seg_size % stripes_extents;
@@ -5985,11 +5985,11 @@ static int _lv_resize_check_type(struct logical_volume *lv,
 			return 0;
 		}
 
-		/* Validate thin target supports bigger size of thin volume then external origin */
+		/* Validate thin target supports bigger size of thin volume than external origin */
 		if (lv_is_thin_volume(lv) && first_seg(lv)->external_lv &&
 		    (lp->extents > first_seg(lv)->external_lv->le_count) &&
 		    !thin_pool_feature_supported(first_seg(lv)->pool_lv, THIN_FEATURE_EXTERNAL_ORIGIN_EXTEND)) {
-			log_error("Thin target does not support external origin smaller then thin volume.");
+			log_error("Thin target does not support external origin smaller than thin volume.");
 			return 0;
 		}
 	}
@@ -9528,7 +9528,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			return_NULL;
 
 		if (origin_lv->size < lp->chunk_size) {
-			log_error("Caching of origin cache volume smaller then chunk size is unsupported.");
+			log_error("Caching of origin cache volume smaller than chunk size is unsupported.");
 			return NULL;
 		}
 	} else if (seg_is_cache(lp)) {

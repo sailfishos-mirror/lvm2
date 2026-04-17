@@ -79,9 +79,9 @@ static int _lv_is_single_seg(const struct logical_volume *lv, const char *segtyp
 
 	dm_list_iterate_items(seg, &lv->segments) {
 		if (cnt++)
-			return 0; /* More then 1 segment */
+			return 0; /* More than 1 segment */
 		if (strcmp(seg->segtype->name, segtype_name))
-			return 0; /* Other then expected */
+			return 0; /* Other than expected */
 	}
 
 	return 1;

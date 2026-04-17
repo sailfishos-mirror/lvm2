@@ -2519,7 +2519,7 @@ static int _check_tool_version(struct cmd_context *cmd, const char *tool,
 			if ((nl = strchr(buf, '\n')))
 				nl[0] = 0; /* cut newline away */
 
-			log_verbose("Found version of %s %s is %s then requested %u.%u.%u.",
+			log_verbose("Found version of %s %s is %s than requested %u.%u.%u.",
 				    argv[0], buf, ret ? "better" : "older", maj, min, patch);
 		} else
 			log_warn("WARNING: Cannot parse output '%s' from %s.", buf, argv[0]);

@@ -1034,7 +1034,7 @@ char yes_no_prompt(const char *prompt, ...)
 
 	sigint_restore();
 
-	/* For other then Yes answer check there is really no interrupt */
+	/* For other than Yes answer check there is really no interrupt */
 	if (sig || sigint_caught()) {
 		stack;
 		ret = 'n';

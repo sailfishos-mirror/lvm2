@@ -81,7 +81,7 @@ static void _cache_display(const struct lv_segment *seg)
 
 /*
  * When older metadata are loaded without newer settings,
- * set then to default settings (the one that could have been
+ * set them to default settings (the one that could have been
  * used implicitly at that time).
  *
  * Needs both segments cache and cache_pool to be loaded.

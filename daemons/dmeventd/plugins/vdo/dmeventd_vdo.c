@@ -232,7 +232,7 @@ void process_event(struct dm_task *dmt,
 			needs_policy = 1;
 		state->percent_check = (state->percent / CHECK_STEP + 1) * CHECK_STEP;
 		if (state->percent_check == DM_PERCENT_100)
-			state->percent_check--; /* Can't get bigger then 100% */
+			state->percent_check--; /* Can't get bigger than 100% */
 	} else
 		state->percent_check = CHECK_MINIMUM;
 
