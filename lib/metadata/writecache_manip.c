@@ -416,20 +416,14 @@ int lv_writecache_set_cleaner(struct logical_volume *lv)
 	seg->writecache_settings.cleaner = 1;
 	seg->writecache_settings.cleaner_set = 1;
 
-	if (lv_is_active(lv)) {
-		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
-			log_error("Failed to update VG.");
-			return 0;
-		}
-		if (!lv_writecache_message(lv, "cleaner")) {
-			log_error("Failed to set writecache cleaner for %s.", display_lvname(lv));
-			return 0;
-		}
-	} else {
-		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
-			log_error("Failed to update VG.");
-			return 0;
-		}
+	if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
+		log_error("Failed to update VG.");
+		return 0;
+	}
+
+	if (lv_is_active(lv) && !lv_writecache_message(lv, "cleaner")) {
+		log_error("Failed to set writecache cleaner for %s.", display_lvname(lv));
+		return 0;
 	}
 	return 1;
 }
