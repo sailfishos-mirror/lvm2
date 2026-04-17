@@ -8490,7 +8490,7 @@ int remove_layer_from_lv(struct logical_volume *lv,
 	 */
 	if (!strstr(layer_lv->name, "_mimage")) {
 		for (r = 0; r < DM_ARRAY_SIZE(_suffixes); ++r) {
-			if (strstr(layer_lv->name, _suffixes[r]) == 0) {
+			if (strstr(layer_lv->name, _suffixes[r])) {
 				lv_names.old = layer_lv->name;
 				lv_names.new = parent_lv->name;
 				if (!for_each_sub_lv(parent_lv, _rename_skip_pools_externals_cb, (void *) &lv_names))
