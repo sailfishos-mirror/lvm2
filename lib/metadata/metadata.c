@@ -613,7 +613,7 @@ int vg_rename(struct cmd_context *cmd, struct volume_group *vg,
 			return 0;
 		}
 
-                /* Mark the PVs that still hold metadata with the old VG name */
+		/* Mark the PVs that still hold metadata with the old VG name */
 		log_debug_metadata("Marking PV %s as moved to VG %s", dev_name(pvl->pv->dev), new_name);
 		pvl->pv->status |= PV_MOVED_VG;
 	}
@@ -815,7 +815,7 @@ int vg_extend_each_pv(struct volume_group *vg, struct pvcreate_params *pp)
 			prev_lbs = logical_block_size;
 			continue;
 		}
-		
+
 		if (prev_lbs != logical_block_size) {
 			inconsistent_existing_lbs = 1;
 			break;
@@ -1184,11 +1184,11 @@ static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bi
 		return NULL;
 	}
 
-        if (!dm_pool_begin_object(mem, 512)) {
-                log_error("dm_pool_begin_object failed for random list of bits.");
+	if (!dm_pool_begin_object(mem, 512)) {
+		log_error("dm_pool_begin_object failed for random list of bits.");
 		dm_pool_free(mem, bs);
-                return NULL;
-        }
+		return NULL;
+	}
 
 	/* Perform loop num_set_bits times, selecting one bit each time */
 	while (i++ < num_bits) {
@@ -1209,12 +1209,12 @@ static dm_bitset_t _bitset_with_random_bits(struct dm_pool *mem, uint32_t num_bi
 		if (dm_snprintf(buf, sizeof(buf), "%u ", bit_selected) < 0) {
 			log_error("snprintf random bit failed.");
 			dm_pool_free(mem, bs);
-                	return NULL;
+			return NULL;
 		}
 		if (!dm_pool_grow_object(mem, buf, strlen(buf))) {
 			log_error("Failed to generate list of random bits.");
 			dm_pool_free(mem, bs);
-                	return NULL;
+			return NULL;
 		}
 	}
 
@@ -1324,7 +1324,6 @@ static int _vg_adjust_ignored_mdas(struct volume_group *vg)
 		else
 			return 1;
 	}
-
 
 	/* Not an error to have vg_mda_count larger than total mdas. */
 	if (vg->mda_copies == VGMETADATACOPIES_ALL ||
@@ -2359,7 +2358,6 @@ int vg_validate(struct volume_group *vg)
 			r = 0;
 	}
 
-
 	if (!check_pv_segments(vg)) {
 		log_error(INTERNAL_ERROR "PV segments corrupted in %s.",
 			  vg->name);
@@ -2954,7 +2952,6 @@ int vg_write(struct volume_group *vg)
 	} else
 		log_debug_metadata("Skipping validation of volume group structure.");
 
-
 	if (vg->status & PARTIAL_VG) {
 		log_error("Cannot update partial volume group %s.", vg->name);
 		return 0;
@@ -3165,7 +3162,7 @@ int vg_commit(struct volume_group *vg)
 		/* This *is* the original now that it's committed. */
 		_vg_move_cached_precommitted_to_committed(vg);
 
-		if (vg->needs_write_and_commit){
+		if (vg->needs_write_and_commit) {
 			/* Print buffered messages that have been finished with this commit. */
 			dm_list_iterate_items(sl, &vg->msg_list)
 				log_print_unless_silent("%s", sl->str);
@@ -3295,7 +3292,7 @@ struct volume_group *vg_read_orphans(struct cmd_context *cmd, const char *orphan
 	vg = fmt->orphan_vg;
 
 	dm_list_iterate_items_safe(pvl, tpvl, &vg->pvs)
-		if (pvl->pv->status & UNLABELLED_PV )
+		if (pvl->pv->status & UNLABELLED_PV)
 			dm_list_move(&head.list, &pvl->list);
 		else
 			pv_set_fid(pvl->pv, NULL);
@@ -3409,7 +3406,7 @@ static int _check_devs_used_correspond_with_lv(struct dm_pool *mem, struct dm_li
 				if (!(dev->flags & DEV_USED_FOR_LV)) {
 					if (!found_inconsistent) {
 						if (!dm_pool_begin_object(mem, 32))
-                                                        return_0;
+								return_0;
 						found_inconsistent = 1;
 					} else {
 						if (!dm_pool_grow_object(mem, DEV_LIST_DELIM, sizeof(DEV_LIST_DELIM) - 1))
@@ -4355,7 +4352,8 @@ const struct logical_volume *lv_committed(const struct logical_volume *lv)
 	return found_lv;
 }
 
-int vg_strip_outdated_historical_lvs(struct volume_group *vg) {
+int vg_strip_outdated_historical_lvs(struct volume_group *vg)
+{
 	struct glv_list *glvl, *tglvl;
 	time_t current_time = time(NULL);
 	uint64_t threshold = find_config_tree_int(vg->cmd, metadata_lvs_history_retention_time_CFG, NULL);
@@ -4756,7 +4754,6 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	 */
 	fid->ref_count++;
 
-
 	/*
 	 * label_scan found PVs for this VG and set up lvmcache to describe the
 	 * VG/PVs that we use here to read the VG.  It created 'vginfo' for the
@@ -4810,7 +4807,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 			continue;
 		}
 
-		/* 
+		/*
 		 * Use the newest copy of the metadata found on any mdas.
 		 * Above, We could check if the scan found an old metadata
 		 * seqno in this mda and just skip reading it again; then these

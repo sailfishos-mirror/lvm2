@@ -1442,36 +1442,36 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 		return lv_raid_split(lv, lp->yes, lp->lv_split_name, image_count, lp->pvh);
 
 	if (lp->mirrors_supplied) {
-		if (seg_is_linear(seg) || seg_is_raid1(seg)) { /* ??? */
-		if (!*lp->type_str || !strcmp(lp->type_str, SEG_TYPE_NAME_RAID1) || !strcmp(lp->type_str, SEG_TYPE_NAME_LINEAR) ||
-		    (!strcmp(lp->type_str, SEG_TYPE_NAME_STRIPED) && image_count == 1)) {
-			if (image_count > DEFAULT_RAID1_MAX_IMAGES) {
-				log_error("Only up to %u mirrors in %s LV %s supported currently.",
-					  DEFAULT_RAID1_MAX_IMAGES, lp->segtype->name, display_lvname(lv));
-				return 0;
-			}
-			if (!seg_is_raid1(seg) && lv_raid_has_integrity(lv)) {
-				log_error("Cannot add raid images with integrity for this raid level.");
-				return 0;
-			}
-			if (!lv_raid_change_image_count(lv, lp->yes, image_count,
-							(lp->region_size_supplied || !seg->region_size) ?
-							lp->region_size : seg->region_size , lp->pvh))
-				return_0;
-
-			if (lv_raid_has_integrity(lv) && !images_reduced) {
-				struct dm_integrity_settings *isettings = NULL;
-				if (!lv_get_raid_integrity_settings(lv, &isettings))
+		if (seg_is_linear(seg) || seg_is_raid1(seg)) {
+			if (!*lp->type_str || !strcmp(lp->type_str, SEG_TYPE_NAME_RAID1) || !strcmp(lp->type_str, SEG_TYPE_NAME_LINEAR) ||
+			    (!strcmp(lp->type_str, SEG_TYPE_NAME_STRIPED) && image_count == 1)) {
+				if (image_count > DEFAULT_RAID1_MAX_IMAGES) {
+					log_error("Only up to %u mirrors in %s LV %s supported currently.",
+						  DEFAULT_RAID1_MAX_IMAGES, lp->segtype->name, display_lvname(lv));
+					return 0;
+				}
+				if (!seg_is_raid1(seg) && lv_raid_has_integrity(lv)) {
+					log_error("Cannot add raid images with integrity for this raid level.");
+					return 0;
+				}
+				if (!lv_raid_change_image_count(lv, lp->yes, image_count,
+								(lp->region_size_supplied || !seg->region_size) ?
+								lp->region_size : seg->region_size , lp->pvh))
 					return_0;
-				if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
-					return_0;
+
+				if (lv_raid_has_integrity(lv) && !images_reduced) {
+					struct dm_integrity_settings *isettings = NULL;
+					if (!lv_get_raid_integrity_settings(lv, &isettings))
+						return_0;
+					if (!lv_add_integrity_to_raid(lv, isettings, lp->pvh, NULL))
+						return_0;
+				}
+
+				log_print_unless_silent("Logical volume %s successfully converted.",
+							display_lvname(lv));
+
+				return 1;
 			}
-
-			log_print_unless_silent("Logical volume %s successfully converted.",
-						display_lvname(lv));
-
-			return 1;
-		}
 		}
 		goto try_new_takeover_or_reshape;
 	}

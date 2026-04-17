@@ -280,19 +280,19 @@ uint32_t vg_mda_count(const struct volume_group *vg)
 
 uint32_t vg_mda_used_count(const struct volume_group *vg)
 {
-       uint32_t used_count = 0;
-       struct metadata_area *mda;
+	uint32_t used_count = 0;
+	struct metadata_area *mda;
 
 	/*
 	 * Ignored mdas could be on either list - the reason being the state
 	 * may have changed from ignored to un-ignored and we need to write
 	 * the state to disk.
 	 */
-       dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use)
-	       if (!mda_is_ignored(mda))
-		       used_count++;
+	dm_list_iterate_items(mda, &vg->fid->metadata_areas_in_use)
+		if (!mda_is_ignored(mda))
+			used_count++;
 
-       return used_count;
+	return used_count;
 }
 
 uint32_t vg_mda_copies(const struct volume_group *vg)
@@ -401,7 +401,7 @@ int vg_check_new_extent_size(const struct format_type *fmt, uint32_t new_extent_
 		return 0;
 	}
 
- 	return 1;
+	return 1;
 }
 
 int vg_set_extent_size(struct volume_group *vg, uint32_t new_extent_size)

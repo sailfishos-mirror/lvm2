@@ -90,13 +90,13 @@ static int _lv_is_single_seg(const struct logical_volume *lv, const char *segtyp
 /* LV is 'error' if it's using single error segment */
 int lv_is_error(const struct logical_volume *lv)
 {
-        return _lv_is_single_seg(lv, SEG_TYPE_NAME_ERROR);
+	return _lv_is_single_seg(lv, SEG_TYPE_NAME_ERROR);
 }
 
 /* LV is 'zero' if it's using single zero segment */
 int lv_is_zero(const struct logical_volume *lv)
 {
-        return _lv_is_single_seg(lv, SEG_TYPE_NAME_ZERO);
+	return _lv_is_single_seg(lv, SEG_TYPE_NAME_ZERO);
 }
 
 /* Orphan pvmove is left public 'pvmoveXXX' named LV with single error target */
@@ -299,7 +299,7 @@ char *lvseg_segtype_dup(struct dm_pool *mem, const struct lv_segment *seg)
 char *lvseg_discards_dup(struct dm_pool *mem, const struct lv_segment *seg)
 {
 	if (lv_is_thin_pool(seg->lv))
-		return  dm_pool_strdup(mem, get_pool_discards_name(seg->discards));
+		return dm_pool_strdup(mem, get_pool_discards_name(seg->discards));
 
 	log_error("Cannot query non thin-pool segment of LV %s for discards property.",
 		  display_lvname(seg->lv));

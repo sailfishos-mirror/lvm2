@@ -232,7 +232,7 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 	}
 
 	if (arg_is_set(cmd, persist_ARG))
-		pr_op = arg_str_value(cmd, persist_ARG, NULL); 
+		pr_op = arg_str_value(cmd, persist_ARG, NULL);
 
 	/*
 	 * vgchange -ay --persist start
@@ -248,12 +248,12 @@ int vgchange_activate(struct cmd_context *cmd, struct volume_group *vg,
 		if (!persist_start_include(cmd, vg, (activate == CHANGE_AAY), 0, NULL))
 			return_0;
 	}
- 
+
 	/*
 	 * Safe, since we never write out new metadata here. Required for
 	 * partial activation to work.
 	 */
-        cmd->handles_missing_pvs = 1;
+	cmd->handles_missing_pvs = 1;
 
 	/* FIXME: Force argument to deactivate them? */
 	if (!do_activate) {
@@ -635,7 +635,7 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg,
 		    vg->name, vg->system_id, system_id);
 
 	vg->system_id = system_id;
-	
+
 	return 1;
 }
 
@@ -1901,8 +1901,8 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
 		return ECMD_FAILED;
 	}
 
-	/* 
-	 * vgchange --setpersist y|require|autostart --persist start 
+	/*
+	 * vgchange --setpersist y|require|autostart --persist start
 	 * will start PR before changing VG.
 	 */
 	if (on && op && strcmp(op, "start")) {

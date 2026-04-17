@@ -97,7 +97,7 @@ int lv_merge_segments(struct logical_volume *lv)
 		  display_lvname(seg->lv), (msg), (val), lvseg_name(seg)); \
 	if ((*error_count)++ > ERROR_MAX) \
 		return; \
-} while(0)
+} while (0)
 
 /* Check segment LV for reshape flags. */
 static int _check_raid_seg_reshape_flags(struct lv_segment *seg)
@@ -494,7 +494,7 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
 			seg_error("has invalid chunk size.");
 
 		if (seg->zero_new_blocks != THIN_ZERO_YES &&
-                    seg->zero_new_blocks != THIN_ZERO_NO)
+		    seg->zero_new_blocks != THIN_ZERO_NO)
 			seg_error("zero_new_blocks is invalid");
 	} else { /* !thin_pool */
 		if (seg->zero_new_blocks != THIN_ZERO_UNSELECTED)
@@ -804,7 +804,6 @@ int check_lv_segments_incomplete_vg(struct logical_volume *lv)
 					/* Can't check more of such segment */
 					continue;
 				}
-
 
 /* FIXME I don't think this ever holds?
 				if (seg_le(seg, s) != le) {

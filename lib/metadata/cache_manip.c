@@ -47,7 +47,7 @@ const char *cache_mode_num_to_str(cache_mode_t mode)
 const char *get_cache_mode_name(const struct lv_segment *pool_seg)
 {
 	const char *str;
-		
+
 	if (!(str = cache_mode_num_to_str(pool_seg->cache_mode))) {
 		log_error(INTERNAL_ERROR "Cache pool %s has undefined cache mode, using writethrough instead.",
 			  display_lvname(pool_seg->lv));

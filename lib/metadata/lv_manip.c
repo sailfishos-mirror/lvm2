@@ -5277,7 +5277,7 @@ static uint32_t _lvseg_get_stripes(struct lv_segment *seg, uint32_t *stripesize)
 
 	if (seg_is_raid(seg)) {
 		*stripesize = seg->stripe_size;
-		return _raid_stripes_count(seg); 
+		return _raid_stripes_count(seg);
 	}
 
 	*stripesize = 0;
@@ -9035,7 +9035,8 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
 						log_debug("Falling back to direct zeroing.");
 					}
 
-					goto retry_with_dev_set; 				}
+					goto retry_with_dev_set;
+				}
 			}
 		} else
 retry_with_dev_set:

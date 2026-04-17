@@ -905,7 +905,6 @@ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev
 		return 0;
 	}
 
-
 	log_debug_devs("Reading labels for pvid");
 
 	while ((dev = dev_iter_get(cmd, iter))) {
@@ -930,8 +929,9 @@ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev
 
 		_scan_dev_close(dev);
 	}
+
 	ret = 1;
- out:
+out:
 	dev_iter_destroy(iter);
 
 	return ret;

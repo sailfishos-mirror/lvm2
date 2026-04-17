@@ -653,7 +653,7 @@ static int _init_device_ids_refresh(struct cmd_context *cmd)
 		if (dm_snprintf(path, sizeof(path), "%sdevices/virtual/dmi/id/product_uuid", sysfs_dir) < 0)
 			return_0;
 		if (get_sysfs_value(path, uuid, sizeof(uuid), 0) && uuid[0])
-			cmd->product_uuid = dm_pool_strdup(cmd->libmem, uuid);;
+			cmd->product_uuid = dm_pool_strdup(cmd->libmem, uuid);
 		if (cmd->product_uuid)
 			cmd->device_ids_check_product_uuid = 1;
 	}

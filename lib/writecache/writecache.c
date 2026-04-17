@@ -178,60 +178,60 @@ static int _writecache_text_export(const struct lv_segment *seg,
 	outf(f, "writecache_block_size = %u", seg->writecache_block_size);
 
 	if (seg->writecache_settings.high_watermark_set) {
-	        outf(f, "high_watermark = %llu",
-	                (unsigned long long)seg->writecache_settings.high_watermark);
+		outf(f, "high_watermark = %llu",
+			(unsigned long long)seg->writecache_settings.high_watermark);
 	}
 
 	if (seg->writecache_settings.low_watermark_set) {
-	        outf(f, "low_watermark = %llu",
-	                (unsigned long long)seg->writecache_settings.low_watermark);
+		outf(f, "low_watermark = %llu",
+			(unsigned long long)seg->writecache_settings.low_watermark);
 	}
 
 	if (seg->writecache_settings.writeback_jobs_set) {
-	        outf(f, "writeback_jobs = %llu",
-	                (unsigned long long)seg->writecache_settings.writeback_jobs);
+		outf(f, "writeback_jobs = %llu",
+			(unsigned long long)seg->writecache_settings.writeback_jobs);
 	}
 
 	if (seg->writecache_settings.autocommit_blocks_set) {
-	        outf(f, "autocommit_blocks = %llu",
-	                (unsigned long long)seg->writecache_settings.autocommit_blocks);
+		outf(f, "autocommit_blocks = %llu",
+			(unsigned long long)seg->writecache_settings.autocommit_blocks);
 	}
 
 	if (seg->writecache_settings.autocommit_time_set) {
-	        outf(f, "autocommit_time = %llu",
-	                (unsigned long long)seg->writecache_settings.autocommit_time);
+		outf(f, "autocommit_time = %llu",
+			(unsigned long long)seg->writecache_settings.autocommit_time);
 	}
 
 	if (seg->writecache_settings.fua_set) {
-	        outf(f, "fua = %u", seg->writecache_settings.fua);
+		outf(f, "fua = %u", seg->writecache_settings.fua);
 	}
 
 	if (seg->writecache_settings.nofua_set) {
-	        outf(f, "nofua = %u", seg->writecache_settings.nofua);
+		outf(f, "nofua = %u", seg->writecache_settings.nofua);
 	}
 
 	if (seg->writecache_settings.cleaner_set && seg->writecache_settings.cleaner) {
-	        outf(f, "cleaner = %u", seg->writecache_settings.cleaner);
+		outf(f, "cleaner = %u", seg->writecache_settings.cleaner);
 	}
 
 	if (seg->writecache_settings.max_age_set) {
-	        outf(f, "max_age = %u", seg->writecache_settings.max_age);
+		outf(f, "max_age = %u", seg->writecache_settings.max_age);
 	}
 
 	if (seg->writecache_settings.metadata_only_set) {
-	        outf(f, "metadata_only = %u", seg->writecache_settings.metadata_only);
+		outf(f, "metadata_only = %u", seg->writecache_settings.metadata_only);
 	}
 
 	if (seg->writecache_settings.pause_writeback_set) {
-	        outf(f, "pause_writeback = %u", seg->writecache_settings.pause_writeback);
+		outf(f, "pause_writeback = %u", seg->writecache_settings.pause_writeback);
 	}
 
 	if (seg->writecache_settings.new_key && seg->writecache_settings.new_val) {
-	        outf(f, "writecache_setting_key = \"%s\"",
-	                seg->writecache_settings.new_key);
+		outf(f, "writecache_setting_key = \"%s\"",
+			seg->writecache_settings.new_key);
 
-	        outf(f, "writecache_setting_val = \"%s\"",
-	                seg->writecache_settings.new_val);
+		outf(f, "writecache_setting_val = \"%s\"",
+			seg->writecache_settings.new_val);
 	}
 
 	return 1;

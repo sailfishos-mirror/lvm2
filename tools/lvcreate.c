@@ -706,7 +706,7 @@ static int _read_mirror_and_raid_params(struct cmd_context *cmd,
 	}
 
 	if (seg_is_mirror(lp) && !_read_mirror_params(cmd, lp))
-                return_0;
+		return_0;
 
 	if (seg_is_raid(lp) && !_read_raid_params(cmd, lp))
 		return_0;
@@ -1859,7 +1859,7 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 	pp.lp = &lp;
 	pp.lcp = &lcp;
 
-        if (!(handle = init_processing_handle(cmd, NULL))) {
+	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
 		return ECMD_FAILED;
 	}
@@ -1932,7 +1932,7 @@ int lvcreate_and_attach_writecache_cmd(struct cmd_context *cmd, int argc, char *
 		return EINVALID_CMD_LINE;
 	}
 
-        if (!(handle = init_processing_handle(cmd, NULL))) {
+	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
 		return ECMD_FAILED;
 	}
