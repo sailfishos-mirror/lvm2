@@ -2781,18 +2781,6 @@ out:
 	return r;
 }
 
-static int _pv_in_pv_list(struct physical_volume *pv, struct dm_list *head)
-{
-	struct pv_list *pvl;
-
-	dm_list_iterate_items(pvl, head) {
-		if (pvl->pv == pv)
-			return 1;
-	}
-
-	return 0;
-}
-
 static int _check_historical_lv_is_valid(struct historical_logical_volume *hlv)
 {
 	struct glv_list *glvl;
@@ -3001,7 +2989,7 @@ int vg_write(struct volume_group *vg)
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		int update_pv_header = 0;
 
-		if (_pv_in_pv_list(pvl->pv, &vg->pv_write_list))
+		if (find_pv_in_pv_list(&vg->pv_write_list, pvl->pv))
 			continue;
 
 		if (!pvl->pv->fmt->ops->pv_needs_rewrite(pvl->pv->fmt, pvl->pv, &update_pv_header))
