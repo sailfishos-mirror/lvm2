@@ -57,7 +57,7 @@ int lv_is_writecache_cachevol(const struct logical_volume *lv)
 }
 
 static int _get_writecache_kernel_status(struct cmd_context *cmd,
-					 struct logical_volume *lv,
+					 const struct logical_volume *lv,
 					 struct dm_status_writecache *status_out)
 {
 	struct lv_with_info_and_seg_status status = {
@@ -102,7 +102,7 @@ fail:
 }
 
 static int _get_writecache_kernel_error(struct cmd_context *cmd,
-					struct logical_volume *lv,
+					const struct logical_volume *lv,
 					uint32_t *kernel_error)
 {
 	struct dm_status_writecache status = { 0 };
@@ -332,7 +332,7 @@ static int _lv_detach_writecache_cachevol_active(struct logical_volume *lv, int 
 
 	log_debug("Checking writecache errors to detach.");
 
-	if (!_get_writecache_kernel_error(cmd, (struct logical_volume *)lv_old, &kernel_error)) {
+	if (!_get_writecache_kernel_error(cmd, lv_old, &kernel_error)) {
 		log_error("Failed to get writecache error status for %s.", display_lvname(lv_old));
 		return 0;
 	}
