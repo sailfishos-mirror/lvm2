@@ -1047,7 +1047,7 @@ int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struc
 		if (!setting_str_list_add("allow_discards", settings->allow_discards, NULL, result, mem))
 			errors++;
 	if (errors)
-		log_warn("Failed to create list of integrity settings.");
+		log_warn("WARNING: Failed to create list of integrity settings.");
 
 	return 1;
 }

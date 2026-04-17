@@ -480,7 +480,7 @@ int writecache_settings_to_str_list(struct dm_writecache_settings *settings, str
 			errors++;
 
 	if (errors)
-		log_warn("Failed to create list of writecache settings.");
+		log_warn("WARNING: Failed to create list of writecache settings.");
 
 	return 1;
 }
