@@ -263,7 +263,7 @@ static void _pdlv_locked_dump(struct buffer *buff, const struct lvmpolld_lv *pdl
 		buffer_append(buff, tmp);
 	if (dm_snprintf(tmp, sizeof(tmp), "\t\tlvname=\"%s\"\n", pdlv->lvname) > 0)
 		buffer_append(buff, tmp);
-	if (dm_snprintf(tmp, sizeof(tmp), "\t\tlvmpolld_internal_timeout=%d\n", pdlv->pdtimeout) > 0)
+	if (dm_snprintf(tmp, sizeof(tmp), "\t\tlvmpolld_internal_timeout=%u\n", pdlv->pdtimeout) > 0)
 		buffer_append(buff, tmp);
 	if (dm_snprintf(tmp, sizeof(tmp), "\t\tlvm_command_interval=\"%s\"\n", pdlv->sinterval ?: "<undefined>") > 0)
 		buffer_append(buff, tmp);

@@ -568,7 +568,7 @@ int vg_set_max_lv(struct volume_group *vg, uint32_t max_lv)
 
 	if (max_lv && max_lv < vg_visible_lvs(vg)) {
 		log_error("MaxLogicalVolume is less than the current number "
-			  "%d of LVs for %s", vg_visible_lvs(vg),
+			  "%u of LVs for %s.", vg_visible_lvs(vg),
 			  vg->name);
 		return 0;
 	}
@@ -596,7 +596,7 @@ int vg_set_max_pv(struct volume_group *vg, uint32_t max_pv)
 
 	if (max_pv && max_pv < vg->pv_count) {
 		log_error("MaxPhysicalVolumes is less than the current number "
-			  "%d of PVs for \"%s\"", vg->pv_count,
+			  "%u of PVs for \"%s\".", vg->pv_count,
 			  vg->name);
 		return 0;
 	}

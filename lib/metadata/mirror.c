@@ -684,7 +684,7 @@ static int _split_mirror_images(struct logical_volume *lv,
 		return 0;
 	}
 
-	log_verbose("Detaching %d images from mirror %s.",
+	log_verbose("Detaching %u images from mirror %s.",
 		    split_count, display_lvname(lv));
 
 	if (!_move_removable_mimages_to_end(lv, split_count, removable_pvs)) {
@@ -2152,7 +2152,7 @@ int lv_remove_mirrors(struct cmd_context *cmd __attribute__((unused)),
 	}
 
 	if (lv_mirror_count(lv) <= mirrors) {
-		log_error("Removing more than existing: %d <= %d.",
+		log_error("Removing more than existing: %u <= %u.",
 			  seg->area_count, mirrors);
 		return 0;
 	}
