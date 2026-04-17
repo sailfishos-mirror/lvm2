@@ -45,17 +45,17 @@ static struct physical_volume *_pv_read(struct cmd_context *cmd,
 					struct volume_group *vg,
 					struct lvmcache_info *info);
 
-static int _check_pv_ext(struct cmd_context *cmd, struct volume_group *vg)
+static void _check_pv_ext(struct cmd_context *cmd, struct volume_group *vg)
 {
 	struct lvmcache_info *info;
 	uint32_t ext_version, ext_flags;
 	struct pv_list *pvl;
 
 	if (vg_is_foreign(vg))
-		return 1;
+		return;
 
 	if (vg_is_shared(vg))
-		return 1;
+		return;
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
 		if (is_missing_pv(pvl->pv))
@@ -88,8 +88,6 @@ static int _check_pv_ext(struct cmd_context *cmd, struct volume_group *vg)
 				 dev_name(pvl->pv->dev), vg->name);
 		}
 	}
-
-	return 1;
 }
 
 /*
