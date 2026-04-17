@@ -32,9 +32,8 @@ static int _add_pe_range(struct dm_pool *mem, const char *pvname,
 
 	/* Ensure no overlap with existing areas */
 	dm_list_iterate_items(per, pe_ranges) {
-		if (((start < per->start) && (start + count - 1 >= per->start)) ||
-		    ((start >= per->start) &&
-			(per->start + per->count - 1) >= start)) {
+		if ((start < per->start + per->count) &&
+		    (per->start < start + count)) {
 			log_error("Overlapping PE ranges specified (" FMTu32
 				  "-" FMTu32 ", " FMTu32 "-" FMTu32 ") on %s.",
 				  start, start + count - 1, per->start,
