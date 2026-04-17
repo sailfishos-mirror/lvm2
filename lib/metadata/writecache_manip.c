@@ -66,8 +66,7 @@ static int _get_writecache_kernel_status(struct cmd_context *cmd,
 
 	status.seg_status.seg = first_seg(lv);
 
-	/* FIXME: why reporter_pool? */
-	if (!(status.seg_status.mem = dm_pool_create("reporter_pool", 1024))) {
+	if (!(status.seg_status.mem = dm_pool_create("writecache_status", 1024))) {
 		log_error("Failed to get mem for LV status.");
 		return 0;
 	}
