@@ -542,7 +542,7 @@ int move_pvs_used_by_lv(struct volume_group *vg_from,
 
 int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
 {
-	static char vg_path[PATH_MAX];
+	char vg_path[PATH_MAX];
 	name_error_t name_error;
 
 	name_error = validate_name_detailed(vg_name);
@@ -4039,7 +4039,7 @@ static int _convert_key_to_string(const char *key, size_t key_len,
 int fid_add_mda(struct format_instance *fid, struct metadata_area *mda,
 		 const char *key, size_t key_len, const unsigned sub_key)
 {
-	static char full_key[PATH_MAX];
+	char full_key[PATH_MAX];
 
 	dm_list_add(_mda_is_ignored(mda) ? &fid->metadata_areas_ignored :
 		                           &fid->metadata_areas_in_use, &mda->list);
@@ -4087,7 +4087,7 @@ struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
 					  const char *key, size_t key_len,
 					  const unsigned sub_key)
 {
-	static char full_key[PATH_MAX];
+	char full_key[PATH_MAX];
 	struct metadata_area *mda = NULL;
 
 	if (!fid) {
@@ -4111,7 +4111,7 @@ struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
 int fid_remove_mda(struct format_instance *fid, struct metadata_area *mda,
 		   const char *key, size_t key_len, const unsigned sub_key)
 {
-	static char full_key[PATH_MAX];
+	char full_key[PATH_MAX];
 	struct metadata_area *mda_indexed = NULL;
 
 	/* At least one of mda or key must be specified. */
