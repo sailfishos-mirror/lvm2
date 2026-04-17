@@ -891,8 +891,9 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
 
 	/* Cut off suffix _pmspare */
 	if (!_dm_strncpy(new_name, lv->name, sizeof(new_name)) ||
-	    !(c = strchr(new_name, '_'))) {
-		log_error(INTERNAL_ERROR "LV %s has no suffix for pool metadata spare.",
+	    !(c = strrchr(new_name, '_')) ||
+	    strcmp(c, "_pmspare")) {
+		log_error(INTERNAL_ERROR "LV %s has no _pmspare suffix.",
 			  display_lvname(lv));
 		return 0;
 	}
