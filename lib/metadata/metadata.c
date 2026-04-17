@@ -4217,19 +4217,6 @@ void mda_set_ignored(struct metadata_area *mda, unsigned mda_ignored)
 			   mda->ops->mda_metadata_locn_offset ? mda->ops->mda_metadata_locn_offset(locn) : UINT64_C(0));
 }
 
-int mdas_empty_or_ignored(struct dm_list *mdas)
-{
-	struct metadata_area *mda;
-
-	if (dm_list_empty(mdas))
-		return 1;
-	dm_list_iterate_items(mda, mdas) {
-		if (_mda_is_ignored(mda))
-			return 1;
-	}
-	return 0;
-}
-
 int pv_change_metadataignore(struct physical_volume *pv, uint32_t mda_ignored)
 {
 	const char *pv_name = pv_dev_name(pv);

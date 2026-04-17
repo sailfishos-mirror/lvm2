@@ -243,7 +243,6 @@ int fid_remove_mda(struct format_instance *fid, struct metadata_area *mda,
 		   const char *key, size_t key_len, const unsigned sub_key);
 struct metadata_area *fid_get_mda_indexed(struct format_instance *fid,
 		const char *key, size_t key_len, const unsigned sub_key);
-int mdas_empty_or_ignored(struct dm_list *mdas);
 
 #define seg_pvseg(seg, s)	(seg)->areas[(s)].u.pv.pvseg
 #define seg_dev(seg, s)		(seg)->areas[(s)].u.pv.pvseg->pv->dev
