@@ -321,7 +321,7 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 		return 0;
 	}
 
-	argv[args] = dpath;
+	argv[++args] = dpath;
 
 	if (!(f = pipe_open(data_lv->vg->cmd, argv, 0, &pdata))) {
 		log_error("WARNING: Cannot read output from %s.", argv[0]);
