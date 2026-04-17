@@ -1599,6 +1599,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 				  display_lvname(lv));
 			if (!_lv_alloc_reshape_post_extend(lv, segtype_sav, stripe_size_sav, lv_size_cur))
 				return_0;
+			return 0;
 		}
 
 		/* pay attention to lv_extend maybe having allocated more because of layout specific rounding */
