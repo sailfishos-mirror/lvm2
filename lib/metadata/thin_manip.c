@@ -32,10 +32,9 @@ struct logical_volume *data_lv_from_thin_pool(struct logical_volume *pool_lv)
 		return NULL;
 	}
 
-	return seg_thinpool->areas[0].u.lv.lv;
+	return seg_lv(seg_thinpool, 0);
 }
 
-/* TODO: drop unused no_update */
 int attach_thin_pool_message(struct lv_segment *pool_seg, dm_thin_message_t type,
 			     struct logical_volume *lv, uint32_t delete_id,
 			     int no_update)
@@ -611,7 +610,7 @@ static int _check_pool_create(const struct logical_volume *lv)
 			return 0;
 		}
 		if (!thin_pool_below_threshold(first_seg(lv))) {
-			log_error("Free space in pool %s is above threshold, new volumes are not allowed.",
+			log_error("Pool %s usage is above threshold, new volumes are not allowed.",
 				  display_lvname(lv));
 			return 0;
 		}
