@@ -808,19 +808,20 @@ int handle_pool_metadata_spare(struct volume_group *vg, uint32_t extents,
 	seg = last_seg(lv);
 	seg_mirrors = lv_mirror_count(lv);
 
-	log_debug("Extending pool metadata spare from %u to %u extents.",
-		  lv->le_count, extents);
 	/* Check spare LV is big enough and preserve segtype */
-	if ((lv->le_count < extents) && seg &&
-	    /* coverity[format_string_injection] lv name is already validated */
-	    !lv_extend(lv, seg->segtype,
-		       seg->area_count / seg_mirrors,
-		       seg->stripe_size,
-		       seg_mirrors,
-		       seg->region_size,
-		       extents - lv->le_count,
-		       pvh, lv->alloc, 0))
-		return_0;
+	if ((lv->le_count < extents) && seg) {
+		log_debug("Extending pool metadata spare from %u to %u extents.",
+			  lv->le_count, extents);
+		/* coverity[format_string_injection] lv name is already validated */
+		if (!lv_extend(lv, seg->segtype,
+			       seg->area_count / seg_mirrors,
+			       seg->stripe_size,
+			       seg_mirrors,
+			       seg->region_size,
+			       extents - lv->le_count,
+			       pvh, lv->alloc, 0))
+			return_0;
+	}
 
 	return 1;
 }
