@@ -9546,11 +9546,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 		/* Create cache origin for cache pool */
 		/* FIXME Eventually support raid/mirrors with -m */
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
-			return_0;
+			return_NULL;
 
 	} else if (seg_is_integrity(lp)) {
 		if (!(create_segtype = get_segtype_from_string(vg->cmd, SEG_TYPE_NAME_STRIPED)))
-			return_0;
+			return_NULL;
 
 	} else if (seg_is_mirrored(lp) || (seg_is_raid(lp) && !seg_is_any_raid0(lp))) {
 		if (!(lp->region_size = adjusted_mirror_region_size(vg->cmd,
@@ -9601,7 +9601,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 			}
 
 			if (!validate_snapshot_origin(origin_lv))
-                                return_0;
+				return_NULL;
 		}
 
 		if (!cow_has_min_chunks(vg, lp->extents, lp->chunk_size))

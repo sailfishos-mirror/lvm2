@@ -320,7 +320,7 @@ char *lvseg_kernel_discards_dup_with_info_and_seg_status(struct dm_pool *mem, co
 		default:
 			log_error("Kernel reports unknown discards status %u.",
 				  lvdm->seg_status.thin_pool->discards);
-			return 0;
+			return NULL;
 		}
 		s = get_pool_discards_name(d);
 	} else if (lvdm->seg_status.type == SEG_STATUS_CACHE) {
@@ -1441,7 +1441,7 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
 
 	if (!(repstr = dm_pool_zalloc(mem, 11))) {
 		log_error("dm_pool_alloc failed");
-		return 0;
+		return NULL;
 	}
 
 	/* Blank if this is a "free space" LV. */
@@ -1674,7 +1674,7 @@ char *lv_attr_dup(struct dm_pool *mem, const struct logical_volume *lv)
 	};
 
 	if (!(status.seg_status.mem = dm_pool_create("reporter_pool", 1024)))
-		return_0;
+		return_NULL;
 
 	if (!(status.info_ok = lv_info_with_seg_status(lv->vg->cmd, first_seg(lv), &status, 1, 1)))
 		goto_bad;

@@ -552,7 +552,7 @@ struct logical_volume *detach_mirror_log(struct lv_segment *mirrored_seg)
 	lv_set_visible(log_lv);
 	log_lv->status &= ~MIRROR_LOG;
 	if (!remove_seg_from_segs_using_this_lv(log_lv, mirrored_seg))
-		return_0;
+		return_NULL;
 
 	return log_lv;
 }

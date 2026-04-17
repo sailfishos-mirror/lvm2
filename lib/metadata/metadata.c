@@ -1913,8 +1913,8 @@ static int _lv_each_dependency(struct logical_volume *lv,
 	struct dm_list *snh;
 
 	struct logical_volume *deps[] = {
-		lv->snapshot ? lv->snapshot->origin : 0,
-		lv->snapshot ? lv->snapshot->cow : 0 };
+		lv->snapshot ? lv->snapshot->origin : NULL,
+		lv->snapshot ? lv->snapshot->cow : NULL };
 	for (i = 0; i < DM_ARRAY_SIZE(deps); ++i) {
 		if (deps[i] && !fn(deps[i], data))
 			return_0;
