@@ -3116,7 +3116,11 @@ static int _vg_commit_mdas(struct volume_group *vg)
 	DM_LIST_INIT(ignored);
 	int good = 0;
 
-	/* Rearrange the metadata_areas_in_use so ignored mdas come first. */
+	/*
+	 * Commit ignored mdas first, so that the non-ignored (active)
+	 * copies are committed last and represent the final state on
+	 * disk if something interrupts the process.
+	 */
 	dm_list_iterate_items_safe(mda, tmda, &vg->fid->metadata_areas_in_use)
 		if (_mda_is_ignored(mda))
 			dm_list_move(&ignored, &mda->list);

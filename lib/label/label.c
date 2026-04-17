@@ -599,8 +599,10 @@ static int _scan_dev_close(struct device *dev)
 	return 1;
 }
 
-// Like bcache_invalidate, only it throws any dirty data away if the
-// write fails.
+/*
+ * Like bcache_invalidate, only it throws any dirty data away if the
+ * write fails.
+ */
 static void _invalidate_di(struct bcache *cache, int di)
 {
 	if (!bcache_invalidate_di(cache, di))

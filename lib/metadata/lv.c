@@ -181,7 +181,7 @@ static struct dm_list *_format_pvsegs(struct dm_pool *mem, const struct lv_segme
 			}
 		}
 		list_item_len += strlen(extent_str);
-		/* trialing 0 */
+		/* trailing 0 */
 		list_item_len += 1;
 
 		if (!(list_item = dm_pool_zalloc(mem, list_item_len))) {

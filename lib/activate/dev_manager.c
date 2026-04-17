@@ -158,7 +158,7 @@ static struct dm_task *_setup_task_run(int task, struct dm_info *info,
 		if (driver_version(vsn, sizeof(vsn)) &&
 		    (sscanf(vsn, "%u.%u", &maj, &min) == 2) &&
 		    (maj == 4 ? min >= 19 : maj > 4) &&
-		    !dm_task_set_newuuid(dmt, " ")) // new uuid has no meaning here
+		    !dm_task_set_newuuid(dmt, " ")) /* new uuid has no meaning here */
 			log_warn("WARNING: Failed to query uuid with LIST.");
 		break;
 	default:
@@ -429,7 +429,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
  * 'mirror_status_str' with the correct device table in order to check
  * for blocking.
  *
- * Returns: 1 if mirror should be ignored, 0 if safe to use
+ * Returns: 1 if safe to use, 0 if mirror is blocked
  */
 static int _ignore_blocked_mirror_devices(struct cmd_context *cmd,
 					  struct device *dev,
@@ -2263,9 +2263,9 @@ int dev_manager_vdo_pool_size_config(struct dev_manager *dm,
 	}
 
 	cfg->virtual_size = length;
-	cfg->physical_size *= 8; // From 4K unit to 512B
-	cfg->block_map_cache_size_mb /= 256; // From 4K unit to MiB
-	cfg->index_memory_size_mb = first_seg(lv)->vdo_params.index_memory_size_mb; // Preserved
+	cfg->physical_size *= 8; /* From 4K unit to 512B */
+	cfg->block_map_cache_size_mb /= 256; /* From 4K unit to MiB */
+	cfg->index_memory_size_mb = first_seg(lv)->vdo_params.index_memory_size_mb; /* Preserved */
 
 inactive:
 	r = 1;

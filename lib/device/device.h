@@ -141,7 +141,7 @@ struct device {
 	struct dm_list aliases;	/* struct dm_str_list */
 	struct dm_list wwids; /* struct dev_wwid, used for multipath component detection */
 	struct dm_list ids; /* struct dev_id, different entries for different idtypes */
-	struct dev_id *id; /* points to the the ids entry being used for this dev */
+	struct dev_id *id; /* points to the ids entry being used for this dev */
 	dev_t dev;
 
 	/* private */

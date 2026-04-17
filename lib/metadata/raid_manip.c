@@ -709,7 +709,7 @@ static int _clear_lvs(struct volume_group *vg, struct dm_list *lv_list)
 	return activate_and_wipe_lvlist(lv_list, WIPE_MODE_DO_ZERO, 0, PROMPT);
 }
 
-/* External interface to clear logical volumes on @lv_list */
+/* Check if RAID @lv has any visible sub LVs */
 int lv_raid_has_visible_sublvs(const struct logical_volume *lv)
 {
 	unsigned s;
@@ -1243,7 +1243,7 @@ static uint32_t _data_rimages_count(const struct lv_segment *seg, const uint32_t
 	return total_rimages - seg->segtype->parity_devs;
 }
 
-/* Get total area len of @lv, i.e. sum of area_len of all segments */
+/* Get rimage length of @lv (raid: le_count of first data sub LV) */
 static uint32_t _lv_total_rimage_len(struct logical_volume *lv)
 {
 	uint32_t s;

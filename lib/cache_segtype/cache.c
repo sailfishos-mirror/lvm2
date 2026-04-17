@@ -692,7 +692,7 @@ static int _cache_add_target_line(struct dev_manager *dm,
 					for (cn = policy_settings->child; cn; cn = cn->sib) {
 						for (j = 0; _accepted[i].settings[j]; j++) {
 							if (strcmp(cn->key, _accepted[i].settings[j]) == 0)
-								break; /* need to be dropped */
+								break; /* -> Valid setting */
 						}
 						if (!_accepted[i].settings[j]) {
 							log_warn("WARNING: %s cache policy does not support \"%s=" FMTu64 "\" setting, "

@@ -938,7 +938,7 @@ int lv_info_with_seg_status(struct cmd_context *cmd,
 		/* Always collect status for '-vpool' */
 		if (_lv_info(cmd, lv, 1, &status->info, lv_seg, &status->seg_status, 0, 0, 0) &&
 		    (status->seg_status.type == SEG_STATUS_VDO_POOL)) {
-			/* There is -tpool device, but query 'active' state of 'fake' vdo-pool */
+			/* There is -vpool device, but query 'active' state of 'fake' vdo-pool */
 			if (!_lv_info(cmd, lv, 0, NULL, NULL, NULL, 0, 0, 0))
 				status->info.exists = 0; /* So VDO pool LV is not active */
 		}

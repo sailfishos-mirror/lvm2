@@ -739,7 +739,7 @@ static int _read_vdo_params(struct cmd_context *cmd,
 	    !lp->pool_data_vdo)
 		return 1;
 
-	// prefilling settings here
+	/* prefilling settings here */
 	if (!fill_vdo_target_params(cmd, &lp->vcp.vdo_params, &lp->vdo_pool_header_size, NULL))
 		return_0;
 
@@ -759,7 +759,7 @@ static int _read_vdo_params(struct cmd_context *cmd,
 		lp->vdo_pool_header_size = 0;
 	}
 
-	// override with optional vdo settings
+	/* override with optional vdo settings */
 	if (!get_vdo_settings(cmd, &lp->vcp.vdo_params, NULL))
 		return_0;
 

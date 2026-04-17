@@ -242,7 +242,7 @@ static int _vdo_pool_text_import(struct lv_segment *seg,
 
 	if (!dm_config_get_uint32(n, "minimum_io_size", &vtp->minimum_io_size))
 		return _bad_field("minimum_io_size");
-	vtp->minimum_io_size >>= SECTOR_SHIFT; // keep in sectors, while metadata uses bytes
+	vtp->minimum_io_size >>= SECTOR_SHIFT; /* keep in sectors, metadata uses bytes */
 
 	if (!dm_config_get_uint32(n, "block_map_cache_size_mb", &vtp->block_map_cache_size_mb))
 		return _bad_field("block_map_cache_size_mb");
@@ -326,13 +326,13 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter 
 
 	if (vtp->use_sparse_index)
 		outf(f, "use_sparse_index = 1");
-	// TODO - conditionally
+	/* TODO - conditionally */
 	outsize(f, vtp->index_memory_size_mb * UINT64_C(2 * 1024),
 		"index_memory_size_mb = %u", vtp->index_memory_size_mb);
 
 	outf(f, "max_discard = %u", vtp->max_discard);
 
-	// TODO - conditionally
+	/* TODO - conditionally */
 	outsize(f, vtp->slab_size_mb * UINT64_C(2 * 1024),
 		"slab_size_mb = %u", vtp->slab_size_mb);
 	outf(f, "ack_threads = %u", (unsigned) vtp->ack_threads);
