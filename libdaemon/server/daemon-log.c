@@ -124,10 +124,10 @@ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *me
 		return;
 
 	buf = strdup(message);
-	pos = buf;
-
 	if (!buf)
 		return; /* _0 */
+
+	pos = buf;
 
 	while (pos) {
 		char *next = strchr(pos, '\n');
