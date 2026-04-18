@@ -115,8 +115,10 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
 		return reply;
 	}
 
-	if (!buffer_write(h.socket_fd, &buffer))
+	if (!buffer_write(h.socket_fd, &buffer)) {
 		reply.error = errno;
+		goto out;
+	}
 
 	if (buffer_read(h.socket_fd, &reply.buffer)) {
 		reply.cft = config_tree_from_string_without_dup_node_check(reply.buffer.mem);
@@ -125,6 +127,7 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
 	} else
 		reply.error = errno;
 
+out:
 	if (buffer.mem != rq.buffer.mem)
 		buffer_destroy(&buffer);
 
