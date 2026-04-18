@@ -916,12 +916,12 @@ int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev
 		if (!label_scan_open(dev))
 			continue;
 
-		if (!dev_read_bytes(dev, 512, LABEL_SIZE, buf)) {
+		if (!dev_read_bytes(dev, SECTOR_SIZE, LABEL_SIZE, buf)) {
 			_scan_dev_close(dev);
 			goto out;
 		}
 
-		pvh = (struct pv_header *)(buf + 32);
+		pvh = (struct pv_header *)(buf + sizeof(struct label_header));
 
 		if (!memcmp(pvh->pv_uuid, pvid, ID_LEN)) {
 			*dev_out = dev;
@@ -1524,7 +1524,7 @@ int label_read_pvid(struct device *dev, int *has_pvid)
 	if (has_pvid)
 		*has_pvid = 0;
 
-	lh = (struct label_header *)(buf + 512);
+	lh = (struct label_header *)(buf + SECTOR_SIZE);
 	if (memcmp(lh->id, LABEL_ID, sizeof(lh->id))) {
 		/* Not an lvm device */
 		label_scan_invalidate(dev);
@@ -1544,7 +1544,7 @@ int label_read_pvid(struct device *dev, int *has_pvid)
 	if (has_pvid)
 		*has_pvid = 1;
 
-	pvh = (struct pv_header *)(buf + 512 + 32);
+	pvh = (struct pv_header *)(buf + SECTOR_SIZE + sizeof(struct label_header));
 	memcpy(dev->pvid, pvh->pv_uuid, ID_LEN);
 	return 1;
 }
