@@ -2244,6 +2244,8 @@ static void _process_initial_registrations(char **regs)
 			if (!(msg.data = strdup(reg)))
 				continue;
 			_do_process_request(&msg);
+			free(msg.data);
+			msg.data = NULL;
 		}
 	}
 
@@ -2595,6 +2597,8 @@ static int _reinstate_registrations(struct dm_event_fifos *fifos,
 				(enum dm_event_mask) mask_value,
 				timeout_value))
 			fprintf(stderr, "Failed to reinstate monitoring for device %s.\n", dev_name);
+		free(msg.data);
+		msg.data = NULL;
 	}
 
 	return 1;
@@ -2740,6 +2744,8 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 		}
 		if (msg.data && strstr(msg.data, "exec_method=systemd"))
 			_systemd_activation = 1;
+		free(msg.data);
+		msg.data = NULL;
 	}
 #ifdef __linux__
 	/*
@@ -2758,6 +2764,8 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 		fprintf(stderr, "Old dmeventd refused to die.\n");
 		goto bad;
 	}
+	free(msg.data);
+	msg.data = NULL;
 
 	if (!_systemd_activation &&
 	    ((e = getenv(SD_ACTIVATION_ENV_VAR_NAME)) && !strcmp(e, "1")))
@@ -2789,6 +2797,7 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 	fini_fifos(fifos);
 	return 1;
 bad:
+	free(msg.data);
 	_free_registrations(regs);
 	fini_fifos(fifos);
 	return 0;
