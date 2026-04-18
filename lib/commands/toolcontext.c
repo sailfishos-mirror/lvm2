@@ -538,6 +538,7 @@ static const char *_set_time_format(struct cmd_context *cmd)
 				}
 				if (!chars_to_check[i])
 					goto_bad;
+				p_fmt++;
 			}
 			else if (isprint(c))
 				p_fmt++;
