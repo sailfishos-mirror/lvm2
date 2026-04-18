@@ -1730,8 +1730,12 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 	/*
 	 * Environment variable LVM_SYSTEM_DIR overrides this below.
 	 */
-	strncpy(cmd->system_dir, (system_dir) ? system_dir : DEFAULT_SYS_DIR,
-		sizeof(cmd->system_dir) - 1);
+	if (!dm_strncpy(cmd->system_dir, system_dir ? : DEFAULT_SYS_DIR,
+			sizeof(cmd->system_dir))) {
+		log_error("Configured system directory %s is too long.",
+			  cmd->system_dir);
+		goto out;
+	}
 
 	if (!_get_env_vars(cmd))
 		goto_out;
