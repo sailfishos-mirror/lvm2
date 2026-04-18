@@ -965,8 +965,10 @@ int lv_check_not_in_use(const struct logical_volume *lv, int error_if_used)
 	else if (!info.open_count)
 		return 1;
 
-	/* If sysfs is not used, use open_count information only. */
-	if (dm_sysfs_dir()) {
+	/* If sysfs is not used, use open_count information only.
+	 * dm_sysfs_dir() always returns pointer to a buffer,
+	 * check if the sysfs path is not empty. */
+	if (*dm_sysfs_dir()) {
 		if (dm_device_has_holders(info.major, info.minor)) {
 			if (error_if_used)
 				log_error("Logical volume %s is used by another device.",
