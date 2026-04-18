@@ -85,8 +85,10 @@ struct dev_filter *sysfs_filter_create(const char *sysfs_dir)
 		return NULL;
 
 	len = strlen(sysfs_dir) + 1;
-	if (!(f = zalloc(sizeof(*f) + len)))
+	if (!(f = zalloc(sizeof(*f) + len))) {
+		log_error("Sysfs filter allocation failed.");
 		return NULL;
+	}
 
 	f->passes_filter = _accept_p;
 	f->destroy = _destroy;
