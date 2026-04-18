@@ -1319,7 +1319,7 @@ bad:
  */
 int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
 {
-	struct dev_filter *pfilter, *filter = NULL, *filter_components[2] = {0};
+	struct dev_filter *pfilter, *filter = NULL;
 
 	if (!cmd->initialized.connections) {
 		log_error(INTERNAL_ERROR "connections must be initialized before filters");
@@ -1354,22 +1354,8 @@ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
 	cmd->initialized.filters = 1;
 	return 1;
 bad:
-	if (!filter) {
-		/*
-		 * composite filter not created - destroy
-		 * each component directly
-		 */
-		if (filter_components[0])
-			filter_components[0]->destroy(filter_components[0]);
-		if (filter_components[1])
-			filter_components[1]->destroy(filter_components[1]);
-	} else {
-		/*
-		 * composite filter created - destroy it - this
-		 * will also destroy any of its components
-		 */
+	if (filter)
 		filter->destroy(filter);
-	}
 
 	cmd->initialized.filters = 0;
 	return 0;
