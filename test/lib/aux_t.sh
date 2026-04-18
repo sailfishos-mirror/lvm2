@@ -562,6 +562,7 @@ kill_tagged_processes() {
 teardown() {
 	local cfg
 	local TEST_LEAKED_DEVICES=""
+	local had_devices=0
 	echo -n "## teardown..."
 	unset LVM_LOG_FILE_EPOCH
 
@@ -608,6 +609,9 @@ teardown() {
 
 	echo "ok"
 
+	# Check for device marker files before teardown_devs removes them
+	[[ -f DEVICES || -f LOOP || -f SCSI_DEBUG_DEV || -f RAMDISK || -f MD_DEV ]] && had_devices=1
+
 	[[ -d "$DM_DEV_DIR/mapper" ]] && teardown_devs
 
 	fi
@@ -628,6 +632,9 @@ teardown() {
 		# after this delete no further write is possible
 		rm -rf "${TESTDIR:?}" || echo BLA
 	fi
+
+	# No devices were prepared - skip expensive /dev scans
+	[[ "$had_devices" -eq 0 ]] && return
 
 	# Remove any dangling symlink in /dev/disk (our tests can confuse udev)
 	find /dev/disk -type l -exec test ! -e {} \; -print0 2>/dev/null | xargs -0 rm -f || true
