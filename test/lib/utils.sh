@@ -123,6 +123,12 @@ stacktrace() {
 
 STACKTRACE() {
 	trap - ERR
+
+	# Skipped tests need no coredump search or debug log processing
+	if [[ -f SKIP_THIS_TEST ]]; then
+		exit 200
+	fi
+
 	local i
 
 	# Use stderr for all diagnostic output so it is never captured
