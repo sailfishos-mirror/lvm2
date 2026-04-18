@@ -261,7 +261,7 @@ static struct bcache *scan_bcache;
 static bool _in_bcache(struct device *dev)
 {
 	if (!dev)
-		return NULL;
+		return false;
 	return (dev->flags & DEV_IN_BCACHE) ? true : false;
 }
 
