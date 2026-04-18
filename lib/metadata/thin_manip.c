@@ -1054,6 +1054,8 @@ int check_new_thin_pool(struct logical_volume *pool_lv)
 	struct cmd_context *cmd = pool_lv->vg->cmd;
 	uint64_t transaction_id;
 	struct lv_status_thin_pool *status = NULL;
+	int was_active = lv_is_active(pool_lv);
+	int r = 0;
 
 	/* For transaction_id check LOCAL activation is required */
 	if (!activate_lv_temporary(cmd, pool_lv)) {
@@ -1066,7 +1068,7 @@ int check_new_thin_pool(struct logical_volume *pool_lv)
 	if (!lv_thin_pool_status(pool_lv, 1, &status)) {
 		log_error("Cannot read thin pool %s transaction id locally, perhaps skipped in lvm.conf volume_list?",
 			  display_lvname(pool_lv));
-		return 0;
+		goto out;
 	}
 
 	transaction_id = status->thin_pool->transaction_id;
@@ -1079,20 +1081,26 @@ int check_new_thin_pool(struct logical_volume *pool_lv)
 			  "Expected transaction id %" PRIu64 ".",
 			  display_lvname(pool_lv), transaction_id,
 			  first_seg(pool_lv)->transaction_id);
-		return 0;
+		goto out;
 	}
+
+	r = 1;
+out:
+	/* On error preserve pool state - avoid deactivating foreign-used pool */
+	if (!r && was_active)
+		return 0;
 
 	log_verbose("Deactivating public thin pool %s.",
 		    display_lvname(pool_lv));
 
 	/* Prevent any 'race' with in-use thin pool and always deactivate */
-	if (!deactivate_lv(pool_lv->vg->cmd, pool_lv)) {
+	if (!deactivate_lv(cmd, pool_lv)) {
 		log_error("Aborting. Could not deactivate thin pool %s.",
 			  display_lvname(pool_lv));
 		return 0;
 	}
 
-	return 1;
+	return r;
 }
 
 int validate_thin_pool_chunk_size(struct cmd_context *cmd, uint32_t chunk_size)
