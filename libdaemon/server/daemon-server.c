@@ -249,7 +249,7 @@ static int _open_socket(daemon_state s)
 	if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK))
 		fprintf(stderr, "setting O_NONBLOCK on socket fd %d failed: %s\n", fd, strerror(errno));
 
-	fprintf(stderr, "[D] creating %s\n", s.socket_path);
+	INFO(&s, "creating %s", s.socket_path);
 	if (!_dm_strncpy(sockaddr.sun_path, s.socket_path, sizeof(sockaddr.sun_path))) {
 		fprintf(stderr, "%s: daemon socket path too long.\n", s.socket_path);
 		goto error;
