@@ -97,7 +97,7 @@ static const char *_read_system_id_from_file(struct cmd_context *cmd, const char
 	const char *system_id = NULL;
 	FILE *fp;
 
-	if (!file || !strlen(file) || !file[0])
+	if (!file || !*file)
 		return_NULL;
 
 	if (!(fp = fopen(file, "r"))) {
