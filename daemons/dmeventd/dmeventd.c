@@ -2015,8 +2015,7 @@ static int _client_read(struct dm_event_fifos *fifos,
 
 	msg->data = NULL;
 
-	errno = 0;
-	while (bytes < size && errno != EOF) {
+	while (bytes < size) {
 		/* Watch client read FIFO for input. */
 		ret = poll(&pfd, 1,
 			   (_exit_now > DM_SIGNALED_EXIT) ? 10 : 1000);
@@ -2027,8 +2026,13 @@ static int _client_read(struct dm_event_fifos *fifos,
 		if (ret <= 0)	/* nothing to read */
 			goto bad;
 
+		if (pfd.revents & (POLLHUP | POLLERR))
+			goto bad;
+
 		ret = read(fifos->client, buf + bytes, size - bytes);
-		bytes += ret > 0 ? ret : 0;
+		if (ret <= 0)
+			goto bad;
+		bytes += ret;
 		if (!msg->data && (bytes == 2 * sizeof(uint32_t))) {
 			msg->cmd = ntohl(header[0]);
 			bytes = 0;
