@@ -1621,7 +1621,7 @@ int init_run_by_dmeventd(struct cmd_context *cmd)
 	init_disable_dmeventd_monitoring(1); /* Lock settings */
 	cmd->run_by_dmeventd = 1;
 
-	return 0;
+	return 1;
 }
 
 void destroy_config_context(struct cmd_context *cmd)
