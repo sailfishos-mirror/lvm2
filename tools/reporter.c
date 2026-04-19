@@ -1616,7 +1616,7 @@ void report_format_destroy(struct cmd_context *cmd)
 	}
 }
 
-int lastlog(struct cmd_context *cmd, int argc __attribute((unused)), char **argv __attribute__((unused)))
+int lastlog(struct cmd_context *cmd, int argc __attribute__((unused)), char **argv __attribute__((unused)))
 {
 	const char *selection;
 
