@@ -268,8 +268,9 @@ int dm_hash_insert_allow_multiple(struct dm_hash_table *t, const char *key,
 
 	n->data = (void *)val;
 	n->data_len = val_len;
+	n->hash = _hash(key, len);
 
-	h = _hash(key, len) & t->mask_slots;
+	h = n->hash & t->mask_slots;
 
 	first = t->slots[h];
 
