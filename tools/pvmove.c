@@ -713,7 +713,7 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 	/* vg->status |= PVMOVE; */
 
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
-		goto out;
+		goto_out;
 
 	if (flags & PVMOVE_FIRST_TIME)
 		if (!_update_metadata(lv_mirr, lvs_changed, exclusive))
