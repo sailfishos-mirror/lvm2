@@ -876,13 +876,10 @@ void prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_devs)
 int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out)
 {
 	char buf[LABEL_SIZE] __attribute__((aligned(8)));
-	struct dm_list devs;
 	struct dev_iter *iter;
 	struct device *dev;
 	struct pv_header *pvh;
 	int ret = 0;
-
-	dm_list_init(&devs);
 
 	/*
 	 * Creates a list of available devices, does not open or read any,
