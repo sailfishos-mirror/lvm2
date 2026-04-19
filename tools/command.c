@@ -525,7 +525,7 @@ static int _is_desc_line(char *str)
 
 static int _is_autotype_line(char *str)
 {
-	if (!strncmp(str, "AUTOTYPE:", 6))
+	if (!strncmp(str, "AUTOTYPE:", 9))
 		return 1;
 	return 0;
 }
