@@ -622,7 +622,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
 	if (temp_activated) {
 		sync_local_dev_names(cmd);
 		if (!deactivate_lv(cmd, cache_lv))
-			log_warn("Failed to deactivate after cleaning cache.");
+			log_warn("WARNING: Failed to deactivate %s after cleaning cache.",
+				 display_lvname(cache_lv));
 		sync_local_dev_names(cmd);
 	}
 
@@ -791,7 +792,7 @@ int cache_set_policy(struct lv_segment *lvseg, const char *name,
 		seg = first_seg(lvseg->pool_lv);
 
 	else {
-		log_error(INTERNAL_ERROR "Cannot set cache metadata format for non cache volume %s.",
+		log_error(INTERNAL_ERROR "Cannot set cache policy for non cache volume %s.",
 			  display_lvname(lvseg->lv));
 		return 0;
 	}
@@ -1056,18 +1057,18 @@ int cache_vol_set_params(struct cmd_context *cmd,
 
 		if (meta_size > max_meta_size) {
 			meta_size = max_meta_size;
-			log_print_unless_silent("Rounding down metadata size to max size %s",
+			log_print_unless_silent("Rounding down metadata size to max size %s.",
 						display_size(cmd, meta_size));
 		}
 		if (meta_size < min_meta_size) {
 			meta_size = min_meta_size;
-			log_print_unless_silent("Rounding up metadata size to min size %s",
+			log_print_unless_silent("Rounding up metadata size to min size %s.",
 						display_size(cmd, meta_size));
 		}
 
 		if (meta_size % extent_size) {
 			meta_size += extent_size - meta_size % extent_size;
-			log_print_unless_silent("Rounding up metadata size to full physical extent %s",
+			log_print_unless_silent("Rounding up metadata size to full physical extent %s.",
 						display_size(cmd, meta_size));
 		}
 	}

@@ -1080,7 +1080,7 @@ int check_new_thin_pool(struct logical_volume *pool_lv)
 	if (first_seg(pool_lv)->transaction_id != transaction_id) {
 		log_error("Cannot use thin pool %s with transaction id "
 			  FMTu64 " for thin volumes. "
-			  "Expected transaction id %" PRIu64 ".",
+			  "Expected transaction id " FMTu64 ".",
 			  display_lvname(pool_lv), transaction_id,
 			  first_seg(pool_lv)->transaction_id);
 		goto out;

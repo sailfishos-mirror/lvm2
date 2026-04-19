@@ -324,7 +324,7 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 	argv[++args] = dpath;
 
 	if (!(f = pipe_open(data_lv->vg->cmd, argv, 0, &pdata))) {
-		log_error("WARNING: Cannot read output from %s.", argv[0]);
+		log_error("Cannot read output from %s.", argv[0]);
 		return 0;
 	}
 
@@ -398,7 +398,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 	adjust = (*virtual_extents * (uint64_t) extent_size) % DM_VDO_BLOCK_SIZE;
 	if (adjust) {
 		*virtual_extents += (DM_VDO_BLOCK_SIZE - adjust) / extent_size;
-		log_print_unless_silent("Rounding size up to 4,00 KiB VDO logical extent boundary: %s.",
+		log_print_unless_silent("Rounding size up to 4 KiB VDO logical extent boundary: %s.",
 					display_size(data_lv->vg->cmd, *virtual_extents * (uint64_t) extent_size));
 	}
 

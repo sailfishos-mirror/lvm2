@@ -284,7 +284,7 @@ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
 		if (seg->area_count > DEFAULT_RAID1_MAX_IMAGES) {
 			log_error("LV %s invalid: maximum supported areas %u "
 				  "(is %u) for %s segment.",
-				  seg->lv->name, DEFAULT_RAID1_MAX_IMAGES,
+				  display_lvname(seg->lv), DEFAULT_RAID1_MAX_IMAGES,
 				  seg->area_count, lvseg_name(seg));
 			if ((*error_count)++ > ERROR_MAX)
 				return;
@@ -292,7 +292,7 @@ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
 	} else if (seg->area_count > DEFAULT_RAID_MAX_IMAGES) {
 		log_error("LV %s invalid: maximum supported areas %u "
 			  "(is %u) for %s segment.",
-			  seg->lv->name, DEFAULT_RAID_MAX_IMAGES,
+			  display_lvname(seg->lv), DEFAULT_RAID_MAX_IMAGES,
 			  seg->area_count, lvseg_name(seg));
 		if ((*error_count)++ > ERROR_MAX)
 			return;

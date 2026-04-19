@@ -70,7 +70,7 @@ struct dev_filter *mpath_filter_create(struct dev_types *dt)
 	const char *sysfs_dir = dm_sysfs_dir();
 
 	if (!*sysfs_dir) {
-		log_verbose("No proc filesystem found: skipping multipath filter");
+		log_verbose("No sysfs filesystem found: skipping multipath filter");
 		return NULL;
 	}
 

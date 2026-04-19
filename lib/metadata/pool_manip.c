@@ -99,9 +99,9 @@ int attach_pool_lv(struct lv_segment *seg,
 	struct glv_list *glvl;
 
 	if (!seg_is_thin_volume(seg) && !seg_is_cache(seg)) {
-		log_error(INTERNAL_ERROR "Unable to attach pool to %s/%s"
+		log_error(INTERNAL_ERROR "Unable to attach pool to %s"
 			  " that is not cache or thin volume.",
-			  pool_lv->vg->name, seg->lv->name);
+			  display_lvname(seg->lv));
 		return 0;
 	}
 

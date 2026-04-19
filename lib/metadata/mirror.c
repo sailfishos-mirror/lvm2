@@ -113,7 +113,7 @@ struct lv_segment *find_mirror_seg(struct lv_segment *seg)
 	}
 
 	if (!seg_is_mirrored(mirror_seg)) {
-		log_error("LV %s on %s is not a mirror segments.",
+		log_error("LV %s on %s is not a mirror segment.",
 			  display_lvname(mirror_seg->lv),
 			  display_lvname(seg->lv));
 		return NULL;

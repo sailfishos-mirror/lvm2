@@ -1527,7 +1527,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
 	out_of_place_les_per_disk = (uint32_t) max(out_of_place_les_per_disk / (unsigned long long) lv->vg->extent_size, 1ULL);
 
 	if (!lv_is_active(lv)) {
-		log_error("Can't remove reshape space from inactive LV %s.",
+		log_error("Can't allocate reshape space for inactive LV %s.",
 			  display_lvname(lv));
 		return 0;
 	}

@@ -2730,7 +2730,7 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
 int lvmcache_check_format(struct lvmcache_info *info, const struct format_type *fmt)
 {
 	if (info->fmt != fmt) {
-		log_error("PV %s is a different format (seqno %s)",
+		log_error("PV %s is a different format (%s)",
 			  dev_name(info->dev), info->fmt->name);
 		return 0;
 	}

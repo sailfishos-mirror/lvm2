@@ -5977,7 +5977,7 @@ static void client_recv_action(struct client *cl)
 		memset(&pvs, 0x0, sizeof(pvs));
 
 		pvs.num = daemon_request_int(req, "path_num", 0);
-		log_error("pvs_num = %d", pvs.num);
+		log_debug("pvs_num = %d", pvs.num);
 
 		if (!pvs.num)
 			goto skip_pvs_path;

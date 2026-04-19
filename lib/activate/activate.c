@@ -1130,8 +1130,8 @@ int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
 	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
 		return 0;
 
-	log_debug_activation("Checking raid data offset and dev sectors for LV %s/%s",
-			     lv->vg->name, lv->name);
+	log_debug_activation("Checking raid data offset and dev sectors for LV %s.",
+			     display_lvname(lv));
 
 	if (!lv_raid_status(lv, &raid_status))
                 return_0;
@@ -1179,8 +1179,8 @@ int lv_raid_dev_count(const struct logical_volume *lv, uint32_t *dev_cnt)
 	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
 		return 0;
 
-	log_debug_activation("Checking raid device count for LV %s/%s",
-			     lv->vg->name, lv->name);
+	log_debug_activation("Checking raid device count for LV %s.",
+			     display_lvname(lv));
 
 	if (!lv_raid_status(lv, &raid_status))
 		return_0;
@@ -2514,7 +2514,7 @@ static int _lv_has_open_snapshots(const struct logical_volume *lv)
 			r++;
 
 	if (r)
-		log_error("LV %s has open %d snapshot(s), not deactivating.",
+		log_error("LV %s has %d open snapshot(s), not deactivating.",
 			  display_lvname(lv), r);
 
 	return r;
