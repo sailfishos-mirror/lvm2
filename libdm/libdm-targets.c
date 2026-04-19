@@ -184,7 +184,7 @@ out:
 		if (s->dev_health[i] == 'a')
 			a++; /* Count number of 'a' */
 
-	if (a) {
+	if (a && s->sync_action) {
 		if ((a < s->dev_count) &&  /* SOME legs are in 'a' */
 		    /* FIXME: kernel gives misleading info here
 		     * Trying to recognize a true state */
