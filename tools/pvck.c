@@ -48,8 +48,8 @@ struct settings {
 	unsigned metadata_offset_set:1;
 	unsigned mda_offset_set:1;
 	unsigned mda_size_set:1;
-	unsigned mda2_offset_set;
-	unsigned mda2_size_set;
+	unsigned mda2_offset_set:1;
+	unsigned mda2_size_set:1;
 	unsigned device_size_set:1;
 	unsigned data_offset_set:1;
 	unsigned seqno_set:1;
