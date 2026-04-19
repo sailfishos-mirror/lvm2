@@ -20,7 +20,7 @@ static int _lvscan_single(struct cmd_context *cmd, struct logical_volume *lv,
 {
 	struct lvinfo info;
 	int inkernel, snap_active = 1;
-	dm_percent_t snap_percent;     /* fused, fsize; */
+	dm_percent_t snap_percent;
 
 	const char *active_str, *snapshot_str;
 
