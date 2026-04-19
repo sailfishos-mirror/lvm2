@@ -1100,6 +1100,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 				if (!arg_is_set(cmd, yes_ARG) &&
 			    	    yes_no_prompt("Device %s is used by an active LV, continue to remove? ", du->devname) == 'n') {
 					log_error("Device not removed.");
+					free_du(du);
 					goto bad;
 				}
 			}
