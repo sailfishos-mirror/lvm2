@@ -594,7 +594,8 @@ static int _read_raid_params(struct cmd_context *cmd,
 		lp->min_recovery_rate = arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
 		lp->max_recovery_rate = arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
 
-		if (lp->min_recovery_rate > lp->max_recovery_rate) {
+		if (lp->max_recovery_rate &&
+		    lp->min_recovery_rate > lp->max_recovery_rate) {
 			log_print_unless_silent("Minimum recovery rate cannot be higher than maximum, adjusting.");
 			lp->max_recovery_rate = lp->min_recovery_rate;
 		}
