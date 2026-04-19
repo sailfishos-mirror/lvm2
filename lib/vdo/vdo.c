@@ -344,7 +344,7 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter 
 	outf(f, "physical_threads = %u", (unsigned) vtp->physical_threads);
 
 	if (vtp->write_policy != DM_VDO_WRITE_POLICY_AUTO)
-		outf(f, "write_policy = %s", get_vdo_write_policy_name(vtp->write_policy));
+		outf(f, "write_policy = \"%s\"", get_vdo_write_policy_name(vtp->write_policy));
 
 	return 1;
 }
