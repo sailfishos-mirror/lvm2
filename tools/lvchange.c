@@ -747,11 +747,11 @@ static int _lvchange_cache(struct cmd_context *cmd,
 	    (mode != setting_seg->cache_mode) &&
 	    lv_is_cache(lv)) {
 		if (!lv_cache_wait_for_clean(lv, &is_clean))
-			return_0;
+			goto_out;
 		if (!is_clean) {
 			log_error("Cache %s is not clean, refusing to switch cache mode.",
 				  display_lvname(lv));
-			return 0;
+			goto out;
 		}
 	}
 
