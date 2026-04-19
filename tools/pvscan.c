@@ -169,8 +169,7 @@ static int _pvscan_display_single(struct cmd_context *cmd, struct volume_group *
 		params->size_total += (uint64_t) pv_pe_count(pv) * pv_pe_size(pv);
 	}
 
-	_pvscan_display_pv(cmd, pv, params);
-	return ECMD_PROCESSED;
+	return _pvscan_display_pv(cmd, pv, params);
 }
 
 int pvscan_display_cmd(struct cmd_context *cmd, int argc, char **argv)
