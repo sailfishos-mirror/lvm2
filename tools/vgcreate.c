@@ -96,6 +96,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 
 	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
+		unlock_vg(cmd, NULL, vp_new.vg_name);
 		return ECMD_FAILED;
 	}
 
