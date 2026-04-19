@@ -37,7 +37,7 @@ static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused
 	 */
 	if (!vg_write(vg)) {
 		log_error("Failed to write VG.");
-		return 0;
+		return ECMD_FAILED;
 	}
 
 	/*
@@ -50,7 +50,7 @@ static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused
 
 	if (!vg_commit(vg)) {
 		log_error("Failed to commit VG.");
-		return 0;
+		return ECMD_FAILED;
 	}
 
 	/*
@@ -68,7 +68,7 @@ static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused
 	 */
 	free_text_fidtc(vg);
 
-	return 1;
+	return ECMD_PROCESSED;
 }
 
 static int _update_metadata(struct cmd_context *cmd, int argc, char **argv)
