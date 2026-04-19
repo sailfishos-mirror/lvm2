@@ -128,7 +128,7 @@ static char *_part_str(struct dev_use *du)
 	static char _part_str_buf[64];
 
 	if (du->part)
-		snprintf(_part_str_buf, 63, " PART=%d", du->part);
+		snprintf(_part_str_buf, sizeof(_part_str_buf), " PART=%d", du->part);
 	else
 		_part_str_buf[0] = '\0';
 
