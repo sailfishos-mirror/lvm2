@@ -663,7 +663,7 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
 			    int *no_quick)
 {
 	struct dm_list devs; /* device_list */
-	struct volume_group *vg;
+	struct volume_group *vg = NULL;
 	struct pv_list *pvl;
 	const char *vgid;
 	struct lockd_state lks = { 0 };
@@ -712,7 +712,8 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
 
 	if (!(vgid = lvmcache_vgid_from_vgname(cmd, vgname))) {
 		log_error_pvscan(cmd, "activation for VG %s failed to find vgid.", vgname);
-		return ECMD_FAILED;
+		ret = ECMD_FAILED;
+		goto out;
 	}
 
 	/*
@@ -732,7 +733,8 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
 		 * cases that would be caught here.
 		 */
 		log_error_pvscan(cmd, "activation for VG %s cannot read (%x).", vgname, error_flags);
-		return ECMD_FAILED;
+		ret = ECMD_FAILED;
+		goto out;
 	}
 
 	/*
