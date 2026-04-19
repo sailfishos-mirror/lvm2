@@ -118,6 +118,21 @@ static int _linear_type_requested(const char *type_str)
 	return (!strcmp(type_str, SEG_TYPE_NAME_LINEAR));
 }
 
+static int _check_linear_and_mirrors_zero(struct cmd_context *cmd,
+					  struct lvconvert_params *lp)
+{
+	if (_linear_type_requested(lp->type_str)) {
+		if (arg_is_set(cmd, mirrors_ARG) && (arg_uint_value(cmd, mirrors_ARG, 0) != 0)) {
+			log_error("Cannot specify mirrors with linear type.");
+			return 0;
+		}
+		lp->mirrors_supplied = 1;
+		lp->mirrors = 0;
+	}
+
+	return 1;
+}
+
 static int _striped_type_requested(const char *type_str)
 {
 	return (!strcmp(type_str, SEG_TYPE_NAME_STRIPED) || _linear_type_requested(type_str));
@@ -1275,14 +1290,8 @@ static int _lvconvert_mirrors(struct cmd_context *cmd,
 		return 0;
 	}
 
-	if (_linear_type_requested(lp->type_str)) {
-		if (arg_is_set(cmd, mirrors_ARG) && (arg_uint_value(cmd, mirrors_ARG, 0) != 0)) {
-			log_error("Cannot specify mirrors with linear type.");
-			return 0;
-		}
-		lp->mirrors_supplied = 1;
-		lp->mirrors = 0;
-	}
+	if (!_check_linear_and_mirrors_zero(cmd, lp))
+		return 0;
 
 	/* Adjust mimage and/or log count */
 	if (!_lvconvert_mirrors_parse_params(cmd, lv, lp,
@@ -1370,14 +1379,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 	if (!_raid_split_image_conversion(lv))
 		return_0;
 
-	if (_linear_type_requested(lp->type_str)) {
-		if (arg_is_set(cmd, mirrors_ARG) && (arg_uint_value(cmd, mirrors_ARG, 0) != 0)) {
-			log_error("Cannot specify mirrors with linear type.");
-			return 0;
-		}
-		lp->mirrors_supplied = 1;
-		lp->mirrors = 0;
-	}
+	if (!_check_linear_and_mirrors_zero(cmd, lp))
+		return 0;
 
 	if (!_lvconvert_validate_thin(lv, lp))
 		return_0;
