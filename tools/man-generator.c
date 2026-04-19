@@ -1156,7 +1156,7 @@ static const char *_upper_command_name(char *str)
 	static char str_upper[32];
 	int i = 0;
 
-	while (*str) {
+	while (*str && i < (int)(sizeof(str_upper) - 1)) {
 		str_upper[i++] = toupper(*str);
 		str++;
 	}
