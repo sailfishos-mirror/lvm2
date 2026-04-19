@@ -122,7 +122,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
 
 		log_debug_metadata("Removing pool metadata spare %s.", display_lvname(lv));
 		if (!lv_remove_single(cmd, lv, DONT_PROMPT, 0))
-				return_ECMD_FAILED;
+			goto_bad;
 	}
 
 	if (vg_from->pr != vg_to->pr) {
