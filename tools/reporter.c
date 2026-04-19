@@ -194,7 +194,7 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
 
 	if (!report_object(sh ? : handle->custom_handle, sh != NULL,
 			   lv->vg, lv, NULL, NULL, NULL, &status, NULL))
-		goto out;
+		goto_out;
 
 	r = ECMD_PROCESSED;
 out:
@@ -1243,7 +1243,7 @@ static int _full_report_single(struct cmd_context *cmd,
 	args->full_report_vg = vg;
 
 	if (!args->log_only && !dm_report_group_push(cmd->cmd_report.report_group, NULL, NULL))
-		goto out;
+		goto_out;
 
 	if (orphan) {
 		if (((r = _do_report(cmd, handle, args, &args->single_args[REPORT_IDX_FULL_PVS])) != ECMD_PROCESSED) ||

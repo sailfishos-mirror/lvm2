@@ -379,7 +379,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 		if (lv_is_not_synced(lv)) {
 			lv->status &= ~LV_NOTSYNCED;
 			if (!_vg_write_commit(lv, NULL))
-				return 0;
+				return_0;
 		}
 
 		if (!_reactivate_lv(lv, active, exclusive)) {
@@ -415,7 +415,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	memlock_unlock(lv->vg->cmd);
 
 	if (!activate_and_wipe_lvlist(&device_list, WIPE_MODE_DO_ZERO, 0, PROMPT))
-		return 0;
+		return_0;
 
 	/* Put metadata sub-LVs back in place */
 	if (!_attach_metadata_devices(seg, &device_list)) {
@@ -427,7 +427,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	lv->status &= ~LV_ACTIVATION_SKIP;
 
 	if (!_vg_write_commit(lv, NULL))
-		return 0;
+		return_0;
 
 	if (!_reactivate_lv(lv, active, exclusive)) {
 		backup(lv->vg);
@@ -592,7 +592,7 @@ static int _lvchange_persistent(struct cmd_context *cmd,
 	}
 
 	if (!_vg_write_commit(lv, NULL))
-		return 0;
+		return_0;
 
 	if (activate != CHANGE_AN) {
 		log_verbose("Re-activating logical volume %s.", display_lvname(lv));
@@ -1258,7 +1258,7 @@ static int _commit_reload(struct logical_volume *lv, uint32_t mr)
 
 	} else if ((mr & MR_COMMIT) &&
 		   !_vg_write_commit(lv, NULL))
-		return 0;
+		return_0;
 
 	return 1;
 }

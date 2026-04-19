@@ -43,7 +43,7 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
 			}
 
 			if (!lockd_lv(cmd, lvl->lv, "un", 0))
-				goto bad;
+				goto_bad;
 		}
 	}
 
