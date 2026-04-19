@@ -191,7 +191,7 @@ int dm_vdo_status_parse(struct dm_pool *mem, const char *input,
 bad:
 	if (s && !mem) {
 		free(s->device);
-		free(s);
+		dm_free(s);
 	}
 	return 0;
 }

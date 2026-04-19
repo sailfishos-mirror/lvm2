@@ -109,7 +109,7 @@ struct dm_hash_table *dm_hash_create(unsigned size_hint)
 	hc->mask_slots = new_size - 1;
 	len = sizeof(*(hc->slots)) * new_size;
 	if (!(hc->slots = dm_zalloc(len))) {
-		free(hc);
+		dm_free(hc);
 		log_error("Failed to allocate slots for hash.");
 		return 0;
 	}
@@ -141,8 +141,8 @@ static void _free_nodes(struct dm_hash_table *t)
 void dm_hash_destroy(struct dm_hash_table *t)
 {
 	_free_nodes(t);
-	free(t->slots);
-	free(t);
+	dm_free(t->slots);
+	dm_free(t);
 }
 
 static struct dm_hash_node **_findh(struct dm_hash_table *t, const void *key,

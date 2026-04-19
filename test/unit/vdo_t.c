@@ -100,7 +100,7 @@ static void _check_good(const struct example_good *es, unsigned count)
 #endif
 		T_ASSERT(_status_eq(&e->status, pr.status));
 		free(pr.status->device);
-		free(pr.status);
+		dm_free(pr.status);
 	}
 }
 

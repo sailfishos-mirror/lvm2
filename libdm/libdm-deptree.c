@@ -1751,7 +1751,7 @@ static int _vdo_node_send_messages(struct dm_tree_node *dnode,
 	r = 1;
 out:
 	free(vdo_status.status->device);
-	free(vdo_status.status);
+	dm_free(vdo_status.status);
 
 	return r;
 }
