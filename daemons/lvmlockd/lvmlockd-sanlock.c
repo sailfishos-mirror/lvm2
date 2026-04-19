@@ -1878,11 +1878,13 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 		if (rv < 0) {
 			log_error("S %s prepare_lockspace_san cannot repair lockspace no info file", lsname);
 			ret = -EINVAL;
+			goto fail;
 		}
 
 		if (host_id != lms->ss.host_id) {
 			log_error("S %s prepare_lockspace_san cannot repair lockspace other info host_id", lsname);
 			ret = -EINVAL;
+			goto fail;
 		}
 
 		hs.generation = generation;
@@ -1903,6 +1905,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 		} else {
 			log_error("S %s prepare_lockspace_san cannot repair lockspace invalid sector_size", lsname);
 			ret = -EINVAL;
+			goto fail;
 		}
 
 		if (no_timeout)
