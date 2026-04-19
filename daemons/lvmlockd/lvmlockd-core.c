@@ -3249,7 +3249,6 @@ static void *lockspace_thread_main(void *arg_in)
 			 * for this fence result
 			 */
 			if (act->op == LD_OP_FENCE_RESULT) {
-				list_del(&act->list);
 				list_add(&act->list, &act_fence);
 				log_debug("S %s apply fence result %d for host %u %u",
 					  ls->name, act->result, act->owner.host_id, act->owner.generation);
