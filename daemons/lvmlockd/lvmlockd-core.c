@@ -5431,10 +5431,10 @@ static uint32_t str_to_opts(const char *str)
 		flags |= LD_AF_FORCE;
 	if (strstr(str, "ex_disable"))
 		flags |= LD_AF_EX_DISABLE;
+	else if (strstr(str, "disable"))
+		flags |= LD_AF_DISABLE;
 	if (strstr(str, "enable"))
 		flags |= LD_AF_ENABLE;
-	if (strstr(str, "disable"))
-		flags |= LD_AF_DISABLE;
 	if (strstr(str, "nodelay"))
 		flags |= LD_AF_NODELAY;
 	if (strstr(str, "repair"))
