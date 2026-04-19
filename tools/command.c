@@ -681,7 +681,7 @@ static void _add_oo_definition_line(const char *name, const char *line)
 		return;
 	}
 
-	oo = &_oo_lines[_oo_line_count++];
+	oo = &_oo_lines[_oo_line_count];
 
 	if (!(oo->name = strdup(name))) {
 		log_error("Failed to duplicate name %s.", name);
@@ -692,19 +692,24 @@ static void _add_oo_definition_line(const char *name, const char *line)
 		*colon = '\0';
 	else {
 		log_error("Parsing command defs: invalid OO definition.");
+		free(oo->name);
 		return;
 	}
 
 	if (!(start = strchr(line, ':'))) {
 		log_error("Parsing command defs: invalid OO line.");
+		free(oo->name);
 		return;
 	}
 	start += 2;
 
 	if (!(oo->line = strdup(start))) {
 		log_error("Failed to duplicate line %s.", start);
+		free(oo->name);
 		return;
 	}
+
+	_oo_line_count++;
 }
 
 /* Support OO_FOO: continuing on multiple lines. */
