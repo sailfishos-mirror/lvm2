@@ -200,11 +200,6 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
 			return 0;
 		}
 
-		if ((lp->lv_split_name = arg_str_value(cmd, name_ARG, NULL))) {
-			if (!validate_restricted_lvname_param(cmd, &vg_name, &lp->lv_split_name))
-				return_0;
-		}
-
 		lp->keep_mimages = 1;
 		_set_conv_type(lp, CONV_SPLIT_MIRRORS);
 		lp->mirrors = arg_uint_value(cmd, splitmirrors_ARG, 0);
