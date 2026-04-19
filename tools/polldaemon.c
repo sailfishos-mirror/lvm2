@@ -519,6 +519,12 @@ static int _lvmpolld_init_poll_vg(struct cmd_context *cmd, const char *vgname,
 		if (!id.display_name && !lpdp->parms->aborting)
 			continue;
 
+		if (!id.display_name) {
+			log_error("Device name for LV %s not found in metadata.",
+				  display_lvname(lv));
+			return ECMD_FAILED;
+		}
+
 		id.vg_name = lv->vg->name;
 		id.lv_name = lv->name;
 
