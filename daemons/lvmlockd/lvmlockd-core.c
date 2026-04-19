@@ -5985,6 +5985,8 @@ static void client_recv_action(struct client *cl)
 		/* Receive the pv list which is transferred from LVM command */
 		if (!alloc_pvs_path(&pvs, pvs.num)) {
 			log_error("fail to allocate pvs path");
+			dm_config_destroy(req.cft);
+			buffer_destroy(&req.buffer);
 			rv = -ENOMEM;
 			goto out;
 		}
@@ -5996,6 +5998,9 @@ static void client_recv_action(struct client *cl)
 
 		if (!alloc_and_copy_pvs_path(&act->pvs, &pvs)) {
 			log_error("fail to allocate pvs path");
+			free(pvs.path);
+			dm_config_destroy(req.cft);
+			buffer_destroy(&req.buffer);
 			rv = -ENOMEM;
 			goto out;
 		}
