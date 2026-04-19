@@ -188,12 +188,17 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
 	}
 
 	if (du) {
+		char *new_pvid;
+
 		memcpy(pvid, &pv->id.uuid, ID_LEN);
-		free(du->pvid);
-		if (!(du->pvid = strdup_pvid(pvid)))
+		if (!(new_pvid = strdup_pvid(pvid)))
 			log_error("Failed to set pvid for devices file.");
-		if (!device_ids_write(cmd))
-			log_warn("Failed to update devices file.");
+		else {
+			free(du->pvid);
+			du->pvid = new_pvid;
+			if (!device_ids_write(cmd))
+				log_warn("Failed to update devices file.");
+		}
 	}
 
 	log_print_unless_silent("Physical volume \"%s\" changed", pv_name);
