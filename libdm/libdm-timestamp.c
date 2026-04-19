@@ -101,7 +101,7 @@ struct dm_timestamp *dm_timestamp_alloc(void)
 {
 	struct dm_timestamp *ts;
 
-	if (!(ts = dm_malloc(sizeof(*ts))))
+	if (!(ts = dm_zalloc(sizeof(*ts))))
 		stack;
 
 	return ts;
