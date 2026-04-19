@@ -1163,7 +1163,7 @@ static int _lvchange_activation_skip(struct logical_volume *lv, uint32_t *mr)
 	lv_set_activation_skip(lv, 1, skip);
 
 	log_verbose("Changing activation skip flag to %s for LV %s.",
-		    display_lvname(lv), skip ? "enabled" : "disabled");
+		    skip ? "enabled" : "disabled", display_lvname(lv));
 
 	/* Request caller to commit+backup metadata */
 	*mr |= MR_COMMIT;
@@ -1185,7 +1185,7 @@ static int _lvchange_autoactivation(struct logical_volume *lv, uint32_t *mr)
 		lv->status &= ~LV_NOAUTOACTIVATE;
 
 	log_verbose("Changing autoactivation flag to %s for LV %s.",
-		    display_lvname(lv), aa_no_arg ? "no" : "yes");
+		    aa_no_arg ? "no" : "yes", display_lvname(lv));
 
 	/* Request caller to commit+backup metadata */
 	*mr |= MR_COMMIT;
@@ -1457,7 +1457,7 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
 
 		default:
 			log_error(INTERNAL_ERROR "Failed to check for option %s",
-				  arg_long_option_name(i));
+				  arg_long_option_name(opt_enum));
 		}
 	}
 
@@ -1527,7 +1527,7 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
 			break;
 		default:
 			log_error(INTERNAL_ERROR "Failed to check for option %s",
-				  arg_long_option_name(i));
+				  arg_long_option_name(opt_enum));
 		}
 
 		/* Display any logical volume change unless already displayed in step 1. */
