@@ -28,7 +28,6 @@ typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
 static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
 						      struct dm_list *removal_lvs,
 						      int vg_write_requested);
-#define	ARRAY_SIZE(a) (sizeof(a) / sizeof(*(a)))
 
 static int _check_restriping(uint32_t new_stripes, struct logical_volume *lv)
 {
@@ -6158,7 +6157,7 @@ static const uint64_t _r5_to_r6[][2] = {
 /* Return segment type flag for raid5 -> raid6 conversions */
 static uint64_t _get_r56_flag(const struct segment_type *segtype, unsigned idx)
 {
-	unsigned elems = ARRAY_SIZE(_r5_to_r6);
+	unsigned elems = DM_ARRAY_SIZE(_r5_to_r6);
 
 	while (elems--)
 		if (segtype->flags & _r5_to_r6[elems][idx])
