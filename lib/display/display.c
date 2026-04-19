@@ -124,6 +124,9 @@ const char *get_percent_string(percent_type_t def)
 {
 	static const char _percent_types[][8] = { "NONE", "VG", "FREE", "LV", "PVS", "ORIGIN" };
 
+	if (def >= DM_ARRAY_SIZE(_percent_types))
+		return "UNKNOWN";
+
 	return _percent_types[def];
 }
 
