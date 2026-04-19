@@ -717,9 +717,7 @@ do_start:
 
 	r = lockd_start_vg(cmd, vg, &exists);
 
-	if (r)
-		vp->lock_start_count++;
-	else if (exists)
+	if (r || exists)
 		vp->lock_start_count++;
 	if (!strcmp(vg->lock_type, "sanlock"))
 		vp->lock_start_sanlock = 1;
