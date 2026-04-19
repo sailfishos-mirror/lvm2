@@ -3674,6 +3674,9 @@ static int _cache_vol_attach(struct cmd_context *cmd,
 	if (!get_cache_params(cmd, &chunk_size, &cache_metadata_format, &cache_mode, &policy_name, &policy_settings))
 		goto_out;
 
+	if (!archive(lv->vg))
+		goto_out;
+
 	/*
 	 * lv/cache_lv keeps the same lockd lock it had before, the lock for
 	 * lv_fast is kept but is not used while it's attached, and
