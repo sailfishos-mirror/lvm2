@@ -196,33 +196,24 @@ static int _raid_text_export_raid0(const struct lv_segment *seg, struct formatte
 
 static int _raid_text_export_raid(const struct lv_segment *seg, struct formatter *f)
 {
-	int raid0 = seg_is_any_raid0(seg);
+	outf(f, "device_count = %u", seg->area_count);
 
-	if (raid0)
-		outfc(f, (seg->area_count == 1) ? "# linear" : NULL,
-		      "stripe_count = %u", seg->area_count);
-
-	else {
-		outf(f, "device_count = %u", seg->area_count);
-		if (seg_is_any_raid10(seg) && seg->data_copies > 0)
-			outf(f, "data_copies = %" PRIu32, seg->data_copies);
-		if (seg->region_size)
-			outf(f, "region_size = %" PRIu32, seg->region_size);
-	}
+	if (seg_is_any_raid10(seg) && seg->data_copies > 0)
+		outf(f, "data_copies = %" PRIu32, seg->data_copies);
+	if (seg->region_size)
+		outf(f, "region_size = %" PRIu32, seg->region_size);
 
 	if (seg->stripe_size)
 		outf(f, "stripe_size = %" PRIu32, seg->stripe_size);
 
-	if (!raid0) {
-		if (seg_is_raid1(seg) && seg->writebehind)
-			outf(f, "writebehind = %" PRIu32, seg->writebehind);
-		if (seg->min_recovery_rate)
-			outf(f, "min_recovery_rate = %" PRIu32, seg->min_recovery_rate);
-		if (seg->max_recovery_rate)
-			outf(f, "max_recovery_rate = %" PRIu32, seg->max_recovery_rate);
-		if (seg->data_offset)
-			outf(f, "data_offset = %" PRIu32, seg->data_offset == 1 ? 0 : seg->data_offset);
-	}
+	if (seg_is_raid1(seg) && seg->writebehind)
+		outf(f, "writebehind = %" PRIu32, seg->writebehind);
+	if (seg->min_recovery_rate)
+		outf(f, "min_recovery_rate = %" PRIu32, seg->min_recovery_rate);
+	if (seg->max_recovery_rate)
+		outf(f, "max_recovery_rate = %" PRIu32, seg->max_recovery_rate);
+	if (seg->data_offset)
+		outf(f, "data_offset = %" PRIu32, seg->data_offset == 1 ? 0 : seg->data_offset);
 
 	return out_areas(f, seg, "raid");
 }
