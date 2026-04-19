@@ -36,8 +36,12 @@ static int _vgimport_single(struct cmd_context *cmd,
 
 	vg->status &= ~EXPORTED_VG;
 
-	if (!vg_is_shared(vg))
-		vg->system_id = cmd->system_id ? dm_pool_strdup(vg->vgmem, cmd->system_id) : NULL;
+	if (!vg_is_shared(vg)) {
+		if (cmd->system_id && !(vg->system_id = dm_pool_strdup(vg->vgmem, cmd->system_id))) {
+			log_error("Failed to set system_id for VG %s.", vg_name);
+			goto bad;
+		}
+	}
 
 	if (!persist_start_include(cmd, vg, 0, 0, NULL))
 		goto_bad;
