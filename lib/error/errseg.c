@@ -20,7 +20,6 @@
 #include "lib/config/config.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/activate/activate.h"
-#include "lib/datastruct/str_list.h"
 
 static int _errseg_merge_segments(struct lv_segment *seg1, struct lv_segment *seg2)
 {
