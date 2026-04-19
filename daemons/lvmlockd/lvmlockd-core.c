@@ -578,11 +578,10 @@ static char **alloc_pvs_path(struct pvs *pvs, int num)
 	if (!num)
 		return NULL;
 
-	pvs->path = malloc(sizeof(char *) * num);
+	pvs->path = calloc(num, sizeof(char *));
 	if (!pvs->path)
 		return NULL;
 
-	memset(pvs->path, 0x0, sizeof(char *) * num);
 	return pvs->path;
 }
 
