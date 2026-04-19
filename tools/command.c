@@ -696,7 +696,7 @@ static void _add_oo_definition_line(const char *name, const char *line)
 		return;
 	}
 
-	if (!(start = strchr(line, ':'))) {
+	if (!(start = strchr(line, ':')) || !start[1] || !start[2]) {
 		log_error("Parsing command defs: invalid OO line.");
 		free(oo->name);
 		return;
