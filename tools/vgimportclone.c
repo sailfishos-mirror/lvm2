@@ -471,6 +471,7 @@ retry_name:
 
 	if (!lock_vol(cmd, vp.old_vgname, LCK_VG_WRITE, NULL)) {
 		log_error("Can't get lock for VG name %s", vp.old_vgname);
+		unlock_vg(cmd, NULL, vp.new_vgname);
 		goto out;
 	}
 
