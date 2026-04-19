@@ -6345,7 +6345,7 @@ static int match_dm_uuid(char *dm_uuid, char *lv_lock_uuid)
 		j++;
 	}
 
-	for (i = 36, j = 0; i < 69; i++) {
+	for (i = 36, j = 0; i < 68; i++) {
 		buf2[j] = dm_uuid[i];
 		j++;
 	}
