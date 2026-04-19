@@ -302,7 +302,7 @@ static int _write_lookup_file(struct cmd_context *cmd, struct volume_group *vg)
 		return 0;
 	}
 
-	fd = open(path, O_CREAT | O_EXCL | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
+	fd = open(path, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		/* not a problem, can happen when multiple pvscans run at once */
 		log_debug("Did not create %s: %d", path, errno);
