@@ -462,59 +462,18 @@ const char *lvmcache_vgname_from_info(struct lvmcache_info *info)
 	return NULL;
 }
 
-static uint64_t _get_pvsummary_size(const char *pvid_arg)
+static struct physical_volume *_find_pvsummary(const char *pvid_arg)
 {
 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
 	struct lvmcache_vginfo *vginfo;
 	struct pv_list *pvl;
 
-	/* In case pvid_arg is not null terminated. */
 	memcpy(pvid, pvid_arg, ID_LEN);
 
 	dm_list_iterate_items(vginfo, &_vginfos) {
 		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
 			if (!memcmp(pvid, &pvl->pv->id.uuid, ID_LEN))
-				return pvl->pv->size;
-		}
-	}
-
-	return 0;
-}
-
-static const char *_get_pvsummary_device_hint(const char *pvid_arg)
-{
-	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
-	struct lvmcache_vginfo *vginfo;
-	struct pv_list *pvl;
-
-	/* In case pvid_arg is not null terminated. */
-	memcpy(pvid, pvid_arg, ID_LEN);
-
-	dm_list_iterate_items(vginfo, &_vginfos) {
-		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
-			if (!memcmp(pvid, &pvl->pv->id.uuid, ID_LEN))
-				return pvl->pv->device_hint;
-		}
-	}
-
-	return NULL;
-}
-
-static const char *_get_pvsummary_device_id(const char *pvid_arg, const char **device_id_type)
-{
-	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
-	struct lvmcache_vginfo *vginfo;
-	struct pv_list *pvl;
-
-	/* In case pvid_arg is not null terminated. */
-	memcpy(pvid, pvid_arg, ID_LEN);
-
-	dm_list_iterate_items(vginfo, &_vginfos) {
-		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
-			if (!memcmp(pvid, &pvl->pv->id.uuid, ID_LEN)) {
-				*device_id_type = pvl->pv->device_id_type;
-				return pvl->pv->device_id;
-			}
+				return pvl->pv;
 		}
 	}
 
@@ -802,6 +761,7 @@ static void _choose_duplicates(struct cmd_context *cmd,
 	struct device *dev1, *dev2;
 	struct device *dev_mpath, *dev_md;
 	struct device *dev_drop;
+	struct physical_volume *pvs;
 	const char *device_id = NULL, *device_id_type = NULL;
 	const char *idname1 = NULL, *idname2 = NULL;
 	uint32_t dev1_major, dev1_minor, dev2_major, dev2_minor;
@@ -1073,16 +1033,20 @@ next:
 		if (!dev_get_size(dev2, &dev2_size))
 			dev2_size = 0;
 
-		pvsummary_size = _get_pvsummary_size(devl->dev->pvid);
+		pvs = _find_pvsummary(devl->dev->pvid);
+		pvsummary_size = pvs ? pvs->size : 0;
 		same_size1 = (dev1_size == pvsummary_size);
 		same_size2 = (dev2_size == pvsummary_size);
 
-		if ((device_hint = _get_pvsummary_device_hint(devl->dev->pvid))) {
+		device_hint = pvs ? pvs->device_hint : NULL;
+		if (device_hint) {
 			same_name1 = !strcmp(device_hint, dev_name(dev1));
 			same_name2 = !strcmp(device_hint, dev_name(dev2));
 		}
 
-		if ((device_id = _get_pvsummary_device_id(devl->dev->pvid, &device_id_type))) {
+		device_id = pvs ? pvs->device_id : NULL;
+		device_id_type = pvs ? pvs->device_id_type : NULL;
+		if (device_id) {
 			uint16_t idtype = idtype_from_str(device_id_type);
 
 			if (idtype) {
@@ -1416,6 +1380,7 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 {
 	struct lvmcache_vginfo *vginfo, *vginfo2;
 	struct lvmcache_info *info, *info2;
+	struct physical_volume *pvs;
 	struct device *dev;
 	const char *device_hint;
 	uint64_t devsize, pvsize;
@@ -1459,8 +1424,9 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 
 		dm_list_iterate_items_safe(info, info2, &vginfo->infos) {
 			dev = info->dev;
-			device_hint = _get_pvsummary_device_hint(dev->pvid);
-			pvsize = _get_pvsummary_size(dev->pvid);
+			pvs = _find_pvsummary(dev->pvid);
+			device_hint = pvs ? pvs->device_hint : NULL;
+			pvsize = pvs ? pvs->size : 0;
 			devsize = dev->size;
 			do_check_size = 0;
 			do_check_name = 0;
