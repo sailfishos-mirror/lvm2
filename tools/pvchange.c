@@ -76,7 +76,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
 		if ((used = is_used_pv(pv)) < 0)
 			goto_bad;
 
-		if (used && (arg_count(cmd, force_ARG) != DONT_PROMPT_OVERRIDE)) {
+		if (used && (arg_force_value(cmd) != DONT_PROMPT_OVERRIDE)) {
 			log_error("PV %s is used by a VG but its metadata is missing.", pv_name);
 			log_error("Can't change PV '%s' without -ff.", pv_name);
 			goto bad;
