@@ -1795,13 +1795,8 @@ static int _lvmcache_update_vgid(struct lvmcache_info *info,
 	    !memcmp(vginfo->vgid, vgid, ID_LEN))
 		return 1;
 
-	if (vginfo && *vginfo->vgid)
+	if (*vginfo->vgid)
 		dm_hash_remove(_vgid_hash, vginfo->vgid);
-	if (!vgid) {
-		/* FIXME: unreachable code path */
-		log_debug_cache("lvmcache: %s: clearing VGID", info ? dev_name(info->dev) : vginfo->vgname);
-		return 1;
-	}
 
 	memset(vginfo->vgid, 0, sizeof(vginfo->vgid));
 	memcpy(vginfo->vgid, vgid, ID_LEN);
