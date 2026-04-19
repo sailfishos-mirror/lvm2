@@ -149,7 +149,7 @@ static char *_owner_str(struct owner *owner)
 
 	/* Use a --lockopt setting to print all owner details? */
 
-	snprintf(log_owner_str, sizeof(log_owner_str)-1, " (host_id %u)", owner->host_id);
+	snprintf(log_owner_str, sizeof(log_owner_str), " (host_id %u)", owner->host_id);
 	return log_owner_str;
 }
 
