@@ -336,7 +336,7 @@ lv_first_seg_field() {
 	local actual
 	actual=$(get lv_first_seg_field "$1" "$2" "${@:4}")
 	[[ "$actual" = "$3" ]] || \
-		die "lv_field: lv=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
+		die "lv_first_seg_field: lv=$1, field=\"$2\", actual=\"$actual\", expected=\"$3\""
 }
 
 lvh_field() {
