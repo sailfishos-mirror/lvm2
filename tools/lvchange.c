@@ -292,15 +292,12 @@ static int _attach_metadata_devices(struct lv_segment *seg, struct dm_list *list
 	return 1;
 }
 
-static int _reactivate_lv(struct logical_volume *lv,
-			  int active, int exclusive)
+static int _reactivate_lv(struct logical_volume *lv, int active)
 {
-	struct cmd_context *cmd = lv->vg->cmd;
-
 	if (!active)
 		return 1;
 
-	return activate_lv(cmd, lv);
+	return activate_lv(lv->vg->cmd, lv);
 }
 
 /*
@@ -313,7 +310,6 @@ static int _reactivate_lv(struct logical_volume *lv,
 static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	int active = 0;
-	int exclusive = 0;
 	int monitored;
 	struct lv_segment *seg = first_seg(lv);
 	struct dm_list device_list;
@@ -337,14 +333,6 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 		}
 
 		active = 1;
-		if (lv_is_active(lv))
-			exclusive = 1;
-	}
-
-	if (seg_is_raid(seg) && active && !exclusive) {
-		log_error("RAID logical volume %s cannot be active remotely.",
-			  display_lvname(lv));
-		return 0;
 	}
 
 	/* Activate exclusively to ensure no nodes still have LV active */
@@ -382,7 +370,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 				return_0;
 		}
 
-		if (!_reactivate_lv(lv, active, exclusive)) {
+		if (!_reactivate_lv(lv, active)) {
 			log_error("Failed to reactivate %s to resynchronize mirror.",
 				  display_lvname(lv));
 			return 0;
@@ -406,7 +394,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	}
 
 	if (!_vg_write_commit(lv, "intermediate")) {
-		if (!_reactivate_lv(lv, active, exclusive))
+		if (!_reactivate_lv(lv, active))
 			stack;
 		return 0;
 	}
@@ -429,7 +417,7 @@ static int _lvchange_resync(struct cmd_context *cmd, struct logical_volume *lv)
 	if (!_vg_write_commit(lv, NULL))
 		return_0;
 
-	if (!_reactivate_lv(lv, active, exclusive)) {
+	if (!_reactivate_lv(lv, active)) {
 		backup(lv->vg);
 		log_error("Failed to reactivate %s after resync.",
 			  display_lvname(lv));
