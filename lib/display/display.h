@@ -34,7 +34,6 @@ const char *display_size_units(const struct cmd_context *cmd, uint64_t size);
 /* Display size specified in MiB units */
 const char *display_mb_size(const struct cmd_context *cmd, uint64_t size);
 
-char *display_uuid(char *uuidstr);
 void display_stripe(const struct lv_segment *seg, uint32_t s, const char *pre);
 
 void pvdisplay_colons(const struct physical_volume *pv);
