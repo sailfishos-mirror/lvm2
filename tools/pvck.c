@@ -2900,7 +2900,7 @@ fail_close:
 /* all sizes and offsets in bytes */
 
 static int _check_metadata_file(struct cmd_context *cmd, struct metadata_file *mf,
-				char *text_buf, int text_size)
+				char *text_buf, uint64_t text_size)
 {
 	char *vgid;
 	int namelen;
