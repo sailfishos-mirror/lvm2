@@ -413,7 +413,7 @@ static int _dev_md_level(struct dev_types *dt, struct device *dev)
 	int level = -1;
 
 	if (_md_sysfs_attribute_scanf(dt, dev, attribute,
-				      "%s", &level_string) != 1)
+				      "%s", level_string) != 1)
 		return -1;
 
 	log_very_verbose("Device %s %s is %s.",
@@ -509,7 +509,7 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
 		return 0;
 
 	if (_md_sysfs_attribute_scanf(dt, dev, attribute,
-				      "%s", &version_string) != 1)
+				      "%s", version_string) != 1)
 		return 0;
 
 	log_very_verbose("Device %s %s is %s.",
@@ -524,7 +524,8 @@ int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev)
 
 int dev_is_md_component(struct cmd_context *cmd __attribute__((unused)),
 	      struct device *dev __attribute__((unused)),
-	      uint64_t *sb __attribute__((unused)))
+	      uint64_t *offset_found __attribute__((unused)),
+	      int full __attribute__((unused)))
 {
 	return 0;
 }
