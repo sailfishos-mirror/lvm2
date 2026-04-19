@@ -831,7 +831,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	dm_list_init(&lp->tags);
 	lp->target_attr = ~0;
 	lp->yes = arg_count(cmd, yes_ARG);
-	lp->force = (force_t) (int) arg_count(cmd, force_ARG);
+	lp->force = arg_force_value(cmd);
 	lp->permission = arg_uint_value(cmd, permission_ARG,
 					LVM_READ | LVM_WRITE);
 
