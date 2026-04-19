@@ -1847,13 +1847,13 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 	int ret;
 
 	if (!_lvcreate_params(cmd, argc, argv, &lp, &lcp)) {
-		stack;
-		return EINVALID_CMD_LINE;
+		ret = EINVALID_CMD_LINE;
+		goto_out;
 	}
 
 	if (!_check_pool_parameters(cmd, NULL, &lp, &lcp)) {
-		stack;
-		return EINVALID_CMD_LINE;
+		ret = EINVALID_CMD_LINE;
+		goto_out;
 	}
 
 	pp.lp = &lp;
@@ -1861,14 +1861,15 @@ int lvcreate(struct cmd_context *cmd, int argc, char **argv)
 
 	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
-		return ECMD_FAILED;
+		ret = ECMD_FAILED;
+		goto out;
 	}
 
 	handle->custom_handle = &pp;
 
 	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, 0, handle,
 			      &_lvcreate_single);
-
+out:
 	_destroy_lvcreate_params(&lp);
 	destroy_processing_handle(cmd, handle);
 	return ret;
@@ -1945,20 +1946,21 @@ static int _lvcreate_and_attach_cmd(struct cmd_context *cmd, int argc, char **ar
 	int ret;
 
 	if (!_lvcreate_params(cmd, argc, argv, &lp, &lcp)) {
-		stack;
-		return EINVALID_CMD_LINE;
+		ret = EINVALID_CMD_LINE;
+		goto_out;
 	}
 
 	if (!(handle = init_processing_handle(cmd, NULL))) {
 		log_error("Failed to initialize processing handle.");
-		return ECMD_FAILED;
+		ret = ECMD_FAILED;
+		goto out;
 	}
 
 	handle->custom_handle = &lap;
 
 	ret = process_each_vg(cmd, 0, NULL, lp.vg_name, NULL, READ_FOR_UPDATE, 0, handle,
 			      &_lvcreate_and_attach_single);
-
+out:
 	_destroy_lvcreate_params(&lp);
 	destroy_processing_handle(cmd, handle);
 	return ret;
