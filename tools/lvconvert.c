@@ -5365,6 +5365,8 @@ int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv)
 	}
 
 	saved_ignore_suspended_devices = ignore_suspended_devices();
+	/* Same as lvconvert_repair_cmd and lvconvert_start_poll_cmd */
+	init_ignore_suspended_devices(1);
 
 	ret = process_each_lv(cmd, 1, cmd->position_argv, NULL, NULL, READ_FOR_UPDATE,
 			      handle, &_lvconvert_raid_types_check, &_lvconvert_raid_types_single);
