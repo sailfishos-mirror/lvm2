@@ -1309,7 +1309,7 @@ static int _free_vg(struct cmd_context *cmd, struct volume_group *vg)
 
 	daemon_reply_destroy(reply);
 
-	return 1;
+	return ret;
 }
 
 static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
