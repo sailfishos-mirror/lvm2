@@ -4208,16 +4208,15 @@ static int work_setlockargs_vg_final(struct action *act)
 		vg_ls_name(act->vg_name, ls_name);
 
 		/*
-		 * Wait for the lockspace thread to be cleared.
+		 * Check if the lockspace thread has been cleared.
 		 * It was stopped in setlockargs_before but has
 		 * likely not been fully cleaned up yet.
+		 * Return EAGAIN for caller to retry later.
 		 */
-		while (1) {
-			pthread_mutex_lock(&lockspaces_mutex);
-			found = find_lockspace_name(ls_name) ? 1 : 0;
-			pthread_mutex_unlock(&lockspaces_mutex);
-			if (!found)
-				break;
+		pthread_mutex_lock(&lockspaces_mutex);
+		found = find_lockspace_name(ls_name) ? 1 : 0;
+		pthread_mutex_unlock(&lockspaces_mutex);
+		if (found) {
 			log_debug("S %s work_setlockargs_vg_final ls not cleared, retry", ls_name);
 			return -EAGAIN;
 		}
