@@ -4156,13 +4156,13 @@ static int work_init_vg(struct action *act)
 			break;
 		}
 	}
-	pthread_mutex_unlock(&lockspaces_mutex);
-
-	if (rv == -EEXIST) {
+	if (rv == -EEXIST)
 		log_error("Existing lockspace name %s matches new %s VG names %s %s",
 			  ls->name, ls_name, ls->vg_name, act->vg_name);
+	pthread_mutex_unlock(&lockspaces_mutex);
+
+	if (rv == -EEXIST)
 		return rv;
-	}
 
 	if (act->lm_type == LD_LM_SANLOCK)
 		rv = lm_init_vg_sanlock(ls_name, act->vg_name, act->flags, act->vg_args, act->align_mb,
