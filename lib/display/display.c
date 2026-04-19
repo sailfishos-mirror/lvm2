@@ -750,10 +750,6 @@ int lvdisplay_segments(const struct logical_volume *lv)
 	return 1;
 }
 
-void vgdisplay_extents(const struct volume_group *vg __attribute__((unused)))
-{
-}
-
 void vgdisplay_full(const struct volume_group *vg)
 {
 	uint32_t access_str;

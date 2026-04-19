@@ -50,7 +50,6 @@ int lvdisplay_segments(const struct logical_volume *lv);
 int lvdisplay_full(struct cmd_context *cmd, const struct logical_volume *lv,
 		   void *handle);
 
-void vgdisplay_extents(const struct volume_group *vg);
 void vgdisplay_full(const struct volume_group *vg);
 void vgdisplay_colons(const struct volume_group *vg);
 void vgdisplay_short(const struct volume_group *vg);
