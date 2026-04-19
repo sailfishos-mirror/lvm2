@@ -312,11 +312,11 @@ static int _write_lookup_file(struct cmd_context *cmd, struct volume_group *vg)
 	log_debug("write_lookup_file %s", path);
 
 	dm_list_iterate_items(pvl, &vg->pvs) {
-		memcpy(&line, &pvl->pv->id.uuid, ID_LEN);
+		memcpy(line, &pvl->pv->id.uuid, ID_LEN);
 		line[ID_LEN] = '\n';
 		line[ID_LEN+1] = '\0';
 
-		if (write(fd, &line, ID_LEN+1) < 0)
+		if (write(fd, line, ID_LEN+1) != ID_LEN+1)
 			log_error_pvscan(cmd, "Failed to write lookup entry %s %s", path, line);
 	}
 
