@@ -115,7 +115,7 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
 			lp->user_set_fs = 1;
 		} else if (arg_is_set(cmd, resizefs_ARG)) {
 			/* --resizefs alone equates to --fs resize */
-			strncpy(lp->fsopt, "resize", sizeof(lp->fsopt)-1);
+			dm_strncpy(lp->fsopt, "resize", sizeof(lp->fsopt));
 			lp->user_set_fs = 1;
 		} else {
 			/*
@@ -126,7 +126,7 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
 			 * needs reducing: the LV is reduced only if the
 			 * fs does not need to be reduced (or no fs.)
 			 */
-			strncpy(lp->fsopt, "checksize", sizeof(lp->fsopt)-1);
+			dm_strncpy(lp->fsopt, "checksize", sizeof(lp->fsopt));
 		}
 #else
 		/*
@@ -171,7 +171,7 @@ static int _lvresize_params(struct cmd_context *cmd, struct lvresize_params *lp)
 			}
 		} else {
 			/* Use manage when no fsmode option is specified. */
-			strncpy(lp->fsmode, "manage", sizeof(lp->fsmode)-1);
+			dm_strncpy(lp->fsmode, "manage", sizeof(lp->fsmode));
 		}
 	}
 
