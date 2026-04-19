@@ -1315,7 +1315,7 @@ static void _create_opt_names_alpha(void)
 	for (i = 0; i < ARG_COUNT; i++)
 		opt_names_alpha[i] = &opt_names[i];
 
-	qsort(opt_names_alpha, ARG_COUNT, sizeof(long), _long_name_compare);
+	qsort(opt_names_alpha, ARG_COUNT, sizeof(*opt_names_alpha), _long_name_compare);
 }
 
 static int _copy_line(const char **line, size_t max_line, int *position)
