@@ -1905,7 +1905,7 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
 	 * vgchange --setpersist y|require|autostart --persist start
 	 * will start PR before changing VG.
 	 */
-	if (on && op && strcmp(op, "start")) {
+	if (on && op && !strcmp(op, "start")) {
 		if (!persist_start(cmd, vg, NULL, NULL)) {
 			log_error("Failed to start PR, VG not changed.");
 			return_ECMD_FAILED;
