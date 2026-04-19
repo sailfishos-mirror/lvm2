@@ -304,10 +304,9 @@ static int read_host_id_file(void)
 
 		key = line;
 		sep = strstr(line, "=");
-		val = sep + 1;
-
-		if (!sep || !val)
+		if (!sep)
 			continue;
+		val = sep + 1;
 
 		*sep = '\0';
 		memset(key_str, 0, sizeof(key_str));
