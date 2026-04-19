@@ -676,6 +676,11 @@ static void _add_oo_definition_line(const char *name, const char *line)
 	char *colon;
 	const char *start;
 
+	if (_oo_line_count >= MAX_OO_LINES) {
+		log_error("Parsing command defs: too many OO definitions.");
+		return;
+	}
+
 	oo = &_oo_lines[_oo_line_count++];
 
 	if (!(oo->name = strdup(name))) {
