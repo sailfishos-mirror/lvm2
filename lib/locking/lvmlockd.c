@@ -106,7 +106,7 @@ void lvmlockd_init(struct cmd_context *cmd)
 		_lvmlockd_init_failed = 1;
 	}
 
-	if (!!access(LVMLOCKD_PIDFILE, F_OK)) {
+	if (access(LVMLOCKD_PIDFILE, F_OK)) {
 		log_warn("WARNING: lvmlockd process is not running.");
 		_lvmlockd_init_failed = 1;
 	} else {
