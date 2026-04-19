@@ -61,7 +61,7 @@ int dev_is_lvm1(struct device *dev, char *buf, int buflen)
 	uint32_t version;
 	int ret;
 
-	version = htole16(pvd->version);
+	version = le16toh(pvd->version);
 
 	if (pvd->id[0] == 'H' && pvd->id[1] == 'M' &&
 	    (version == 1 || version == 2))
