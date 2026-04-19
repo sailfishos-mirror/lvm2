@@ -122,6 +122,7 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
 	/* store it on disks */
 	log_verbose("Writing out updated volume group");
 	if (!vg_write(vg) || !vg_commit(vg)) {
+		stack;
 		goto error;
 	}
 
@@ -157,7 +158,7 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
 
 	log_print_unless_silent("Volume group \"%s\" successfully renamed to \"%s\"",
 				vp->vg_name_old, vp->vg_name_new);
-	return 1;
+	return ECMD_PROCESSED;
 
  error:
 	unlock_vg(cmd, vg, vp->vg_name_new);
@@ -165,7 +166,7 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
 
 	lockd_rename_vg_final(cmd, vg, 0);
 
-	return 0;
+	return ECMD_FAILED;
 }
 
 int vgrename(struct cmd_context *cmd, int argc, char **argv)
