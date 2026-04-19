@@ -1147,7 +1147,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 					-1))
 		return_0;
 	else if (seg_is_vdo(lp)) {
-		/* Only supported with --type thin, -T, --thin, -V */
+		/* Only supported with --type vdo, -V */
 		if (arg_outside_list_is_set(cmd, "is unsupported with VDOs",
 					    LVCREATE_ARGS,
 					    PERSISTENT_ARGS,
@@ -1159,7 +1159,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 					    -1))
 			return_0;
 
-		/* If size/extents given with thin, then we are also creating a thin-pool */
+		/* If size/extents given with VDO, then we are also creating a VDO pool */
 		if (arg_is_set(cmd, size_ARG) || arg_is_set(cmd, extents_ARG)) {
 			if (arg_is_set(cmd, pooldatasize_ARG)) {
 				log_error("Please specify either size or pooldatasize.");
