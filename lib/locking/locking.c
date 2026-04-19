@@ -289,7 +289,7 @@ out_hold:
 	 */
 	if (lck_type != LCK_UNLOCK)
 		lvmcache_lock_vgname(resource, lck_type == LCK_READ);
-	else if (lck_type == LCK_UNLOCK)
+	else
 		lvmcache_unlock_vgname(resource);
 
 	return 1;
