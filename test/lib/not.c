@@ -20,7 +20,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-static int _finished(const char *cmd, int status, int pid) {
+static int _finished(const char *cmd, int status) {
 	int ret;
 	if (!strcmp(cmd, "not"))
 		return !status;
@@ -101,7 +101,7 @@ int main(int args, char **argv) {
 			return FAILURE;
 		}
 
-		return _finished(argv[0], WEXITSTATUS(status), pid);
+		return _finished(argv[0], WEXITSTATUS(status));
 	}
 	/* not accessible */
 	return FAILURE;

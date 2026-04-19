@@ -23,15 +23,22 @@
 
 int main(int argc, char *argv[])
 {
-	int percent = atoi(argv[1]);
 	int ret, s;
+	int percent;
+
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s <percent>\n", argv[0]);
+		exit(1);
+	}
+
+	percent = atoi(argv[1]);
 
 	ret = ilm_connect(&s);
 	if (ret == 0) {
 		printf("ilm_connect: SUCCESS\n");
 	} else {
 		printf("ilm_connect: FAIL\n");
-		exit(-1);
+		exit(1);
 	}
 
 	ret = ilm_inject_fault(s, percent);
@@ -39,7 +46,7 @@ int main(int argc, char *argv[])
 		printf("ilm_inject_fault (100): SUCCESS\n");
 	} else {
 		printf("ilm_inject_fault (100): FAIL\n");
-		exit(-1);
+		exit(1);
 	}
 
 	ret = ilm_disconnect(s);
@@ -47,7 +54,7 @@ int main(int argc, char *argv[])
 		printf("ilm_disconnect: SUCCESS\n");
 	} else {
 		printf("ilm_disconnect: FAIL\n");
-		exit(-1);
+		exit(1);
 	}
 
 	return 0;

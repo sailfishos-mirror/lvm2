@@ -261,7 +261,14 @@ static int drain(int fd)
 
 static int drain_fds(int fd1, int fd2, long timeout)
 {
-	return -1;
+	int r = 0;
+
+	if (drain(fd1) > 0)
+		r = 1;
+	if (fd2 >= 0 && drain(fd2) > 0)
+		r = 1;
+
+	return r;
 }
 
 #define SYSLOG_ACTION_READ_CLEAR     4
