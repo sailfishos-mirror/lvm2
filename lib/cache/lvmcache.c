@@ -381,21 +381,8 @@ const char *lvmcache_vgid_from_vgname(struct cmd_context *cmd, const char *vgnam
 {
 	struct lvmcache_vginfo *vginfo;
 
-	if (_found_duplicate_vgnames) {
-		if (!(vginfo = _search_vginfos_list(vgname, NULL)))
-			return NULL;
-	} else {
-		if (!(vginfo = dm_hash_lookup(_vgname_hash, vgname)))
-			return NULL;
-	}
-
-	if (vginfo->has_duplicate_local_vgname) {
-		/*
-		 * return NULL if there is a local VG with the same name since
-		 * we don't know which to use.
-		 */
+	if (!(vginfo = _vginfo_lookup(vgname, NULL)))
 		return NULL;
-	}
 
 	if (vginfo->has_duplicate_foreign_vgname)
 		return NULL;
