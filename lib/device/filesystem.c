@@ -148,7 +148,7 @@ static int _fs_get_mnt(struct fs_info *fsi, dev_t devt)
 		}
 
 		log_debug("fs_get_info %s is mounted \"%s\"", fsi->fs_dev_path, me->mnt_dir);
-		strncpy(fsi->mount_dir, me->mnt_dir, PATH_MAX-1);
+		dm_strncpy(fsi->mount_dir, me->mnt_dir, sizeof(fsi->mount_dir));
 	}
 	endmntent(fme);
 
