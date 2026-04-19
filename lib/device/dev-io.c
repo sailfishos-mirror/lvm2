@@ -99,7 +99,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
 		return 1;
 	}
 
-	if (fd <= 0) {
+	if (fd < 0) {
 		if (!dev_open_readonly_quiet(dev))
 			return_0;
 		fd = dev_fd(dev);
@@ -202,7 +202,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
 		return 1;
 	}
 
-	if (fd <= 0) {
+	if (fd < 0) {
 		if (!dev_open_readonly_quiet(dev))
 			return 0;
 		fd = dev_fd(dev);
