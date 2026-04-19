@@ -742,7 +742,6 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
 			    struct processing_handle *handle)
 {
 	struct vgchange_params *vp = (struct vgchange_params *)handle->custom_handle;
-	int ret = ECMD_PROCESSED;
 	unsigned i;
 	activation_change_t activate;
 	int changed = 0;
@@ -814,7 +813,7 @@ static int _vgchange_single(struct cmd_context *cmd, const char *vg_name,
 			return_ECMD_FAILED;
 	}
 
-	return ret;
+	return ECMD_PROCESSED;
 }
 
 /*
@@ -1176,7 +1175,7 @@ int vgchange(struct cmd_context *cmd, int argc, char **argv)
 	if ((cmd->command->command_enum == vgchange_activate_CMD) ||
 	    (cmd->command->command_enum == vgchange_refresh_CMD)) {
 		cmd->lockd_vg_default_sh = 1;
-		/* Allow deactivating if locks fail. */
+		/* Enforce shared lock when activating, skip it for deactivation. */
 		if (is_change_activating((activation_change_t) (uint32_t)
 					 arg_uint_value(cmd, activate_ARG, CHANGE_AY)))
 			cmd->lockd_vg_enforce_sh = 1;
