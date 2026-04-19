@@ -204,7 +204,7 @@
 #
 OO_ALL: --commandprofile String, --config String, --debug,
 --driverloaded Bool, --help, --nolocking, --lockopt String, --longhelp, --profile String, --quiet,
---verbose, --version, --yes, --test, --devicesfile String, --devices PV, --nohints --journal String
+--verbose, --version, --yes, --test, --devicesfile String, --devices PV, --nohints, --journal String
 
 #
 # options for pvdisplay, lvdisplay, vgdisplay
@@ -515,7 +515,7 @@ RULE: all not lv_is_locked lv_is_merging_origin lv_is_merging_cow lv_is_cow
 RULE: --poolmetadata not --readahead --stripesize --stripes_long
 
 # alternate form of lvconvert --type cache
-lvconvert --cache --cachepool LV LV_linear_striped_raid_thinpool_vdo_vdopool_vdopooldata_thin_error_zero
+lvconvert --cache --cachepool LV LV_linear_striped_raid_thinpool_thinpooldata_vdo_vdopool_vdopooldata_thin_error_zero
 OO: OO_LVCONVERT_CACHE, OO_LVCONVERT_POOL, OO_LVCONVERT
 OP: PV ...
 ID: lvconvert_to_cache_with_cachepool
@@ -1560,7 +1560,7 @@ OO: --alloc Alloc, --autobackup Bool, --force,
 ID: lvresize_pv
 DESC: Resize an LV by specified PV extents.
 
-lvresize --poolmetadatasize PSizeMB LV_thinpool
+lvresize --poolmetadatasize PSizeMB LV_thinpool_linear
 OO: --alloc Alloc, --autobackup Bool, --force,
 --nofsck, --nosync, --noudevsync,
 --reportformat ReportFmt, --stripes Number, --stripesize SizeKB,
