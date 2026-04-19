@@ -348,6 +348,7 @@ Resize a pool metadata SubLV by a specified size.
 [ \fIPV\fP\ .\|.\|.\& ]
 .sp
 LV1 types:
+linear
 thinpool
 .RE
 .P

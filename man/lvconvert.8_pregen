@@ -2563,6 +2563,7 @@ striped
 raid
 thin
 thinpool
+thinpooldata
 vdo
 vdopool
 vdopooldata
