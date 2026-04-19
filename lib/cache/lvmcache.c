@@ -2807,7 +2807,7 @@ int lvmcache_update_bas(struct lvmcache_info *info, struct physical_volume *pv)
 				pv->ba_start = ba->disk_locn.offset >> SECTOR_SHIFT;
 				pv->ba_size = ba->disk_locn.size >> SECTOR_SHIFT;
 			}
-		del_das(&info->bas);
+		del_bas(&info->bas);
 	} else
 		dm_list_init(&info->bas);
 
