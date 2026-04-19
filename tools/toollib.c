@@ -4857,7 +4857,7 @@ int process_each_pv(struct cmd_context *cmd,
 	}
 
 	if (!lvmcache_get_vgnameids(cmd, &all_vgnameids, only_this_vgname, 1)) {
-		ret_max = ret;
+		ret_max = ECMD_FAILED;
 		goto_out;
 	}
 
