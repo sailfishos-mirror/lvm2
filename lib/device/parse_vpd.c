@@ -158,10 +158,10 @@ int parse_vpd_ids(const unsigned char *vpd_data, int vpd_datalen, struct dm_list
 	int type;
 	uint8_t cur_id_size = 0;
 
-	memset(id, 0, ID_BUFSIZE);
 	for (d = vpd_data + 4;
 	     d + 4 <= vpd_end;
 	     d += d[3] + 4) {
+		memset(id, 0, ID_BUFSIZE);
 		memset(tmp_str, 0, sizeof(tmp_str));
 
 		switch (d[1] & 0xf) {
