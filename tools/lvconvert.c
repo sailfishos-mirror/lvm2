@@ -1897,8 +1897,7 @@ static int _lvconvert_splitsnapshot(struct cmd_context *cmd, struct logical_volu
 
 		if ((arg_count(cmd, force_ARG) == PROMPT) &&
 		    !arg_is_set(cmd, yes_ARG) &&
-		    lv_is_visible(cow) &&
-		    lv_is_active(cow)) {
+		    lv_is_visible(cow)) {
 			if (yes_no_prompt("Do you really want to split off active "
 					  "logical volume %s? [y/n]: ", display_lvname(cow)) == 'n') {
 				log_error("Logical volume %s not split.", display_lvname(cow));
