@@ -314,7 +314,7 @@ pid_t pdst_kill_pdlv(struct lvmpolld_store *pdst, const char *id)
 
 	pdst_lock(pdst);
 	pdlv = pdst_locked_lookup(pdst, id);
-	if (pdlv && !pdlv_locked_polling_finished(pdlv) && pdlv->cmd_pid > 0) {
+	if (pdlv && !pdlv_get_polling_finished(pdlv) && pdlv->cmd_pid > 0) {
 		kill(pdlv->cmd_pid, SIGTERM);
 		pid = pdlv->cmd_pid;
 	}
