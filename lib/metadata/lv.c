@@ -170,7 +170,7 @@ static struct dm_list *_format_pvsegs(struct dm_pool *mem, const struct lv_segme
 		if (range_format) {
 			if (dm_snprintf(extent_str, sizeof(extent_str),
 					":%" PRIu32 "-%" PRIu32,
-					extent, extent + seg_len - 1) < 0) {
+					extent, extent + (seg_len ? seg_len - 1 : 0)) < 0) {
 				log_error("_format_pvsegs: extent range dm_snprintf failed.");
 				goto bad;
 			}
