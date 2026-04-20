@@ -231,18 +231,24 @@ static int _read_pv(struct cmd_context *cmd,
 	}
 
 	if (dm_config_get_str(pvn, "device", &str)) {
-		if (!(pv->device_hint = dm_pool_strdup(mem, str)))
+		if (!(pv->device_hint = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device hint in read_pv.");
+			return 0;
+		}
 	}
 
 	if (dm_config_get_str(pvn, "device_id", &str)) {
-		if (!(pv->device_id = dm_pool_strdup(mem, str)))
+		if (!(pv->device_id = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device_id in read_pv.");
+			return 0;
+		}
 	}
 
 	if (dm_config_get_str(pvn, "device_id_type", &str)) {
-		if (!(pv->device_id_type = dm_pool_strdup(mem, str)))
+		if (!(pv->device_id_type = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device_id_type in read_pv.");
+			return 0;
+		}
 	}
 
 	if (!_read_uint64(pvn, "pe_start", &pv->pe_start)) {
@@ -332,18 +338,24 @@ static int _read_pvsummary(struct cmd_context *cmd,
 		log_warn("Couldn't read dev size for physical volume.");
 
 	if (dm_config_get_str(pvn, "device", &str)) {
-		if (!(pv->device_hint = dm_pool_strdup(mem, str)))
+		if (!(pv->device_hint = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device hint in read_pv_sum.");
+			return 0;
+		}
 	}
 
 	if (dm_config_get_str(pvn, "device_id", &str)) {
-		if (!(pv->device_id = dm_pool_strdup(mem, str)))
+		if (!(pv->device_id = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device_id in read_pv_sum.");
+			return 0;
+		}
 	}
 
 	if (dm_config_get_str(pvn, "device_id_type", &str)) {
-		if (!(pv->device_id_type = dm_pool_strdup(mem, str)))
+		if (!(pv->device_id_type = dm_pool_strdup(mem, str))) {
 			log_error("Failed to allocate memory for device_id_type in read_pv_sum.");
+			return 0;
+		}
 	}
 
 	dm_list_add(&vgsummary->pvsummaries, &pvl->list);
