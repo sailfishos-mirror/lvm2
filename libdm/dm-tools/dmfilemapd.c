@@ -619,7 +619,7 @@ check_unlinked:
 		return 0;
 
 	/* Should not happen with normal /proc. */
-	if ((fd > 0) && !same) {
+	if ((fd >= 0) && !same) {
 		log_error("File descriptor mismatch: %d and %s (read from %s) "
 			  "are not the same file!", fm->fd, link_buf, path_buf);
 		return 0;
