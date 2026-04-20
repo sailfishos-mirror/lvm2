@@ -59,9 +59,9 @@ static int _lv_tree_move(struct dm_list *lvh,
 			if (seg_type(seg, s) == AREA_LV && seg_lv(seg, s)) {
 				if ((lvh1 = _lvh_in_vg(seg_lv(seg, s), vg_from))) {
 					if (!_lv_tree_move(lvh1, lvht, vg_from, vg_to))
-						return 0;
+						return_0;
 				} else if (!_lvh_in_vg(seg_lv(seg, s), vg_to))
-					return 0;
+					return_0;
 			}
 
 	return 1;
