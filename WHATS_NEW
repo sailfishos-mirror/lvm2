@@ -1,5 +1,18 @@
 Version 2.03.40 -
 ==================
+  Preserve bcache AIO context across lvm shell commands to avoid reinit cost.
+  Fix msg.data leaks in dmeventd restart and reinstate paths.
+  Fix VG lock leak on init_processing_handle failure in vgcreate.
+  Fix VG lock leak on lv_remove_single failure in vgmerge.
+  Fix VG lock leak on second lock_vol failure in vgimportclone.
+  Fix VG lock leak on early return in pvscan.
+  Fix inverted strstr check in remove_layer_from_lv layer rename.
+  Fix inverted strcmp for vgchange --persist lockstart check.
+  Fix argv overwriting last vdoformat option with device path.
+  Fix NULL deref of sync_action in dm_get_status_raid.
+  Fix recovery rate check in lvcreate when max rate is unset.
+  Fix dm_strncpy off-by-one in raid split image conversion name.
+  Fix missing failure return after reshape space allocation error in raid.
   Pre-create udev cookie before critical section to avoid resume failures.
   Validate area_count before subtracting parity_devs in RAID metadata import.
   Validate area_count against MAX_STRIPES to prevent integer overflow.
