@@ -84,7 +84,8 @@ static int _lv_is_single_seg(const struct logical_volume *lv, const char *segtyp
 			return 0; /* Other than expected */
 	}
 
-	return 1;
+	/* 0 when segment list is empty (cnt == 0), 1 for single match */
+	return cnt ? 1 : 0;
 }
 
 /* LV is 'error' if it's using single error segment */
