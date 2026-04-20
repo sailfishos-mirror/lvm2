@@ -83,7 +83,7 @@ static int _config_validate(struct cmd_context *cmd, struct dm_config_tree *cft)
 	struct cft_check_handle *handle;
 
 	if (!(handle = get_config_tree_check_handle(cmd, cft)))
-		return 1;
+		return 1; /* FIXME: Currently intentional, may hide real error! */
 
 	handle->force_check = 1;
 	handle->skip_if_checked = 1;
