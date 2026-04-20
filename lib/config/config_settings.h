@@ -2152,11 +2152,11 @@ cfg(report_pvsegs_sort_CFG, "pvsegs_sort", report_CFG_SECTION, CFG_PROFILABLE | 
 	"See 'pvs --segments -o help' for the list of possible fields.\n")
 
 cfg(report_pvsegs_cols_CFG, "pvsegs_cols", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_PVSEGS_COLS, vsn(1, 1, 3), NULL, 0, NULL,
-	"List of columns to sort by when reporting 'pvs --segments' command.\n"
+	"List of columns to report for 'pvs --segments' command.\n"
 	"See 'pvs --segments -o help' for the list of possible fields.\n")
 
 cfg(report_pvsegs_cols_verbose_CFG, "pvsegs_cols_verbose", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_PVSEGS_COLS_VERB, vsn(1, 1, 3), NULL, 0, NULL,
-	"List of columns to sort by when reporting 'pvs --segments' command in verbose mode.\n"
+	"List of columns to report for 'pvs --segments' command in verbose mode.\n"
 	"See 'pvs --segments -o help' for the list of possible fields.\n")
 
 cfg(report_vgs_cols_full_CFG, "vgs_cols_full", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_VGS_COLS_FULL, vsn(2, 2, 158), NULL, 0, NULL,
@@ -2164,7 +2164,7 @@ cfg(report_vgs_cols_full_CFG, "vgs_cols_full", report_CFG_SECTION, CFG_PROFILABL
 	"See 'vgs -o help' for the list of possible fields.\n")
 
 cfg(report_pvs_cols_full_CFG, "pvs_cols_full", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_PVS_COLS_FULL, vsn(2, 2, 158), NULL, 0, NULL,
-	"List of columns to report for lvm fullreport's 'vgs' subreport.\n"
+	"List of columns to report for lvm fullreport's 'pvs' subreport.\n"
 	"See 'pvs -o help' for the list of possible fields.\n")
 
 cfg(report_lvs_cols_full_CFG, "lvs_cols_full", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_LVS_COLS_FULL, vsn(2, 2, 158), NULL, 0, NULL,
@@ -2184,7 +2184,7 @@ cfg(report_vgs_sort_full_CFG, "vgs_sort_full", report_CFG_SECTION, CFG_PROFILABL
 	"See 'vgs -o help' for the list of possible fields.\n")
 
 cfg(report_pvs_sort_full_CFG, "pvs_sort_full", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_PVS_SORT_FULL, vsn(2, 2, 158), NULL, 0, NULL,
-	"List of columns to sort by when reporting lvm fullreport's 'vgs' subreport.\n"
+	"List of columns to sort by when reporting lvm fullreport's 'pvs' subreport.\n"
 	"See 'pvs -o help' for the list of possible fields.\n")
 
 cfg(report_lvs_sort_full_CFG, "lvs_sort_full", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_LVS_SORT_FULL, vsn(2, 2, 158), NULL, 0, NULL,
