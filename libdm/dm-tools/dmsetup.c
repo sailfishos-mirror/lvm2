@@ -5523,7 +5523,7 @@ static int _stats_print_one_region(struct dm_stats *dms, int clear,
 static int _stats_print(CMD_ARGS)
 {
 	struct dm_stats *dms;
-	char *name, *stbuff = NULL;
+	char *name;
 	uint64_t region_id;
 	unsigned clear = (unsigned) _switches[CLEAR_ARG];
 	int allregions = _switches[ALL_REGIONS_ARG];
@@ -5574,15 +5574,6 @@ static int _stats_print(CMD_ARGS)
 		region_id = dm_stats_get_current_region(dms);
 		if (!_stats_print_one_region(dms, clear, region_id))
 			goto_out;
-
-		/*FIXME: line control for large regions */
-		if (!(stbuff = dm_stats_print_region(dms, region_id, 0, 0, clear))) {
-			log_error("Could not print statistics region.");
-			goto out;
-		}
-
-		printf("%s", stbuff);
-		dm_stats_buffer_destroy(dms, stbuff);
 	}
 
 	r = 1;
