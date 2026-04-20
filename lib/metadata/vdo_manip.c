@@ -269,7 +269,6 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 	FILE *f;
 	uint64_t lb;
 	unsigned slabbits;
-	unsigned reformatting = 0;
 	int args = 0;
 	char buf[VDO_FORMAT_OUTPUT_BUF_SIZE];
 	char *buf_pos = buf;
@@ -338,12 +337,8 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 			}
 		if ((c = strchr(buf, '\n')))
 			*c = 0; /* cut last '\n' away */
-		if (buf[0]) {
-			if (reformatting)
-				log_verbose("  %s", buf); /* Print vdo_format messages */
-			else
-				log_print_unless_silent("  %s", buf); /* Print vdo_format messages */
-		}
+		if (buf[0])
+			log_print_unless_silent("  %s", buf); /* Print vdo_format messages */
 	}
 
 	if (!pipe_close(&pdata)) {
