@@ -619,7 +619,7 @@ static void _vprint_log(int level, const char *file, int line, int dm_errno_or_c
 		if (_lvm_errmsg &&
 		    (_lvm_errmsg_len + msglen + 2) < _lvm_errmsg_size) {
 			/* prepend '\n' and copy with '\0' but do not count in */
-                        if (_lvm_errmsg_len)
+			if (_lvm_errmsg_len)
 				_lvm_errmsg[_lvm_errmsg_len++] = '\n';
 			memcpy(_lvm_errmsg + _lvm_errmsg_len, message, msglen + 1);
 			_lvm_errmsg_len += msglen;

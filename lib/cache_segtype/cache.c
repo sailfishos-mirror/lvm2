@@ -673,7 +673,7 @@ static int _cache_add_target_line(struct dev_manager *dm,
 			}
 		};
 
-                /* Check if cache settings are acceptable to known policies */
+		/* Check if cache settings are acceptable to known policies */
 		for (i = 0; i < DM_ARRAY_SIZE(_accepted); i++) {
 			if (strcasecmp(setting_seg->policy_name, _accepted[i].name))
 				continue;

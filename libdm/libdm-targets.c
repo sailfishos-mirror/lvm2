@@ -167,9 +167,9 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
 	 */
 	msg_fields = "<data_offset>";
 	if (!(p = _skip_fields(params, 6))) /* skip pre-1.9.0 params */
-		goto bad;
+		goto_bad;
 	if (sscanf(p, FMTu64, &s->data_offset) != 1)
-		goto bad;
+		goto_bad;
 
 	/* <journal_char>  - 'A' - active write-through journal device.
 	 *                 - 'a' - active write-back journal device.

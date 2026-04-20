@@ -289,7 +289,7 @@ void fcntl_unlock_file(int lockfd)
 		log_sys_error("fcntl", "");
 
 	if (close(lockfd))
-		log_sys_error("close","");
+		log_sys_error("close", "");
 }
 
 int lvm_fclose(FILE *fp, const char *filename)

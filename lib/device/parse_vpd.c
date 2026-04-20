@@ -297,7 +297,7 @@ int parse_vpd_serial(const unsigned char *in, char *out, size_t outsize)
 	}
 
 	if (len >= outsize)
-                len = outsize - 1;
+		len = outsize - 1;
 
 	if (len > 0) {
 		memcpy(out, in + 4, len);

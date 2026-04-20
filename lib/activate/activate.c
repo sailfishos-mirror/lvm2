@@ -525,8 +525,8 @@ int target_version(const char *target_name, uint32_t *maj,
 	if (!(dmt = dm_task_create(DM_DEVICE_LIST_VERSIONS)))
 		return_0;
 
-        if (activation_checks() && !dm_task_enable_checks(dmt))
-                goto_out;
+	if (activation_checks() && !dm_task_enable_checks(dmt))
+		goto_out;
 
 	if (!dm_task_run(dmt)) {
 		log_debug_activation("Failed to get %s target version", target_name);
@@ -554,7 +554,7 @@ int target_version(const char *target_name, uint32_t *maj,
 		target = (struct dm_versions *)((char *) target + target->next);
 	} while (last_target != target);
 
-      out:
+out:
 	if (r)
 		log_very_verbose("Found %s target "
 				 "v%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".",
@@ -1136,7 +1136,7 @@ int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
 			     display_lvname(lv));
 
 	if (!lv_raid_status(lv, &raid_status))
-                return_0;
+		return_0;
 
 	*data_offset = raid_status->raid->data_offset;
 
@@ -1159,12 +1159,12 @@ int lv_raid_dev_health(const struct logical_volume *lv, char **dev_health)
 			     display_lvname(lv));
 
 	if (!lv_raid_status(lv, &raid_status))
-                return_0;
+		return_0;
 
 	if (!(*dev_health = dm_pool_strdup(lv->vg->cmd->mem,
 					  raid_status->raid->dev_health))) {
 		stack;
-                r = 0;
+		r = 0;
 	}
 
 	dm_pool_destroy(raid_status->mem);
@@ -2942,7 +2942,7 @@ const struct logical_volume *lv_component_is_active(const struct logical_volume 
 	const struct logical_volume *holder_lv = lv_lock_holder(lv);
 
 	if ((holder_lv != lv) && lv_is_active(holder_lv))
-                return NULL; /* Lock holding LV is active, do not check components */
+		return NULL; /* Lock holding LV is active, do not check components */
 
 	if (_component_cb((struct logical_volume *) lv, &holder_lv) == 1)
 		(void) for_each_sub_lv((struct logical_volume *) lv, _component_cb,

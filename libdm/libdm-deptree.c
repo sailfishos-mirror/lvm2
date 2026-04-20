@@ -211,7 +211,7 @@ struct load_segment {
 	unsigned read_only;		/* Thin pool target vsn 1.3 */
 	uint32_t device_id;		/* Thin */
 
-	// VDO params
+	/* VDO */
 	uint32_t vdo_version;		/* VDO - version of target table line */
 	struct dm_tree_node *vdo_data;  /* VDO */
 	struct dm_vdo_target_params vdo_params; /* VDO */
@@ -653,7 +653,6 @@ static const char *_node_name(struct dm_tree_node *dnode)
 }
 
 void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags)
-
 {
 	if (udev_flags != dnode->udev_flags)
 		log_debug_activation("Resetting %s udev_flags from 0x%x to 0x%x.",
@@ -2719,7 +2718,7 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 
 	if (seg->flags & DM_CACHE_FEATURE_PASSTHROUGH)
 		EMIT_PARAMS(pos, " passthrough");
-        else if (seg->flags & DM_CACHE_FEATURE_WRITEBACK)
+	else if (seg->flags & DM_CACHE_FEATURE_WRITEBACK)
 		EMIT_PARAMS(pos, " writeback");
 	else
 		EMIT_PARAMS(pos, " writethrough");

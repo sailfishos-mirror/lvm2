@@ -9125,7 +9125,7 @@ int activate_and_wipe_lvlist(struct dm_list *lv_list, int wipe_mode, int yes, fo
 	}
 
 	dm_list_iterate_items(lvl, lv_list) {
-		/* Wipe any know signatures */
+		/* Wipe any known signatures */
 		if (!wipe_lv(lvl->lv, wp)) {
 			r = 0;
 			goto_out;

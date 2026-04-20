@@ -543,7 +543,7 @@ struct logical_volume *convert_vdo_lv(struct logical_volume *lv,
 	if (!convert_vdo_pool_lv(lv, &vcp->vdo_params, &lvc.virtual_extents, vcp->do_zero, vcp->header_size))
 		return_NULL;
 
-        /* Create VDO LV with the name, we just release above */
+	/* Create VDO LV with the name, we just release above */
 	if (!(vdo_lv = lv_create_single(lv->vg, &lvc)))
 		return_NULL;
 
@@ -677,7 +677,7 @@ typedef struct mem_table_s {
 	uint64_t *value;
 } mem_table_t;
 
-static int _compare_mem_table_s(const void *a, const void *b){
+static int _compare_mem_table_s(const void *a, const void *b) {
 	return strcmp(((const mem_table_t*)a)->name, ((const mem_table_t*)b)->name);
 }
 

@@ -980,7 +980,7 @@ static int _lvchange_writemostly(struct logical_volume *lv,
 	struct lv_segment *raid_seg = first_seg(lv);
 
 	/*
-	 * Prohibit writebehind and writebehind during synchronization.
+	 * Prohibit writemostly and writebehind during synchronization.
 	 *
 	 * FIXME: we can do better once we can distinguish between
 	 *        an initial sync after a linear -> raid1 upconversion

@@ -167,7 +167,7 @@ const char *display_percent(struct cmd_context *cmd, dm_percent_t percent)
 	char *buf;
 	int r;
 
-        /* Reusing same  ring buffer we use for displaying LV names */
+	/* Reusing same  ring buffer we use for displaying LV names */
 	if ((cmd->display_lvname_idx + NAME_LEN) >= sizeof((cmd->display_buffer)))
 		cmd->display_lvname_idx = 0;
 

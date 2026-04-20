@@ -161,7 +161,7 @@ static int _lvcreate_name_params(struct cmd_context *cmd,
 		vg_name = skip_dev_dir(cmd, argv[0], NULL);
 		if (!strchr(vg_name, '/')) {
 			if (lp->snapshot && arg_is_set(cmd, virtualsize_ARG))
-				lp->snapshot = 0 ; /* Sparse volume via thin-pool */
+				lp->snapshot = 0; /* Sparse volume via thin-pool */
 			if (!_set_vg_name(lp, vg_name))
 				return_0;
 		} else {

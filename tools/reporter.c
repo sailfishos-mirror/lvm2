@@ -177,7 +177,7 @@ static int _do_lvs_with_info_and_status_single(struct cmd_context *cmd,
 	int merged;
 
 	if (lv_is_merging_origin(lv))
-		/* Status is need to know which LV should be shown */
+		/* Status is needed to know which LV should be shown */
 		do_status = 1;
 
 	if (!_do_info_and_status(cmd, first_seg(lv), &status, do_info, do_status))
@@ -241,7 +241,7 @@ static int _do_segs_with_info_and_status_single(struct cmd_context *cmd,
 	int merged;
 
 	if (lv_is_merging_origin(seg->lv))
-		/* Status is need to know which LV should be shown */
+		/* Status is needed to know which LV should be shown */
 		do_status = 1;
 
 	if (!_do_info_and_status(cmd, seg, &status, do_info, do_status))

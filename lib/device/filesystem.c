@@ -200,9 +200,9 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 
 		if (dm_snprintf(rdev_path, sizeof(rdev_path), "%s/%s/dev",
 				 devices_path, device_name) < 0) {
-			    log_error("Couldn't create rdev path for %s.", fsi->fs_dev_path);
-			    ret = 0;
-			    break;
+				log_error("Couldn't create rdev path for %s.", fsi->fs_dev_path);
+				ret = 0;
+				break;
 		}
 
 		if ((fd = open(rdev_path, O_RDONLY)) < 0) {

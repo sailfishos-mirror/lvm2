@@ -310,7 +310,7 @@ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
 		if (area_len &&
 		    area_len != seg_lv(seg, s)->le_count) {
 				raid_seg_error_val("DataLV size variations",
-		    				   seg_lv(seg, s)->le_count);
+						   seg_lv(seg, s)->le_count);
 		} else
 			area_len = seg_lv(seg, s)->le_count;
 	}
@@ -331,7 +331,7 @@ static void _check_raid_seg(struct lv_segment *seg, int *error_count)
 			if (area_len &&
 			    area_len != seg_metalv(seg, s)->le_count) {
 				raid_seg_error_val("MetaLV size variations",
-		    				   seg_metalv(seg, s)->le_count);
+						   seg_metalv(seg, s)->le_count);
 			} else
 				area_len = seg_metalv(seg, s)->le_count;
 		}

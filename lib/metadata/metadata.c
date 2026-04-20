@@ -2746,7 +2746,7 @@ int vg_validate(struct volume_group *vg)
 				log_error("Failed to store historical LV id.");
 				goto out;
 			}
-			if (!id_write_format(&hlv->lvid.id[1], uuid,sizeof(uuid)))
+			if (!id_write_format(&hlv->lvid.id[1], uuid, sizeof(uuid)))
 				stack;
 			log_error(INTERNAL_ERROR "Duplicate historical LV id %s detected for %s in %s.",
 				  uuid, hlv->name, vg->name);
@@ -3148,7 +3148,7 @@ int vg_commit(struct volume_group *vg)
 		 * The volume_group structure could be reused later.
 		 */
 		vg->old_name = NULL;
-	        dm_list_iterate_items(pvl, &vg->pvs)
+		dm_list_iterate_items(pvl, &vg->pvs)
 			pvl->pv->status &= ~PV_MOVED_VG;
 
 		/* This *is* the original now that it's committed. */

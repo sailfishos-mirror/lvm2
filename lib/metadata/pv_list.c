@@ -139,7 +139,7 @@ static int _parse_pes(struct dm_pool *mem, char *c, struct dm_list *pe_ranges,
 
 	return 1;
 
-      error:
+error:
 	log_error("Physical extent parsing error at %s.", c);
 	return 0;
 }

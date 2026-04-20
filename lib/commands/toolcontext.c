@@ -684,7 +684,7 @@ static int _process_config(struct cmd_context *cmd)
 	if ((old_umask = umask((mode_t) cmd->default_settings.umask)) !=
 	    (mode_t) cmd->default_settings.umask)
 		log_verbose("Set umask from %04o to %04o",
-                            old_umask, cmd->default_settings.umask);
+				    old_umask, cmd->default_settings.umask);
 
 	/* dev dir */
 	if (dm_snprintf(cmd->dev_dir, sizeof(cmd->dev_dir), "%s/",
@@ -1336,7 +1336,7 @@ int init_filters(struct cmd_context *cmd, unsigned load_persistent_cache)
 	/*
 	 * persistent filter is a cache of the previous result real filter result.
 	 * If a dev is found in persistent filter, the pass/fail result saved by
-	 * the pfilter is used.  If a dev does not existing in the persistent
+	 * the pfilter is used.  If a dev does not exist in the persistent
 	 * filter, the dev is passed on to the real filter, and when the result
 	 * of the real filter is saved in the persistent filter.
 	 *
@@ -1363,15 +1363,15 @@ bad:
 
 struct format_type *get_format_by_name(struct cmd_context *cmd, const char *format)
 {
-        struct format_type *fmt;
+	struct format_type *fmt;
 
-        dm_list_iterate_items(fmt, &cmd->formats)
-                if (!strcasecmp(fmt->name, format) ||
-                    !strcasecmp(fmt->name + 3, format) ||
-                    (fmt->alias && !strcasecmp(fmt->alias, format)))
-                        return fmt;
+	dm_list_iterate_items(fmt, &cmd->formats)
+		if (!strcasecmp(fmt->name, format) ||
+		    !strcasecmp(fmt->name + 3, format) ||
+		    (fmt->alias && !strcasecmp(fmt->alias, format)))
+			return fmt;
 
-        return NULL;
+	return NULL;
 }
 
 /* FIXME: there's only one format, get rid of the list of formats */
@@ -1880,7 +1880,7 @@ int refresh_filters(struct cmd_context *cmd)
 
 	_destroy_filters(cmd);
 	if (!(r = init_filters(cmd, 0)))
-                stack;
+		stack;
 
 	/*
 	 * During repair code must not reset suspended flag.

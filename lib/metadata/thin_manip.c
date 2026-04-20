@@ -995,7 +995,7 @@ const char *get_pool_discards_name(thin_discards_t discards)
 {
 	switch (discards) {
 	case THIN_DISCARDS_PASSDOWN:
-                return "passdown";
+		return "passdown";
 	case THIN_DISCARDS_NO_PASSDOWN:
 		return "nopassdown";
 	case THIN_DISCARDS_IGNORE:

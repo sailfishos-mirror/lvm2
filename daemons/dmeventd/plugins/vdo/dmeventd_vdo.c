@@ -323,7 +323,7 @@ int register_device(const char *device,
 	if (strncmp(cmd_str, "lvm ", 4) == 0) {
 		if (!(state->cmd_str = dm_pool_strdup(state->mem, cmd_str + 4))) {
 			log_error("Failed to copy lvm VDO command.");
-				goto bad;
+			goto bad;
 		}
 	} else if (cmd_str[0] == '/') {
 		if (!(state->cmd_str = dm_pool_strdup(state->mem, cmd_str))) {
@@ -345,7 +345,7 @@ int register_device(const char *device,
 		_init_thread_signals(state);
 	} else if (cmd[0] == 0) {
 		name = "volume"; /* What to use with 'others?' */
-	} else/* Unsupported command format */
+	} else /* Unsupported command format */
 		goto inval;
 
 	state->max_fails = 1;

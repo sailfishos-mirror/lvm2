@@ -2267,7 +2267,7 @@ int lockd_global(struct cmd_context *cmd, const char *def_mode)
 		if (retries < find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL)) {
 			if (result == -EIOTIMEOUT)
 				log_warn("Retrying global lock: io timeout");
-                        else
+			else
 				log_warn("Retrying global lock: held by other host%s", _owner_str(&owner));
 			sleep(1);
 			retries++;

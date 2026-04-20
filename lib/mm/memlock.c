@@ -185,7 +185,7 @@ static void _allocate_memory(void)
 	/* FIXME else warn user setting got ignored */
 
 #ifdef HAVE_MALLINFO2
-        /* Prefer mallinfo2 call when available with newer glibc */
+	/* Prefer mallinfo2 call when available with newer glibc */
 #define MALLINFO mallinfo2
 #else
 #define MALLINFO mallinfo

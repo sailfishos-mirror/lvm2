@@ -50,7 +50,7 @@
  * foo_VAL enum in field a, which is used in commands[]
  * structs.
  *
- * option definitions (arg.h) will reference foo_VAL enum
+ * option definitions (args.h) will reference foo_VAL enum
  * in field a.
  *
  * FIXME: for specialized val types, the set of recognized

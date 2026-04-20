@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
@@ -124,7 +124,7 @@ struct dev_manager;
 #define segtype_is_integrity(segtype)	((segtype)->flags & SEG_INTEGRITY ? 1 : 0)
 #define segtype_is_mirrored(segtype)	((segtype)->flags & SEG_AREAS_MIRRORED ? 1 : 0)
 #define segtype_is_mirror(segtype)	((segtype)->flags & SEG_MIRROR ? 1 : 0)
-#define segtype_is_pool(segtype)	((segtype)->flags & (SEG_CACHE_POOL | SEG_THIN_POOL)  ? 1 : 0)
+#define segtype_is_pool(segtype)	((segtype)->flags & (SEG_CACHE_POOL | SEG_THIN_POOL) ? 1 : 0)
 #define segtype_is_raid0(segtype)	((segtype)->flags & SEG_RAID0 ? 1 : 0)
 #define segtype_is_raid0_meta(segtype)	((segtype)->flags & SEG_RAID0_META ? 1 : 0)
 #define segtype_is_any_raid0(segtype)	((segtype)->flags & (SEG_RAID0 | SEG_RAID0_META) ? 1 : 0)

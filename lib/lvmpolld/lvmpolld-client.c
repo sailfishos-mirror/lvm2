@@ -205,7 +205,7 @@ static int _process_poll_init(const struct cmd_context *cmd, const char *poll_ty
 	daemon_reply rep;
 	daemon_request req;
 	const char *e = getenv("LVM_SYSTEM_DIR");
-	int r = 0; 
+	int r = 0;
 
 	str = malloc(INTERV_SIZE * sizeof(char));
 	if (!str)

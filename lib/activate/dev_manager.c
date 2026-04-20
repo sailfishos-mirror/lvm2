@@ -2712,7 +2712,7 @@ static int _add_cvol_subdev_to_dtree(struct dev_manager *dm, struct dm_tree *dtr
 	struct lv_segment *lvseg = first_seg(lv);
 	const struct logical_volume *pool_lv = lvseg->pool_lv;
 	struct dm_info info;
-	char *name ,*dlid;
+	char *name, *dlid;
 	union lvid lvid = { .id = { lv->vg->id, _get_id_for_meta_or_data(lvseg, meta_or_data) } };
 	lvid.s[sizeof(lvid.id)] = 0;
 

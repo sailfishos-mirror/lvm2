@@ -1109,7 +1109,6 @@ static float _find_config_float(const void *start, node_lookup_fn find,
 	}
 
 	return fail;
-
 }
 
 static int _str_in_array(const char *str, const char * const values[])

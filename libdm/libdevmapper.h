@@ -212,16 +212,6 @@ const char *dm_task_get_message_response(struct dm_task *dmt);
 const char *dm_task_get_name(const struct dm_task *dmt);
 struct dm_names *dm_task_get_names(struct dm_task *dmt);
 
-/*
- * These functions return device-mapper names based on the value
- * of the mangling mode set during preceding dm_task_run call:
- *   - unmangled name for DM_STRING_MANGLING_{AUTO, HEX},
- *   - name without any changes for DM_STRING_MANGLING_NONE.
- *
- * To get mangled or unmangled form of the name directly, use
- * dm_task_get_name_mangled or dm_task_get_name_unmangled function.
- */
-
 int dm_task_set_ro(struct dm_task *dmt);
 int dm_task_set_newname(struct dm_task *dmt, const char *newname);
 int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid);
@@ -402,7 +392,7 @@ struct dm_status_writecache {
 };
 
 int dm_get_status_writecache(struct dm_pool *mem, const char *params,
-                             struct dm_status_writecache **status);
+			     struct dm_status_writecache **status);
 
 struct dm_status_integrity {
 	uint64_t number_of_mismatches;
@@ -411,7 +401,7 @@ struct dm_status_integrity {
 };
 
 int dm_get_status_integrity(struct dm_pool *mem, const char *params,
-                            struct dm_status_integrity **status);
+			    struct dm_status_integrity **status);
 
 /*
  * RAID target support
@@ -2150,18 +2140,18 @@ enum dm_vdo_write_policy {
 };
 
 struct dm_vdo_target_params {
-	uint32_t minimum_io_size;       // in sectors
+	uint32_t minimum_io_size;       /* in sectors */
 	uint32_t block_map_cache_size_mb;
 	union {
-		uint32_t block_map_era_length;	// format period
-		uint32_t block_map_period;      // supported alias
+		uint32_t block_map_era_length;	/* format period */
+		uint32_t block_map_period;      /* supported alias */
 	};
-	uint32_t index_memory_size_mb;  // format
+	uint32_t index_memory_size_mb;  /* format */
 
-	uint32_t slab_size_mb;          // format
+	uint32_t slab_size_mb;          /* format */
 
 	uint32_t max_discard;
-	// threads
+	/* threads */
 	uint32_t ack_threads;
 	uint32_t bio_threads;
 	uint32_t bio_rotation;
@@ -2173,9 +2163,9 @@ struct dm_vdo_target_params {
 	int use_compression;
 	int use_deduplication;
 	int use_metadata_hints;
-	int use_sparse_index;          // format
+	int use_sparse_index;          /* format */
 
-	// write policy
+	/* write policy */
 	enum dm_vdo_write_policy write_policy;
 };
 
@@ -2679,11 +2669,11 @@ struct dm_hash_node *dm_hash_get_next(struct dm_hash_table *t, struct dm_hash_no
  */
 
 void *dm_hash_lookup_with_val(struct dm_hash_table *t, const char *key,
-                              const void *val, uint32_t val_len);
+			      const void *val, uint32_t val_len);
 void dm_hash_remove_with_val(struct dm_hash_table *t, const char *key,
-                             const void *val, uint32_t val_len);
+			     const void *val, uint32_t val_len);
 int dm_hash_insert_allow_multiple(struct dm_hash_table *t, const char *key,
-                                  const void *val, uint32_t val_len);
+				  const void *val, uint32_t val_len);
 void *dm_hash_lookup_with_count(struct dm_hash_table *t, const char *key, int *count);
 
 

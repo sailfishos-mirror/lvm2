@@ -350,7 +350,7 @@ static int _other_fs_ops(fs_op_t type)
 /* Check if udev is supposed to create nodes */
 static int _check_udev(int check_udev)
 {
-    return check_udev && dm_udev_get_sync_support() && dm_udev_get_checking();
+	return check_udev && dm_udev_get_sync_support() && dm_udev_get_checking();
 }
 
 /* FIXME: duplication of the  code from libdm-common.c */

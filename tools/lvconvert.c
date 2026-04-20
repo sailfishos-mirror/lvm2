@@ -252,7 +252,7 @@ static int _read_params(struct cmd_context *cmd, struct lvconvert_params *lp)
 	 */
 	switch(lp->conv_type) {
 	case CONV_SPLIT_MIRRORS:
-                break;
+		break;
 
 	case CONV_OTHER:
 		if (arg_is_set(cmd, regionsize_ARG)) {
@@ -1504,9 +1504,9 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 		if (!arg_is_set(cmd, stripes_long_ARG))
 			lp->stripes = 0;
 		if (!type_enforced && !arg_is_set(cmd, type_ARG))
-		       lp->segtype = NULL;
+			lp->segtype = NULL;
 		if (!arg_is_set(cmd, regionsize_ARG))
-		       lp->region_size = 0;
+			lp->region_size = 0;
 
 		if (!lv_raid_convert(lv, lp->segtype,
 				     lp->yes, lp->force, lp->stripes, lp->stripe_size_supplied, lp->stripe_size,
@@ -2966,9 +2966,9 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
 	}
 
 	if ((dm_snprintf(meta_name, sizeof(meta_name), "%s%s", lv->name, is_cachepool ? "_cmeta" : "_tmeta") < 0)) {
-                log_error("Failed to create internal lv names, pool name is too long.");
-                return 0;
-        }
+		log_error("Failed to create internal lv names, pool name is too long.");
+		return 0;
+	}
 
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
@@ -3045,7 +3045,7 @@ static int _lvconvert_swap_pool_metadata(struct cmd_context *cmd,
 		return_0;
 
 	if (!swap_lv_identifiers(cmd, metadata_lv, prev_metadata_lv))
-                return_0;
+		return_0;
 
 	if (!attach_pool_metadata_lv(seg, metadata_lv))
 		return_0;
@@ -4349,7 +4349,7 @@ int lvconvert_combine_split_snapshot_cmd(struct cmd_context *cmd, int argc, char
 		vglv_sz = strlen(vgname) + strlen(lvname2_orig) + 2;
 		if (!(vglv = dm_pool_alloc(cmd->mem, vglv_sz)) ||
 		    dm_snprintf(vglv, vglv_sz, "%s/%s", vgname, lvname2_orig) < 0) {
-       			log_error("vg/lv string alloc failed.");
+			log_error("vg/lv string alloc failed.");
 			return ECMD_FAILED;
 		}
 

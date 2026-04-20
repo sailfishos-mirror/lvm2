@@ -115,7 +115,7 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
 	    vg_to->pool_metadata_spare_lv) {
 		if (vg_from->pool_metadata_spare_lv->le_count >
 		    vg_to->pool_metadata_spare_lv->le_count)
-			/* Preserve bigger pmspare from  VG_FROM */
+			/* Preserve bigger pmspare from VG_FROM */
 			lv = vg_to->pool_metadata_spare_lv;
 		else
 			lv = vg_from->pool_metadata_spare_lv;

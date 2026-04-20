@@ -189,7 +189,7 @@ int discard_pv_segment(struct pv_segment *peg, uint32_t discard_area_reduction)
 	 */
 	if (!find_config_tree_bool(peg->pv->fmt->cmd, devices_issue_discards_CFG, NULL))
 		return 1;
- 
+
 	/* Missing PV? */
 	if (is_missing_pv(peg->pv) || !peg->pv->dev) {
 		if (!id_write_format(&peg->pv->id, uuid, sizeof(uuid)))
@@ -477,7 +477,7 @@ static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg,
 
 	/* Check PEs to be removed are not already allocated */
 	dm_list_iterate_items(peg, &pv->segments) {
- 		if (peg->pe + peg->len <= new_pe_count)
+		if (peg->pe + peg->len <= new_pe_count)
 			continue;
 
 		if (peg->lvseg) {
@@ -492,7 +492,7 @@ static int _reduce_pv(struct physical_volume *pv, struct volume_group *vg,
 		return_0;
 
 	dm_list_iterate_items_safe(peg, pegt, &pv->segments) {
- 		if (peg->pe + peg->len > new_pe_count)
+		if (peg->pe + peg->len > new_pe_count)
 			dm_list_del(&peg->list);
 	}
 

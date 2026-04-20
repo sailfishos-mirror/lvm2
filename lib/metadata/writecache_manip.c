@@ -117,7 +117,7 @@ bool lv_writecache_is_clean(struct cmd_context *cmd, struct logical_volume *lv, 
 {
 	struct dm_status_writecache status = { 0 };
 
-	if (!_get_writecache_kernel_status(cmd, lv, &status)) 
+	if (!_get_writecache_kernel_status(cmd, lv, &status))
 		return false;
 
 	if (dirty_blocks)

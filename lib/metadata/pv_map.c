@@ -97,7 +97,7 @@ static int _create_alloc_areas_for_pv(struct dm_pool *mem, struct pv_map *pvm,
 		if (!_create_single_area(mem, pvm, pe, area_len))
 			return_0;
 
-      next:
+next:
 		pe = peg->pe + peg->len;
 	}
 

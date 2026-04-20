@@ -4267,7 +4267,7 @@ static int _vdo_compression_disp(struct dm_report *rh, struct dm_pool *mem,
 				 struct dm_report_field *field,
 				 const void *data, void *private)
 {
-	const struct lv_segment *seg = (const struct lv_segment *) data; \
+	const struct lv_segment *seg = (const struct lv_segment *) data;
 
 	if (seg_is_vdo(seg))
 		seg = first_seg(seg_lv(seg, 0));
@@ -4276,14 +4276,14 @@ static int _vdo_compression_disp(struct dm_report *rh, struct dm_pool *mem,
 		return _binary_disp(rh, mem, field, seg->vdo_params.use_compression,
 				    GET_FIRST_RESERVED_NAME(vdo_compression_y), private);
 
-	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64)); \
+	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
 }
 
 static int _vdo_deduplication_disp(struct dm_report *rh, struct dm_pool *mem,
 				   struct dm_report_field *field,
 				   const void *data, void *private)
 {
-	const struct lv_segment *seg = (const struct lv_segment *) data; \
+	const struct lv_segment *seg = (const struct lv_segment *) data;
 
 	if (seg_is_vdo(seg))
 		seg = first_seg(seg_lv(seg, 0));
@@ -4292,7 +4292,7 @@ static int _vdo_deduplication_disp(struct dm_report *rh, struct dm_pool *mem,
 		return _binary_disp(rh, mem, field, seg->vdo_params.use_deduplication,
 				    GET_FIRST_RESERVED_NAME(vdo_deduplication_y), private);
 
-	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64)); \
+	return _field_set_value(field, "", &GET_TYPE_RESERVED_VALUE(num_undef_64));
 }
 
 static int _vdo_use_metadata_hints_disp(struct dm_report *rh, struct dm_pool *mem,

@@ -79,7 +79,7 @@ static int lvmdbusd_running(void)
 			running = 1;
 		} else {
 			log_debug_dbus("Unexpected errno: %d on lockf, returning running", errno_cpy);
-			running = 1 ;
+			running = 1;
 		}
 	}
 

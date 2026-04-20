@@ -547,7 +547,7 @@ static int _update_metadata(struct logical_volume *lv_mirr,
 	}
 
 	if (!lv_update_and_reload(lv))
-                return_0;
+		return_0;
 
 	/* Ensure mirror LV is active */
 	if (!_activate_lv(lv_mirr->vg->cmd, lv_mirr, exclusive)) {

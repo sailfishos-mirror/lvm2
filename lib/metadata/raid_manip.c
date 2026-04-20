@@ -2065,7 +2065,7 @@ static int _raid_reshape_remove_images(struct logical_volume *lv,
 		}
 
 		if (available_slvs + removed_slvs != old_image_count) {
-			log_error ("No correct kernel/lvm total LV count on %s.", display_lvname(lv));
+			log_error("No correct kernel/lvm total LV count on %s.", display_lvname(lv));
 			return 0;
 		}
 

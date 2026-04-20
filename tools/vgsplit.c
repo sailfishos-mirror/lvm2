@@ -186,7 +186,7 @@ static int _move_lvs(struct volume_group *vg_from, struct volume_group *vg_to)
 }
 
 /*
- * Move the hidden / internal "snapshotN" LVs.from 'vg_from' to 'vg_to'.
+ * Move the hidden / internal "snapshotN" LVs from 'vg_from' to 'vg_to'.
  */
 static int _move_snapshots(struct volume_group *vg_from,
 			   struct volume_group *vg_to)

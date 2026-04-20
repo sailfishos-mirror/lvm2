@@ -1033,7 +1033,7 @@ int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struc
 
 	if (settings->journal_watermark_set)
 		if (!setting_str_list_add("journal_watermark", settings->journal_watermark, NULL, result, mem))
-                        errors++;
+			errors++;
 
 	if (settings->commit_time_set)
 		if (!setting_str_list_add("commit_time", settings->commit_time, NULL, result, mem))

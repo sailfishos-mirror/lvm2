@@ -71,7 +71,7 @@ int dm_uuid_has_prefix(char *sysbuf, const char *prefix)
 	if (!strncmp(sysbuf, "part", 4)) {
 		const char *dash = strchr(sysbuf, '-');
 
- 		if (!dash)
+		if (!dash)
 			return 0;
 
 		if (!strncmp(dash + 1, prefix, strlen(prefix)))
@@ -855,7 +855,7 @@ int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result)
 		goto out;
 	}
 
- sys_partition:
+sys_partition:
 	/*
 	 * If we can't get the primary dev out of the list of known device
 	 * types, try to look at sysfs directly then. This is more complex

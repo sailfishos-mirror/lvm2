@@ -28,7 +28,7 @@ struct lv_list {
 
 struct logical_volume {
 	/* NOTE: lvid must be the first structure member as it's used for
-	 * offsetof()  calculation in report.c  with columns.h */
+	 * offsetof() calculation in report.c with columns.h */
 	union lvid lvid;
 	const char *name;
 
@@ -75,7 +75,7 @@ struct logical_volume {
  * With the introduction of tracking historical LVs, we need to make
  * a difference between live LV (struct logical_volume) and historical LV
  * (struct historical_logical_volume). To minimize the impact of this change
- * and to minimize the changes needed in the existing  code, we use a
+ * and to minimize the changes needed in the existing code, we use a
  * little trick here - when processing LVs (e.g. while reporting LV
  * properties), each historical LV is represented as dummy LV which is
  * an instance of struct logical_volume with all its properties set to
@@ -214,7 +214,7 @@ char *lvseg_kernel_discards_dup_with_info_and_seg_status(struct dm_pool *mem, co
 char *lv_time_dup(struct dm_pool *mem, const struct logical_volume *lv, int iso_mode);
 
 char *lv_dmpath_suffix_dup(struct dm_pool *mem, const struct logical_volume *lv,
-                           const char *suffix);
+			   const char *suffix);
 
 typedef enum {
 	PERCENT_GET_DATA = 0,

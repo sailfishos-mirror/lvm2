@@ -724,7 +724,7 @@ static const char *_get_default_cache_policy(struct cmd_context *cmd)
 {
 	const struct segment_type *segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_CACHE);
 	unsigned attr = ~0;
-        const char *def = NULL;
+	const char *def = NULL;
 
 	if (!segtype ||
 	    !segtype->ops->target_present ||
