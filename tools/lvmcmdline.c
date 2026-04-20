@@ -3336,7 +3336,7 @@ int lvm_run_command(struct cmd_context *cmd, int argc, char **argv)
 	dev_mpath_exit();
 	hints_exit(cmd);
 	lvmcache_destroy(cmd, 1, 1);
-	label_scan_destroy(cmd);
+	label_scan_drop(cmd);
 	devices_file_exit(cmd);
 
 	if ((config_string_cft = remove_config_tree_by_source(cmd, CONFIG_STRING)))

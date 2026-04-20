@@ -1694,8 +1694,7 @@ void label_scan_drop(struct cmd_context *cmd)
 
 	while ((dev = dev_iter_get(cmd, iter))) {
 		cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
-		if (_in_bcache(dev))
-			_scan_dev_close(dev);
+		label_scan_invalidate(dev);
 	}
 	dev_iter_destroy(iter);
 }

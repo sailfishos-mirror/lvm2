@@ -1912,7 +1912,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	activation_release();
 	hints_exit(cmd);
 	lvmcache_destroy(cmd, 0, 0);
-	label_scan_destroy(cmd);
+	label_scan_drop(cmd);
 	label_exit();
 	_destroy_segtypes(&cmd->segtypes);
 	_destroy_formats(cmd, &cmd->formats);
