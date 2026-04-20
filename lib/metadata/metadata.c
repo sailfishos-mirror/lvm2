@@ -4401,7 +4401,8 @@ int lv_on_pmem(struct logical_volume *lv)
 
 int vg_is_foreign(struct volume_group *vg)
 {
-	return vg->cmd->system_id && strcmp(vg->system_id, vg->cmd->system_id);
+	return vg->cmd->system_id && vg->system_id && vg->system_id[0] &&
+	       strcmp(vg->system_id, vg->cmd->system_id);
 }
 
 void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
