@@ -164,9 +164,10 @@ int cache_set_cache_mode(struct lv_segment *seg, cache_mode_t mode)
 void cache_check_for_warns(const struct lv_segment *seg)
 {
 	struct logical_volume *origin_lv = seg_lv(seg, 0);
+	cache_mode_t mode = lv_is_cache_vol(seg->pool_lv) ?
+		seg->cache_mode : first_seg(seg->pool_lv)->cache_mode;
 
-	if (lv_is_raid(origin_lv) &&
-	    first_seg(seg->pool_lv)->cache_mode == CACHE_MODE_WRITEBACK)
+	if (lv_is_raid(origin_lv) && (mode == CACHE_MODE_WRITEBACK))
 		log_warn("WARNING: Data redundancy could be lost with writeback "
 			 "caching of raid logical volume!");
 }
