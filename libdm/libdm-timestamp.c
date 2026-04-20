@@ -91,8 +91,8 @@ static uint64_t _timestamp_to_uint64(struct dm_timestamp *ts)
 {
 	uint64_t stamp = 0;
 
-	stamp += ts->t.tv_sec * NSEC_PER_SEC;
-	stamp += ts->t.tv_usec * NSEC_PER_USEC;
+	stamp += (uint64_t) ts->t.tv_sec * NSEC_PER_SEC;
+	stamp += (uint64_t) ts->t.tv_usec * NSEC_PER_USEC;
 
 	return stamp;
 }
