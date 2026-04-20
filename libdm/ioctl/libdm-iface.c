@@ -744,7 +744,7 @@ DM_EXPORT_NEW_SYMBOL(int, dm_task_get_info, 1_02_97)
 	info->live_table = dmt->dmi.v4->flags & DM_ACTIVE_PRESENT_FLAG ? 1 : 0;
 	info->inactive_table = dmt->dmi.v4->flags & DM_INACTIVE_PRESENT_FLAG ?
 	    1 : 0;
-	info->deferred_remove = dmt->dmi.v4->flags & DM_DEFERRED_REMOVE;
+	info->deferred_remove = dmt->dmi.v4->flags & DM_DEFERRED_REMOVE ? 1 : 0;
 	info->internal_suspend = (dmt->dmi.v4->flags & DM_INTERNAL_SUSPEND_FLAG) ? 1 : 0;
 	info->target_count = dmt->dmi.v4->target_count;
 	info->open_count = dmt->dmi.v4->open_count;
