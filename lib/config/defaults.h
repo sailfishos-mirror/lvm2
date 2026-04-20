@@ -75,7 +75,7 @@
 
 #define DEFAULT_MIRRORLOG MIRROR_LOG_DISK
 #define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
-#define DEFAULT_MIRROR_IMAGE_FAULT_POLICY "remove"
+#define DEFAULT_MIRROR_DEVICE_FAULT_POLICY "remove"
 #define DEFAULT_MIRROR_MAX_IMAGES 8 /* limited by kernel DM_KCOPYD_MAX_REGIONS */
 /* Limited by kernel failed devices bitfield in superblock (raid4/5/6 MD max 253) */
 /*
@@ -313,8 +313,6 @@
 #define DEFAULT_PVSEGS_SORT_FULL "pv_uuid,pvseg_start"
 #define DEFAULT_SEGS_SORT_FULL "lv_uuid,seg_start"
 
-#define DEFAULT_MIRROR_DEVICE_FAULT_POLICY "remove"
-#define DEFAULT_MIRROR_LOG_FAULT_POLICY "allocate"
 #define DEFAULT_SNAPSHOT_AUTOEXTEND_THRESHOLD 100
 #define DEFAULT_SNAPSHOT_AUTOEXTEND_PERCENT 20
 #define DEFAULT_THIN_POOL_AUTOEXTEND_THRESHOLD 100
