@@ -1552,8 +1552,10 @@ static int _message(CMD_ARGS)
 	argc--;
 	argv++;
 
-	if (argc <= 0)
+	if (argc <= 0) {
 		log_error("No message supplied.");
+		goto out;
+	}
 
 	for (i = 0; i < argc; i++)
 		sz += strlen(argv[i]) + 1;
