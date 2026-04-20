@@ -90,13 +90,6 @@ static int _ignore_fwraid(struct cmd_context *cmd, struct dev_filter *f __attrib
 		return 0;
 	}
 
-	if (ret < 0) {
-		log_debug_devs("%s: Skipping: error in firmware RAID component detection",
-			       dev_name(dev));
-		dev->filtered_flags |= DEV_FILTERED_FWRAID;
-		return 0;
-	}
-
 	return 1;
 }
 
