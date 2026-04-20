@@ -1700,8 +1700,8 @@ int lv_set_creation(struct logical_volume *lv,
 		}
 
 		lv->hostname = _utsname.nodename;
-	} else
-		lv->hostname = dm_pool_strdup(lv->vg->vgmem, hostname);
+	} else if (!(lv->hostname = dm_pool_strdup(lv->vg->vgmem, hostname)))
+		return_0;
 
 	lv->timestamp = timestamp ? : (uint64_t) time(NULL);
 
