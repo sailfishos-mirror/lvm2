@@ -4034,7 +4034,7 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
 	dm_list_iterate_items(aa, &ah->allocated_areas[0]) {
 		if (!(seg = find_seg_by_le(orig_lv, current_le))) {
 			log_error("Failed to find segment for %s extent " FMTu32 ".",
-				  display_lvname(lv), current_le);
+				  display_lvname(orig_lv), current_le);
 			return 0;
 		}
 
