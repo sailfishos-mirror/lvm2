@@ -1346,7 +1346,7 @@ static int _vg_write_file(struct format_instance *fid __attribute__((unused)),
 	if (!(fp = fdopen(fd, "w"))) {
 		log_sys_error("fdopen", temp_file);
 		if (close(fd))
-			log_sys_error("fclose", temp_file);
+			log_sys_error("close", temp_file);
 		return 0;
 	}
 

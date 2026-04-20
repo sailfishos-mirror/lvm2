@@ -1066,7 +1066,7 @@ int cache_vol_set_params(struct cmd_context *cmd,
 	max_meta_size = 2 * DEFAULT_CACHE_POOL_MAX_METADATA_SIZE; /* 2x for KiB to sectors */
 
 	if (pool_lv->size < (extent_size * 2)) {
-		log_error("The minimum cache size is two extents (%s bytes).",
+		log_error("The minimum cache size is two extents (%s).",
 			  display_size(cmd, extent_size * 2));
 		return 0;
 	}

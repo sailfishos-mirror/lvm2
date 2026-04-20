@@ -1629,7 +1629,7 @@ static int _lv_suspend_lv(const struct logical_volume *lv, struct lv_activate_op
 
 /*
  * These two functions return the number of visible LVs in the state,
- * or -1 on error.  FIXME Check this.
+ * or 0 when activation is disabled.
  */
 int lvs_in_vg_activated(const struct volume_group *vg)
 {
@@ -2300,7 +2300,7 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
 		if (!laopts->origin_only && lv_is_origin(lv)) {
 			dm_list_iterate_items_gen(snap_seg, &lv->snapshot_segs, origin_list) {
 				if (!(lv_pre_tmp = find_lv_in_vg_by_lvid(lv_pre->vg, &snap_seg->cow->lvid))) {
-					log_error(INTERNAL_ERROR "LV %s (%s) missing from preload metadata.",
+					log_error(INTERNAL_ERROR "LV %s (%s) missing from precommitted metadata.",
 						  display_lvname(snap_seg->cow),
 						  snap_seg->cow->lvid.id[1].uuid);
 					goto out;

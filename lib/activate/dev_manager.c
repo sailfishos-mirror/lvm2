@@ -2137,14 +2137,14 @@ int dev_manager_thin_device_id(struct dev_manager *dm,
 	}
 
 	if (!target_type || strcmp(target_type, TARGET_NAME_THIN)) {
-		log_error("Unexpected target type %s found for thin %s.",
-			  target_type, display_lvname(lv));
+		log_error("Expected %s segment type but got %s instead.",
+			  TARGET_NAME_THIN, target_type ? target_type : "NULL");
 		goto out;
 	}
 
 	if (!params || sscanf(params, "%*u:%*u %u", device_id) != 1) {
 		log_error("Cannot parse table like parameters %s for %s.",
-			  params, display_lvname(lv));
+			  params ? params : "NULL", display_lvname(lv));
 		goto out;
 	}
 
@@ -3303,7 +3303,7 @@ static int _add_target_to_dtree(struct dev_manager *dm,
 	uint64_t extent_size = seg->lv->vg->extent_size;
 
 	if (!seg->segtype->ops->add_target_line) {
-		log_error(INTERNAL_ERROR "_emit_target cannot handle "
+		log_error(INTERNAL_ERROR "_add_target_to_dtree cannot handle "
 			  "segment type %s.", lvseg_name(seg));
 		return 0;
 	}

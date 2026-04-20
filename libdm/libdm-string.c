@@ -349,7 +349,7 @@ char *dm_build_dm_name(struct dm_pool *mem, const char *vgname,
 
 	if (!(r = dm_pool_alloc(mem, len))) {
 		log_error("build_dm_name: Allocation failed for %" PRIsize_t
-			  " for %s %s %s.", len, vgname, lvname, layer);
+			  " for %s %s %s.", len, vgname, lvname, layer ?: "");
 		return NULL;
 	}
 
@@ -380,7 +380,7 @@ char *dm_build_dm_uuid(struct dm_pool *mem, const char *uuid_prefix, const char 
 	len = strlen(uuid_prefix) + strlen(lvid) + strlen(layer) + 2;
 
 	if (!(dmuuid = dm_pool_alloc(mem, len))) {
-		log_error("build_dm_name: Allocation failed for %" PRIsize_t
+		log_error("build_dm_uuid: Allocation failed for %" PRIsize_t
 			  " %s %s.", len, lvid, layer);
 		return NULL;
 	}

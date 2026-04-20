@@ -1071,7 +1071,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 				   uint32_t *stripes, uint32_t *stripe_size)
 {
 	if (*stripes < 1 || *stripes > MAX_STRIPES) {
-		log_error("Number of stripes (%d) must be between %d and %d.",
+		log_error("Number of stripes (%u) must be between %u and %u.",
 			  *stripes, 1, MAX_STRIPES);
 		return 0;
 	}
@@ -1680,7 +1680,7 @@ static int _get_one_integrity_setting(struct cmd_context *cmd, struct dm_integri
 
 		size_mb = settings->journal_sectors / 2048;
 		if (size_mb < 4 || size_mb > 1024) {
-			log_error("Invalid raid integrity journal size %d MiB (use 4-1024 MiB).", size_mb);
+			log_error("Invalid raid integrity journal size %u MiB (use 4-1024 MiB).", size_mb);
 			goto_bad;
 		}
 		settings->journal_sectors_set = 1;

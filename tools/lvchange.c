@@ -937,7 +937,7 @@ static int _lvchange_rebuild(struct logical_volume *lv)
 	    yes_no_prompt("Do you really want to rebuild %u PVs "
 			  "of logical volume %s [y/n]: ",
 			  pv_count, display_lvname(lv)) == 'n') {
-		log_error("Logical volume %s not rebuild.",
+		log_error("Logical volume %s not rebuilt.",
 			  display_lvname(lv));
 		return 0;
 	}

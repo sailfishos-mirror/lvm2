@@ -2668,7 +2668,7 @@ int vg_validate(struct volume_group *vg)
 
 					if (!radix_tree_insert_ptr(vhash.lv_lock_args, lvl->lv->lock_args,
 								   strlen(lvl->lv->lock_args), lvl)) {
-						log_error("Failed to hash lvname.");
+						log_error("Failed to hash lock_args.");
 						r = 0;
 					}
 

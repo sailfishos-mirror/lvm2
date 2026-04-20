@@ -977,7 +977,7 @@ static char *_generate_raid_name(struct logical_volume *lv,
 
 	if (dm_snprintf(name, sizeof(name), "%s_%s%s",
 			lv->name, suffix, count_suffix) < 0) {
-		log_error("Failed to new raid name for %s.",
+		log_error("Failed to generate new raid name for %s.",
 			  display_lvname(lv));
 		return NULL;
 	}
@@ -1025,7 +1025,7 @@ static struct logical_volume *_alloc_image_component(struct logical_volume *lv,
 		break;
 	default:
 		log_error(INTERNAL_ERROR
-			  "Bad type provided to _alloc_raid_component.");
+			  "Bad type provided to _alloc_image_component.");
 		return NULL;
 	}
 
@@ -2425,7 +2425,7 @@ static int _raid_reshape(struct logical_volume *lv,
 
 		/* Possible after a shrinking reshape and forgotten device removal */
 		log_error("Device count is incorrect. "
-			  "Forgotten \"lvconvert --stripes %d %s\" to remove %u images after reshape?",
+			  "Forgotten \"lvconvert --stripes %u %s\" to remove %u images after reshape?",
 			  devs_in_sync - seg->segtype->parity_devs, display_lvname(lv),
 			  old_image_count - devs_in_sync);
 		return 0;
@@ -3059,7 +3059,7 @@ static int _raid_extract_images(struct logical_volume *lv,
 		    (extract > 1) ? "images" : "image",
 		    display_lvname(lv));
 	if ((int) dm_list_size(target_pvs) < extract) {
-		log_error("Unable to remove %d images:  Only %d device%s given.",
+		log_error("Unable to remove %d images: Only %u device%s given.",
 			  extract, dm_list_size(target_pvs),
 			  (dm_list_size(target_pvs) == 1) ? "" : "s");
 		return 0;

@@ -1136,14 +1136,14 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
 		return_0;
 
 	if (failed_mimages > 0)
-		log_print_unless_silent("Mirror status: %d of %d images failed.",
+		log_print_unless_silent("Mirror status: %d of %u images failed.",
 					failed_mimages, original_mimages);
 
 	/*
 	 * Count the failed log devices
 	 */
 	if (failed_logs > 0)
-		log_print_unless_silent("Mirror log status: %d of %d images failed.",
+		log_print_unless_silent("Mirror log status: %d of %u images failed.",
 					failed_logs, original_logs);
 
 	/*
@@ -1167,7 +1167,7 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
 	log_count = replace_logs ? original_logs : (original_logs - failed_logs);
 
 	while (replace_mimages || replace_logs) {
-		log_warn("WARNING: Trying to up-convert to %d images, %d logs.", lp->mirrors, log_count);
+		log_warn("WARNING: Trying to up-convert to %u images, %u logs.", lp->mirrors, log_count);
 		if (_lvconvert_mirrors_aux(cmd, lv, lp, NULL,
 					   lp->mirrors, log_count, pvh))
 			break;
@@ -1180,11 +1180,11 @@ static int _lvconvert_mirrors_repair(struct cmd_context *cmd,
 	}
 
 	if (replace_mimages && lv_mirror_count(lv) != original_mimages)
-		log_warn("WARNING: Failed to replace %d of %d images in volume %s.",
+		log_warn("WARNING: Failed to replace %u of %u images in volume %s.",
 			 original_mimages - lv_mirror_count(lv), original_mimages,
 			 display_lvname(lv));
 	if (replace_logs && _get_log_count(lv) != original_logs)
-		log_warn("WARNING: Failed to replace %d of %d logs in volume %s.",
+		log_warn("WARNING: Failed to replace %u of %u logs in volume %s.",
 			 original_logs - _get_log_count(lv), original_logs,
 			 display_lvname(lv));
 

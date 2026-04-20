@@ -941,7 +941,7 @@ struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *l
 
 	/* coverity[unreachable] intentional single iteration to get first item */
 	dm_list_iterate_items(sl, &lv->segs_using_this_lv) {
-		/* Needs to be he only item in list */
+		/* Needs to be the only item in list */
 		if (!dm_list_end(&lv->segs_using_this_lv, &sl->list))
 			break;
 
@@ -1338,7 +1338,7 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
 			 seg->lv->name, seg->le, area_num, lv->name, le);
 
 	if (area_num >= seg->area_count) {
-		log_error(INTERNAL_ERROR "Try to set to high area number (%u >= %u) for LV %s.",
+		log_error(INTERNAL_ERROR "Try to set too high area number (%u >= %u) for LV %s.",
 			  area_num, seg->area_count, display_lvname(seg->lv));
 		return 0;
 	}
@@ -1449,7 +1449,7 @@ static int _lv_segment_reduce(struct lv_segment *seg, uint32_t reduction)
 		if (reduction % areas) {
 			log_error("Segment extent reduction %" PRIu32
 				  " not divisible by #stripes %" PRIu32,
-				  reduction, seg->area_count);
+				  reduction, areas);
 			return 0;
 		}
 		area_reduction = reduction / areas;
@@ -4001,7 +4001,7 @@ int lv_add_segmented_mirror_image(struct alloc_handle *ah,
 			if (!lv_split_segment(lv, seg->le + aa[0].len)) {
 				log_error("Failed to split segment at %s "
 					  "extent " FMTu32 ".",
-					  display_lvname(lv), le);
+					  display_lvname(lv), seg->le + aa[0].len);
 				return 0;
 			}
 		}
@@ -4089,7 +4089,7 @@ int lv_add_mirror_areas(struct alloc_handle *ah,
 		if (aa[0].len < seg->area_len) {
 			if (!lv_split_segment(lv, seg->le + aa[0].len)) {
 				log_error("Failed to split segment at %s extent " FMTu32 ".",
-					  display_lvname(lv), le);
+					  display_lvname(lv), seg->le + aa[0].len);
 				return 0;
 			}
 		}
@@ -8290,7 +8290,7 @@ int remove_layers_for_segments(struct cmd_context *cmd,
 
 			/* Find the layer segment pointed at */
 			if (!(lseg = find_seg_by_le(layer_lv, seg_le(seg, s)))) {
-				log_error("Layer segment found: %s:%" PRIu32,
+				log_error("Layer segment not found: %s:%" PRIu32,
 					  layer_lv->name, seg_le(seg, s));
 				return 0;
 			}

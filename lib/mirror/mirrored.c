@@ -244,7 +244,7 @@ static int _mirrored_transient_status(struct dm_pool *mem, struct lv_segment *se
 		for (j = 0; j < sm->dev_count; ++j)
 			if (info.major == (int)sm->devs[j].major &&
 			    info.minor == (int)sm->devs[j].minor) {
-				log_very_verbose("Status of image %d: %c.",
+				log_very_verbose("Status of image %u: %c.",
 						 i, sm->devs[j].health);
 				if (sm->devs[j].health != DM_STATUS_MIRROR_ALIVE) {
 					seg_lv(seg, i)->status |= PARTIAL_LV;
@@ -253,7 +253,7 @@ static int _mirrored_transient_status(struct dm_pool *mem, struct lv_segment *se
 				break;
 			}
 		if (j == sm->dev_count) {
-			log_error("Failed to find image %d (%d:%d).",
+			log_error("Failed to find image %u (%d:%d).",
 				  i, info.major, info.minor);
 			goto out;
 		}

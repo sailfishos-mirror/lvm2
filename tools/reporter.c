@@ -906,7 +906,7 @@ static int _get_report_options(struct cmd_context *cmd,
 
 		opts = grouped_arg_str_value(current_group->arg_values, options_ARG, NULL);
 		if (!opts || !*opts) {
-			log_error("Invalid options string: %s", opts);
+			log_error("Invalid options string: %s", opts ? : "");
 			r = EINVALID_CMD_LINE;
 			goto out;
 		}
@@ -1351,7 +1351,7 @@ static int _config_report(struct cmd_context *cmd, struct report_args *args, str
 			single_args->selection = find_config_tree_str(cmd, log_command_log_selection_CFG, NULL);
 			break;
 		default:
-			log_error(INTERNAL_ERROR "_report: unknown report type.");
+			log_error(INTERNAL_ERROR "_config_report: unknown report type.");
 			return 0;
 	}
 

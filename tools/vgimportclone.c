@@ -443,7 +443,7 @@ retry_name:
 		if (!strcmp(vgnl->vg_name, tmp_vgname)) {
 			vgname_count++;
 			if (dm_snprintf(tmp_vgname, sizeof(tmp_vgname), "%s%u", base_vgname, vgname_count) < 0) {
-				log_error("Failed to generated temporary vg name, %s%u is too long.", base_vgname, vgname_count);
+				log_error("Failed to generate temporary vg name, %s%u is too long.", base_vgname, vgname_count);
 				goto out;
 			}
 			goto retry_name;

@@ -340,7 +340,7 @@ int vg_remove_snapshot(struct logical_volume *cow)
 	cow->snapshot = NULL;
 	lv_set_visible(cow);
 
-	/* When origin with all its snapshots is going to be remove
+	/* When origin with all its snapshots is going to be removed
 	 * don't bother with individual manipulation with COWs
 	 * Note: removal proceeds only when origin is inactive */
 	if (is_origin_active && origin->to_remove) {

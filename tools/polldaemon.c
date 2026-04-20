@@ -192,7 +192,7 @@ int wait_for_single_lv(struct cmd_context *cmd, const struct poll_operation_id *
 		if (!vg) {
 			/* What more could we do here? */
 			if (error_flags & FAILED_NOTFOUND) {
-				log_print_unless_silent("Can't find VG %s. No longer active.", id->display_name);
+				log_print_unless_silent("Can't find VG for %s. No longer active.", id->display_name);
 				ret = 1;
 			} else {
 				log_error("ABORTING: Can't reread VG for %s error flags %x.", id->display_name, error_flags);

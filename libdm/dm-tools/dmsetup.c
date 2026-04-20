@@ -723,7 +723,7 @@ static int _do_usleep_wait(void)
 			return_0;
 		dm_timestamp_get(_now);
 		this_interval = _interval;
-		log_error("Using "FMTu64" as first interval.", this_interval);
+		log_debug("Using "FMTu64" as first interval.", this_interval);
 	} else {
 		dm_timestamp_get(_now);
 		delta_t = dm_timestamp_delta(_now, _start_timestamp);
@@ -1968,7 +1968,7 @@ static int _udevcookies(CMD_ARGS)
 	char *otimes, *ctimes;
 
 	if ((max_id = semctl(0, 0, SEM_INFO, &sinfo)) < 0) {
-		log_sys_error("sem_ctl", "SEM_INFO");
+		log_sys_error("semctl", "SEM_INFO");
 		return 0;
 	}
 

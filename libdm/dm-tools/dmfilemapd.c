@@ -338,7 +338,7 @@ static int _parse_args(int argc, char **argv, struct filemap_monitor *fm)
 		errno = 0;
 		_foreground = (int) strtol(argv[0], &endptr, 10);
 		if (errno || *endptr) {
-			_early_log("Could not parse debug argument: %s.",
+			_early_log("Could not parse foreground argument: %s.",
 				   argv[0]);
 			return 0;
 		}

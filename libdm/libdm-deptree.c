@@ -1009,7 +1009,7 @@ static int _node_has_closed_parents(struct dm_tree_node *node,
 			continue;
 
 		if (info.open_count) {
-			log_debug_activation("Node %s %d:%d has open_count %d", uuid_prefix,
+			log_debug_activation("Node %s %d:%d has open_count %d", uuid,
 					     dinfo->major, dinfo->minor, info.open_count);
 			return 0;
 		}
@@ -1354,7 +1354,7 @@ static int _resume_node(const char *name, uint32_t major, uint32_t minor,
 	log_verbose("Resuming %s (" FMTu32 ":" FMTu32 ").", name, major, minor);
 
 	if (!(dmt = dm_task_create(DM_DEVICE_RESUME))) {
-		log_debug_activation("Suspend dm_task creation failed for %s.", name);
+		log_debug_activation("Resume dm_task creation failed for %s.", name);
 		return 0;
 	}
 

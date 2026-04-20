@@ -280,7 +280,7 @@ static void _dump(FILE *out, struct node *n, unsigned indent)
 		fprintf(out, " ");
 
 	if (n->has_value) {
-		fprintf(out, "value: %lu\n", (unsigned long) n->value.n);
+		fprintf(out, "value: %llu\n", (unsigned long long) n->value.n);
 	} else {
 		fprintf(out, "key: '%c' [0x%02x] %u\n",
 			isprint(n->key) ? n->key : ' ', n->key, indent);

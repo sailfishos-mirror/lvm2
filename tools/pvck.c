@@ -673,7 +673,7 @@ static int _check_label_header(struct label_header *lh, uint64_t labelsector,
 	}
 
 	if (htole64(lh->sector_xl) != labelsector) {
-		log_print("CHECK: label_header.sector expected %d", (int)labelsector);
+		log_print("CHECK: label_header.sector expected %llu", (unsigned long long)labelsector);
 		bad++;
 	}
 

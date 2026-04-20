@@ -1012,7 +1012,7 @@ int lv_integrity_mismatches(struct cmd_context *cmd,
 		goto fail;
 
 	if (status.seg_status.type != SEG_STATUS_INTEGRITY) {
-		log_error("Invalid device mapper status type (%d) for %s",
+		log_error("Invalid device mapper status type (%u) for %s",
 			  (uint32_t)status.seg_status.type, display_lvname(lv));
 		goto fail;
 	}

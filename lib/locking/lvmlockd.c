@@ -1767,7 +1767,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 	}
 
 	if (!ret && !strcmp(lock_type, "sanlock")) {
-		log_debug("lockd_starg_vg result %d deactivate sanlock lv", result);
+		log_debug("lockd_start_vg result %d deactivate sanlock lv.", result);
 		if (!_deactivate_sanlock_lv(cmd, vg))
 			log_error("Failed to deactivate internal lvmlock LV for sanlock.");
 	}
@@ -3438,7 +3438,7 @@ void lockd_lvcreate_done(struct cmd_context *cmd, struct volume_group *vg, struc
 		return;
 
 	if (!lp->lockd_name) {
-		log_error("lockd_lvcreate_done missing name %s", lp->lockd_name ?: "-");
+		log_error("lockd_lvcreate_done missing lockd_name.");
 		return;
 	}
 

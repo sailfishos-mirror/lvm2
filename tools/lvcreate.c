@@ -392,8 +392,8 @@ static int _update_extents_params(struct volume_group *vg,
 	if ((lcp->percent != PERCENT_NONE) && lp->stripes &&
 	    (size_rest = lp->extents % (lp->stripes * stripesize_extents)) &&
 	    (vg->free_count < lp->extents - size_rest + (lp->stripes * stripesize_extents))) {
-		log_print_unless_silent("Rounding size (%d extents) down to stripe boundary "
-					"size (%d extents)", lp->extents,
+		log_print_unless_silent("Rounding size (%u extents) down to stripe boundary "
+					"size (%u extents)", lp->extents,
 					lp->extents - size_rest);
 		lp->extents = lp->extents - size_rest;
 	}
@@ -1506,7 +1506,7 @@ static int _check_raid_parameters(struct volume_group *vg,
 				return 0;
 			}
 		} else if (lp->stripes <= lp->segtype->parity_devs) {
-			log_error("Number of stripes must be at least %d for %s",
+			log_error("Number of stripes must be at least %u for %s",
 				  lp->segtype->parity_devs + 1,
 				  lp->segtype->name);
 			return 0;

@@ -697,7 +697,7 @@ static int _cache_add_target_line(struct dev_manager *dm,
 						if (!_accepted[i].settings[j]) {
 							log_warn("WARNING: %s cache policy does not support \"%s=" FMTu64 "\" setting, "
 								 "remove with 'lvchange --cachesettings \"%s=default\" ...'.",
-								 _accepted[i].name, cn->key, cn->v->v.i, cn->key);
+								 _accepted[i].name, cn->key, (uint64_t)cn->v->v.i, cn->key);
 							dm_config_remove_node(policy_settings, cn);
 							goto restart;
 						}

@@ -662,7 +662,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
 		if (!_get_percent_arg(av, ++ptr))
 			return_0;
 		if ((uint64_t) v >= UINT32_MAX) {
-			log_error("Percentage is too big (>=%d%%).", UINT32_MAX);
+			log_error("Percentage is too big (>=%u%%).", UINT32_MAX);
 			return 0;
 		}
 	} else if (*ptr) {
@@ -835,7 +835,7 @@ static int _extents_arg(struct cmd_context *cmd __attribute__((unused)),
 		return_0;
 
 	if (av->ui64_value >= UINT32_MAX) {
-		log_error("Percentage is too big (>=%d%%).", UINT32_MAX);
+		log_error("Percentage is too big (>=%u%%).", UINT32_MAX);
 		return 0;
 	}
 

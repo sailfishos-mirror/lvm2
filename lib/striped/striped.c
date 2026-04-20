@@ -51,7 +51,7 @@ static void _striped_display(const struct lv_segment *seg)
 				  seg->stripe_size / 2);
 
 		for (s = 0; s < seg->area_count; s++) {
-			log_print("  Stripe %d:", s);
+			log_print("  Stripe %u:", s);
 			display_stripe(seg, s, "    ");
 		}
 	}

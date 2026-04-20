@@ -3178,7 +3178,7 @@ bool lvmcache_is_outdated_dev(struct cmd_context *cmd,
 	struct lvmcache_info *info;
 
 	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
-		log_error(INTERNAL_ERROR "lvmcache_get_outdated_mdas no vginfo");
+		log_error(INTERNAL_ERROR "lvmcache_is_outdated_dev no vginfo.");
 		return false;
 	}
 

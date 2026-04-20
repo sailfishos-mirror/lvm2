@@ -215,7 +215,7 @@ static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter
 			outf(f, "create = \"%s\"", tmsg->u.lv->name);
 			break;
 		case DM_THIN_MESSAGE_DELETE:
-			outf(f, "delete = %d", tmsg->u.delete_id);
+			outf(f, "delete = %u", tmsg->u.delete_id);
 			break;
 		default:
 			log_error(INTERNAL_ERROR "Passed unsupported message.");
@@ -524,7 +524,7 @@ static int _thin_text_export(const struct lv_segment *seg, struct formatter *f)
 {
 	outf(f, "thin_pool = \"%s\"", seg->pool_lv->name);
 	outf(f, "transaction_id = %" PRIu64, seg->transaction_id);
-	outf(f, "device_id = %d", seg->device_id);
+	outf(f, "device_id = %u", seg->device_id);
 
 	if (seg->external_lv)
 		outf(f, "external_origin = \"%s\"", seg->external_lv->name);

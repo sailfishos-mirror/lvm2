@@ -577,7 +577,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
 		online_pvid_file_read(path, &file_major, &file_minor, file_vgname, file_devname);
 
 		if (file_vgname[0] && strcmp(vgname, file_vgname)) {
-			log_error_pvscan(cmd, "Wrong VG found for %d:%d PVID %s: %s vs %s",
+			log_error_pvscan(cmd, "Wrong VG found for %u:%u PVID %s: %s vs %s",
 				         file_major, file_minor, pvid, vgname, file_vgname);
 			goto bad;
 		}
@@ -585,7 +585,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
 		devno = MKDEV(file_major, file_minor);
 
 		if (!(dev = setup_dev_in_dev_cache(cmd, devno, file_devname[0] ? file_devname : NULL))) {
-			log_error_pvscan(cmd, "No device set up for online PV %d:%d %s PVID %s", file_major, file_minor, file_devname, pvid);
+			log_error_pvscan(cmd, "No device set up for online PV %u:%u %s PVID %s", file_major, file_minor, file_devname, pvid);
 			goto bad;
 		}
 

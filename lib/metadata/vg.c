@@ -675,7 +675,7 @@ char *vg_attr_dup(struct dm_pool *mem, const struct volume_group *vg)
 	char *repstr;
 
 	if (!(repstr = dm_pool_zalloc(mem, 8))) {
-		log_error("dm_pool_alloc failed");
+		log_error("dm_pool_zalloc failed.");
 		return NULL;
 	}
 

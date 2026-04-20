@@ -566,7 +566,7 @@ int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size)
 	_dm_version_patchlevel = v[2];
 	if (version &&
 	    (snprintf(version, size, "%u.%u.%u", v[0], v[1], v[2]) < 0)) {
-		log_error("Buffer for version is to short.");
+		log_error("Buffer for version is too short.");
 		if (size > 0)
 			version[0] = '\0';
 		return 0;
@@ -2432,7 +2432,7 @@ static int _can_retry_buffer_full(struct dm_task *dmt)
 	case DM_DEVICE_TARGET_MSG:
 		break;
 	default:
-		log_error("WARNING: libdevmapper buffer too small for data.");
+		log_error("libdevmapper buffer too small for data.");
 		return 0;
 	}
 

@@ -232,7 +232,7 @@ static int _merge_free_pv_segment(struct pv_segment *peg)
 
 	if (peg->lvseg) {
 		log_error(INTERNAL_ERROR
-			  "_merge_free_pv_seg called on a"
+			  "_merge_free_pv_segment called on a"
 			  " segment that is not free.");
 		return 0;
 	}

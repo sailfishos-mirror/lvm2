@@ -153,9 +153,9 @@
 #define LV_RESHAPE_DATA_OFFSET	UINT64_C(0x2000000000000000)    /* LV reshape flag data offset (out of place reshaping) */
 
 
-#define LV_VDO			UINT64_C(0x0000000020000000)    /* LV - Internal user only */
-#define LV_VDO_POOL		UINT64_C(0x0000000040000000)    /* LV - Internal user only */
-#define LV_VDO_POOL_DATA	UINT64_C(0x8000000000000000)    /* LV - Internal user only */
+#define LV_VDO			UINT64_C(0x0000000020000000)    /* LV - Internal use only */
+#define LV_VDO_POOL		UINT64_C(0x0000000040000000)    /* LV - Internal use only */
+#define LV_VDO_POOL_DATA	UINT64_C(0x8000000000000000)    /* LV - Internal use only */
 
 #define LV_CACHE_VOL		UINT64_C(0x0010000000000000)	/* LV - also a PV flag */
 #define LV_CACHE_USES_CACHEVOL	UINT64_C(0x4000000000000000)	/* LV - also a PV flag */

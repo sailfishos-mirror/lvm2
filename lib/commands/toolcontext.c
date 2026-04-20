@@ -724,7 +724,7 @@ static int _process_config(struct cmd_context *cmd)
 	/* proc dir */
 	if (dm_snprintf(cmd->proc_dir, sizeof(cmd->proc_dir), "%s",
 			 find_config_tree_str(cmd, global_proc_CFG, NULL)) < 0) {
-		log_error("Device directory given in config file too long");
+		log_error("Proc directory given in config file too long");
 		return 0;
 	}
 
@@ -802,13 +802,13 @@ static int _process_config(struct cmd_context *cmd)
 	else if (strcmp(cmd->stripe_filler, "error") &&
 		 strcmp(cmd->stripe_filler, "zero")) {
 		if (stat(cmd->stripe_filler, &st)) {
-			log_warn("WARNING: activation/missing_stripe_filler = \"%s\"."
+			log_warn("WARNING: activation/missing_stripe_filler = \"%s\" "
 				 "is invalid,", cmd->stripe_filler);
 			log_warn("         stat failed: %s", strerror(errno));
 			log_warn("Falling back to \"error\" missing_stripe_filler.");
 			cmd->stripe_filler = "error";
 		} else if (!S_ISBLK(st.st_mode)) {
-			log_warn("WARNING: activation/missing_stripe_filler = \"%s\"."
+			log_warn("WARNING: activation/missing_stripe_filler = \"%s\" "
 				 "is not a block device.", cmd->stripe_filler);
 			log_warn("Falling back to \"error\" missing_stripe_filler.");
 			cmd->stripe_filler = "error";
@@ -2012,7 +2012,7 @@ int refresh_toolcontext(struct cmd_context *cmd)
 	cmd->initialized.config = 1;
 
 	if (!dm_list_empty(&cmd->pending_delete)) {
-		log_debug(INTERNAL_ERROR "Unprocessed pending delete for %d devices.",
+		log_debug(INTERNAL_ERROR "Unprocessed pending delete for %u devices.",
 			  dm_list_size(&cmd->pending_delete));
 		dm_list_init(&cmd->pending_delete);
 	}

@@ -28,7 +28,7 @@ struct logical_volume *data_lv_from_thin_pool(struct logical_volume *pool_lv)
 	struct lv_segment *seg_thinpool = first_seg(pool_lv);
 
 	if (!seg_thinpool || !seg_is_thin_pool(seg_thinpool)) {
-		log_error(INTERNAL_ERROR "data_lv_from_thin_pool arg not thin pool %s", pool_lv->name);
+		log_error(INTERNAL_ERROR "LV %s is not a thin pool.", display_lvname(pool_lv));
 		return NULL;
 	}
 

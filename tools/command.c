@@ -910,7 +910,7 @@ static void _add_pos_arg(struct command *cmd, char *str, int required)
 
 	if (required) {
 		if (cmd->rp_count >= CMD_RP_ARGS) {
-			log_error("Too many required pos args, increase CMD_RO_ARGS.");
+			log_error("Too many required pos args, increase CMD_RP_ARGS.");
 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
 			return;
 		}
@@ -1941,7 +1941,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 				/* 1st. pass print optional options with short opts
 				 * 2nd. pass print optional options without short opts */
 				if ((short_opts && !opt_names[opt_enum].short_opt) ||
-                                    (!short_opts && opt_names[opt_enum].short_opt))
+				    (!short_opts && opt_names[opt_enum].short_opt))
 					continue;
 
 				/*

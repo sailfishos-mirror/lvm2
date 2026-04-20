@@ -108,7 +108,7 @@ struct lv_segment *find_mirror_seg(struct lv_segment *seg)
 	struct lv_segment *mirror_seg;
 
 	if (!(mirror_seg = get_only_segment_using_this_lv(seg->lv))) {
-		log_error("Failed to find mirror_seg for %s", display_lvname(seg->lv));
+		log_error("Failed to find mirror segment for %s.", display_lvname(seg->lv));
 		return NULL;
 	}
 
@@ -822,7 +822,7 @@ static int _split_mirror_images(struct logical_volume *lv,
 
 	if (lv_is_active(lv_lock_holder(lv))) {
 		if (!_activate_lv_like_model(lv, new_lv)) {
-			log_error("Failed to rename newly split LV in the kernel");
+			log_error("Failed to rename newly split LV in the kernel.");
 			return 0;
 		}
 
@@ -842,7 +842,7 @@ static int _split_mirror_images(struct logical_volume *lv,
 		sync_local_dev_names(lv->vg->cmd);
 
 		if (!_activate_lv_like_model(lv, new_lv)) {
-			log_error("Failed to rename newly split LV in the kernel");
+			log_error("Failed to rename newly split LV in the kernel.");
 			return 0;
 		}
 	}
