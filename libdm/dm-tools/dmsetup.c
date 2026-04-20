@@ -5757,8 +5757,8 @@ static int _stats_ungroup(CMD_ARGS)
 	if (!(r = dm_stats_delete_group(dms, group_id, 0)))
 		log_error("Could not delete group " FMTu64 " on %s.",
 			  group_id, name);
-
-	printf("Removed group ID "FMTu64" on %s\n", group_id, name);
+	else
+		printf("Removed group ID "FMTu64" on %s\n", group_id, name);
 
 out:
 	dm_stats_destroy(dms);
