@@ -1144,7 +1144,7 @@ static int _find_config_bool(const void *start, node_lookup_fn find,
 	const struct dm_config_value *v;
 	int b;
 
-	if (n) {
+	if (n && n->v) {
 		v = n->v;
 
 		switch (v->type) {
