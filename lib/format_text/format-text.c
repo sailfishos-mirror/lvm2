@@ -1443,7 +1443,6 @@ static int _vg_commit_file(struct format_instance *fid, struct volume_group *vg,
 				log_error("%s: rename to %s failed: %s",
 					  tc->path_live, new_name,
 					  strerror(errno));
-				sync_dir(new_name);
 				return 0;
 			}
 		}
