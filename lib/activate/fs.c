@@ -294,6 +294,7 @@ static int _do_fs_op(fs_op_t type, const char *dev_dir, const char *vg_name,
 
 		if (!_mk_link(dev_dir, vg_name, lv_name, dev, check_udev))
 			stack;
+		break;
 	default:
 		; /* NOTREACHED */
 	}
