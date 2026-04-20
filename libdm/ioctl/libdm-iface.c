@@ -1225,7 +1225,7 @@ static char *_add_target(struct target *t, char *out, char *end)
 	}
 	else {
 		memcpy(out, t->params, len);
-		out += len + backslash_count;
+		out += len;
 	}
 
 	/* align next block */
