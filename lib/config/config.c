@@ -2074,7 +2074,6 @@ static struct dm_config_node *_add_def_node(struct dm_config_tree *cft,
 			default:
 				log_error(INTERNAL_ERROR "_add_def_node: unknown type");
 				return NULL;
-				break;
 		}
 		dm_config_value_set_format_flags(cn->v, format_flags);
 	} else {
