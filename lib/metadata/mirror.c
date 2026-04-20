@@ -1017,9 +1017,6 @@ static int _remove_mirror_images(struct logical_volume *lv,
 	 */
 	new_area_count = old_area_count - num_removed;
 
-	if (num_removed && old_area_count == new_area_count)
-		return 1;
-
 	/* Remove mimage LVs from the segment */
 	dm_list_init(&tmp_orphan_lvs);
 	for (m = new_area_count; m < mirrored_seg->area_count; m++) {
