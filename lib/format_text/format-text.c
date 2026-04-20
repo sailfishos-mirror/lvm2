@@ -2227,6 +2227,7 @@ static int _add_metadata_area_to_pv(struct physical_volume *pv,
 					 "layout not supported by %s format.",
 					  mda_index, dev_name(pv->dev),
 					  pv->fmt->name);
+		return 0;
 	}
 
 	if (!(mda = dm_pool_zalloc(pv->fid->mem, sizeof(struct metadata_area)))) {
