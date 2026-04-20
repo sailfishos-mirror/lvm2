@@ -1786,7 +1786,7 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
 		goto_out;
 
 	if (seg_is_vdo(lp) &&
-	    !check_vdo_constrains(cmd, &(struct vdo_pool_size_config) {
+	    !check_vdo_constraints(cmd, &(struct vdo_pool_size_config) {
 				  .physical_size = (uint64_t)lp->extents * vg->extent_size,
 				  .virtual_size = lcp->virtual_size,
 				  .block_map_cache_size_mb = lp->vcp.vdo_params.block_map_cache_size_mb,

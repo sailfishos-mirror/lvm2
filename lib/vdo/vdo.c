@@ -373,7 +373,7 @@ static int _vdo_check(struct cmd_context *cmd, const struct lv_segment *seg)
 	if (seg->vdo_params.index_memory_size_mb >= cfg.index_memory_size_mb)
 		cfg.index_memory_size_mb = seg->vdo_params.index_memory_size_mb - cfg.index_memory_size_mb;
 
-	return check_vdo_constrains(cmd, &cfg);
+	return check_vdo_constraints(cmd, &cfg);
 }
 
 static int _vdo_pool_add_target_line(struct dev_manager *dm,

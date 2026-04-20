@@ -1413,7 +1413,7 @@ struct vdo_pool_size_config {
 	uint32_t index_memory_size_mb;
 };
 
-int check_vdo_constrains(struct cmd_context *cmd, const struct vdo_pool_size_config *cfg);
+int check_vdo_constraints(struct cmd_context *cmd, const struct vdo_pool_size_config *cfg);
 /* --  metadata/vdo_manip.c */
 
 struct logical_volume *find_pvmove_lv(struct volume_group *vg,

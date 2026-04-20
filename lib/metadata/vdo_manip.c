@@ -741,7 +741,7 @@ static int _get_memory_info(struct cmd_context *cmd, uint64_t *total_mb, uint64_
 	if (can_swap > swap_free)
 		can_swap = swap_free;
 
-	/* TODO: add more constrains, i.e. 3/4 of physical RAM... */
+	/* TODO: add more constraints, i.e. 3/4 of physical RAM... */
 
 	*total_mb = mem_total >> 10;
 	*available_mb = (mem_available + can_swap) >> 10;
@@ -778,7 +778,7 @@ static int _vdo_snprintf(char **buf, size_t *bufsize, const char *format, ...)
 	return n;
 }
 
-int check_vdo_constrains(struct cmd_context *cmd, const struct vdo_pool_size_config *cfg)
+int check_vdo_constraints(struct cmd_context *cmd, const struct vdo_pool_size_config *cfg)
 {
 	static const char _vdo_split[][8] = { "", " and", ",", "," };
 	uint64_t req_mb, total_mb, available_mb;
