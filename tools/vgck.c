@@ -21,7 +21,7 @@
  * or corruption of some mda_header fields.
  */
 
-static int _update_metadata_single(struct cmd_context *cmd __attribute__((unused)),
+static int _update_metadata_single(struct cmd_context *cmd,
 		       const char *vg_name,
 		       struct volume_group *vg,
 		       struct processing_handle *handle __attribute__((unused)))

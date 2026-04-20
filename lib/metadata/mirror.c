@@ -130,7 +130,8 @@ struct lv_segment *find_mirror_seg(struct lv_segment *seg)
  */
 uint32_t adjusted_mirror_region_size(struct cmd_context *cmd,
 				     uint32_t extent_size, uint32_t extents,
-				     uint32_t region_size, int internal, int clustered)
+				     uint32_t region_size, int internal,
+				     int clustered __attribute__((unused)))
 {
 	uint64_t region_max;
 

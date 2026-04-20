@@ -571,9 +571,9 @@ static int _cache_text_export(const struct lv_segment *seg, struct formatter *f)
 }
 
 #ifdef DEVMAPPER_SUPPORT
-static int _cache_add_target_line(struct dev_manager *dm,
+static int _cache_add_target_line(struct dev_manager *dm __attribute__((unused)),
 				 struct dm_pool *mem,
-				 struct cmd_context *cmd __attribute__((unused)),
+				 struct cmd_context *cmd,
 				 void **target_state __attribute__((unused)),
 				 struct lv_segment *seg,
 				 const struct lv_activate_opts *laopts __attribute__((unused)),

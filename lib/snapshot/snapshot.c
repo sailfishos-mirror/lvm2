@@ -103,7 +103,7 @@ static int _snap_target_status_compatible(const char *type)
 
 static int _snap_target_percent(void **target_state __attribute__((unused)),
 				dm_percent_t *percent,
-				struct dm_pool *mem __attribute__((unused)),
+				struct dm_pool *mem,
 				struct cmd_context *cmd __attribute__((unused)),
 				struct lv_segment *seg __attribute__((unused)),
 				char *params, uint64_t *total_numerator,

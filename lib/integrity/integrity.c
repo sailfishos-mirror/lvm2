@@ -275,13 +275,13 @@ static int _modules_needed(struct dm_pool *mem,
 #endif /* DEVMAPPER_SUPPORT */
 
 #ifdef DEVMAPPER_SUPPORT
-static int _integrity_add_target_line(struct dev_manager *dm,
+static int _integrity_add_target_line(struct dev_manager *dm __attribute__((unused)),
 				 struct dm_pool *mem,
 				 struct cmd_context *cmd __attribute__((unused)),
 				 void **target_state __attribute__((unused)),
 				 struct lv_segment *seg,
-				 const struct lv_activate_opts *laopts,
-				 struct dm_tree_node *node, uint64_t len,
+				 const struct lv_activate_opts *laopts __attribute__((unused)),
+				 struct dm_tree_node *node, uint64_t len __attribute__((unused)),
 				 uint32_t *pvmove_mirror_count __attribute__((unused)))
 {
 	char *origin_uuid;

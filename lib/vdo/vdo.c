@@ -120,7 +120,7 @@ static int _vdo_target_status_compatible(const char *type)
 }
 
 static int _vdo_add_target_line(struct dev_manager *dm,
-				struct dm_pool *mem __attribute__((unused)),
+				struct dm_pool *mem,
 				struct cmd_context *cmd,
 				void **target_state __attribute__((unused)),
 				struct lv_segment *seg,

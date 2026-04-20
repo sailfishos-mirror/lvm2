@@ -153,7 +153,8 @@ struct dev_filter *md_filter_create(struct cmd_context *cmd, struct dev_types *d
 
 #else
 
-struct dev_filter *md_filter_create(struct dev_types *dt)
+struct dev_filter *md_filter_create(struct cmd_context *cmd __attribute__((unused)),
+				    struct dev_types *dt __attribute__((unused)))
 {
 	return NULL;
 }
