@@ -1,5 +1,12 @@
 Version 2.03.40 -
 ==================
+  Reset warned flag in dmeventd raid plugin when device fully syncs.
+  Fix inverted range comparison in libdm reserved value check.
+  Fix percent_check threshold stuck above 100% in dmeventd thin/vdo plugins.
+  Fix cache_check_for_warns reading wrong cache mode for cachevol.
+  Fix memory leak in process_each_label duplicate handling.
+  Fix missing unlock_vg in vgcreate when pvcreate_each_device fails.
+  Lock the origin LV when locking a COW snapshot in lvmlockd.
   Preserve bcache AIO context across lvm shell commands to avoid reinit cost.
   Fix msg.data leaks in dmeventd restart and reinstate paths.
   Fix VG lock leak on init_processing_handle failure in vgcreate.
