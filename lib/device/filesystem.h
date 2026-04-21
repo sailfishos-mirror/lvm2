@@ -26,6 +26,7 @@ struct logical_volume;
 #define UUID_LEN 37
 
 struct fs_info {
+	uint64_t new_size_bytes;
 	char fstype[FSTYPE_MAX];
 	char mount_dir[PATH_MAX];
 	char uuid[UUID_LEN];
@@ -35,7 +36,6 @@ struct fs_info {
 	uint32_t crypt_offset_bytes; /* offset in bytes of crypt data on LV */
 	dev_t crypt_devt; /* dm-crypt device between the LV and FS */
 	uint64_t crypt_dev_size_bytes;
-	uint64_t new_size_bytes;
 
 	unsigned nofs:1;
 	unsigned unmounted:1;
