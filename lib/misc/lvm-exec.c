@@ -19,6 +19,7 @@
 #include "lib/misc/lvm-exec.h"
 #include "lib/commands/toolcontext.h"
 
+#include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -198,7 +199,11 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 		log_sys_error("fdopen", "STDIN");
 		if (close(pipefd[0]))
 			log_sys_error("close", "STDIN");
-		return NULL; /* FIXME: kill */
+		if (kill(pdata->pid, SIGKILL))
+			log_sys_error("kill", "");
+		else if (waitpid(pdata->pid, NULL, 0) != pdata->pid)
+			log_sys_error("waitpid", "");
+		return NULL;
 	}
 
 	return pdata->fp;
