@@ -4543,6 +4543,7 @@ int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset)
 	case SEG_RAID0:
 	case SEG_RAID0_META:
 	case SEG_RAID1:
+	case SEG_RAID10:
 	case SEG_RAID4:
 	case SEG_RAID5_N:
 	case SEG_RAID5_LA:
