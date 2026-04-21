@@ -596,7 +596,7 @@ GET_LVSEG_NUM_PROPERTY_FN(reshape_len_le, lvseg->reshape_len)
 #define _reshape_len_le_set prop_not_implemented_set
 GET_LVSEG_NUM_PROPERTY_FN(data_offset, lvseg->data_offset)
 #define _data_offset_set prop_not_implemented_set
-GET_LVSEG_NUM_PROPERTY_FN(new_data_offset, lvseg->data_offset)
+#define _new_data_offset_get prop_not_implemented_get
 #define _new_data_offset_set prop_not_implemented_set
 GET_LVSEG_NUM_PROPERTY_FN(parity_chunks, lvseg->data_offset)
 #define _parity_chunks_set prop_not_implemented_set
