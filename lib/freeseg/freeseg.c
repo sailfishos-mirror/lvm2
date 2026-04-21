@@ -22,7 +22,7 @@ static void _freeseg_destroy(struct segment_type *segtype)
 	free(segtype);
 }
 
-static struct segtype_handler _freeseg_ops = {
+static const struct segtype_handler _freeseg_ops = {
 	.destroy = _freeseg_destroy,
 };
 
