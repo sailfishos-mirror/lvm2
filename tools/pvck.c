@@ -42,7 +42,7 @@ struct settings {
 	uint32_t seqno;
 	struct id pv_id;
 
-	int mda_num;               /* 1 or 2 for first or second mda */
+	unsigned mda_num;          /* 1 or 2 for first or second mda */
 	char *backup_file;
 
 	unsigned metadata_offset_set:1;
@@ -1851,7 +1851,7 @@ static int _get_one_setting(struct cmd_context *cmd, struct settings *set, char 
 	}
 
 	if (!strncmp(key, "mda_num", sizeof("mda_num") - 1)) {
-		if (sscanf(val, "%u", (int *)&set->mda_num) != 1)
+		if (sscanf(val, "%u", &set->mda_num) != 1)
 			goto_bad;
 		return 1;
 	}
