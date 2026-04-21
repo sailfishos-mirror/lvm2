@@ -1465,6 +1465,16 @@ OO: OO_CONFIG
 OP: String ...
 ID: lvmconfig_general
 
+lvmconfig --edit String
+OO: --edit String, --file String, --long, --withspaces
+ID: lvmconfig_edit
+DESC: Edit settings in lvm config file.
+
+lvmconfig --input String
+OO: --edit String, --output String, --long, --withspaces
+ID: lvmconfig_input_output
+DESC: Read a config file and write to output file or stdout.
+
 ---
 
 lvmdevices
@@ -2086,6 +2096,16 @@ dumpconfig
 OO: OO_CONFIG
 OP: String ...
 ID: lvmconfig_general
+
+dumpconfig --edit String
+OO: --edit String, --file String, --long, --withspaces
+ID: lvmconfig_edit
+DESC: Edit settings in lvm config file.
+
+dumpconfig --input String
+OO: --edit String, --output String, --long, --withspaces
+ID: lvmconfig_input_output
+DESC: Read a config file and write to output file or stdout.
 
 devtypes
 OO: --aligned, --binary, --nameprefixes, --noheadings,

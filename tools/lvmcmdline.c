@@ -77,6 +77,8 @@ static struct cmdline_context _cmdline;
 static const struct command_function _command_functions[CMD_COUNT] = {
 	{ CMD_NONE, NULL },
 	{ lvmconfig_general_CMD, lvmconfig },
+	{ lvmconfig_edit_CMD, editconfig_cmd },
+	{ lvmconfig_input_output_CMD, editconfig_cmd },
 	{ lvchange_properties_CMD, lvchange_properties_cmd },
 	{ lvchange_resync_CMD, lvchange_resync_cmd },
 	{ lvchange_syncaction_CMD, lvchange_syncaction_cmd },

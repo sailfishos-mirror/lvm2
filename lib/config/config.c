@@ -1911,18 +1911,33 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 			line = strchr(line, '=') + 1;
 	}
 
-	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
-	    (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
-	    (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
-	    !out->tree_spec->valuesonly &&
-	    (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
-		/* print with # at the front to comment out the line */
-		if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
-			space_prefix_len = strspn(line, "\t ");
-			fprintf(out->fp, "%.*s%s%s\n", space_prefix_len, line, "# ",
-				line + space_prefix_len);
+	/* Determine if this value should be commented out */
+	if (!out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
+		int should_comment = 0;
+
+		/* For FULL tree with --long: comment if value is at default (no CFG_DIFF) */
+		if ((out->tree_spec->type == CFG_DEF_TREE_FULL) &&
+		    out->tree_spec->check_status &&
+		    !(out->tree_spec->check_status[cn->id] & CFG_DIFF)) {
+			should_comment = 1;
 		}
-		return 1;
+		/* For DEFAULT/MISSING/etc trees: comment if CFG_DEFAULT_COMMENTED flag set */
+		else if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
+			 (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
+			 (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
+			 (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
+			should_comment = 1;
+		}
+
+		if (should_comment) {
+			/* print with # at the front to comment out the line */
+			if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
+				space_prefix_len = strspn(line, "\t ");
+				fprintf(out->fp, "%.*s%s%s\n", space_prefix_len, line, "# ",
+					line + space_prefix_len);
+			}
+			return 1;
+		}
 	}
 
 	/* print the line as it is */
