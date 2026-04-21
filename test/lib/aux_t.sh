@@ -776,6 +776,20 @@ prepare_scsi_debug_dev() {
 	modprobe --dry-run scsi_debug || skip
 	lsmod | not grep scsi_debug >/dev/null || skip
 
+	# Check there is enough memory for scsi_debug's vmalloc allocation
+	local NEED_KB=$(( (DEV_SIZE + 2) * 1024 ))
+	local MEM_AVAIL
+	local VTOTAL
+
+	MEM_AVAIL=$(awk '/MemAvailable:/{print $2}' /proc/meminfo)
+	test "${MEM_AVAIL:-0}" -gt "$NEED_KB" || \
+		skip "Not enough memory (need ${NEED_KB}kB, available ${MEM_AVAIL:-0}kB)"
+
+	# 32-bit kernels have limited vmalloc address space
+	VTOTAL=$(awk '/VmallocTotal:/{print $2}' /proc/meminfo)
+	test -z "$VTOTAL" || test "$VTOTAL" -gt "$NEED_KB" || \
+		skip "Not enough vmalloc space (need ${NEED_KB}kB, total ${VTOTAL}kB)"
+
 	# Create the scsi_debug device and determine the new scsi device's name
 	# NOTE: it will _never_ make sense to pass num_tgts param;
 	# last param wins.. so num_tgts=1 is imposed
