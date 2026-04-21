@@ -101,6 +101,7 @@ int vgcreate(struct cmd_context *cmd, int argc, char **argv)
 	}
 
 	if (!pvcreate_each_device(cmd, handle, &pp)) {
+		unlock_vg(cmd, NULL, vp_new.vg_name);
 		destroy_processing_handle(cmd, handle);
 		return_ECMD_FAILED;
 	}
