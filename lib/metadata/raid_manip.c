@@ -1026,28 +1026,28 @@ static struct logical_volume *_alloc_image_component(struct logical_volume *lv,
 	default:
 		log_error(INTERNAL_ERROR
 			  "Bad type provided to _alloc_raid_component.");
-		return 0;
+		return NULL;
 	}
 
 	if (dm_snprintf(img_name, sizeof(img_name), "%s_%s_%%d",
 			(alt_base_name) ? : lv->name, type_suffix) < 0) {
 		log_error("Component name for raid %s is too long.", display_lvname(lv));
-		return 0;
+		return NULL;
 	}
 
 	status = LVM_READ | LVM_WRITE | LV_REBUILD | type;
 	if (!(tmp_lv = lv_create_empty(img_name, NULL, status, ALLOC_INHERIT, lv->vg))) {
 		log_error("Failed to allocate new raid component, %s.", img_name);
-		return 0;
+		return NULL;
 	}
 
 	if (ah) {
 		if (!(segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_STRIPED)))
-			return_0;
+			return_NULL;
 
 		if (!lv_add_segment(ah, first_area, 1, tmp_lv, segtype, 0, status, 0)) {
 			log_error("Failed to add segment to LV, %s.", img_name);
-			return 0;
+			return NULL;
 		}
 	}
 
@@ -4558,7 +4558,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 
 	/* Initialize reshape len properly after adding the image component list */
 	if (!_lv_set_reshape_len(lv, 0))
-		return_0;
+		return_NULL;
 
 	if (update_and_reload && !lv_update_and_reload(lv))
 		return NULL;
