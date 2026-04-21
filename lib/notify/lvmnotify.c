@@ -68,7 +68,7 @@ static int lvmdbusd_running(void)
 
 	/* Need to ensure we close lock FD now */
 	errno = 0;
-	rc = lockf(fd, F_TLOCK|F_TEST, 0);
+	rc = lockf(fd, F_TEST, 0);
 	if (-1 != rc) {
 		/* Not locked, thus not running */
 		running = 0;
