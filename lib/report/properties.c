@@ -288,7 +288,6 @@ GET_PV_STR_PROPERTY_FN(pv_device_id_type, pv->device_id_type)
 #define _lv_initial_image_sync_get prop_not_implemented_get
 #define _lv_image_synced_get prop_not_implemented_get
 #define _lv_image_synced_set prop_not_implemented_set
-#define _lv_image_synced_get prop_not_implemented_get
 #define _lv_merging_set prop_not_implemented_set
 #define _lv_merging_get prop_not_implemented_get
 #define _lv_converting_set prop_not_implemented_set
