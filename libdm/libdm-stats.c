@@ -5072,7 +5072,7 @@ int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
 			    dm_filemapd_mode_t mode, unsigned foreground,
 			    unsigned verbose)
 {
-	char fd_str[8], group_str[8], fg_str[2], verb_str[2];
+	char fd_str[8], group_str[24], fg_str[2], verb_str[2];
 	const char *mode_str = _filemapd_mode_names[mode];
 	char *args[NR_FILEMAPD_ARGS + 1];
 	pid_t pid = 0;
