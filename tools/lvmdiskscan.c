@@ -72,7 +72,7 @@ static int _check_device(struct cmd_context *cmd, struct device *dev)
 	uint64_t size;
 
 	if (!dev_get_size(dev, &size)) {
-		log_error("Couldn't get size of \"%s\"", dev_name(dev));
+		log_warn("WARNING: Couldn't get size of \"%s\".", dev_name(dev));
 		size = 0;
 	}
 	_print(cmd, dev, size, NULL);
