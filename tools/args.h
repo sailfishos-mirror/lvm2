@@ -402,7 +402,7 @@ arg(lockopt_ARG, '\0', "lockopt", string_VAL, 0, 0,
 
 arg(lockstart_ARG, '\0', "lockstart", 0, 0, 0,
     "Start the lockspace of a shared VG in lvmlockd.\n"
-    "lvmlockd locks becomes available for the VG, allowing LVM to use the VG.\n"
+    "lvmlockd locks become available for the VG, allowing LVM to use the VG.\n"
     "See \\fBlvmlockd\\fP(8) for more information.\n")
 
 arg(lockstop_ARG, '\0', "lockstop", 0, 0, 0,
@@ -964,7 +964,7 @@ arg(trackchanges_ARG, '\0', "trackchanges", 0, 0, 0,
     "Only the regions with changed data are resynchronized during merge.\n"
     "While a raid1 LV is tracking changes, operations on it are limited to\n"
     "merging the split image (see --mergemirrors) or permanently splitting\n"
-    "the image (see --splitmirrors with --name.\n")
+    "the image (see --splitmirrors with --name).\n")
 
 arg(trustcache_ARG, '\0', "trustcache", 0, 0, 0,
     "No longer used.\n")
@@ -1767,7 +1767,7 @@ arg(snapshot_ARG, 's', "snapshot", 0, 0, 0,
     "be extended with lvextend (shrinking is also allowed with lvreduce.)\n"
     "A small amount of the COW snapshot LV size is used to track COW block\n"
     "locations, so the full size is not available for COW data blocks.\n"
-    "Use lvs to check how much space is used, and see --monitor to\n"
+    "Use lvs to check how much space is used, and see --monitor\n"
     "to automatically extend the size to avoid running out of space.\n"
     "#lvconvert\n"
     "Combine a former COW snapshot LV with a former origin LV to reverse\n"
