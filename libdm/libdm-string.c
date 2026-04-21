@@ -422,7 +422,7 @@ void dm_unescape_colons_and_at_signs(char *src,
 				     char **substr_first_unquoted_at_sign)
 {
 	const char *orig_chars = ":@";
-	char *arr_substr_first_unquoted[] = {NULL, NULL, NULL};
+	char *arr_substr_first_unquoted[] = {NULL, NULL};
 
 	_unquote_characters(src, orig_chars, 2, '\\', arr_substr_first_unquoted);
 
