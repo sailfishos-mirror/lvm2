@@ -1420,6 +1420,7 @@ static struct dm_config_value *_clone_config_value(struct dm_pool *mem,
 	}
 
 	new_cv->type = v->type;
+	new_cv->format_flags = v->format_flags;
 
 	if (v->next && !(new_cv->next = _clone_config_value(mem, v->next)))
 		return_NULL;
