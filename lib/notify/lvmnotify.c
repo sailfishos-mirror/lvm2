@@ -145,7 +145,7 @@ void lvmnotify_send(struct cmd_context *cmd)
 	ret = sd_bus_message_read(m, "i", &result);
 	if (ret < 0)
 		log_debug_dbus("Failed to parse dbus response message: %d", ret);
-	if (result)
+	else if (result)
 		log_debug_dbus("Bad return value from dbus service: %d", result);
 out:
 	sd_bus_error_free(&error);
