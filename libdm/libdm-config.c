@@ -352,7 +352,7 @@ static int _write_value(struct config_output *out, const struct dm_config_value 
 
 	default:
 		log_error("_write_value: Unknown value type: %d", v->type);
-
+		return 0;
 	}
 
 	return 1;
