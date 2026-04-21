@@ -2348,13 +2348,13 @@ report {
 	# pvsegs_sort = "pv_name,pvseg_start"
 
 	# Configuration option report/pvsegs_cols.
-	# List of columns to sort by when reporting 'pvs --segments' command.
+	# List of columns to report for 'pvs --segments' command.
 	# See 'pvs --segments -o help' for the list of possible fields.
 	# This configuration option has an automatic default value.
 	# pvsegs_cols = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size"
 
 	# Configuration option report/pvsegs_cols_verbose.
-	# List of columns to sort by when reporting 'pvs --segments' command in verbose mode.
+	# List of columns to report for 'pvs --segments' command in verbose mode.
 	# See 'pvs --segments -o help' for the list of possible fields.
 	# This configuration option has an automatic default value.
 	# pvsegs_cols_verbose = "pv_name,vg_name,pv_fmt,pv_attr,pv_size,pv_free,pvseg_start,pvseg_size,lv_name,seg_start_pe,segtype,seg_pe_ranges"
@@ -2366,7 +2366,7 @@ report {
 	# vgs_cols_full = "vg_all"
 
 	# Configuration option report/pvs_cols_full.
-	# List of columns to report for lvm fullreport's 'vgs' subreport.
+	# List of columns to report for lvm fullreport's 'pvs' subreport.
 	# See 'pvs -o help' for the list of possible fields.
 	# This configuration option has an automatic default value.
 	# pvs_cols_full = "pv_all"
@@ -2396,7 +2396,7 @@ report {
 	# vgs_sort_full = "vg_name"
 
 	# Configuration option report/pvs_sort_full.
-	# List of columns to sort by when reporting lvm fullreport's 'vgs' subreport.
+	# List of columns to sort by when reporting lvm fullreport's 'pvs' subreport.
 	# See 'pvs -o help' for the list of possible fields.
 	# This configuration option has an automatic default value.
 	# pvs_sort_full = "pv_name"

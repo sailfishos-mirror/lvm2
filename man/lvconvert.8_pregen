@@ -2170,7 +2170,7 @@ detached image to be merged efficiently back into the raid1 LV later.
 Only the regions with changed data are resynchronized during merge.
 While a raid1 LV is tracking changes, operations on it are limited to
 merging the split image (see --mergemirrors) or permanently splitting
-the image (see --splitmirrors with --name.
+the image (see --splitmirrors with --name).
 .
 .TP
 .O_type

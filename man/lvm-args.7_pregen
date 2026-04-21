@@ -804,7 +804,7 @@ Used by: \fBconfig\fP, \fBdevtypes\fP, \fBdumpconfig\fP, \fBformats\fP, \fBfullr
 .TP
 \fB--lockstart\fP
 Start the lockspace of a shared VG in lvmlockd.
-lvmlockd locks becomes available for the VG, allowing LVM to use the VG.
+lvmlockd locks become available for the VG, allowing LVM to use the VG.
 See \fBlvmlockd\fP(8) for more information.
 .br
 Used by: \fBvgchange\fP
@@ -1756,7 +1756,7 @@ detached image to be merged efficiently back into the raid1 LV later.
 Only the regions with changed data are resynchronized during merge.
 While a raid1 LV is tracking changes, operations on it are limited to
 merging the split image (see --mergemirrors) or permanently splitting
-the image (see --splitmirrors with --name.
+the image (see --splitmirrors with --name).
 .br
 Used by: \fBlvconvert\fP
 .

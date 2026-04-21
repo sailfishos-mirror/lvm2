@@ -1991,7 +1991,7 @@ often 20% of the origin LV is enough. If COW space runs low, it can
 be extended with lvextend (shrinking is also allowed with lvreduce.)
 A small amount of the COW snapshot LV size is used to track COW block
 locations, so the full size is not available for COW data blocks.
-Use lvs to check how much space is used, and see --monitor to
+Use lvs to check how much space is used, and see --monitor
 to automatically extend the size to avoid running out of space.
 .
 .TP

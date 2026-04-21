@@ -1090,7 +1090,7 @@ See \fBlvmlockd\fP(8) for more information.
 .TP
 .O_lockstart
 Start the lockspace of a shared VG in lvmlockd.
-lvmlockd locks becomes available for the VG, allowing LVM to use the VG.
+lvmlockd locks become available for the VG, allowing LVM to use the VG.
 See \fBlvmlockd\fP(8) for more information.
 .
 .TP
