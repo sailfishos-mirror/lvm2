@@ -3516,7 +3516,8 @@ int dm_tree_children_use_uuid(struct dm_tree_node *dnode,
 			return 1;
 
 		if (dm_tree_node_num_children(child, 0))
-			dm_tree_children_use_uuid(child, uuid_prefix, uuid_prefix_len);
+			if (dm_tree_children_use_uuid(child, uuid_prefix, uuid_prefix_len))
+				return 1;
 	}
 
 	return 0;
