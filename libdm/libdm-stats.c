@@ -18,7 +18,7 @@
 #include "libdm/misc/dmlib.h"
 #include "libdm/misc/kdev_t.h"
 
-#include "math.h" /* log10() */
+#include <math.h> /* log10() */
 
 #include <sys/sysmacros.h>
 #include <sys/ioctl.h>
