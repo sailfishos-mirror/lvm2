@@ -985,10 +985,10 @@ static int _stats_parse_string_data(char *string_data, char **program_id,
 		}
 	}
 
-	if (!strncmp(*program_id, "-", 1))
+	if (!strcmp(*program_id, "-"))
 		*program_id = empty_string;
 
-	if (!strncmp(*aux_data, "-", 1))
+	if (!strcmp(*aux_data, "-"))
 		*aux_data = empty_string;
 
 	return 1;
