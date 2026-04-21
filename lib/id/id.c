@@ -101,8 +101,6 @@ int id_equal(const struct id *lhs, const struct id *rhs)
 	return !memcmp(lhs->uuid, rhs->uuid, sizeof(lhs->uuid));
 }
 
-#define GROUPS (ID_LEN / 4)
-
 int id_write_format(const struct id *id, char *buffer, size_t size)
 {
 	int i, tot;
