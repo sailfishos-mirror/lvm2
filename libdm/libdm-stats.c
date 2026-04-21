@@ -3308,17 +3308,17 @@ int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id, const char *alia
 	if (!dms->regions || !dms->groups || !alias)
 		return_0;
 
-	if (!_stats_region_is_grouped(dms, group_id)) {
-		log_error("Cannot set alias for ungrouped region ID "
-			  FMTu64, group_id);
-		return 0;
-	}
-
 	if (group_id & DM_STATS_WALK_GROUP) {
 		if (group_id == DM_STATS_WALK_GROUP)
 			group_id = dms->cur_group;
 		else
 			group_id &= ~DM_STATS_WALK_GROUP;
+	}
+
+	if (!_stats_region_is_grouped(dms, group_id)) {
+		log_error("Cannot set alias for ungrouped region ID "
+			  FMTu64, group_id);
+		return 0;
 	}
 
 	if (group_id != dms->regions[group_id].group_id) {
