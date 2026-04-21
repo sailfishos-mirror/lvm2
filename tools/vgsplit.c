@@ -423,12 +423,13 @@ static int _move_cache(struct volume_group *vg_from,
 {
 	int is_moving;
 	struct dm_list *lvh, *lvht;
-	struct logical_volume *lv, *data = NULL, *meta = NULL, *orig = NULL, *fast = NULL;
+	struct logical_volume *lv, *data, *meta, *orig, *fast;
 	struct lv_segment *seg, *cache_seg;
 
 	dm_list_iterate_safe(lvh, lvht, &vg_from->lvs) {
 		lv = dm_list_item(lvh, struct lv_list)->lv;
 		seg = first_seg(lv);
+		data = meta = orig = fast = NULL;
 
 		if (!lv_is_cache(lv) && !lv_is_writecache(lv) && !lv_is_cache_pool(lv) && !lv_is_cache_vol(lv))
 			continue;
