@@ -142,7 +142,7 @@ static void _compute_verbose_derived(const struct dm_vdo_stats_full *full,
 {
 	uint64_t es = 0, ew = 0, ec = 0;
 	uint64_t bs = 0, bw = 0, bc = 0;
-	int i;
+	unsigned i;
 
 	for (i = 0; i < full->field_count; i++) {
 		const char *l = full->fields[i].label;
@@ -212,7 +212,7 @@ static const struct _label_fixup {
 
 static void _fixup_labels(struct dm_vdo_stats_full *full)
 {
-	int i, j;
+	unsigned i, j;
 	int recovering, readonly;
 	unsigned na_mask;
 	size_t mlen;
@@ -231,7 +231,7 @@ static void _fixup_labels(struct dm_vdo_stats_full *full)
 	for (i = 0; i < full->field_count; i++) {
 		struct dm_vdo_stats_field *fld = &full->fields[i];
 
-		for (j = 0; j < (int) DM_ARRAY_SIZE(_fixups); j++) {
+		for (j = 0; j < DM_ARRAY_SIZE(_fixups); j++) {
 			mlen = strlen(_fixups[j].match);
 
 			if (_fixups[j].flags & FIXUP_PREFIX) {
@@ -303,14 +303,15 @@ static void _print_size_fields(const struct vdo_derived *d,
 	_print_field_na("saving percent", buf, na || d->saving_pct < 0, max_len);
 }
 
-static int _max_label_length(const struct dm_vdo_stats_full *full)
+static size_t _max_label_length(const struct dm_vdo_stats_full *full)
 {
-	int i, len, max = MAX_DERIVED_LABEL_LEN;
+	unsigned i;
+	size_t len, max = MAX_DERIVED_LABEL_LEN;
 
 	for (i = 0; i < full->field_count; i++) {
 		if (!full->fields[i].label[0])
 			continue;
-		len = (int) strlen(full->fields[i].label);
+		len = strlen(full->fields[i].label);
 		if (len > max)
 			max = len;
 	}
@@ -323,7 +324,8 @@ static void _print_verbose(const char *name,
 			   const struct vdo_derived *d,
 			   const struct _verbose_derived *vd)
 {
-	int i, max_len, na;
+	unsigned i;
+	size_t max_len, na;
 	char buf[MAX_FMT_BUF];
 	const char *l;
 
