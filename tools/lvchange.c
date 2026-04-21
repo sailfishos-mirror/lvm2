@@ -919,7 +919,8 @@ static int _lvchange_tag(struct cmd_context *cmd, struct logical_volume *lv,
 
 static int _lvchange_rebuild(struct logical_volume *lv)
 {
-	int pv_count, i = 0;
+	unsigned pv_count;
+	int i = 0;
 	char **rebuild_pvs;
 	const char *tmp_str;
 	struct dm_list *rebuild_pvh = NULL;
