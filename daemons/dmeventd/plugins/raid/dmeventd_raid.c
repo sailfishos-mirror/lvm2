@@ -101,8 +101,10 @@ static int _process_raid_event(struct dso_state *state, char *params, const char
 		}
 	} else {
 		state->failed = 0;
-		if (status->insync_regions == status->total_regions)
+		if (status->insync_regions == status->total_regions) {
 			memset(&state->raid_devs, 0, sizeof(state->raid_devs));
+			state->warned = 0;
+		}
 		log_info("%s array, %s, is %s in-sync.",
 			 status->raid_type, device,
 			 (status->insync_regions == status->total_regions) ? "now" : "not");
