@@ -703,10 +703,10 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
 		return 0;
 	}
 
-	av->i_value = ((int32_t) v < INT32_MAX) ? (int32_t) v : INT32_MAX;
-	av->ui_value = ((uint32_t) v < UINT32_MAX) ? (uint32_t) v : UINT32_MAX;
-	av->i64_value = ((int64_t) v < INT64_MAX) ? (int64_t) v : INT64_MAX;
-	av->ui64_value = ((uint64_t) v < UINT64_MAX) ? (uint64_t) v : UINT64_MAX;
+	av->i_value = (v < (double) INT32_MAX) ? (int32_t) v : INT32_MAX;
+	av->ui_value = (v < (double) UINT32_MAX) ? (uint32_t) v : UINT32_MAX;
+	av->i64_value = (v < (double) INT64_MAX) ? (int64_t) v : INT64_MAX;
+	av->ui64_value = (v < (double) UINT64_MAX) ? (uint64_t) v : UINT64_MAX;
 
 	return 1;
 }
