@@ -3371,7 +3371,7 @@ static void _get_final_time(time_range_t range, struct tm *tm,
 			}
 			/* fall through */
 		case RANGE_DAY:
-			if (tm_up.tm_mday < _get_days_in_month(tm_up.tm_mon, tm_up.tm_year)) {
+			if (tm_up.tm_mday < _get_days_in_month(tm_up.tm_mon + 1, tm_up.tm_year + 1900)) {
 				tm_up.tm_mday += 1;
 				break;
 			}
