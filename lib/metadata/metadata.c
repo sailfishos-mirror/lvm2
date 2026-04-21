@@ -2203,7 +2203,7 @@ static int _validate_lock_args_chars(const char *lock_args)
 	int found_colon = 0;
 	int r = 1;
 
-	for (i = 0; i < strlen(lock_args); i++) {
+	for (i = 0; lock_args[i]; i++) {
 		c = lock_args[i];
 
 		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+' && c != ':') {
