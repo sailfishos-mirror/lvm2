@@ -3884,6 +3884,18 @@ int lockd_lv(struct cmd_context *cmd, struct logical_volume *lv,
 		return _lockd_lv_vdo(cmd, lv, def_mode, flags);
 
 	/*
+	 * A COW snapshot does not have its own lock, it is covered
+	 * by the lock on its origin LV.
+	 */
+	if (lv_is_cow(lv)) {
+		struct logical_volume *origin = origin_from_cow(lv);
+		if (origin) {
+			log_debug("lockd_lv cow using origin %s for %s", origin->name, lv->name);
+			lv = origin;
+		}
+	}
+
+	/*
 	 * An LV with NULL lock_args does not have a lock of its own.
 	 */
 	if (!lv->lock_args) {
