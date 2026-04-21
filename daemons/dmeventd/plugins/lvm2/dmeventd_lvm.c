@@ -79,7 +79,7 @@ int dmeventd_lvm2_init(void)
 		 * Need some space for allocations.  1024 should be more
 		 * than enough for what we need (device mapper name splitting)
 		 */
-		if (!_mem_pool && !(_mem_pool = dm_pool_create("mirror_dso", 1024))) {
+		if (!_mem_pool && !(_mem_pool = dm_pool_create("lvm2_dso", 1024))) {
 			lvm2_exit(_lvm_handle);
 			_lvm_handle = NULL;
 			goto out;
