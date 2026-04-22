@@ -555,6 +555,7 @@ static int _skip_remote_lvs(struct cmd_context *cmd,
 {
 	const struct logical_volume *lv_top;
 	struct lv_list *lvl, *lvl2, *lvl3;
+	struct dm_list remote_tops;
 	int already_done;
 
 	/* Named pvmove: check the named LV directly */
@@ -567,6 +568,8 @@ static int _skip_remote_lvs(struct cmd_context *cmd,
 		}
 		return 1;
 	}
+
+	dm_list_init(&remote_tops);
 
 	dm_list_iterate_items_safe(lvl, lvl2, moving_lvs) {
 		lv_top = lv_lock_holder(lvl->lv);
@@ -584,10 +587,33 @@ static int _skip_remote_lvs(struct cmd_context *cmd,
 		if (already_done)
 			continue;
 
+		/*
+		 * The dedup scan above only finds entries still in moving_lvs.
+		 * When a remotely-held lv_top was already removed, later sub-LVs
+		 * of the same lv_top would re-query lockd.  Check remote_tops to
+		 * avoid those redundant lock round-trips.
+		 */
+		dm_list_iterate_items(lvl3, &remote_tops) {
+			if (lv_lock_holder(lvl3->lv) == lv_top) {
+				already_done = 1;
+				break;
+			}
+		}
+		if (already_done) {
+			log_warn("WARNING: Not moving LV %s. LV %s exclusive lock is not held.",
+				 display_lvname(lvl->lv), display_lvname(lv_top));
+			dm_list_del(&lvl->list);
+			continue;
+		}
+
 		if (!_skip_remotely_used_lv(cmd, lv_top)) {
 			log_warn("WARNING: Not moving LV %s. LV %s exclusive lock is not held.",
 				 display_lvname(lvl->lv), display_lvname(lv_top));
 			dm_list_del(&lvl->list);
+			if ((lvl3 = dm_pool_alloc(cmd->mem, sizeof(*lvl3)))) {
+				lvl3->lv = lvl->lv;
+				dm_list_add(&remote_tops, &lvl3->list);
+			}
 		}
 	}
 
