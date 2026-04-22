@@ -482,7 +482,7 @@ static void *_client_thread(void *state)
 			dm_config_destroy(req.cft);
 		buffer_destroy(&req.buffer);
 
-		if (!r) {
+		if (!r || !res.buffer.mem) {
 			buffer_destroy(&res.buffer);
 			goto fail;
 		}
