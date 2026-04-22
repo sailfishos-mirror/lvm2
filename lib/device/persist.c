@@ -83,7 +83,7 @@ int setpersist_arg_flags(const char *str, uint32_t *flags)
 		else if (!strcmp(argv[i], "noptpl"))
 			*flags |= SETPR_NOPTPL;
 		else {
-			log_error("Unknown setpersist option value: %s", argv[i]);
+			log_error("Unknown setpersist option value: %s.", argv[i]);
 			return 0;
 		}
 	}
@@ -92,7 +92,7 @@ int setpersist_arg_flags(const char *str, uint32_t *flags)
 	    ((*flags & SETPR_REQUIRE) && (*flags & SETPR_NOREQUIRE)) ||
 	    ((*flags & SETPR_AUTOSTART) && (*flags & SETPR_NOAUTOSTART)) ||
 	    ((*flags & SETPR_PTPL) && (*flags & SETPR_NOPTPL))) {
-		log_error("Invalid setpersist option combination: %s", str);
+		log_error("Invalid setpersist option combination: %s.", str);
 		return 0;
 	}
 
@@ -238,7 +238,7 @@ void persist_key_file_rename(struct volume_group *vg, const char *old_name, cons
 
 	if (rename(old_path, new_path) < 0) {
 		if (errno != ENOENT)
-			log_warn("WARNING: Failed to rename %s", old_path);
+			log_warn("WARNING: Failed to rename %s.", old_path);
 	}
 }
 
@@ -252,7 +252,7 @@ static int key_file_exists(struct cmd_context *cmd, struct volume_group *vg)
 	if (!stat(path, &info))
 		return 1;
 	if (errno != ENOENT)
-		log_debug("key_file_exists errno %d %s", errno, path);
+		log_debug("key_file_exists errno %d %s.", errno, path);
 	return 0;
 }
 
@@ -271,7 +271,7 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 	create_persist_key_path(vg, vg->name, path);
 
 	if (!(fp = fopen(path, "r"))) {
-		log_debug("key_file: cannot open %s", path);
+		log_debug("key_file: cannot open %s.", path);
 		return 0;
 	}
 
@@ -292,7 +292,7 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 		stack;
 
 	if (!buf_key[0]) {
-		log_debug("key_file: empty");
+		log_debug("key_file: empty.");
 		if (unlink(path))
 			log_sys_debug("unlink", path);
 		return 0;
@@ -302,14 +302,14 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 		*p = '\0';
 
 	if (strlen(buf_key) >= PR_KEY_BUF_SIZE) {
-		log_debug("key_file: too long");
+		log_debug("key_file: too long.");
 		if (unlink(path))
 			log_sys_debug("unlink", path);
 		return 0;
 	}
 
 	if (!parse_prkey(buf_key, &val)) {
-		log_debug("key_file: parse error %s", buf_key);
+		log_debug("key_file: parse error %s.", buf_key);
 		if (unlink(path))
 			log_sys_debug("unlink", path);
 		return 0;
@@ -330,7 +330,8 @@ static int read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 	if (gen)
 		*gen = found_gen;
 
-	log_debug("key_file: read 0x%llx host_id %u gen %u", (unsigned long long)val, found_host_id, found_gen);
+	log_debug("key_file: read 0x%llx host_id %u gen %u.",
+		  (unsigned long long) val, found_host_id, found_gen);
 	return 1;
 }
 
@@ -342,18 +343,18 @@ static int write_key_file(struct cmd_context *cmd, struct volume_group *vg, uint
 	create_persist_key_path(vg, vg->name, path);
 
 	if (!(fp = fopen(path, "w"))) {
-		log_debug("Failed to create key file");
+		log_debug("Failed to create key file.");
 		return 0;
 	}
 
-	fprintf(fp, "key: 0x%llx\n", (unsigned long long)key);
+	fprintf(fp, "key: 0x%llx\n", (unsigned long long) key);
 
 	if (fflush(fp))
-		log_debug("Failed to write/flush key file");
+		log_debug("Failed to write/flush key file.");
 	if (fclose(fp))
-		log_debug("Failed to write/close key file");
+		log_debug("Failed to write/close key file.");
 
-	log_debug("key_file: wrote 0x%llx", (unsigned long long)key);
+	log_debug("key_file: wrote 0x%llx.", (unsigned long long) key);
 	return 1;
 }
 
@@ -378,7 +379,7 @@ static int dev_read_reservation_scsi(struct cmd_context *cmd, struct device *dev
 	devname = dev_name(dev);
 
 	if ((fd = open(devname, O_RDONLY)) < 0) {
-		log_error("dev_read_reservation %s open error %d", devname, errno);
+		log_error("dev_read_reservation %s open error %d.", devname, errno);
 		return 0;
 	}
 
@@ -404,19 +405,20 @@ static int dev_read_reservation_scsi(struct cmd_context *cmd, struct device *dev
 	io_hdr.timeout = 2000;     /* millisecs */
 
 	if (ioctl(fd, SG_IO, &io_hdr) < 0) {
-		log_error("dev_read_reservation %s sg_io ioctl error %d", devname, errno);
+		log_error("dev_read_reservation %s sg_io ioctl error %d.", devname, errno);
 		ret = 0;
 		goto out;
 	}
 
 	ret_bytes = response_len - io_hdr.resid;
 
-	log_debug("dev_read_reservation %s sg_io bytes %u of %u status driver:%02x host:%02x scsi:%02x",
-		  devname, ret_bytes, response_len, io_hdr.driver_status, io_hdr.host_status, io_hdr.status);
+	log_debug("dev_read_reservation %s sg_io bytes %d of %d status driver:%02x host:%02x scsi:%02x.",
+		  devname, ret_bytes, response_len, (unsigned) io_hdr.driver_status,
+		  (unsigned) io_hdr.host_status, (unsigned) io_hdr.status);
 
 	io_hdr.status &= 0x7e;
 	if (io_hdr.status) {
-		log_error("dev_read_reservation %s error 0x%x", devname, io_hdr.status);
+		log_error("dev_read_reservation %s error 0x%x.", devname, io_hdr.status);
 		ret = 0;
 		goto out;
 	}
@@ -427,7 +429,7 @@ static int dev_read_reservation_scsi(struct cmd_context *cmd, struct device *dev
 	add_len = be32toh(add_len_be);
 	num = add_len / 16;
 
-	log_debug("dev_read_reservation %s pr_gen %u add_len %u num %d", devname, pr_gen, add_len, num);
+	log_debug("dev_read_reservation %s pr_gen %u add_len %u num %d.", devname, pr_gen, add_len, num);
 
 	if (num > 0) {
 		memcpy(&key_be, response_buf + 8, 8);
@@ -441,8 +443,8 @@ static int dev_read_reservation_scsi(struct cmd_context *cmd, struct device *dev
 		if (prtype_ret)
 			*prtype_ret = prtype_from_scsi((uint8_t)pr_type_scsi);
 
-		log_debug("dev_read_reservation %s holder key %llx type 0x%x",
-			  devname, (unsigned long long)key, pr_type_scsi);
+		log_debug("dev_read_reservation %s holder key %llx type 0x%x.",
+			  devname, (unsigned long long) key, pr_type_scsi);
 	} else {
 		if (holder_ret)
 			*holder_ret = 0;
@@ -459,7 +461,7 @@ out:
 static int dev_read_reservation(struct cmd_context *cmd, struct device *dev, uint64_t *holder_ret, int *prtype_ret)
 {
 	if (!dev_allow_pr(cmd, dev)) {
-		log_error("persistent reservation not supported for device type %s", dev_name(dev));
+		log_error("Persistent reservation not supported for device type %s.", dev_name(dev));
 		return 0;
 	}
 
@@ -492,7 +494,7 @@ static int dev_find_key_scsi(struct cmd_context *cmd, struct device *dev, int ma
 	devname = dev_name(dev);
 
 	if ((fd = open(devname, O_RDONLY)) < 0) {
-		log_error("dev_find_key_scsi %s open error %d", devname, errno);
+		log_error("dev_find_key_scsi %s open error %d.", devname, errno);
 		return 0;
 	}
 
@@ -522,25 +524,26 @@ static int dev_find_key_scsi(struct cmd_context *cmd, struct device *dev, int ma
 
 	if (ioctl(fd, SG_IO, &io_hdr) < 0) {
 		if (may_fail)
-			log_debug("dev_find_key_scsi %s sg_io ioctl error %d", devname, errno);
+			log_debug("dev_find_key_scsi %s sg_io ioctl error %d.", devname, errno);
 		else
-			log_error("dev_find_key_scsi %s sg_io ioctl error %d", devname, errno);
+			log_error("dev_find_key_scsi %s sg_io ioctl error %d.", devname, errno);
 		ret = 0;
 		goto out;
 	}
 
 	ret_bytes = response_len - io_hdr.resid;
 
-	log_debug("dev_find_key_scsi %s sg_io ret_bytes %u of %u status driver:%02x host:%02x scsi:%02x",
-		   devname, ret_bytes, response_len, io_hdr.driver_status, io_hdr.host_status, io_hdr.status);
+	log_debug("dev_find_key_scsi %s sg_io ret_bytes %d of %d status driver:%02x host:%02x scsi:%02x.",
+		  devname, ret_bytes, response_len, (unsigned) io_hdr.driver_status,
+		  (unsigned) io_hdr.host_status, (unsigned) io_hdr.status);
 
 	io_hdr.status &= 0x7e;
 	if (io_hdr.status) {
 		if (may_fail)
-			log_debug("dev_find_key_scsi %s error scsi:0x%02x driver:%02x host:%02x",
+			log_debug("dev_find_key_scsi %s error scsi:0x%02x driver:%02x host:%02x.",
 				  devname, io_hdr.status, io_hdr.driver_status, io_hdr.host_status);
 		else
-			log_error("dev_find_key_scsi %s error scsi:0x%02x driver:%02x host:%02x",
+			log_error("dev_find_key_scsi %s error scsi:0x%02x driver:%02x host:%02x.",
 				  devname, io_hdr.status, io_hdr.driver_status, io_hdr.host_status);
 		ret = 0;
 		goto out;
@@ -554,7 +557,7 @@ static int dev_find_key_scsi(struct cmd_context *cmd, struct device *dev, int ma
 	add_len = be32toh(add_len_be);
 	num_keys = add_len / 8;
 
-	log_debug("dev_find_key_scsi %s num %d pr_gen %u", devname, num_keys, pr_gen);
+	log_debug("dev_find_key_scsi %s num %d pr_gen %u.", devname, num_keys, pr_gen);
 
 	/* caller wants just a count of all keys */
 	if (find_all && found_count && !found_all) {
@@ -590,7 +593,8 @@ static int dev_find_key_scsi(struct cmd_context *cmd, struct device *dev, int ma
 		memcpy(&key_be, p, 8);
 		key = be64toh(key_be);
 
-		log_debug("dev_find_key_scsi %s 0x%llx", devname, (unsigned long long)key);
+		log_debug("dev_find_key_scsi %s 0x%llx.",
+			  devname, (unsigned long long) key);
 
 		if (find_all && found_count && found_all)
 			all_keys[i] = key;
@@ -657,7 +661,7 @@ int dev_find_key(struct cmd_context *cmd, struct device *dev, int may_fail,
 	int ret;
 
 	if (!dev_allow_pr(cmd, dev)) {
-		log_error("persistent reservation not supported for device type %s", dev_name(dev));
+		log_error("Persistent reservation not supported for device type %s.", dev_name(dev));
 		return 0;
 	}
 
@@ -707,7 +711,7 @@ static int vg_is_registered_by_key(struct cmd_context *cmd, struct volume_group 
 		found = 0;
 
 		if (!dev_find_key(cmd, dev, 0, key, &found, 0, NULL, 0, NULL, NULL)) {
-			log_error("Failed to read persistent reservation key on %s", dev_name(dev));
+			log_error("Failed to read persistent reservation key on %s.", dev_name(dev));
 			errors++;
 			continue;
 		}
@@ -744,7 +748,7 @@ static int vg_is_registered_by_host_id(struct cmd_context *cmd, struct volume_gr
 		found_key = 0;
 
 		if (!dev_find_key(cmd, dev, 0, 0, NULL, host_id, &found_key, 0, NULL, NULL)) {
-			log_error("Failed to read persistent reservation key on %s", dev_name(dev));
+			log_error("Failed to read persistent reservation key on %s.", dev_name(dev));
 			errors++;
 			continue;
 		}
@@ -770,7 +774,7 @@ static int vg_is_registered_by_host_id(struct cmd_context *cmd, struct volume_gr
 			continue;
 
 		log_warn("WARNING: Inconsistent reservation keys for host_id %d: 0x%llx 0x%llx (generation %u %u).",
-			 host_id, (unsigned long long)first_key, (unsigned long long)found_key,
+			 host_id, (unsigned long long) first_key, (unsigned long long) found_key,
 			 first_gen, found_gen);
 		errors++;
 	}
@@ -851,7 +855,7 @@ int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_gro
 		found_keys = NULL;
 
 		if (!dev_find_key(cmd, dev, 1, our_key_val, &found_local, 0, NULL, 1, &found_count, &found_keys)) {
-			log_error("Failed to read persistent reservation key on %s", dev_name(dev));
+			log_error("Failed to read persistent reservation key on %s.", dev_name(dev));
 			errors++;
 			continue;
 		}
@@ -890,7 +894,7 @@ static int _is_started(struct cmd_context *cmd, struct volume_group *vg, int *is
 	}
 
 	if (partial) {
-		log_debug("PR is started: partial");
+		log_debug("PR is started: partial.");
 		goto out;
 	}
 
@@ -904,23 +908,23 @@ static int _is_started(struct cmd_context *cmd, struct volume_group *vg, int *is
 		holder = 0;
 
 		if (!dev_read_reservation(cmd, dev, &holder, &prtype)) {
-			log_debug("PR is started: failed read %s", dev_name(dev));
+			log_debug("PR is started: failed read %s.", dev_name(dev));
 			goto out;
 		}
 
 		if (!prtype) {
-			log_debug("PR is started: no res %s", dev_name(dev));
+			log_debug("PR is started: no res %s.", dev_name(dev));
 			goto out;
 		}
 
 		if ((prtype != PR_TYPE_WE) && (prtype != PR_TYPE_WEAR)) {
-			log_debug("PR is started: wrong type %s %s", prtype_to_str(prtype), dev_name(dev));
+			log_debug("PR is started: wrong type %s %s.", prtype_to_str(prtype), dev_name(dev));
 			goto out;
 		}
 
 		if ((prtype == PR_TYPE_WE) && (holder != our_key_val)) {
-			log_debug("PR is started: other holder 0x%llx %s",
-				  (unsigned long long)holder, dev_name(dev));
+			log_debug("PR is started: other holder 0x%llx %s.",
+				  (unsigned long long) holder, dev_name(dev));
 			goto out;
 		}
 	}
@@ -936,7 +940,7 @@ out:
 		*is_error = 1;
 
 	if (!is_started && !may_fail)
-		log_error("persistent reservation is not started.");
+		log_error("Persistent reservation is not started.");
 
 	return is_started;
 }
@@ -965,8 +969,8 @@ int persist_is_started_gen(struct cmd_context *cmd, struct volume_group *vg, int
 	key_gen = (our_key_val & 0xFFFFFF0000) >> 16;
 
 	if (key_gen != ls_generation) {
-		log_error("persistent reservation key 0x%llx gen %llu vs %llu needs update (run vgchange --persist start)",
-			  (unsigned long long)our_key_val, (unsigned long long)key_gen, (unsigned long long)ls_generation);
+		log_error("Persistent reservation key 0x%llx gen %llu vs %llu needs update (run vgchange --persist start)",
+			  (unsigned long long) our_key_val, (unsigned long long) key_gen, (unsigned long long) ls_generation);
 		return 0;
 	}
 	return 1;
@@ -1003,17 +1007,17 @@ static int get_our_key(struct cmd_context *cmd, struct volume_group *vg,
 		 */
 
 		if (!read_key_file(cmd, vg, our_key_buf, &our_key_val, &last_host_id, &last_gen)) {
-			log_debug("last key from file: none");
+			log_debug("Last key from file: none.");
 			goto read_keys;
 		}
 
 		if (last_host_id != local_host_id) {
-			log_debug("last key from file: wrong host_id %d vs local %d", last_host_id, local_host_id);
+			log_debug("Last key from file: wrong host_id %d vs local %d.", last_host_id, local_host_id);
 			persist_key_file_remove(cmd, vg);
 			goto read_keys;
 		}
 
-		log_debug("our key from file: 0x%llx", (unsigned long long)our_key_val);
+		log_debug("Our key from file: 0x%llx.", (unsigned long long) our_key_val);
 		goto done;
 
  read_keys:
@@ -1022,41 +1026,46 @@ static int get_our_key(struct cmd_context *cmd, struct volume_group *vg,
 		memset(our_key_buf, 0, sizeof(our_key_buf));
 		our_key_val = 0;
 
-		log_debug("reading keys to find local host_id %d", local_host_id);
+		log_debug("Reading keys to find local host_id %d.", local_host_id);
 
-		if (!vg_is_registered_by_host_id(cmd, vg, local_host_id, &our_key_val, &last_gen, NULL)) {
+		if (!vg_is_registered_by_host_id(cmd, vg, local_host_id,
+						 &our_key_val, &last_gen, NULL)) {
 			log_error("No registered key found for local host.");
 			return 0;
 		}
 
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000%06x%04x", last_gen, local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d gen %u", local_host_id, last_gen);
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000%06x%04x",
+				last_gen, (unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d gen %u.", local_host_id, last_gen);
 			return 0;
 		}
 
-		log_debug("our key from device: 0x%llx", (unsigned long long)our_key_val);
+		log_debug("Our key from device: 0x%llx.", (unsigned long long) our_key_val);
 
 	} else if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val)) {
-			log_error("Failed to parse local key %s", local_key);
+			log_error("Failed to parse local key %s.", local_key);
 			return 0;
 		}
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val) < 0)
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x%llx",
+				(unsigned long long) our_key_val) < 0)
 			return_0;
 
-		log_debug("our key from arg: 0x%llx", (unsigned long long)our_key_val);
+		log_debug("Our key from arg: 0x%llx.", (unsigned long long) our_key_val);
 
 	} else if (local_host_id) {
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000000000%04x",
+				(unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 		if (!parse_prkey(our_key_buf, &our_key_val)) {
-			log_error("Failed to parse generated key %s", our_key_buf);
+			log_error("Failed to parse generated key %s.", our_key_buf);
 			return 0;
 		}
 
-		log_debug("our key from host_id %d: 0x%llx", local_host_id, (unsigned long long)our_key_val);
+		log_debug("Our key from host_id %d: 0x%llx.", local_host_id,
+			  (unsigned long long) our_key_val);
 
 	} else {
 		log_error("No PR key source.");
@@ -1108,18 +1117,18 @@ static int get_our_key_sanlock_start(struct cmd_context *cmd, struct volume_grou
 	 * current sanlock generation is already available.
 	 */
 	if (lockd_vg_is_started(cmd, vg, &cur_gen)) {
-		log_debug("current host generation %u", cur_gen);
+		log_debug("Current host generation %u.", cur_gen);
 		last_gen = cur_gen - 1;
 		goto done;
 	}
 
 	if (!read_key_file(cmd, vg, our_key_buf, &our_key_val, &last_host_id, &last_gen)) {
-		log_debug("last key from file: none");
+		log_debug("Last key from file: none.");
 		goto read_keys;
 	}
 
 	if (last_host_id != local_host_id) {
-		log_debug("last key from file: wrong host_id %d vs local %d", last_host_id, local_host_id);
+		log_debug("Last key from file: wrong host_id %d vs local %d.", last_host_id, local_host_id);
 		persist_key_file_remove(cmd, vg);
 		goto read_keys;
 	}
@@ -1137,7 +1146,7 @@ static int get_our_key_sanlock_start(struct cmd_context *cmd, struct volume_grou
 	 * Then read_key_file() would use that value as last_gen rather
 	 * than taking the gen from the last key that it used.
 	 */
-	log_debug("last key from file: 0x%llx gen %u", (unsigned long long)our_key_val, last_gen);
+	log_debug("Last key from file: 0x%llx gen %u.", (unsigned long long) our_key_val, last_gen);
 	goto done;
 
  read_keys:
@@ -1146,12 +1155,12 @@ static int get_our_key_sanlock_start(struct cmd_context *cmd, struct volume_grou
 	memset(our_key_buf, 0, sizeof(our_key_buf));
 	our_key_val = 0;
 
-	log_debug("reading keys to find local host_id %d", local_host_id);
+	log_debug("Reading keys to find local host_id %d.", local_host_id);
 
 	if (!vg_is_registered_by_host_id(cmd, vg, local_host_id, &our_key_val, &last_gen, NULL))
 		last_gen = 0;
 
-	log_debug("last key from device: 0x%llx gen %u", (unsigned long long)our_key_val, last_gen);
+	log_debug("Last key from device: 0x%llx gen %u.", (unsigned long long) our_key_val, last_gen);
 
  done:
 	/* create our key from host_id and the next generation number */
@@ -1161,18 +1170,19 @@ static int get_our_key_sanlock_start(struct cmd_context *cmd, struct volume_grou
 
 	gen = last_gen + 1;
 
-	if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000%06x%04x", gen, local_host_id) != 18) {
-		log_error("Failed to format key string for host_id %d gen %u", local_host_id, gen);
+	if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000%06x%04x",
+			gen, (unsigned) local_host_id) != 18) {
+		log_error("Failed to format key string for host_id %d gen %u.", local_host_id, gen);
 		return 0;
 	}
 
 	if (!parse_prkey(our_key_buf, &our_key_val)) {
-		log_error("Failed to parse generated key %s", our_key_buf);
+		log_error("Failed to parse generated key %s.", our_key_buf);
 		return 0;
 	}
 
-	log_debug("our key from host_id %d gen %u: 0x%llx",
-		  local_host_id, gen, (unsigned long long)our_key_val);
+	log_debug("Our key from host_id %d gen %u: 0x%llx.",
+		  local_host_id, gen, (unsigned long long) our_key_val);
 
 	if (ret_key_buf)
 		memcpy(ret_key_buf, our_key_buf, PR_KEY_BUF_SIZE);
@@ -1270,20 +1280,20 @@ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_
 
 		key_gen = (our_key_val & 0xFFFFFF0000) >> 16;
 
-		log_debug("persist_key_update found local_host_id %d key 0x%llx gen %u",
-			  local_host_id, (unsigned long long)our_key_val, key_gen);
+		log_debug("persist_key_update found local_host_id %d key 0x%llx gen %u.",
+			  local_host_id, (unsigned long long) our_key_val, key_gen);
 		break;
 	}
 
 	if (want_gen == key_gen) {
 		/* Common case when using PR with shared VG. */
-		log_debug("persist_key_update: 0x%llx already contains gen %u",
-			  (unsigned long long)our_key_val, want_gen);
+		log_debug("persist_key_update: 0x%llx already contains gen %u.",
+			  (unsigned long long) our_key_val, want_gen);
 		return 1;
 	}
 
-	if (dm_snprintf(new_key_buf, PR_KEY_BUF_SIZE-1, "0x100000%06x%04x", want_gen, local_host_id) != 18) {
-		log_error("Failed to format key string for host_id %d gen %u", local_host_id, want_gen);
+	if (dm_snprintf(new_key_buf, PR_KEY_BUF_SIZE-1, "0x100000%06x%04x", want_gen, (unsigned) local_host_id) != 18) {
+		log_error("Failed to format key string for host_id %d gen %u.", local_host_id, want_gen);
 		return 0;
 	}
 
@@ -1292,7 +1302,8 @@ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_
 		return 0;
 	}
 
-	log_debug("persist_key_update: updated 0x%llx to %s", (unsigned long long)our_key_val, new_key_buf);
+	log_debug("persist_key_update: updated 0x%llx to %s.",
+		  (unsigned long long) our_key_val, new_key_buf);
 	return 1;
 }
 
@@ -1338,7 +1349,7 @@ int persist_read(struct cmd_context *cmd, struct volume_group *vg)
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation read failed: lvmpersist command error");
+		log_error("Persistent reservation read failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -1358,7 +1369,7 @@ static char *key_vals_to_str(struct cmd_context *cmd, int count, uint64_t *vals)
 		return NULL;
 
 	for (i = 0; i < count; i++) {
-		num = sprintf(str + off, "0x%llx ", (unsigned long long)vals[i]);
+		num = sprintf(str + off, "0x%llx ", (unsigned long long) vals[i]);
 		if (num < 0)
 			break;
 		off += num;
@@ -1418,7 +1429,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 
 	if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val)) {
-			log_error("Failed to parse local key %s", local_key);
+			log_error("Failed to parse local key %s.", local_key);
 			return 0;
 		}
 	}
@@ -1465,14 +1476,14 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 					our_key_val = found_key_val;
 				else if (our_key_val != found_key_val)
 					log_warn("WARNING: Unexpected local key 0x%llx (previous 0x%llx) on %s.",
-						 (unsigned long long)found_key_val, (unsigned long long)our_key_val, dev_name(dev));
+						 (unsigned long long) found_key_val, (unsigned long long) our_key_val, dev_name(dev));
 
 				found_key_gen = (found_key_val & 0xFFFFFF0000) >> 16;
 				if (!our_key_gen)
 					our_key_gen = found_key_gen;
 				else if (found_key_gen != our_key_gen)
 					log_warn("WARNING: Local key 0x%llx generation %u (expect %u) on %s.",
-						 (unsigned long long)found_key_val, found_key_gen, our_key_gen, dev_name(dev));
+						 (unsigned long long) found_key_val, found_key_gen, our_key_gen, dev_name(dev));
 
 				if (our_key_gen && (found_key_gen == our_key_gen))
 					our_key_val = found_key_val;
@@ -1496,7 +1507,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 					one_key_val = found_keys[0];
 				else if (one_key_val != found_keys[0])
 					log_warn("WARNING: Unexpected registered key 0x%llx (other 0x%llx) on %s.",
-						 (unsigned long long)found_keys[0], (unsigned long long)one_key_val,
+						 (unsigned long long) found_keys[0], (unsigned long long) one_key_val,
 						 dev_name(dev));
 			}
 
@@ -1544,7 +1555,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 				other_holder = holder;
 			else if (other_holder != holder)
 				log_warn("WARNING: Unexpected reservation holder 0x%llx (other 0x%llx) on %s.",
-					 (unsigned long long)holder, (unsigned long long)other_holder, dev_name(dev));
+					 (unsigned long long) holder, (unsigned long long) other_holder, dev_name(dev));
 		} else {
 			pv_res_other_type++;
 			log_warn("WARNING: Unexpected reservation type %s on %s.",
@@ -1565,7 +1576,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	if (our_key_val && local_host_id &&
 	    vg->lock_type && !strcmp(vg->lock_type, "sanlock") &&
 	    !lockd_vg_is_started(cmd, vg, &current_sanlock_gen))
-		log_warn("WARNING: Skipped key generation check (VG not started.)");
+		log_warn("WARNING: Skipped key generation check (VG not started).");
 	else if (our_key_gen != current_sanlock_gen)
 		log_warn("WARNING: Unexpected mismatch between local key generation %u and sanlock generation %u.",
 			 our_key_gen, current_sanlock_gen);
@@ -1575,19 +1586,23 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	pv_res_local = pv_res_we_local + pv_res_wear_local;
 	pv_res_other = pv_res_we_other + pv_res_wear_other;
 
-	log_debug("pr_check pv_count %d error_reg %d error_res %d no_reg %d reg %d res: none %d wear_local %d wear_other %d we_local %d we_other %d other_type %d",
+	log_debug("pr_check pv_count %d error_reg %d error_res %d no_reg %d reg %d res: none %d wear_local %d wear_other %d we_local %d we_other %d other_type %d.",
 		  pv_count, pv_error_reg, pv_error_res, pv_no_reg, pv_reg, pv_no_res, pv_res_wear_local, pv_res_wear_other, pv_res_we_local, pv_res_we_other, pv_res_other_type);
 
 	if (!pv_reg) {
 		if (local_host_id)
-			log_print_unless_silent("key for local host is not registered (host_id %d)", local_host_id);
+			log_print_unless_silent("key for local host is not registered (host_id %d)",
+						local_host_id);
 		else
-			log_print_unless_silent("key for local host is not registered (0x%llx)", (unsigned long long)our_key_val);
+			log_print_unless_silent("key for local host is not registered (0x%llx)",
+						(unsigned long long) our_key_val);
 	} else {
 		if (pv_reg == pv_count)
-			log_print_unless_silent("key for local host is registered: 0x%llx", (unsigned long long)our_key_val);
+			log_print_unless_silent("key for local host is registered: 0x%llx",
+						(unsigned long long) our_key_val);
 		else
-			log_print_unless_silent("key for local host is registered on %d of %d devices: 0x%llx", pv_reg, pv_count, (unsigned long long)our_key_val);
+			log_print_unless_silent("key for local host is registered on %d of %d devices: 0x%llx",
+						pv_reg, pv_count, (unsigned long long) our_key_val);
 
 		if (pv_no_reg)
 			log_warn("WARNING: Key for local host is missing on %d of %d devices.", pv_no_reg, pv_count);
@@ -1596,12 +1611,15 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	if (!vg_is_shared(vg) && one_key_val) {
 		if (pv_res_local && (one_key_val != our_key_val))
 			log_warn("WARNING: Unexpected mismatch between local key 0x%llx and one registered key 0x%llx.",
-				 (unsigned long long)our_key_val, (unsigned long long)one_key_val);
+				 (unsigned long long) our_key_val,
+				 (unsigned long long) one_key_val);
 		if (pv_res_other && other_holder && (one_key_val != other_holder))
 			log_warn("WARNING: Unexpected mismatch between holder key 0x%llx and one registered key 0x%llx.",
-				 (unsigned long long)other_holder, (unsigned long long)one_key_val);
+				 (unsigned long long) other_holder,
+				 (unsigned long long) one_key_val);
 		else if (one_key_val != our_key_val)
-			log_print_unless_silent("key for other host is registered: 0x%llx", (unsigned long long)one_key_val);
+			log_print_unless_silent("key for other host is registered: 0x%llx",
+						(unsigned long long) one_key_val);
 	}
 
 	if (vg_is_shared(vg)) {
@@ -1624,7 +1642,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 		if (pv_res_wear_local == pv_count)
 			log_print_unless_silent("reservation WEAR for local host");
 		else if (pv_res_wear_local)
-			log_print_unless_silent("reservation WEAR for local host on %d of %d devices.", pv_res_wear_local, pv_count);
+			log_print_unless_silent("reservation WEAR for local host on %d of %d devices", pv_res_wear_local, pv_count);
 
 		if (!pv_res_wear_local && pv_res_wear_other)
 			log_print_unless_silent("reservation WEAR for other host");
@@ -1639,7 +1657,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	if (pv_res_we_local == pv_count)
 		log_print_unless_silent("reservation WE for local host");
 	else if (pv_res_we_local)
-		log_print_unless_silent("reservation WE for local host on %d of %d devices.", pv_res_we_local, pv_count);
+		log_print_unless_silent("reservation WE for local host on %d of %d devices", pv_res_we_local, pv_count);
 
 	if (pv_res_we_other == pv_count)
 		log_print_unless_silent("reservation WE for other host");
@@ -1650,7 +1668,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 		log_error("PR is not started.");
 		return 0;
 	} else if (pv_res_local == pv_count) {
-		log_print_unless_silent("PR is started.");
+		log_print_unless_silent("PR is started");
 	} else {
 		log_error("PR is not started.");
 		return 0;
@@ -1659,7 +1677,8 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	/* key file is an optimization, not strictly required, so don't fail command here */
 	if (!read_key_file(cmd, vg, NULL, &file_key, NULL, NULL) || (file_key != our_key_val)) {
 		log_print_unless_silent("updating incorrect key file value 0x%llx to 0x%llx",
-					(unsigned long long)file_key, (unsigned long long)our_key_val);
+					(unsigned long long) file_key,
+					(unsigned long long) our_key_val);
 		if (!write_key_file(cmd, vg, our_key_val))
 			log_warn("WARNING: Failed to update key file.");
 	}
@@ -1700,7 +1719,7 @@ static int _run_stop(struct cmd_context *cmd, struct volume_group *vg, struct dm
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
 		if (!cleanup)
-			log_error("persistent reservation stop failed: lvmpersist command error");
+			log_error("Persistent reservation stop failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -1755,14 +1774,14 @@ int persist_finish_before(struct cmd_context *cmd, struct volume_group *vg, stru
 
 			if (!dev_find_key(cmd, dev, 0, 0, NULL, 0, NULL, 1, &found_key_count, &found_keys)) {
 				/* shouldn't happen */
-				log_error("Failed to get PR keys from %s", dev_name(dev));
+				log_error("Failed to get PR keys from %s.", dev_name(dev));
 				return 0;
 			}
 			if (found_keys)
 				dm_pool_free(cmd->mem, found_keys);
 			if (found_key_count > 1) {
-				log_error("Found %d PR keys on %s", found_key_count, dev_name(dev));
-				log_error("Stop PR for VG %s on other hosts (vgchange --persist stop)", vg->name);
+				log_error("Found %d PR keys on %s.", found_key_count, dev_name(dev));
+				log_error("Stop PR for VG %s on other hosts (vgchange --persist stop).", vg->name);
 				return 0;
 			}
 
@@ -1876,18 +1895,18 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 			continue;
 
 		if (!dev_read_reservation(cmd, dev, NULL, &prtype)) {
-			log_error("PR not found on %s", dev_name(dev));
+			log_error("PR not found on %s.", dev_name(dev));
 			return 0;
 		}
 
 		if (!prtype) {
 			log_error("PR is not started on %s.", dev_name(dev));
-			log_error("(Use lvmpersist to start PR on new devices from all hosts, prior to vgextend.)");
+			log_error("(Use lvmpersist to start PR on new devices from all hosts, prior to vgextend).");
 			return 0;
 		}
 
 		if (prtype != PR_TYPE_WEAR) {
-			log_error("PR type %s (expect WEAR) found on %s",
+			log_error("PR type %s (expect WEAR) found on %s.",
 				  prtype_to_str(prtype), dev_name(dev));
 			return 0;
 		}
@@ -1899,7 +1918,7 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 	 */
 
 	if (!dev_find_key(cmd, check_dev, 0, 0, NULL, 0, NULL, 1, &old_count, &old_vals)) {
-		log_error("PR keys not found on %s", dev_name(check_dev));
+		log_error("PR keys not found on %s.", dev_name(check_dev));
 		return 0;
 	}
 
@@ -1917,7 +1936,7 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 		new_vals = NULL;
 
 		if (!dev_find_key(cmd, dev, 0, 0, NULL, 0, NULL, 1, &new_count, &new_vals)) {
-			log_error("PR keys not found on %s", dev_name(dev));
+			log_error("PR keys not found on %s.", dev_name(dev));
 			error = 1;
 			goto next;
 		}
@@ -1934,20 +1953,20 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 			}
 		}
 		if (!found) {
-			log_error("Local PR key 0x%llx not found on %s",
-				  (unsigned long long)our_key_val, dev_name(dev));
+			log_error("Local PR key 0x%llx not found on %s.",
+				  (unsigned long long) our_key_val, dev_name(dev));
 			error = 1;
 			goto next;
 		}
 
 		if (new_count != old_count) {
-			log_error("PR keys incomplete (found %d of %d) on %s",
+			log_error("PR keys incomplete (found %d of %d) on %s.",
 				  new_count, old_count, dev_name(dev));
 			error = 1;
 			goto next;
 		}
 
-		log_debug("checking for %d PR keys on %s", new_count, dev_name(dev));
+		log_debug("checking for %d PR keys on %s.", new_count, dev_name(dev));
 
 		for (i = 0; i < old_count; i++) {
 			found = 0;
@@ -1958,8 +1977,8 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 				}
 			}
 			if (!found) {
-				log_error("PR key 0x%llx not found on %s",
-					  (unsigned long long)old_vals[i], dev_name(dev));
+				log_error("PR key 0x%llx not found on %s.",
+					  (unsigned long long) old_vals[i], dev_name(dev));
 				error = 1;
 			}
 		}
@@ -1967,7 +1986,7 @@ static int _persist_extend_shared(struct cmd_context *cmd, struct volume_group *
 		dm_pool_free(cmd->mem, new_vals);
 	}
 
-	log_debug("Found PR on all new devs");
+	log_debug("Found PR on all new devs.");
 	dm_pool_free(cmd->mem, old_vals);
 
 	return error ? 0 : 1;
@@ -1981,7 +2000,8 @@ int persist_upgrade_stop(struct cmd_context *cmd, struct volume_group *vg, uint6
 	if (!pv_list_to_dev_list(cmd->mem, &vg->pvs, &devs))
 		return_0;
 
-	if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val) < 0)
+	if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x%llx",
+			(unsigned long long) our_key_val) < 0)
 		return_0;
 
 	if (!_run_stop(cmd, vg, &devs, our_key_buf, 0))
@@ -2025,7 +2045,7 @@ int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_
 	if (!pv_list_to_dev_list(cmd->mem, &vg->pvs, &devs))
 		return_0;
 
-	log_debug("persist_upgrade_ex stop PR %s", our_key_buf);
+	log_debug("persist_upgrade_ex stop PR %s.", our_key_buf);
 
 	if (!_run_stop(cmd, vg, &devs, our_key_buf, 0))
 		return_0;
@@ -2034,19 +2054,21 @@ int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_
 		new_key_val = our_key_val;
 		memcpy(new_key_buf, our_key_buf, PR_KEY_BUF_SIZE);
 	} else if (local_host_id) {
-		if (dm_snprintf(new_key_buf, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(new_key_buf, sizeof(our_key_buf), "0x100000000000%04x",
+				(unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 		if (!parse_prkey(new_key_buf, &new_key_val)) {
-			log_error("Failed to parse generated key %s", new_key_buf);
+			log_error("Failed to parse generated key %s.", new_key_buf);
 			return 0;
 		}
 	}
 
 	pv_count = dm_list_size(&devs);
 
-	log_debug("persist_upgrade_ex start PR on %d devs with local key %llx", pv_count, (unsigned long long)new_key_val);
+	log_debug("persist_upgrade_ex start PR on %d devs with local key %llx.",
+		  pv_count, (unsigned long long) new_key_val);
 
 	args = 9 + pv_count*2;
 	if (vg->pr & VG_PR_PTPL)
@@ -2077,8 +2099,8 @@ int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation exclusive start failed: lvmpersist command error.");
-		log_error("(Use vgchange --persist stop to stop PR on other hosts.");
+		log_error("Persistent reservation exclusive start failed: lvmpersist command error.");
+		log_error("(Use vgchange --persist stop to stop PR on other hosts).");
 		return 0;
 	}
 
@@ -2114,25 +2136,28 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
 
 	if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val)) {
-			log_error("Failed to parse local key %s", local_key);
+			log_error("Failed to parse local key %s.", local_key);
 			return 0;
 		}
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val) < 0)
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x%llx",
+				(unsigned long long) our_key_val) < 0)
 			return_0;
 	} else if (local_host_id) {
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000000000%04x",
+				(unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 		if (!parse_prkey(our_key_buf, &our_key_val)) {
-			log_error("Failed to parse generated key %s", our_key_buf);
+			log_error("Failed to parse generated key %s.", our_key_buf);
 			return 0;
 		}
 	}
 
 	pv_count = dm_list_size(devs);
 
-	log_debug("start PR on %d devs with local key %llx", pv_count, (unsigned long long)our_key_val);
+	log_debug("Start PR on %d devs with local key %llx.",
+		  pv_count, (unsigned long long) our_key_val);
 
 	args = 9 + pv_count*2;
 	if (set_flags & SETPR_PTPL)
@@ -2163,7 +2188,7 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation start failed: lvmpersist command error.");
+		log_error("Persistent reservation start failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -2204,28 +2229,31 @@ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, ui
 	if (vg_is_sanlock(vg)) {
 		if (!local_host_id)
 			return_0;
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000%06x%04x", 1, local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000%06x%04x",
+				1U, (unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 		if (!parse_prkey(our_key_buf, &our_key_val)) {
-			log_error("Failed to parse generated key %s", our_key_buf);
+			log_error("Failed to parse generated key %s.", our_key_buf);
 			return 0;
 		}
 	} else if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val)) {
-			log_error("Failed to parse local key %s", local_key);
+			log_error("Failed to parse local key %s.", local_key);
 			return 0;
 		}
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val) < 0)
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x%llx",
+				(unsigned long long) our_key_val) < 0)
 			return_0;
 	} else if (local_host_id) {
-		if (dm_snprintf(our_key_buf, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(our_key_buf, sizeof(our_key_buf), "0x100000000000%04x",
+				(unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 		if (!parse_prkey(our_key_buf, &our_key_val)) {
-			log_error("Failed to parse generated key %s", our_key_buf);
+			log_error("Failed to parse generated key %s.", our_key_buf);
 			return 0;
 		}
 	} else {
@@ -2239,15 +2267,16 @@ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, ui
 	 */
 	if (local_key) {
 		if (!parse_prkey(local_key, &our_key_val_stop)) {
-			log_error("Failed to parse local key %s", local_key);
+			log_error("Failed to parse local key %s.", local_key);
 			return 0;
 		}
-		if (dm_snprintf(our_key_buf_stop, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)our_key_val_stop) < 0)
+		if (dm_snprintf(our_key_buf_stop, PR_KEY_BUF_SIZE-1, "0x%llx",
+				(unsigned long long) our_key_val_stop) < 0)
 			return_0;
 	} else if (local_host_id) {
 		/* The key used in persist_vgcreate_begin did not include gen 1. */
-		if (dm_snprintf(our_key_buf_stop, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", local_host_id) != 18) {
-			log_error("Failed to format key string for host_id %d", local_host_id);
+		if (dm_snprintf(our_key_buf_stop, PR_KEY_BUF_SIZE-1, "0x100000000000%04x", (unsigned) local_host_id) != 18) {
+			log_error("Failed to format key string for host_id %d.", local_host_id);
 			return 0;
 		}
 	}
@@ -2257,12 +2286,13 @@ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, ui
 
 	pv_count = dm_list_size(&devs);
 
-	log_debug("stop PR on %d devs with local key %s", pv_count, our_key_buf_stop);
+	log_debug("Stop PR on %d devs with local key %s.", pv_count, our_key_buf_stop);
 
 	if (!_run_stop(cmd, vg, &devs, our_key_buf_stop, 0))
-		log_warn("WARNING: failed to stop PR with key %s", our_key_buf_stop);
+		log_warn("WARNING: failed to stop PR with key %s.", our_key_buf_stop);
 
-	log_debug("start PR on %d devs with local key %llx", pv_count, (unsigned long long)our_key_val);
+	log_debug("Start PR on %d devs with local key %llx.",
+		  pv_count, (unsigned long long) our_key_val);
 
 	args = 9 + pv_count*2;
 	if (set_flags & SETPR_PTPL)
@@ -2293,7 +2323,7 @@ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, ui
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation start failed: lvmpersist command error.");
+		log_error("Persistent reservation start failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -2378,7 +2408,7 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 		if (!(dev = pvl->pv->dev))
 			continue;
 		if (!dev_allow_pr(cmd, dev)) {
-			log_error("persistent reservation not supported for device type %s", dev_name(dev));
+			log_error("Persistent reservation not supported for device type %s.", dev_name(dev));
 			return 0;
 		}
 	}
@@ -2402,7 +2432,8 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 	if (!pv_count)
 		return_0;
 
-	log_debug("start PR on %d new devs with local key %llx", pv_count, (unsigned long long)our_key_val);
+	log_debug("Start PR on %d new devs with local key %llx.",
+		  pv_count, (unsigned long long) our_key_val);
 
 	args = 9 + pv_count*2;
 
@@ -2433,7 +2464,7 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation start failed: lvmpersist command error");
+		log_error("Persistent reservation start failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -2446,7 +2477,7 @@ int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg)
 		found = 0;
 
 		if (!dev_find_key(cmd, dev, 0, our_key_val, &found, 0, NULL, 0, NULL, NULL)) {
-			log_error("Failed to read persistent reservation key on %s", dev_name(dev));
+			log_error("Failed to read persistent reservation key on %s.", dev_name(dev));
 			errors++;
 			continue;
 		}
@@ -2507,7 +2538,8 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 			log_error("Invalid removekey value: %s.", remkey);
 			return 0;
 		}
-		if (dm_snprintf(rem_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)rem_key_val) < 0)
+		if (dm_snprintf(rem_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx",
+				(unsigned long long) rem_key_val) < 0)
 			return_0;
 	}
 
@@ -2529,7 +2561,7 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 		if (!(dev = pvl->pv->dev))
 			continue;
 		if (!dev_allow_pr(cmd, dev)) {
-			log_error("persistent reservation not supported for device type %s", dev_name(dev));
+			log_error("Persistent reservation not supported for device type %s.", dev_name(dev));
 			return 0;
 		}
 		pv_count++;
@@ -2588,14 +2620,15 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 				break;
 
 			if (found_key_count) {
-				log_error("persistent reservation is started by another key (0x%llx)",
-					  (unsigned long long)found_key_print);
+				log_error("Persistent reservation is started by another key (0x%llx).",
+					  (unsigned long long) found_key_print);
 				return 0;
 			}
 		}
 	}
 
-	log_debug("start PR on %d devs with local key %llx", pv_count, (unsigned long long)our_key_val);
+	log_debug("Start PR on %d devs with local key %llx.",
+		  pv_count, (unsigned long long) our_key_val);
 
 	args = 9 + pv_count*2;
 	if (vg->pr & VG_PR_PTPL)
@@ -2643,21 +2676,21 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation start failed: lvmpersist command error.");
+		log_error("Persistent reservation start failed: lvmpersist command error.");
 		return 0;
 	}
 
 	/* Verify */
 
 	if (!vg_is_registered_by_key(cmd, vg, our_key_val, &partial_reg)) {
-		log_error("persistent reservation start failed: local key 0x%llx is not registered.",
-			  (unsigned long long)our_key_val);
+		log_error("Persistent reservation start failed: local key 0x%llx is not registered.",
+			  (unsigned long long) our_key_val);
 		goto out_stop;
 	}
 
 	if (partial_reg) {
-		log_error("persistent reservation start failed: local key 0x%llx is partially registered.",
-			  (unsigned long long)our_key_val);
+		log_error("Persistent reservation start failed: local key 0x%llx is partially registered.",
+			  (unsigned long long) our_key_val);
 		goto out_stop;
 	}
 
@@ -2671,26 +2704,26 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 		holder = 0;
 
 		if (!dev_read_reservation(cmd, dev, &holder, &prtype)) {
-			log_error("persistent reservation start failed: cannot read reservation on %s.",
+			log_error("Persistent reservation start failed: cannot read reservation on %s.",
 				  dev_name(dev));
 			goto out_stop;
 		}
 
 		if (!prtype) {
-			log_error("persistent reservation start failed: no reservation on %s.",
+			log_error("Persistent reservation start failed: no reservation on %s.",
 				  dev_name(dev));
 			goto out_stop;
 		}
 
 		if ((prtype != PR_TYPE_WE) && (prtype != PR_TYPE_WEAR)) {
-			log_error("persistent reservation start failed: wrong type (%s) on %s.",
+			log_error("Persistent reservation start failed: wrong type (%s) on %s.",
 				  prtype_to_str(prtype), dev_name(dev));
 			goto out_stop;
 		}
 
 		if ((prtype == PR_TYPE_WE) && (holder != our_key_val)) {
-			log_error("persistent reservation start failed: other holder (0x%llx) on %s.",
-				  (unsigned long long)holder, dev_name(dev));
+			log_error("Persistent reservation start failed: other holder (0x%llx) on %s.",
+				  (unsigned long long) holder, dev_name(dev));
 			goto out_stop;
 		}
 
@@ -2744,7 +2777,8 @@ int persist_remove(struct cmd_context *cmd, struct volume_group *vg, const char 
 		return 0;
 	}
 
-	if (dm_snprintf(rem_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx", (unsigned long long)rem_key_val) < 0)
+	if (dm_snprintf(rem_key_buf, PR_KEY_BUF_SIZE-1, "0x%llx",
+			(unsigned long long) rem_key_val) < 0)
 		return_0;
 
 	if (vg_is_sanlock(vg))
@@ -2791,7 +2825,7 @@ int persist_remove(struct cmd_context *cmd, struct volume_group *vg, const char 
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation remove failed: lvmpersist command error");
+		log_error("Persistent reservation remove failed: lvmpersist command error.");
 		return 0;
 	}
 
@@ -2854,7 +2888,7 @@ int persist_clear(struct cmd_context *cmd, struct volume_group *vg)
 	argv[++args] = NULL;
 
 	if (!exec_cmd(cmd, argv, &status, 1)) {
-		log_error("persistent reservation clear failed: lvmpersist command error");
+		log_error("Persistent reservation clear failed: lvmpersist command error.");
 		return 0;
 	}
 
