@@ -261,8 +261,10 @@ static int _daemon_read(struct dm_event_fifos *fifos,
 			msg->cmd = ntohl(header[0]);
 			bytes = 0;
 
-			if (!(size = msg->size = ntohl(header[1])))
-				break;
+			if (!(size = msg->size = ntohl(header[1]))) {
+				log_error("Missing event server response data.");
+				goto bad;
+			}
 
 			if (!(buf = msg->data = malloc(msg->size + 1))) {
 				log_error("Unable to allocate message data.");
@@ -403,7 +405,7 @@ int daemon_talk(struct dm_event_fifos *fifos,
 		free(msg->data);
 		msg->data = NULL;
 
-		if (!_daemon_read(fifos, msg)) {
+		if (!_daemon_read(fifos, msg) || !msg->data) {
 			stack;
 			return -EIO;
 		}
