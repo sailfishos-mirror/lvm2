@@ -991,7 +991,7 @@ static struct block *_new_block(struct bcache *cache, int di, block_address i, b
 				if (!_wait_all(cache))
 					return NULL;
 				if (dm_list_size(&cache->errored) >= cache->max_io) {
-					log_debug("bcache no new blocks for di %d index %u with >%d errors.",
+					log_debug("bcache no new blocks for di %d index %u with >%u errors.",
 						  di, (uint32_t) i, cache->max_io);
 					return NULL;
 				}

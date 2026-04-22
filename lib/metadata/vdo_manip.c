@@ -165,7 +165,7 @@ static int _sysfs_get_kvdo_value(const char *dm_name, const struct dm_info *dmin
 	ssize_t size;
 	int fd, r = 0;
 
-	if (dm_snprintf(path, sizeof(path), "%sblock/dm-%d/vdo/%s",
+	if (dm_snprintf(path, sizeof(path), "%sblock/dm-%u/vdo/%s",
 			dm_sysfs_dir(), dminfo->minor, vdo_param) < 0) {
 		log_debug("Failed to build kvdo path.");
 		return 0;
@@ -307,8 +307,8 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 					   vtp->index_memory_size_mb / 1024);
 	else
 		buf_pos += 1 + dm_snprintf(buf_pos, 30, "--uds-memory-size=0.%2u",
-					   (vtp->index_memory_size_mb < 512) ? 25 :
-					   (vtp->index_memory_size_mb < 768) ? 50 : 75);
+					   (vtp->index_memory_size_mb < 512) ? 25U :
+					   (vtp->index_memory_size_mb < 768) ? 50U : 75U);
 
 	if (vtp->use_sparse_index)
 		argv[++args] = "--uds-sparse";

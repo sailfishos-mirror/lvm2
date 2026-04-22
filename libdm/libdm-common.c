@@ -1316,7 +1316,7 @@ int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor
 			} else {
 				buf[len] = 0; /* kill \n and ensure \0 */
 				*read_ahead = atoi(buf) * 2;
-				log_debug_activation("%s (%d:%d): read ahead is %" PRIu32,
+				log_debug_activation("%s (%u:%u): read ahead is %u.",
 						     dev_name, major, minor, *read_ahead);
 			}
 
@@ -1366,8 +1366,8 @@ static int _set_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
 	int fd;
 	long read_ahead_long = (long) read_ahead;
 
-	log_debug_activation("%s (%d:%d): Setting read ahead to %" PRIu32, dev_name,
-			     major, minor, read_ahead);
+	log_debug_activation("%s (%u:%u): Setting read ahead to %u.",
+			     dev_name, major, minor, read_ahead);
 
 	/*
 	 * If we know the device number, use sysfs if we can.

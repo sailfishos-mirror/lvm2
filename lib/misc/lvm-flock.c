@@ -199,7 +199,7 @@ int lock_file(const char *file, uint32_t flags)
 	case LCK_UNLOCK:
 		return _release_lock(file, 1);
 	default:
-		log_error("Unrecognised lock type: %d", flags & LCK_TYPE_MASK);
+		log_error("Unrecognised lock type: %u.", flags & LCK_TYPE_MASK);
 		return 0;
 	}
 

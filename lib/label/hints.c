@@ -517,14 +517,14 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 		 * depend on hints. (This would also fail the following pvid check.)
 		 */
 		if (dev->flags & DEV_SCAN_NOT_READ) {
-			log_debug("Uncertain hint for unread device %d:%d %s",
+			log_debug("Uncertain hint for unread device %u:%u %s.",
 				  major(hint->devt), minor(hint->devt), dev_name(dev));
 			ret = 0;
 			continue;
 		}
 
 		if (strcmp(dev->pvid, hint->pvid)) {
-			log_debug("Invalid hint device %d:%d %s pvid %s had hint pvid %s",
+			log_debug("Invalid hint device %u:%u %s pvid %s had hint pvid %s.",
 				  major(hint->devt), minor(hint->devt), dev_name(dev),
 				  dev->pvid, hint->pvid);
 			ret = 0;
@@ -564,7 +564,7 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 			continue;
 
 		if (!(vginfo = lvmcache_vginfo_from_vgname(hint->vgname, NULL))) {
-			log_debug("Invalid hint device %d:%d %s pvid %s had vgname %s no VG info.",
+			log_debug("Invalid hint device %u:%u %s pvid %s had vgname %s no VG info.",
 				  major(hint->devt), minor(hint->devt), hint->name,
 				  hint->pvid, hint->vgname);
 			ret = 0;
@@ -572,7 +572,7 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 		}
 
 		if (!lvmcache_vginfo_has_pvid(vginfo, hint->pvid)) {
-			log_debug("Invalid hint device %d:%d %s pvid %s had vgname %s no PV info.",
+			log_debug("Invalid hint device %u:%u %s pvid %s had vgname %s no PV info.",
 				  major(hint->devt), minor(hint->devt), hint->name,
 				  hint->pvid, hint->vgname);
 			ret = 0;
@@ -924,7 +924,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 		}
 	}
 
-	log_debug("accept hints found %d", dm_list_size(hints));
+	log_debug("accept hints found %u.", dm_list_size(hints));
 	return 1;
 }
 
@@ -1104,7 +1104,7 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 		if (vgname && is_orphan_vg(vgname))
 			vgname = NULL;
 
-		fprintf(fp, "scan:%s pvid:%s devn:%d:%d vg:%s\n",
+		fprintf(fp, "scan:%s pvid:%s devn:%u:%u vg:%s\n",
 			dev_name(dev),
 			dev->pvid,
 			major(dev->dev), minor(dev->dev),
@@ -1497,7 +1497,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
 
 	_apply_hints(cmd, &hints_list, vgname, devs_in, devs_out);
 
-	log_debug("get_hints: applied using %d other %d vgname %s",
+	log_debug("get_hints: applied using %u other %u vgname %s.",
 		  dm_list_size(devs_out), dm_list_size(devs_in), vgname ?: "");
 
 	dm_list_splice(hints_out, &hints_list);

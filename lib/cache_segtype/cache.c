@@ -612,7 +612,7 @@ static int _cache_add_target_line(struct dev_manager *dm __attribute__((unused))
 	else
 		switch (setting_seg->cache_mode) {
 		default:
-			log_error(INTERNAL_ERROR "LV %s has unknown cache mode %d.",
+			log_error(INTERNAL_ERROR "LV %s has unknown cache mode %u.",
 				  display_lvname(seg->lv), setting_seg->cache_mode);
 			/* Fall through */
 		case CACHE_MODE_WRITETHROUGH:

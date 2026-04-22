@@ -258,7 +258,7 @@ int dm_dump_memory_debug(void)
 	}
 
 	if (_head)
-		log_very_verbose("%ld bytes leaked in total", tot);
+		log_very_verbose("%lu bytes leaked in total.", tot);
 
 	return 1;
 }

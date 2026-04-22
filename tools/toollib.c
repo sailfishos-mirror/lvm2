@@ -1072,7 +1072,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 {
 	if (*stripes < 1 || *stripes > MAX_STRIPES) {
 		log_error("Number of stripes (%u) must be between %u and %u.",
-			  *stripes, 1, MAX_STRIPES);
+			  *stripes, 1U, MAX_STRIPES);
 		return 0;
 	}
 
@@ -2011,7 +2011,7 @@ int get_and_validate_major_minor(const struct cmd_context *cmd,
 		if (*major != -1) {
 			log_warn("WARNING: Ignoring supplied major number %d - "
 				 "kernel assigns major numbers dynamically. "
-				 "Using major number %d instead.",
+				 "Using major number %u instead.",
 				 *major, cmd->dev_types->device_mapper_major);
 		}
 		/* Stay with dynamic major:minor if minor is not specified. */
@@ -4986,7 +4986,7 @@ int pvcreate_params_from_args(struct cmd_context *cmd, struct pvcreate_params *p
 
 	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
 		log_error("labelsector must be less than %lu.",
-			  LABEL_SCAN_SECTORS);
+			  (unsigned long) LABEL_SCAN_SECTORS);
 		return 0;
 	}
 

@@ -227,7 +227,7 @@ static int _mirrored_transient_status(struct dm_pool *mem, struct lv_segment *se
 		}
 		log_very_verbose("Status of log (%d:%d): %c.",
 				 info.major, info.minor,
-				 sm->logs[0].health);
+				 (int) sm->logs[0].health);
 		if (sm->logs[0].health != DM_STATUS_MIRROR_ALIVE) {
 			log->status |= PARTIAL_LV;
 			++failed;
@@ -245,7 +245,7 @@ static int _mirrored_transient_status(struct dm_pool *mem, struct lv_segment *se
 			if (info.major == (int)sm->devs[j].major &&
 			    info.minor == (int)sm->devs[j].minor) {
 				log_very_verbose("Status of image %u: %c.",
-						 i, sm->devs[j].health);
+						 i, (int) sm->devs[j].health);
 				if (sm->devs[j].health != DM_STATUS_MIRROR_ALIVE) {
 					seg_lv(seg, i)->status |= PARTIAL_LV;
 					++failed;

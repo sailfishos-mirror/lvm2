@@ -172,20 +172,20 @@ static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter
 		outf(f, "discards = \"%s\"", get_pool_discards_name(seg->discards));
 		break;
 	default:
-		log_error(INTERNAL_ERROR "Invalid discards value %d.", seg->discards);
+		log_error(INTERNAL_ERROR "Invalid discards value %u.", seg->discards);
 		return 0;
 	}
 
 	if (seg->zero_new_blocks == THIN_ZERO_YES)
 		outf(f, "zero_new_blocks = 1");
 	else if (seg->zero_new_blocks != THIN_ZERO_NO) {
-		log_error(INTERNAL_ERROR "Invalid zero new blocks value %d.",
+		log_error(INTERNAL_ERROR "Invalid zero new blocks value %u.",
 			  seg->zero_new_blocks);
 		return 0;
 	}
 
 	if (seg->crop_metadata != THIN_CROP_METADATA_UNSELECTED)
-		outf(f, "crop_metadata = %u", (seg->crop_metadata == THIN_CROP_METADATA_YES) ? 1 : 0);
+		outf(f, "crop_metadata = %u", (seg->crop_metadata == THIN_CROP_METADATA_YES) ? 1U : 0U);
 
 	dm_list_iterate_items(tmsg, &seg->thin_messages) {
 		/* Extra validation */
@@ -206,7 +206,7 @@ static int _thin_pool_text_export(const struct lv_segment *seg, struct formatter
 		if (!cnt)
 			outnl(f);
 
-		outf(f, "message%d {", ++cnt);
+		outf(f, "message%u {", ++cnt);
 		out_inc_indent(f);
 
 		switch (tmsg->type) {

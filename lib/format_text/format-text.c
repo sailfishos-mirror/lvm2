@@ -365,9 +365,10 @@ static uint64_t _next_rlocn_offset(struct volume_group *vg, struct raw_locn *rlo
 	 * metadata area, then start at beginning.
 	 */
 	if (mdah->size - old_last < alignment) {
-		log_debug_metadata("VG %s %u new metadata start align from %llu to beginning %u",
+		log_debug_metadata("VG %s %u new metadata start align from %llu to beginning %u.",
 				   vg->name, vg->seqno,
-				   (unsigned long long)(old_last + 1), MDA_HEADER_SIZE);
+				   (unsigned long long) (old_last + 1),
+				   (unsigned) MDA_HEADER_SIZE);
 		return MDA_HEADER_SIZE;
 	}
 
@@ -382,7 +383,7 @@ static uint64_t _next_rlocn_offset(struct volume_group *vg, struct raw_locn *rlo
 
 	new_start = next_start + adjust;
 
-	log_debug_metadata("VG %s %u new metadata start align from %llu to %llu (+%llu)",
+	log_debug_metadata("VG %s %u new metadata start align from %llu to %llu (+%llu).",
 			   vg->name, vg->seqno,
 			   (unsigned long long)next_start,
 			   (unsigned long long)new_start,
@@ -393,9 +394,9 @@ static uint64_t _next_rlocn_offset(struct volume_group *vg, struct raw_locn *rlo
 	 * alignment bytes of the end, then start at the beginning.
 	 */
 	if (new_start > mdah->size - alignment) {
-		log_debug_metadata("VG %s %u new metadata start align from %llu to beginning %u",
+		log_debug_metadata("VG %s %u new metadata start align from %llu to beginning %u.",
 				   vg->name, vg->seqno,
-				   (unsigned long long)new_start, MDA_HEADER_SIZE);
+				   (unsigned long long)new_start, (unsigned) MDA_HEADER_SIZE);
 		return MDA_HEADER_SIZE;
 	}
 
@@ -454,7 +455,7 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
 				&when, &desc);
 
 	if (!vg && (!use_previous_vg || !*use_previous_vg)) {
-		log_warn("WARNING: Failed to read metadata text at %llu off %llu size %llu VG %s on %s",
+		log_warn("WARNING: Failed to read metadata text at %llu off %llu size %llu VG %s on %s.",
 			 (unsigned long long)(area->start + rlocn->offset),
 			 (unsigned long long)rlocn->offset,
 			 (unsigned long long)rlocn->size,
@@ -464,7 +465,7 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
 		return NULL;
 	}
 
-	log_debug_metadata("Found metadata text at %llu off %llu size %llu VG %s on %s",
+	log_debug_metadata("Found metadata text at %llu off %llu size %llu VG %s on %s.",
 			   (unsigned long long)(area->start + rlocn->offset),
 			   (unsigned long long)rlocn->offset,
 			   (unsigned long long)rlocn->size,

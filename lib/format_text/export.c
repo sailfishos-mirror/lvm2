@@ -591,7 +591,7 @@ static int _print_pvs(struct formatter *f, struct volume_group *vg)
 }
 
 static int _print_segment(struct formatter *f, struct volume_group *vg,
-			  int count, struct lv_segment *seg)
+			  unsigned count, struct lv_segment *seg)
 {
 	char buffer[2048];
 
@@ -717,7 +717,7 @@ static int _print_lv(struct formatter *f, struct logical_volume *lv)
 {
 	struct lv_segment *seg;
 	char buffer[4096];
-	int seg_count;
+	unsigned seg_count;
 	uint64_t status = lv->status;
 
 	outnl(f);

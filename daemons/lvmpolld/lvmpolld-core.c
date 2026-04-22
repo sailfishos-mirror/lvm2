@@ -252,7 +252,7 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
 			     "has timed out");
 
 			if (timeout > MAX_TIMEOUT) {
-				ERROR(pdlv->ls, "%s: %s (PID %d) (no output for %d seconds)",
+				ERROR(pdlv->ls, "%s: %s (PID %d) (no output for %u seconds)",
 				      PD_LOG_PREFIX,
 				      "LVM2 cmd is unresponsive too long",
 				      pdlv->cmd_pid,

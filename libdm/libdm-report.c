@@ -2079,7 +2079,7 @@ static int _compare_selection_field(struct dm_report *rh,
 	int r = 0;
 
 	if (!f->sort_value) {
-		log_error("_compare_selection_field: field without value :%d",
+		log_error("_compare_selection_field: field without value :%u.",
 			  f->props->field_num);
 		return 0;
 	}

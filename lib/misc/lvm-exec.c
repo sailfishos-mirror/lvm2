@@ -87,22 +87,22 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
 
 	/* Parent */
 	if (wait4(pid, &status, 0, NULL) != pid) {
-		log_error("wait4 child process %u failed: %s", pid,
-			  strerror(errno));
+		log_error("wait4 child process %u failed: %s.",
+			  (unsigned) pid, strerror(errno));
 		return 0;
 	}
 
 	if (!WIFEXITED(status)) {
-		log_error("Child %u exited abnormally", pid);
+		log_error("Child %u exited abnormally.", (unsigned) pid);
 		return 0;
 	}
 
 	if (WEXITSTATUS(status)) {
 		if (rstatus) {
 			*rstatus = WEXITSTATUS(status);
-			log_verbose("%s failed: %u", argv[0], *rstatus);
+			log_verbose("%s failed: %d.", argv[0], *rstatus);
 		} else
-			log_error("%s failed: %u", argv[0], WEXITSTATUS(status));
+			log_error("%s failed: %d.", argv[0], WEXITSTATUS(status));
 		return 0;
 	}
 

@@ -256,7 +256,7 @@ void pvdisplay_segments(const struct physical_volume *pv)
 				  pvseg->lvseg->lv->vg->cmd->dev_dir,
 				  pvseg->lvseg->lv->vg->name,
 				  pvseg->lvseg->lv->name);
-			log_print("  Logical extents\t%d to %d",
+			log_print("  Logical extents\t%u to %u",
 				  pvseg->lvseg->le, pvseg->lvseg->le +
 				  pvseg->lvseg->len - 1);
 		} else
@@ -366,7 +366,7 @@ void lvdisplay_colons(const struct logical_volume *lv)
 	struct lvinfo info;
 	inkernel = lv_info(lv->vg->cmd, lv, 0, &info, 1, 0) && info.exists;
 
-	log_print("%s%s/%s:%s:%" PRIu64 ":%d:-1:%d:%" PRIu64 ":%d:-1:%d:%d:%d:%d",
+	log_print("%s%s/%s:%s:%" PRIu64 ":%d:-1:%u:%" PRIu64 ":%u:-1:%d:%u:%d:%d",
 		  lv->vg->cmd->dev_dir,
 		  lv->vg->name,
 		  lv->name,
@@ -557,7 +557,7 @@ int lvdisplay_full(struct cmd_context *cmd,
 		log_print("LV Integrity mode      %s",
 			  (seg->integrity_settings.mode[0] == 'B') ? "bitmap" :
 			  (seg->integrity_settings.mode[0] == 'J') ? "journal" : "");
-		log_print("LV Integrity blocksize %d",
+		log_print("LV Integrity blocksize %u",
 			  seg->integrity_settings.block_size);
 		if (inkernel &&
 		    lv_integrity_mismatches(lv->vg->cmd, lv, &integrity_mismatches))
@@ -709,7 +709,7 @@ void display_stripe(const struct lv_segment *seg, uint32_t s, const char *pre)
 			    "Missing");
 
 		if (seg_pv(seg, s))
-			log_print("%sPhysical extents\t%d to %d", pre,
+			log_print("%sPhysical extents\t%u to %u", pre,
 				  seg_pe(seg, s),
 				  seg_pe(seg, s) + seg->area_len - 1);
 		break;
@@ -719,7 +719,7 @@ void display_stripe(const struct lv_segment *seg, uint32_t s, const char *pre)
 			  seg_lv(seg, s)->name : "Missing");
 
 		if (seg_lv(seg, s))
-			log_print("%sLogical extents\t%d to %d", pre,
+			log_print("%sLogical extents\t%u to %u", pre,
 				  seg_le(seg, s),
 				  seg_le(seg, s) + seg->area_len - 1);
 		break;
@@ -765,8 +765,8 @@ void vgdisplay_full(const struct volume_group *vg)
 	log_print("VG Name               %s", vg->name);
 	log_print("System ID             %s", (vg->system_id && *vg->system_id) ? vg->system_id : "");
 	log_print("Format                %s", vg->fid->fmt->name);
-	log_print("Metadata Areas        %d", vg_mda_count(vg));
-	log_print("Metadata Sequence No  %d", vg->seqno);
+	log_print("Metadata Areas        %u", vg_mda_count(vg));
+	log_print("Metadata Sequence No  %u", vg->seqno);
 	access_str = vg->status & (LVM_READ | LVM_WRITE);
 	log_print("VG Access             %s%s%s%s",
 		  access_str == (LVM_READ | LVM_WRITE) ? "read/write" : "",
@@ -787,7 +787,7 @@ void vgdisplay_full(const struct volume_group *vg)
 
 	log_print("MAX LV                %u", vg->max_lv);
 	log_print("Cur LV                %u", vg_visible_lvs(vg));
-	log_print("Open LV               %u", lvs_in_vg_opened(vg));
+	log_print("Open LV               %d", lvs_in_vg_opened(vg));
 /****** FIXME Max LV Size
       log_print ( "MAX LV Size           %s",
                ( s1 = display_size ( LVM_LV_SIZE_MAX(vg))));
@@ -851,7 +851,7 @@ void vgdisplay_colons(const struct volume_group *vg)
 		return;
 	}
 
-	log_print("%s:%s:%" PRIu64 ":-1:%u:%u:%u:-1:%u:%u:%u:%" PRIu64 ":%" PRIu32
+	log_print("%s:%s:%" PRIu64 ":-1:%u:%u:%d:-1:%u:%u:%u:%" PRIu64 ":%" PRIu32
 		  ":%u:%u:%u:%s",
 		vg->name,
 		access_str,

@@ -824,14 +824,14 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 	/* Non-default lease size is requested. */
 	if ((sector_size == 4096) && opt_align_mb && (opt_align_mb != 8)) {
 		if (opt_align_mb != 1 && opt_align_mb != 2 && opt_align_mb != 4) {
-			log_error("S %s init_vg_sanlock invalid align input %u", ls_name, opt_align_mb);
+			log_error("S %s init_vg_sanlock invalid align input %d", ls_name, opt_align_mb);
 			return -EARGS;
 		}
 		align_mb = opt_align_mb;
 		align_size = align_mb * ONE_MB;
 	}
 
-	log_debug("S %s init_vg_san %s dev_size %llu sector_size %u align_size %u",
+	log_debug("S %s init_vg_san %s dev_size %llu sector_size %d align_size %d",
 		  ls_name, disk.path, (unsigned long long)dev_size, sector_size, align_size);
 
 	strcpy_name_len(ss.name, ls_name, SANLK_NAME_LEN);

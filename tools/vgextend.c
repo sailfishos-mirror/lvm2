@@ -115,7 +115,8 @@ static int _vgextend_single(struct cmd_context *cmd, const char *vg_name,
 		}
 	}
 
-	log_verbose("Volume group \"%s\" will be extended by %d new physical volumes", vg_name, pp->pv_count);
+	log_verbose("Volume group \"%s\" will be extended by %u new physical volumes.",
+		    vg_name, pp->pv_count);
 
 	if (!vg_write(vg) || !vg_commit(vg))
 		goto_out;

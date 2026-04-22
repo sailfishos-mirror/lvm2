@@ -832,9 +832,9 @@ static int _get_default_region_size(struct cmd_context *cmd)
 		return mrs;
 
 	if (mrs != rrs)
-		log_verbose("Overriding default 'mirror_region_size' setting"
-			    " with 'raid_region_size' setting of %u kiB",
-			    rrs / 2);
+		log_verbose("Overriding default 'mirror_region_size' setting "
+			    "with 'raid_region_size' setting of %s.",
+			    display_size(cmd, rrs));
 
 	return rrs;
 }
@@ -859,14 +859,14 @@ uint32_t get_default_region_size(struct cmd_context *cmd)
 
 	if (!is_power_of_2(region_size)) {
 		region_size = _round_down_pow2(region_size);
-		log_verbose("Reducing region size to %u kiB (power of 2).",
-			    region_size / 2);
+		log_verbose("Reducing region size to %s (power of 2).",
+			    display_size(cmd, region_size));
 	}
 
 	if (region_size % (pagesize >> SECTOR_SHIFT)) {
 		region_size = DEFAULT_RAID_REGION_SIZE * 2;
-		log_verbose("Using default region size %u kiB (multiple of page size).",
-			    region_size / 2);
+		log_verbose("Using default region size %s (multiple of page size).",
+			    display_size(cmd, region_size));
 	}
 
 	return (uint32_t) region_size;
@@ -884,7 +884,7 @@ int add_seg_to_segs_using_this_lv(struct logical_volume *lv,
 		}
 	}
 
-	log_very_verbose("Adding %s:" FMTu32 " as a user of %s.",
+	log_very_verbose("Adding %s:%u as a user of %s.",
 			 seg->lv->name, seg->le, lv->name);
 
 	if (!(sl = dm_pool_zalloc(lv->vg->vgmem, sizeof(*sl)))) {
@@ -947,7 +947,7 @@ struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *l
 
 		if (sl->count != 1) {
 			log_error("%s is expected to have only one segment using it, "
-				  "while %s:" FMTu32 " uses it %d times.",
+				  "while %s:%u uses it %u times.",
 				  display_lvname(lv), display_lvname(sl->seg->lv),
 				  sl->seg->le, sl->count);
 			return NULL;
@@ -956,7 +956,7 @@ struct lv_segment *get_only_segment_using_this_lv(const struct logical_volume *l
 		return sl->seg;
 	}
 
-	log_error("%s is expected to have only one segment using it, while it has %d.",
+	log_error("%s is expected to have only one segment using it, while it has %u.",
 		  display_lvname(lv), dm_list_size(&lv->segs_using_this_lv));
 
 	return NULL;
@@ -5325,7 +5325,7 @@ static int _lvresize_extents_from_percent(const struct logical_volume *lv,
 	uint32_t pv_extent_count;
 	uint32_t old_extents = lp->extents;
 
-	log_debug("lvresize_extents_from_percent type %d extents %u percent_value %u",
+	log_debug("lvresize_extents_from_percent type %u extents %u percent_value %u",
 		  lp->percent, lp->extents, lp->percent_value);
 
 	switch (lp->percent) {
@@ -5568,13 +5568,13 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 
 			if (!lp->stripe_size && lp->stripes > 1) {
 				if (seg_stripesize) {
-					log_print_unless_silent("Using stripesize of last segment %s",
+					log_print_unless_silent("Using stripesize of last segment %s.",
 								display_size(cmd, (uint64_t) seg_stripesize));
 					lp->stripe_size = seg_stripesize;
 				} else {
 					lp->stripe_size =
 						find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
-					log_print_unless_silent("Using default stripesize %s",
+					log_print_unless_silent("Using default stripesize %s.",
 								display_size(cmd, (uint64_t) lp->stripe_size));
 				}
 			}
@@ -5722,7 +5722,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 	}
 
 	if ((lp->extents == existing_logical_extents) && !lp->use_policies) {
-		log_print_unless_silent("New size (%d extents) matches existing size (%d extents).",
+		log_print_unless_silent("New size (%u extents) matches existing size (%u extents).",
 					lp->extents, existing_logical_extents);
 		if (lp->resize == LV_ANY)
 			lp->resize = LV_EXTEND; /* lets pretend zero size extension */
@@ -5751,14 +5751,14 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 		     !lp->percent ||
 		     (vg->free_count >= (lp->extents - existing_logical_extents - size_rest +
 					 stripes_extents)))) {
-			log_print_unless_silent("Rounding size (%d extents) up to stripe "
-						"boundary size for segment (%d extents).",
+			log_print_unless_silent("Rounding size (%u extents) up to stripe "
+						"boundary size for segment (%u extents).",
 						lp->extents,
 						lp->extents - size_rest + stripes_extents);
 			lp->extents = lp->extents - size_rest + stripes_extents;
 		} else if (size_rest) {
-			log_print_unless_silent("Rounding size (%d extents) down to stripe "
-						"boundary size for segment (%d extents)",
+			log_print_unless_silent("Rounding size (%u extents) down to stripe "
+						"boundary size for segment (%u extents).",
 						lp->extents, lp->extents - size_rest);
 			lp->extents = lp->extents - size_rest;
 		}
@@ -5767,22 +5767,22 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 	/* Final sanity checking */
 	if (lp->extents < existing_logical_extents) {
 		if (lp->resize == LV_EXTEND) {
-			log_error("New size given (%d extents) not larger "
-				  "than existing size (%d extents)",
+			log_error("New size given (%u extents) not larger "
+				  "than existing size (%u extents).",
 				  lp->extents, existing_logical_extents);
 			return 0;
 		}
 		lp->resize = LV_REDUCE;
 	} else if (lp->extents > existing_logical_extents) {
 		if (lp->resize == LV_REDUCE) {
-			log_error("New size given (%d extents) not less than "
-				  "existing size (%d extents)", lp->extents,
+			log_error("New size given (%u extents) not less than "
+				  "existing size (%u extents).", lp->extents,
 				  existing_logical_extents);
 			return 0;
 		}
 		lp->resize = LV_EXTEND;
 	} else if ((lp->extents == existing_logical_extents) && !lp->use_policies) {
-		log_print_unless_silent("New size (%d extents) matches existing size (%d extents)",
+		log_print_unless_silent("New size (%u extents) matches existing size (%u extents).",
 					lp->extents, existing_logical_extents);
 		if (lp->resize == LV_ANY)
 			lp->resize = LV_EXTEND;
@@ -5818,7 +5818,7 @@ static int _lv_reduce_vdo_discard(struct cmd_context *cmd,
 
 	if (dm_snprintf(name, sizeof(name), "%s%s/%s", cmd->dev_dir,
 			vg->name, lv->name) < 0) {
-		log_error("Name too long - device not discarded (%s)", lv->name);
+		log_error("Name too long - device not discarded (%s).", lv->name);
 		return 0;
 	}
 
@@ -5925,7 +5925,7 @@ static int _lv_resize_check_type(struct logical_volume *lv,
 	}
 
 	if (lv_is_raid_image(lv) || lv_is_raid_metadata(lv)) {
-		log_error("Cannot resize a RAID %s directly for %s",
+		log_error("Cannot resize a RAID %s directly for %s.",
 			  lv_is_raid_image(lv) ? "image" : "metadata area",
 			  display_lvname(lv));
 		return 0;
@@ -8437,20 +8437,20 @@ int remove_layer_from_lv(struct logical_volume *lv,
 	 *    So we need to fix mirror code first, then switch...
 	 */
 	if (dm_list_size(&parent_lv->segments) != 1) {
-		log_error("Invalid %d segments in %s, expected only 1.",
+		log_error("Invalid %u segments in %s, expected only 1.",
 			  dm_list_size(&parent_lv->segments),
 			  display_lvname(parent_lv));
 		return 0;
 	}
 
 	if (parent_seg->area_count != 1) {
-		log_error("Invalid %d area count(s) in %s, expected only 1.",
+		log_error("Invalid %u area count(s) in %s, expected only 1.",
 			  parent_seg->area_count, display_lvname(parent_lv));
 		return 0;
 	}
 
 	if (seg_type(parent_seg, 0) != AREA_LV) {
-		log_error("Invalid seg_type %d in %s, expected LV.",
+		log_error("Invalid seg_type %u in %s, expected LV.",
 			  seg_type(parent_seg, 0), display_lvname(parent_lv));
 		return 0;
 	}
@@ -9420,7 +9420,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 
 	if ((lp->alloc != ALLOC_ANYWHERE) && (lp->stripes > dm_list_size(lp->pvh))) {
 		log_error("Number of stripes (%u) must not exceed "
-			  "number of physical volumes (%d)", lp->stripes,
+			  "number of physical volumes (%u)", lp->stripes,
 			  dm_list_size(lp->pvh));
 		return NULL;
 	}
@@ -9478,8 +9478,8 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 				size = ((uint64_t)vg->extent_size * lp->extents + size - 1) /
 					size * size / vg->extent_size;
 				if (size != lp->extents) {
-					log_print_unless_silent("Rounding size (%d extents) up to chunk boundary "
-								"size (%d extents).", lp->extents, size);
+					log_print_unless_silent("Rounding size (%u extents) up to chunk boundary "
+								"size (%u extents).", lp->extents, size);
 					lp->extents = size;
 				}
 			}

@@ -1008,7 +1008,7 @@ static int _node_has_closed_parents(struct dm_tree_node *node,
 			continue;
 
 		if (info.open_count) {
-			log_debug_activation("Node %s %d:%d has open_count %d", uuid,
+			log_debug_activation("Node %s %u:%u has open_count %d.", uuid,
 					     dinfo->major, dinfo->minor, info.open_count);
 			return 0;
 		}
@@ -1712,8 +1712,8 @@ static int _vdo_node_send_messages(struct dm_tree_node *dnode,
 				   int send)
 {
 	struct dm_vdo_status_parse_result vdo_status;
-	int send_compression_message = 0;
-	int send_deduplication_message = 0;
+	unsigned send_compression_message = 0;
+	unsigned send_deduplication_message = 0;
 	int r = 0;
 
 	if (!_vdo_get_status(dnode, &vdo_status))
@@ -2735,7 +2735,7 @@ static int _cache_emit_segment_line(struct dm_task *dmt,
 	if (seg->policy_settings)
 		for (cn = seg->policy_settings->child; cn; cn = cn->sib)
 			if (cn->v) /* Skip deleted entry */
-				EMIT_PARAMS(pos, " %s %" PRIu64, cn->key, cn->v->v.i);
+				EMIT_PARAMS(pos, " %s %" PRIu64, cn->key, (uint64_t) cn->v->v.i);
 
 	return 1;
 }
@@ -3036,7 +3036,7 @@ static int _thin_pool_emit_segment_line(struct dm_task *dmt,
 	if (!_build_dev_string(pool, sizeof(pool), seg->pool))
 		return_0;
 
-	EMIT_PARAMS(pos, "%s %s %d %" PRIu64 " %d%s%s%s%s%s", metadata, pool,
+	EMIT_PARAMS(pos, "%s %s %u %" PRIu64 " %d%s%s%s%s%s", metadata, pool,
 		    seg->data_block_size, seg->low_water_mark, features,
 		    seg->skip_block_zeroing ? " skip_block_zeroing" : "",
 		    seg->ignore_discard ? " ignore_discard" : "",
@@ -3068,7 +3068,7 @@ static int _thin_emit_segment_line(struct dm_task *dmt,
 			return_0;
 	}
 
-	EMIT_PARAMS(pos, "%s %d%s", pool, seg->device_id, external);
+	EMIT_PARAMS(pos, "%s %u%s", pool, seg->device_id, external);
 
 	return 1;
 }
@@ -3098,7 +3098,7 @@ static int _emit_segment_line(struct dm_task *dmt, uint32_t major,
 			return_0;
 		if (!_build_dev_string(cowbuf, sizeof(cowbuf), seg->cow))
 			return_0;
-		EMIT_PARAMS(pos, "%s %s %c %d", originbuf, cowbuf,
+		EMIT_PARAMS(pos, "%s %s %c %u", originbuf, cowbuf,
 			    seg->persistent ? 'P' : 'N', seg->chunk_size);
 		break;
 	case SEG_SNAPSHOT_ORIGIN:

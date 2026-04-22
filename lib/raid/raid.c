@@ -30,14 +30,14 @@ static void _raid_display(const struct lv_segment *seg)
 	unsigned s;
 
 	for (s = 0; s < seg->area_count; ++s) {
-		log_print("  Raid Data LV%2d", s);
+		log_print("  Raid Data LV%2u", s);
 		display_stripe(seg, s, "    ");
 	}
 
 	if (seg->meta_areas)
 		for (s = 0; s < seg->area_count; ++s)
 			if (seg_metalv(seg, s))
-				log_print("  Raid Metadata LV%2d\t%s", s, seg_metalv(seg, s)->name);
+				log_print("  Raid Metadata LV%2u\t%s", s, seg_metalv(seg, s)->name);
 
 	log_print(" ");
 }
@@ -336,8 +336,8 @@ static int _raid_add_target_line(struct dev_manager *dm,
 	 * It is not strictly a userspace limitation.
 	 */
 	if (seg->area_count > DEFAULT_RAID_MAX_IMAGES) {
-		log_error("Unable to handle more than %u devices in a "
-			  "single RAID array", DEFAULT_RAID_MAX_IMAGES);
+		log_error("Unable to handle more than %u devices in a single RAID array.",
+			  (unsigned) DEFAULT_RAID_MAX_IMAGES);
 		return 0;
 	}
 

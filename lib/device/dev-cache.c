@@ -1505,7 +1505,7 @@ int dev_cache_exit(void)
 		radix_tree_iterate(_cache.names, NULL, 0, &vt.it);
 
 		if (vt.num_open)
-			log_error(INTERNAL_ERROR "%d device(s) were left open and have been closed.",
+			log_error(INTERNAL_ERROR "%u device(s) were left open and have been closed.",
 				  vt.num_open);
 	}
 
@@ -2381,7 +2381,7 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
 	 * sda
 	 */
 	if (major_is_scsi_device(cmd->dev_types, major)) {
-		if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/device/block",
+		if (dm_snprintf(path, sizeof(path), "%sdev/block/%u:%u/device/block",
 				dm_sysfs_dir(), major, minor) < 0) {
 			return NULL;
 		}
@@ -2402,7 +2402,7 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
 			log_sys_debug("closedir", path);
 
 		if (devname[0]) {
-			log_debug("Found %s for %d:%d from sys", devname, major, minor);
+			log_debug("Found %s for %u:%u from sys.", devname, major, minor);
 			return _strdup(devname);
 		}
 		return NULL;
@@ -2413,7 +2413,7 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
 	 * mpatha
 	 */
 	if (major == cmd->dev_types->device_mapper_major) {
-		if (dm_snprintf(path, sizeof(path), "%sdev/block/%d:%d/dm/name",
+		if (dm_snprintf(path, sizeof(path), "%sdev/block/%u:%u/dm/name",
 				dm_sysfs_dir(), major, minor) < 0) {
 			return NULL;
 		}
@@ -2427,7 +2427,7 @@ static char *_get_devname_from_devno(struct cmd_context *cmd, dev_t devno)
 		if (dm_snprintf(devname, sizeof(devname), "%s/%s", dm_dir(), namebuf) < 0)
 			return_NULL;
 
-		log_debug("Found %s for %d:%d from sys dm.", devname, major, minor);
+		log_debug("Found %s for %u:%u from sys dm.", devname, major, minor);
 
 		return _strdup(devname);
 	}
@@ -2461,7 +2461,7 @@ try_partition:
 		log_sys_debug("fclose", _partitions);
 
 	if (devname[0]) {
-		log_debug("Found %s for %d:%d from %s", devname, major, minor, _partitions);
+		log_debug("Found %s for %u:%u from %s.", devname, major, minor, _partitions);
 		return _strdup(devname);
 	}
 

@@ -1000,7 +1000,7 @@ void dm_event_log(const char *subsys, int level, const char *file,
 				now / 60, now % 60, now_nsec / 1000,
 				// TODO: Maybe use shorter ID
 				// ((int)(pthread_self()) >> 6) & 0xffff,
-				(int)pthread_self(), subsys,
+				(unsigned) pthread_self(), subsys,
 				(_debug_level > 3) ? "" : indent);
 		}
 		if (_debug_level > 3)

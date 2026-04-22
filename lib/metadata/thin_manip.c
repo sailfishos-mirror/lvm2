@@ -511,7 +511,7 @@ int thin_pool_prepare_metadata(struct logical_volume *metadata_lv,
 
 	/* Build path for 'thin_restore' app with this 'hidden/deleted' tmpfile */
 	(void) dm_snprintf(md_path, sizeof(md_path), "%s/%u/fd/%u",
-			   cmd->proc_dir, getpid(), fileno(f));
+			   cmd->proc_dir, (unsigned) getpid(), (unsigned) fileno(f));
 
 	argv[++args] = "-i";
 	argv[++args] = md_path;

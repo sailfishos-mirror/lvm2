@@ -1053,7 +1053,7 @@ static void write_adopt_file(void)
 	adopt_update_count++;
 
 	t = time(NULL);
-	fprintf(fp, "lvmlockd adopt_version %u.%u pid %d updates %u %s",
+	fprintf(fp, "lvmlockd adopt_version %d.%d pid %d updates %u %s",
 		ADOPT_VERSION_MAJOR, ADOPT_VERSION_MINOR, getpid(), adopt_update_count, ctime(&t));
 
 	pthread_mutex_lock(&lockspaces_mutex);
@@ -5640,7 +5640,7 @@ static int print_resource(struct resource *r, const char *prefix, int pos, int l
 			"name=%s "
 			"type=%s "
 			"mode=%s "
-			"sh_count=%d "
+			"sh_count=%u "
 			"version=%u\n",
 			prefix,
 			r->name,
@@ -6201,12 +6201,12 @@ static void *client_thread_main(void *arg_in)
 				 */
 
 				if (cl->poll_ignore) {
-					log_debug("client close %d pi %d fd %d",
+					log_debug("client close %u pi %d fd %d",
 						  cl->id, cl->pi, cl->fd);
 					/* assert cl->pi != -1 */
 					/* assert pollfd[pi].fd == FD_IGNORE */
 					if (close(cl->fd))
-						log_error("client close %d pi %d fd %d failed",
+						log_error("client close %u pi %d fd %d failed",
 							  cl->id, cl->pi, cl->fd);
 					rem_pollfd(cl->pi);
 					cl->pi = -1;
@@ -6215,7 +6215,7 @@ static void *client_thread_main(void *arg_in)
 				} else {
 					/* main thread should have closed */
 					if (cl->pi != -1 || cl->fd != -1) {
-						log_error("client %d bad state pi %d fd %d",
+						log_error("client %u bad state pi %d fd %d",
 							  cl->id, cl->pi, cl->fd);
 					}
 				}
@@ -7509,7 +7509,7 @@ static int main_loop(daemon_state *ds_arg)
 
 	openlog("lvmlockd", LOG_CONS | LOG_PID, LOG_DAEMON);
 #ifdef LOCKDSANLOCK_SUPPORT
-	log_warn("lvmlockd started " LVM_VERSION " sanlock_support %u", LOCKDSANLOCK_SUPPORT);
+	log_warn("lvmlockd started " LVM_VERSION " sanlock_support %d", LOCKDSANLOCK_SUPPORT);
 #else
 	log_warn("lvmlockd started " LVM_VERSION " sanlock_support no");
 #endif
@@ -7748,7 +7748,7 @@ int main(int argc, char *argv[])
 			exit(EXIT_SUCCESS);
 		case 'V':
 #ifdef LOCKDSANLOCK_SUPPORT
-			printf("lvmlockd version: " LVM_VERSION " sanlock_support %u\n", LOCKDSANLOCK_SUPPORT);
+			printf("lvmlockd version: " LVM_VERSION " sanlock_support %d\n", LOCKDSANLOCK_SUPPORT);
 #else
 			printf("lvmlockd version: " LVM_VERSION " sanlock_support no\n");
 #endif

@@ -46,7 +46,8 @@ static void _daemon_get_cmdline(pid_t pid, char *cmdline, size_t size)
 	char buf[sizeof(DEFAULT_PROC_DIR) + 32];
 	int fd, n = 0;
 
-	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/%u/cmdline", pid);
+	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/%u/cmdline",
+		 (unsigned) pid);
 	/* FIXME Use generic read code. */
 	if ((fd = open(buf, O_RDONLY)) >= 0) {
 		if ((n = read(fd, cmdline, size - 1)) < 0) {
@@ -63,7 +64,8 @@ static void _daemon_get_filename(int fd, char *filename, size_t size)
 	char buf[sizeof(DEFAULT_PROC_DIR) + 32];
 	ssize_t lsize;
 
-	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/self/fd/%u", fd);
+	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/self/fd/%u",
+		 (unsigned) fd);
 
 	if ((lsize = readlink(buf, filename, size - 1)) == -1)
 		filename[0] = '\0';

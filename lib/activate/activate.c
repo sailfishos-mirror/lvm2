@@ -1936,7 +1936,7 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume 
 	 */
 	if (laopts->skip_in_use && lv_is_thin_pool(lv) &&
 	    lv_info(lv->vg->cmd, lv, 1, &info, 1, 0) && (info.open_count > 1)) {
-		log_debug_activation("Skipping unmonitor of opened %s (open:%d)",
+		log_debug_activation("Skipping unmonitor of opened %s (open:%u)",
 				     display_lvname(lv), info.open_count);
 		return 1;
 	}

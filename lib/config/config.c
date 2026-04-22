@@ -1731,9 +1731,9 @@ static int _copy_one_line(const char *comment, char *line, int *pos, int len)
 static int _get_config_node_version(uint16_t version_enc, char *version)
 {
 	if (dm_snprintf(version, 9, "%u.%u.%u",
-			(version_enc & 0xE000) >> 13,
-			(version_enc & 0x1E00) >> 9,
-			(version_enc & 0x1FF)) == -1) {
+			(unsigned)(version_enc & 0xE000) >> 13,
+			(unsigned)(version_enc & 0x1E00) >> 9,
+			(unsigned)(version_enc & 0x1FF)) == -1) {
 		log_error("_get_config_node_version: couldn't create version string");
 		return 0;
 	}

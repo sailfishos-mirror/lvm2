@@ -720,7 +720,7 @@ static int _create_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg,
 
 	lv_size_bytes = (uint64_t)total_extents * extent_bytes;
 	num_mb = lv_size_bytes / ONE_MB_IN_BYTES;
-	log_debug("Creating lvmlock LV for sanlock with size %um %llub %u extents",
+	log_debug("Creating lvmlock LV for sanlock with size %dm %llub %u extents.",
 		  num_mb, (unsigned long long)lv_size_bytes, lp.extents);
 
 	dm_list_init(&lp.tags);

@@ -641,7 +641,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 	dm_list_init(&wait_devs);
 	dm_list_init(&done_devs);
 
-	log_debug_devs("Scanning %d devices for VG info", dm_list_size(devs));
+	log_debug_devs("Scanning %u devices for VG info.", dm_list_size(devs));
 
  scan_more:
 	rem_prefetches = bcache_max_prefetches(scan_bcache);
@@ -1208,7 +1208,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 	if (vgname) {
 		metadata_pv_count = lvmcache_pvsummary_count(vgname);
 		if (metadata_pv_count > dm_list_size(&devs)) {
-			log_debug("Incomplete PV list from online files %d metadata %d.",
+			log_debug("Incomplete PV list from online files %u metadata %u.",
 				  dm_list_size(&devs), metadata_pv_count);
 			_clear_scan_state(cmd, &devs_drop);
 			_clear_scan_state(cmd, &devs);
@@ -1434,7 +1434,7 @@ int label_scan(struct cmd_context *cmd)
 	 */
 	if (using_hints) {
 		if (!validate_hints(cmd, &hints_list)) {
-			log_debug("Will scan %d remaining devices", dm_list_size(&all_devs));
+			log_debug("Will scan %u remaining devices", dm_list_size(&all_devs));
 			_scan_list(cmd, cmd->filter, &all_devs, 0, NULL);
 			/* scan_devs are the devs that have been scanned */
 			dm_list_splice(&scan_devs, &all_devs);

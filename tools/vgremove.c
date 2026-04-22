@@ -52,7 +52,7 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
 	if (lv_count) {
 		if (force == PROMPT) {
 			if ((missing = vg_missing_pv_count(vg)))
-				log_warn("WARNING: %d physical volumes are currently missing "
+				log_warn("WARNING: %u physical volumes are currently missing "
 					 "from the system.", missing);
 			if (yes_no_prompt("Do you really want to remove volume "
 					  "group \"%s\" containing %u "

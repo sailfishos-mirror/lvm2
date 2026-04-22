@@ -311,12 +311,12 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, size_t sz, int 
 		return 0;
 	}
 
-	r = sscanf(major_minor_str, "%d:%d", &major, &minor);
+	r = sscanf(major_minor_str, "%u:%u", &major, &minor);
 	if (r != 2)
 		return -EINVAL;
 
 	/* FIXME dm_dir() */
-	LOG_DBG("Checking /dev/mapper for device %d:%d", major, minor);
+	LOG_DBG("Checking /dev/mapper for device %u:%u", major, minor);
 	/* Check /dev/mapper dir */
 	dp = opendir("/dev/mapper");
 	if (!dp)
@@ -353,7 +353,7 @@ static int find_disk_path(char *major_minor_str, char *path_rtn, size_t sz, int 
 			strerror(errno));
 
 	/* FIXME Find out why this was here and deal with underlying problem. */
-	LOG_DBG("Path not found for %d/%d", major, minor);
+	LOG_DBG("Path not found for %u/%u", major, minor);
 	return -ENOENT;
 
 	// LOG_DBG("Creating /dev/mapper/%d-%d", major, minor);
@@ -1465,7 +1465,7 @@ static int disk_status_info(struct log_c *lc, struct dm_ulog_request *rq)
 	}
 
 	r = snprintf(data, DM_ULOG_REQUEST_DATA_SIZE,
-		     "3 clustered-disk %d:%d %c",
+		     "3 clustered-disk %u:%u %c",
 		     major(statbuf.st_rdev), minor(statbuf.st_rdev),
 		     (lc->log_dev_failed) ? 'D' : 'A');
 	if (r < 0)
@@ -1530,7 +1530,7 @@ static int disk_status_table(struct log_c *lc, struct dm_ulog_request *rq)
 	}
 
 	r = snprintf(data, DM_ULOG_REQUEST_DATA_SIZE,
-		     "clustered-disk %d:%d %u %s%s ",
+		     "clustered-disk %u:%u %u %s%s ",
 		     major(statbuf.st_rdev), minor(statbuf.st_rdev),
 		     lc->region_size,
 		     (lc->sync == DEFAULTSYNC) ? "" :

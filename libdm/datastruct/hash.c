@@ -123,7 +123,7 @@ static void _free_nodes(struct dm_hash_table *t)
 	unsigned i;
 
 #ifdef DEBUG
-	log_debug("Free hash hint:%d slots:%d nodes:%d (s:%d f:%d c:%d h:%d)",
+	log_debug("Free hash hint:%u slots:%u nodes:%u (s:%u f:%u c:%u h:%u).",
 		  t->num_hint, t->mask_slots + 1, t->num_nodes,
 		  t->search, t->found, t->collisions, t->same_hash);
 #endif

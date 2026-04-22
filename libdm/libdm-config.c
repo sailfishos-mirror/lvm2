@@ -340,7 +340,7 @@ static int _write_value(struct config_output *out, const struct dm_config_value 
 
 	case DM_CFG_INT:
 		if (v->format_flags & DM_CONFIG_VALUE_FMT_INT_OCTAL)
-			line_append("0%" PRIo64, v->v.i);
+			line_append("0%" PRIo64, (uint64_t)v->v.i);
 		else
 			line_append(FMTd64, v->v.i);
 		break;
@@ -351,7 +351,7 @@ static int _write_value(struct config_output *out, const struct dm_config_value 
 		break;
 
 	default:
-		log_error("_write_value: Unknown value type: %d", v->type);
+		log_error("_write_value: Unknown value type: %u.", v->type);
 		return 0;
 	}
 

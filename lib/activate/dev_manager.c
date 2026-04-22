@@ -456,7 +456,7 @@ static int _ignore_blocked_mirror_devices(struct cmd_context *cmd,
 
 	for (i = 0; i < sm->dev_count; ++i)
 		if (sm->devs[i].health != DM_STATUS_MIRROR_ALIVE) {
-			log_debug_activation("%s: Mirror image %d marked as failed.",
+			log_debug_activation("%s: Mirror image %u marked as failed.",
 					     dev_name(dev), i);
 			check_for_blocking = 1;
 		}
@@ -2426,7 +2426,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 			.major = MAJOR(dm_dev->devno),
 			.minor = MINOR(dm_dev->devno),
 		};
-		log_debug("Cached as present %s %s (%d:%d).",
+		log_debug("Cached as present %s %s (%u:%u).",
 			  name, dlid, info.major, info.minor);
 	} else if (!_info(dm->cmd, name, dlid, 0, 0, 0, &info, NULL, NULL))
 		return_0;
@@ -2439,8 +2439,8 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 		 * FIXME compare info.major with lv->major if multiple major support
 		 */
 		if (info.exists && ((int) info.minor != lv->minor)) {
-			log_error("Volume %s (%" PRIu32 ":%" PRIu32")"
-				  " differs from already active device "
+			log_error("Volume %s (%" PRId32 ":%" PRId32") "
+				  "differs from already active device "
 				  "(%" PRIu32 ":%" PRIu32").",
 				  display_lvname(lv), lv->major, lv->minor,
 				  info.major, info.minor);
@@ -2449,7 +2449,7 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 		if (!info.exists && _info_by_dev(lv->major, lv->minor, &info2) &&
 		    info2.exists) {
 			log_error("The requested major:minor pair "
-				  "(%" PRIu32 ":%" PRIu32") is already used.",
+				  "(%" PRId32 ":%" PRId32") is already used.",
 				  lv->major, lv->minor);
 			return 0;
 		}

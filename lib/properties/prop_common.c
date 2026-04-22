@@ -43,7 +43,7 @@ int prop_get_property(struct lvm_property_type *p, const void *obj,
 		return 0;
 	}
 	if (!(p->type & type)) {
-		log_errno(EINVAL, "Property name %s does not match type %d",
+		log_errno(EINVAL, "Property name %s does not match type %u",
 			  prop->id, p->type);
 		return 0;
 	}
@@ -75,7 +75,7 @@ int prop_set_property(struct lvm_property_type *p, void *obj,
 		return 0;
 	}
 	if (!(p->type & type)) {
-		log_errno(EINVAL, "Property name %s does not match type %d",
+		log_errno(EINVAL, "Property name %s does not match type %u",
 			  prop->id, p->type);
 		return 0;
 	}

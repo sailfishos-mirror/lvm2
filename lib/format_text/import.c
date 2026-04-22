@@ -54,7 +54,7 @@ int text_read_metadata_summary(const struct format_type *fmt,
 		return_0;
 
 	if (dev) {
-		log_debug_metadata("Reading metadata summary from %s at %llu size %d (+%d)",
+		log_debug_metadata("Reading metadata summary from %s at %llu size %u (+%u).",
 				   dev_name(dev), (unsigned long long)offset,
 				   size, size2);
 
@@ -150,7 +150,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 
 
 	if (dev) {
-		log_debug_metadata("Reading metadata from %s at %llu size %d (+%d)",
+		log_debug_metadata("Reading metadata from %s at %llu size %u (+%u).",
 				   dev_name(dev), (unsigned long long)offset,
 				   size, size2);
 

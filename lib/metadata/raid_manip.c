@@ -127,7 +127,7 @@ static int _check_region_size_constraints(struct logical_volume *lv,
 static int _check_max_raid_devices(uint32_t image_count)
 {
 	if (image_count > DEFAULT_RAID_MAX_IMAGES) {
-		log_error("Unable to handle raid arrays with more than %u devices.",
+		log_error("Unable to handle raid arrays with more than %d devices.",
 			  DEFAULT_RAID_MAX_IMAGES);
 		return 0;
 	}
@@ -138,7 +138,7 @@ static int _check_max_raid_devices(uint32_t image_count)
 static int _check_max_mirror_devices(uint32_t image_count)
 {
 	if (image_count > DEFAULT_MIRROR_MAX_IMAGES) {
-		log_error("Unable to handle mirrors with more than %u devices.",
+		log_error("Unable to handle mirrors with more than %d devices.",
 			  DEFAULT_MIRROR_MAX_IMAGES);
 		return 0;
 	}
@@ -929,7 +929,7 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
 		if (seg_type(seg, s) == AREA_UNASSIGNED) {
 			if (seg_metatype(seg, s) != AREA_UNASSIGNED) {
 				log_error(INTERNAL_ERROR "Metadata segment area."
-					  " #%d should be AREA_UNASSIGNED.", s);
+					  " #%u should be AREA_UNASSIGNED.", s);
 				return 0;
 			}
 			missing++;
@@ -1405,7 +1405,7 @@ static int _lv_relocate_reshape_space(struct logical_volume *lv, enum alloc_wher
 			end = _reshape_len_per_dev(seg);
 			break;
 		default:
-			log_error(INTERNAL_ERROR "bogus reshape space reallocation request [%d]", where);
+			log_error(INTERNAL_ERROR "bogus reshape space reallocation request [%u]", where);
 			return 0;
 		}
 
@@ -3055,7 +3055,7 @@ static int _raid_extract_images(struct logical_volume *lv,
 	if (!_raid_allow_extraction(lv, extract, target_pvs))
 		return_0;
 
-	log_verbose("Extracting %u %s from %s.", extract,
+	log_verbose("Extracting %d %s from %s.", extract,
 		    (extract > 1) ? "images" : "image",
 		    display_lvname(lv));
 	if ((int) dm_list_size(target_pvs) < extract) {
@@ -3286,7 +3286,7 @@ static int _lv_raid_change_image_count(struct logical_volume *lv, int yes, uint3
 		r = 1;
 
 	if (old_count == new_count) {
-		log_warn("WARNING: %s already has image count of %d.",
+		log_warn("WARNING: %s already has image count of %u.",
 			 display_lvname(lv), new_count);
 		return r;
 	}
@@ -4230,7 +4230,7 @@ static int _convert_raid1_to_mirror(struct logical_volume *lv,
 	if (!_check_max_mirror_devices(new_image_count)) {
 		log_error("Unable to convert %s LV %s with %u images to %s.",
 			  SEG_TYPE_NAME_RAID1, display_lvname(lv), new_image_count, SEG_TYPE_NAME_MIRROR);
-		log_error("At least reduce to the maximum of %u images with \"lvconvert -m%u %s\".",
+		log_error("At least reduce to the maximum of %d images with \"lvconvert -m%d %s\".",
 			  DEFAULT_MIRROR_MAX_IMAGES, DEFAULT_MIRROR_MAX_IMAGES - 1, display_lvname(lv));
 		return 0;
 	}
@@ -7525,7 +7525,7 @@ static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv,
 		if (r && cleared_devs &&
 		    (failed_sublvs <= raid_seg->segtype->parity_devs))
 			/* TODO: maybe we want to activate RAID volume here ? */
-			log_print_unless_silent("Volume has been restored after clearing %u superblocks(s). Once online please check its content.",
+			log_print_unless_silent("Volume has been restored after clearing %d superblock(s). Once online please check its content.",
 						cleared_devs);
 	}
 

@@ -80,7 +80,7 @@ static int _pvscan_display_pv(struct cmd_context *cmd,
 		}
 
 		if (dm_snprintf(params->pv_tmp_name, params->pv_tmp_namelen, "%-*s with UUID %s",
-				params->pv_max_name_len - 2, pvdevname, uuid) < 0) {
+				(int) params->pv_max_name_len - 2, pvdevname, uuid) < 0) {
 			log_error("Invalid PV name with uuid.");
 			return ECMD_FAILED;
 		}
@@ -93,55 +93,55 @@ static int _pvscan_display_pv(struct cmd_context *cmd,
 		if (!cmd->enable_devices_file) {
 			if (is_orphan(pv)) {
 				log_print_unless_silent("PV %-*s    %-*s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, " ");
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, " ");
 			} else {
 				log_print_unless_silent("PV %-*s VG %-*s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, pv_vg_name(pv));
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, pv_vg_name(pv));
 			}
 		} else if (!(dev->flags & DEV_MATCHED_USE_ID)) {
 			if (is_orphan(pv)) {
 				log_print_unless_silent("PV %-*s    %-*s %-10s %s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, " ",
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, " ",
 						"-", "-");
 			} else {
 				log_print_unless_silent("PV %-*s VG %-*s %-10s %s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, pv_vg_name(pv),
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, pv_vg_name(pv),
 						"-", "-");
 			}
 		} else {
 			if (is_orphan(pv)) {
 				log_print_unless_silent("PV %-*s    %-*s %-10s %s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, " ",
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, " ",
 						idtype_to_str(dev->id->idtype),
 						dev->id->idname ?: "none");
 			} else {
 				log_print_unless_silent("PV %-*s VG %-*s %-10s %s",
-						pv_len, pvdevname,
-						params->vg_max_name_len, pv_vg_name(pv),
+						(int) pv_len, pvdevname,
+						(int) params->vg_max_name_len, pv_vg_name(pv),
 						idtype_to_str(dev->id->idtype),
 						dev->id->idname ?: "none");
 			}
 		}
 	} else if (is_orphan(pv))
 		log_print_unless_silent("PV %-*s    %-*s %s [%s]",
-					pv_len, pvdevname,
-					params->vg_max_name_len, " ",
+					(int) pv_len, pvdevname,
+					(int) params->vg_max_name_len, " ",
 					pv->fmt ? pv->fmt->name : "    ",
 					display_size(cmd, pv_size(pv)));
 	else if (pv_status(pv) & EXPORTED_VG)
 		log_print_unless_silent("PV %-*s  is in exported VG %s [%s / %s free]",
-					pv_len, pvdevname, pv_vg_name(pv),
+					(int) pv_len, pvdevname, pv_vg_name(pv),
 					display_size(cmd, (uint64_t) pv_pe_count(pv) * pv_pe_size(pv)),
 					display_size(cmd, (uint64_t) (pv_pe_count(pv) - pv_pe_alloc_count(pv)) * pv_pe_size(pv)));
 	else
 		log_print_unless_silent("PV %-*s VG %-*s %s [%s / %s free]",
-					pv_len, pvdevname,
-					params->vg_max_name_len, pv_vg_name(pv),
+					(int) pv_len, pvdevname,
+					(int) params->vg_max_name_len, pv_vg_name(pv),
 					pv->fmt ? pv->fmt->name : "    ",
 					display_size(cmd, (uint64_t) pv_pe_count(pv) * pv_pe_size(pv)),
 					display_size(cmd, (uint64_t) (pv_pe_count(pv) - pv_pe_alloc_count(pv)) * pv_pe_size(pv)));
@@ -996,7 +996,7 @@ static void _set_pv_devices_online(struct cmd_context *cmd, struct volume_group 
 		devno = MKDEV(major, minor);
 
 		if (!(dev = setup_dev_in_dev_cache(cmd, devno, file_devname[0] ? file_devname : NULL))) {
-			log_print_pvscan(cmd, "VG %s PV %s no device found for online PV %d:%d %s",
+			log_print_pvscan(cmd, "VG %s PV %s no device found for online PV %u:%u %s",
 					 vg->name, pvid, major, minor, file_devname);
 			pvl->pv->status |= MISSING_PV;
 			continue;

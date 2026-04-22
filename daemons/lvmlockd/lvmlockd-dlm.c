@@ -83,7 +83,7 @@ static int check_args_version(char *vg_args)
 	}
 
 	if (major > VG_LOCK_ARGS_MAJOR) {
-		log_error("check_args_version %s major %d %d", vg_args, major, VG_LOCK_ARGS_MAJOR);
+		log_error("check_args_version %s major %u %d", vg_args, major, VG_LOCK_ARGS_MAJOR);
 		return -1;
 	}
 
@@ -139,7 +139,7 @@ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
 	memset(clustername, 0, sizeof(clustername));
 	memset(lock_args_version, 0, sizeof(lock_args_version));
 
-	snprintf(lock_args_version, MAX_VERSION, "%u.%u.%u",
+	snprintf(lock_args_version, MAX_VERSION, "%d.%d.%d",
 		 VG_LOCK_ARGS_MAJOR, VG_LOCK_ARGS_MINOR, VG_LOCK_ARGS_PATCH);
 
 	rv = read_cluster_name(clustername);

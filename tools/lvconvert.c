@@ -96,7 +96,8 @@ struct convert_poll_id_list {
 static void _set_conv_type(struct lvconvert_params *lp, conversion_type_t conv_type)
 {
 	if (lp->conv_type != CONV_OTHER)
-		log_error(INTERNAL_ERROR "Changing conv_type from %d to %d.", lp->conv_type, conv_type);
+		log_error(INTERNAL_ERROR "Changing conv_type from %u to %u.",
+			  lp->conv_type, conv_type);
 
 	lp->conv_type = conv_type;
 }
@@ -784,7 +785,7 @@ static int _lvconvert_mirrors_parse_params(struct cmd_context *cmd,
 
 	/* Did the user try to subtract more legs than available? */
 	if (lp->mirrors < 1) {
-		log_error("Unable to reduce images by specified amount - only %d in %s",
+		log_error("Unable to reduce images by specified amount - only %u in %s.",
 			  *old_mimage_count, lv->name);
 		return 0;
 	}
@@ -1445,7 +1446,8 @@ static int _lvconvert_raid(struct logical_volume *lv, struct lvconvert_params *l
 			    (!strcmp(lp->type_str, SEG_TYPE_NAME_STRIPED) && image_count == 1)) {
 				if (image_count > DEFAULT_RAID1_MAX_IMAGES) {
 					log_error("Only up to %u mirrors in %s LV %s supported currently.",
-						  DEFAULT_RAID1_MAX_IMAGES, lp->segtype->name, display_lvname(lv));
+						  (unsigned) DEFAULT_RAID1_MAX_IMAGES,
+						  lp->segtype->name, display_lvname(lv));
 					return 0;
 				}
 				if (!seg_is_raid1(seg) && lv_raid_has_integrity(lv)) {
@@ -4552,7 +4554,8 @@ static int _lv_create_cachevol(struct cmd_context *cmd,
 		}
  add_dev_arg:
 		if (dev_argc >= MAX_CACHEDEVS) {
-			log_error("Cannot allocate from more than %u cache devices.", MAX_CACHEDEVS);
+			log_error("Cannot allocate from more than %u cache devices.",
+				  (unsigned) MAX_CACHEDEVS);
 			return 0;
 		}
 
@@ -6140,7 +6143,7 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
 			block_size = 512;
 
 		log_print_unless_silent("Using writecache block size %u for thin pool data, logical block size %u, physical block size %u.",
-					block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
+					block_size, lbs_4k ? 4096U : 512U, pbs_4k ? 4096U : 512U);
 
 		goto out;
 	}
@@ -6179,7 +6182,7 @@ skip_fs:
 			block_size = 4096;
 
 		log_print_unless_silent("Using writecache block size %u for unknown file system block size, logical block size %u, physical block size %u.",
-					block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
+					block_size, lbs_4k ? 4096U : 512U, pbs_4k ? 4096U : 512U);
 
 		if (block_size != 512) {
 			log_warn("WARNING: Unable to detect a file system block size on %s.", display_lvname(lv));

@@ -635,7 +635,7 @@ static int _init_device_ids_refresh(struct cmd_context *cmd)
 
 	/* 0 disables, 1 enables single refresh, 10-600 enables refresh period */
 	if ((val > 1 && val < 10) || (val > 600)) {
-		log_error("Invalid device_ids_refresh value %u", val);
+		log_error("Invalid device_ids_refresh value %d.", val);
 		return 0;
 	}
 

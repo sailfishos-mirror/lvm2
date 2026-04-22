@@ -1071,7 +1071,7 @@ int fs_get_blkid(const char *pathname, struct fs_info *fsi)
 	if (!strcmp(fsi->fstype, "btrfs"))
 		fsi->fs_last_byte = 0;
 
-	log_debug("libblkid TYPE %s BLOCK_SIZE %d FSLASTBLOCK %llu FSBLOCKSIZE %u fs_last_byte %llu",
+	log_debug("libblkid TYPE %s BLOCK_SIZE %u FSLASTBLOCK %llu FSBLOCKSIZE %u fs_last_byte %llu.",
 		  fsi->fstype, fsi->fs_block_size_bytes, (unsigned long long)fslastblock, fsblocksize,
 		  (unsigned long long)fsi->fs_last_byte);
 	return 1;

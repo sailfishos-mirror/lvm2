@@ -194,7 +194,7 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
 	if (closedir(dir))
 		log_sys_debug("closedir", PVS_ONLINE_DIR);
 
-	log_debug("Found PVs online %d for %s", dm_list_size(pvs_online), vgname ?: "all");
+	log_debug("Found PVs online %u for %s", dm_list_size(pvs_online), vgname ?: "all");
 
 	return 1;
 }
@@ -445,7 +445,7 @@ int get_pvs_lookup(struct dm_list *pvs_online, const char *vgname)
 		dm_list_add(pvs_online, &po->list);
 	}
 
-	log_debug("Found PVs online lookup %d for %s.", dm_list_size(pvs_online), vgname);
+	log_debug("Found PVs online lookup %u for %s.", dm_list_size(pvs_online), vgname);
 
 	if (fclose(fp))
 		log_sys_debug("fclose", lookup_path);

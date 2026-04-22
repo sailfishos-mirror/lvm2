@@ -37,9 +37,9 @@
 #include <sys/file.h>
 #include <sys/sysmacros.h>
 
-#define DEVICES_FILE_MAJOR 1
-#define DEVICES_FILE_MINOR 1
-#define VERSION_LINE_MAX 256
+#define DEVICES_FILE_MAJOR 1U
+#define DEVICES_FILE_MINOR 1U
+#define VERSION_LINE_MAX 256U
 
 static int _devices_fd = -1;
 static int _using_devices_file;
@@ -1841,7 +1841,8 @@ int device_ids_write(struct cmd_context *cmd)
 	}
 	pos += num;
 
-	if (dm_snprintf(version_buf, VERSION_LINE_MAX, "VERSION=%u.%u.%u", DEVICES_FILE_MAJOR, DEVICES_FILE_MINOR, df_counter+1) < 0)
+	if (dm_snprintf(version_buf, VERSION_LINE_MAX, "VERSION=%u.%u.%u",
+			DEVICES_FILE_MAJOR, DEVICES_FILE_MINOR, df_counter+1) < 0)
 		goto_out;
 
 	if (cmd->device_ids_refresh_until && cmd->device_ids_refresh_trigger) {
@@ -1939,7 +1940,7 @@ int device_ids_write(struct cmd_context *cmd)
 
 	ret = 1;
 
-	log_debug("Wrote devices file %s hash %u hashed size %u total size %u",
+	log_debug("Wrote devices file %s hash %u hashed size %d total size %d",
 		  version_buf, hash, fb_bytes, fb_bytes + fc_bytes);
 
 	devices_file_backup(cmd, fc, fb, &t, df_counter+1);
@@ -3837,7 +3838,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 	 * If the dev has no PVID or is excluded by filters, then there's no
 	 * point in trying to match it to one of the dus_check entries.
 	 */
-	log_debug("Reading and filtering %d devs with suspect serial numbers.", dm_list_size(&devs_check));
+	log_debug("Reading and filtering %u devs with suspect serial numbers.", dm_list_size(&devs_check));
 	dm_list_iterate_items_safe(devl, devl2, &devs_check) {
 		const char *idname;
 		if (!(idname = _dev_idname(devl->dev, DEV_ID_TYPE_SYS_SERIAL))) {
@@ -3873,7 +3874,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		}
 	}
 
-	log_debug("Checking %d PVs with suspect serial numbers.", dm_list_size(&devs_check));
+	log_debug("Checking %u PVs with suspect serial numbers.", dm_list_size(&devs_check));
 
 	/*
 	 * Unpair du's and dev's that were matched using suspect serial numbers
@@ -3928,7 +3929,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 			}
 		}
 		if (!found)
-			log_debug("Match PVID failed in %d devs checked.", dm_list_size(&devs_check));
+			log_debug("Match PVID failed in %u devs checked.", dm_list_size(&devs_check));
 	}
 
 	/*
@@ -4160,7 +4161,7 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 	if (dm_list_empty(&search_pvids) && !cmd->device_ids_refresh_trigger)
 		return;
 
-	log_debug("Search for PVIDs %d trigger %d all_ids %d search all %d auto %d none %d",
+	log_debug("Search for PVIDs %u trigger %d all_ids %d search all %d auto %d none %d",
 		  dm_list_size(&search_pvids), cmd->device_ids_refresh_trigger, all_ids,
 		  search_mode_all, search_mode_auto, search_mode_none);
 

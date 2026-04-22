@@ -445,14 +445,14 @@ static int _set_integrity_block_size(struct cmd_context *cmd, struct logical_vol
 			}
 
 			if (settings->block_size && (settings->block_size != use_bs)) {
-				log_error("Cannot use integrity block size %u with unknown file system block size, logical block size %u, physical block size %u.",
+				log_error("Cannot use integrity block size %u with unknown file system block size, logical block size %d, physical block size %d.",
 					   settings->block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
 				goto bad;
 			}
 
 			settings->block_size = use_bs;
 
-			log_print_unless_silent("Using integrity block size %u for unknown file system block size, logical block size %u, physical block size %u.",
+			log_print_unless_silent("Using integrity block size %u for unknown file system block size, logical block size %d, physical block size %d.",
 						settings->block_size, lbs_4k ? 4096 : 512, pbs_4k ? 4096 : 512);
 			goto out;
 		}

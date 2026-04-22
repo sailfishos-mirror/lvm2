@@ -486,10 +486,10 @@ static void format_info_r_action(char *line, char *r_name, char *r_type)
 	}
 
 	if (!strcmp(r_type, "gl")) {
-		printf("LW GL %s ver %u pid %u (%s)\n", mode, 0, pid, cl_name);
+		printf("LW GL %s ver %u pid %u (%s)\n", mode, 0U, pid, cl_name);
 
 	} else if (!strcmp(r_type, "vg")) {
-		printf("LW VG %s ver %u pid %u (%s)\n", mode, 0, pid, cl_name);
+		printf("LW VG %s ver %u pid %u (%s)\n", mode, 0U, pid, cl_name);
 
 	} else if (!strcmp(r_type, "lv")) {
 		printf("LW LV %s %s\n", mode, r_name);
@@ -542,10 +542,10 @@ static void format_info_r_fence_wait_action(char *line, char *r_name, char *r_ty
 	}
 
 	if (!strcmp(r_type, "gl")) {
-		printf("LW GL %s ver %u pid %u (%s) fence_owner %u.%u\n", mode, 0, pid, cl_name, owner_host_id, owner_generation);
+		printf("LW GL %s ver %u pid %u (%s) fence_owner %u.%u\n", mode, 0U, pid, cl_name, owner_host_id, owner_generation);
 
 	} else if (!strcmp(r_type, "vg")) {
-		printf("LW VG %s ver %u pid %u (%s) fence_owner %u.%u\n", mode, 0, pid, cl_name, owner_host_id, owner_generation);
+		printf("LW VG %s ver %u pid %u (%s) fence_owner %u.%u\n", mode, 0U, pid, cl_name, owner_host_id, owner_generation);
 
 	} else if (!strcmp(r_type, "lv")) {
 		printf("LW LV %s %s fence_owner %u.%u\n", mode, r_name, owner_host_id, owner_generation);

@@ -931,7 +931,7 @@ static int _stats_parse_histogram_spec(struct dm_stats *dms,
 	return 1;
 
 badchar:
-	log_error("Invalid character in histogram: '%c' (0x%x)", *c, *c);
+	log_error("Invalid character in histogram: '%c' (0x%x).", *c, (unsigned char) *c);
 bad:
 	dm_pool_abandon_object(mem);
 	return 0;
@@ -1279,7 +1279,7 @@ static int _stats_parse_histogram(struct dm_pool *mem, char *hist_str,
 	return 1;
 
 badchar:
-	log_error("Invalid character in histogram data: '%c' (0x%x)", *c, *c);
+	log_error("Invalid character in histogram data: '%c' (0x%x).", *c, (unsigned char) *c);
 bad:
 	dm_pool_abandon_object(mem);
 	return 0;
@@ -2562,7 +2562,7 @@ static uint64_t _stats_get_counter(const struct dm_stats *dms,
 		return area->total_write_nsecs;
 	case DM_STATS_NR_COUNTERS:
 	default:
-		log_error("Attempt to read invalid counter: %d", counter);
+		log_error("Attempt to read invalid counter: %u.", counter);
 	}
 	return 0;
 }
@@ -4158,7 +4158,7 @@ int dm_stats_create_group(struct dm_stats *dms, const char *members,
 
 	/* too many bits? */
 	if ((*regions - 1) > dms->max_region) {
-		log_error("Invalid region ID: %d", *regions - 1);
+		log_error("Invalid region ID: %u.", *regions - 1);
 		goto bad;
 	}
 
@@ -4639,7 +4639,7 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 	struct dm_stats_group *group = NULL;
 	uint64_t nr_kept, nr_old;
 	struct _extent ext = { .id = 0 };
-	int64_t i;
+	int i;
 
 	group = &dms->groups[group_id];
 
@@ -4672,19 +4672,18 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 			if (!dm_pool_grow_object(mem, &ext, sizeof(ext)))
 				goto out;
 
-			log_very_verbose("Kept region " FMTu64, i);
+			log_very_verbose("Kept region %d.", i);
 		} else {
 
-			if (i == (int64_t)group_id)
+			if (i == (int)group_id)
 				*regroup = 1;
 
 			if (!_stats_delete_region(dms, i)) {
-				log_error("Could not remove region ID " FMTu64,
-					  i);
+				log_error("Could not remove region ID %d.", i);
 				goto out;
 			}
 
-			log_very_verbose("Deleted region " FMTu64, i);
+			log_very_verbose("Deleted region %d.", i);
 		}
 	}
 
@@ -4693,7 +4692,7 @@ static int _stats_unmap_regions(struct dm_stats *dms, uint64_t group_id,
 		log_error("Could not finalize region extent table.");
 		goto out;
 	}
-	log_very_verbose("Kept " FMTd64 " of " FMTd64 " old extents",
+	log_very_verbose("Kept " FMTu64 " of " FMTu64 " old extents.",
 			 nr_kept, nr_old);
 	log_very_verbose("Found " FMTu64 " new extents",
 			 *count - nr_kept);
@@ -4768,10 +4767,10 @@ static uint64_t *_stats_map_file_regions(struct dm_stats *dms, int fd,
 	 */
 	if (update)
 		log_very_verbose("Updating extents from fd %d with group ID "
-				 FMTu64 " on (%d:%d)", fd, group_id,
+				 FMTu64 " on (%u:%u).", fd, group_id,
 				 major(buf.st_dev), minor(buf.st_dev));
 	else
-		log_very_verbose("Mapping extents from fd %d on (%d:%d)",
+		log_very_verbose("Mapping extents from fd %d on (%u:%u).",
 				 fd, major(buf.st_dev), minor(buf.st_dev));
 
 	/* Use a temporary, private pool for the extent table. This avoids
@@ -5094,13 +5093,13 @@ int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
 
 	if (foreground > 1) {
 		log_error("Invalid dmfilemapd foreground argument. "
-			  "Must be 0 or 1: %d.", foreground);
+			  "Must be 0 or 1: %u.", foreground);
 		return 0;
 	}
 
 	if (verbose > 3) {
 		log_error("Invalid dmfilemapd verbose argument. "
-			  "Must be 0..3: %d.", verbose);
+			  "Must be 0..3: %u.", verbose);
 		return 0;
 	}
 

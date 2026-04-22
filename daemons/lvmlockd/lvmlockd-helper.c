@@ -222,13 +222,13 @@ __attribute__((noreturn)) void helper_main(int in_fd, int out_fd, int log_stderr
 
 			if ((rv < 0) && (errno == ECHILD)) {
 				/*
-				log_helper("helper no children exist fork_count %d done_count %d", fork_count, done_count);
+				log_helper("helper no children exist fork_count %u done_count %u", fork_count, done_count);
 				*/
 				timeout = IDLE_TIMEOUT_MS;
 			}
 
 			else if (!rv && !info.si_pid) {
-				log_helper("helper no children ready fork_count %d done_count %d", fork_count, done_count);
+				log_helper("helper no children ready fork_count %u done_count %u", fork_count, done_count);
 				timeout = ACTIVE_TIMEOUT_MS;
 			}
 
@@ -254,7 +254,7 @@ __attribute__((noreturn)) void helper_main(int in_fd, int out_fd, int log_stderr
 			}
 
 			else {
-				log_helper("helper waitid rv %d errno %d fork_count %d done_count %d",
+				log_helper("helper waitid rv %d errno %d fork_count %u done_count %u",
 					  rv, errno, fork_count, done_count);
 			}
 

@@ -141,7 +141,7 @@ int dev_ext_release(struct device *dev)
 int dev_ext_enable(struct device *dev, dev_ext_t src)
 {
 	if (src >= DEV_EXT_NUM) {
-		log_error(INTERNAL_ERROR "%s: Invalid external source [%d].",
+		log_error(INTERNAL_ERROR "%s: Invalid external source [%u].",
 			   dev_name(dev), src);
 		return 0;
 	}

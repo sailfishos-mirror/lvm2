@@ -281,7 +281,7 @@ int pvchange(struct cmd_context *cmd, int argc, char **argv)
 
 	ret = process_each_pv(cmd, argc, argv, NULL, 0, READ_FOR_UPDATE, handle, _pvchange_single);
 
-	log_print_unless_silent("%d physical volume%s changed / %d physical volume%s not changed",
+	log_print_unless_silent("%u physical volume%s changed / %u physical volume%s not changed.",
 				params.done, params.done == 1 ? "" : "s",
 				params.total - params.done, (params.total - params.done) == 1 ? "" : "s");
 

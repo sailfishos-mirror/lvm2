@@ -2665,14 +2665,14 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
 
 	/* Currently only support exactly one data area */
 	if (dm_list_size(&info->das) != 1) {
-		log_error("Must be exactly one data area (found %d) on PV %s",
+		log_error("Must be exactly one data area (found %u) on PV %s.",
 			  dm_list_size(&info->das), dev_name(info->dev));
 		return 0;
 	}
 
 	/* Currently only support one bootloader area at most */
 	if (dm_list_size(&info->bas) > 1) {
-		log_error("Must be at most one bootloader area (found %d) on PV %s",
+		log_error("Must be at most one bootloader area (found %u) on PV %s.",
 			  dm_list_size(&info->bas), dev_name(info->dev));
 		return 0;
 	}

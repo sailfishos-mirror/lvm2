@@ -187,7 +187,7 @@ retry_fcntl:
 		goto fail_close_unlink;
 	}
 
-	snprintf(buffer, sizeof(buffer), "%u\n", getpid());
+	snprintf(buffer, sizeof(buffer), "%u\n", (unsigned) getpid());
 
 	bufferlen = strlen(buffer);
 	write_out = write(fd, buffer, bufferlen);
@@ -201,8 +201,8 @@ retry_fcntl:
 
 	if ((write_out == 0) || ((size_t)write_out < bufferlen)) {
 		log_error("Cannot write pid to pidfile [%s], shortwrite of"
-			  "[%" PRIsize_t "] bytes, expected [%" PRIsize_t "]\n",
-			  lockfile, write_out, bufferlen);
+			  "[%zu] bytes, expected [%zu]\n",
+			  lockfile, (size_t) write_out, bufferlen);
 
 		goto fail_close_unlink;
 	}
