@@ -58,7 +58,7 @@ int buffer_read(int fd, struct buffer *buffer) {
 		} else if (result < 0 && (errno == EAGAIN ||
 					  errno == EINTR || errno == EIO)) {
 			/* ignore the result, this is just a glorified sleep */
-			poll(&pfd, 1, -1);
+			(void) poll(&pfd, 1, -1);
 		} else if (result < 0)
 			return 0;
 	}
@@ -85,7 +85,7 @@ int buffer_write(int fd, const struct buffer *buffer) {
 			else if (result < 0 && (errno == EAGAIN ||
 						errno == EINTR || errno == EIO)) {
 				/* ignore the result, this is just a glorified sleep */
-				poll(&pfd, 1, -1);
+				(void) poll(&pfd, 1, -1);
 			} else if (result < 0)
 				return 0; /* too bad */
 		}

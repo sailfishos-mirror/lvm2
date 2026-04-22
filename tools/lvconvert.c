@@ -3426,6 +3426,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 	 * Before starting a real conversion, prepare  _pmspare volume.
 	 * If there is already one present in a VG, make sure the size is right
 	 */
+	/* coverity[format_string_injection] lv name is already validated */
 	if (!handle_pool_metadata_spare(vg, metadata_lv->le_count, use_pvh, pool_metadata_spare)) {
 		log_error("Failed to set up spare metadata LV for pool.");
 		goto bad;
