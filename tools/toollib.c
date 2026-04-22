@@ -6162,7 +6162,11 @@ do_command:
 
 				/* allow deviceidtype_ARG/deviceid_ARG ? */
 				memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
-				device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0);
+				if (!device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0)) {
+					log_error("Failed to add device id for %s.", pd->name);
+					dm_list_move(&pp->arg_fail, &pd->list);
+					continue;
+				}
 
 			} else {
 				log_error("Failed to find PV %s", pd->name);
@@ -6202,7 +6206,11 @@ do_command:
 
 		/* allow deviceidtype_ARG/deviceid_ARG ? */
 		memcpy(pvid, &pv->id.uuid, ID_LEN);
-		device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0);
+		if (!device_id_add(cmd, pd->dev, pvid, NULL, NULL, 0)) {
+			log_error("Failed to add device id for %s.", pv_name);
+			dm_list_move(&pp->arg_fail, &pd->list);
+			continue;
+		}
 
 		log_verbose("Set up physical volume for \"%s\" with %" PRIu64
 			    " available sectors.", pv_name, pv_size(pv));
