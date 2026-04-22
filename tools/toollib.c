@@ -3453,16 +3453,21 @@ void setup_async_lvs(struct cmd_context *cmd, struct dm_list *lvs)
 			if (radix_tree_lookup_ptr(pool_seen,
 						  &pool_lv->lvid.id[1],
 						  sizeof(pool_lv->lvid.id[1]))) {
-				radix_tree_insert_ptr(cmd->async_lv_set,
-						      &lvl->lv->lvid.id[1],
-						      sizeof(lvl->lv->lvid.id[1]),
-						      lvl->lv);
+				if (!radix_tree_insert_ptr(cmd->async_lv_set,
+							   &lvl->lv->lvid.id[1],
+							   sizeof(lvl->lv->lvid.id[1]),
+							   lvl->lv)) {
+					radix_tree_destroy(pool_seen);
+					goto_bad;
+				}
 				count++;
-			} else
-				radix_tree_insert_ptr(pool_seen,
-						      &pool_lv->lvid.id[1],
-						      sizeof(pool_lv->lvid.id[1]),
-						      (void *)pool_lv);
+			} else if (!radix_tree_insert_ptr(pool_seen,
+							  &pool_lv->lvid.id[1],
+							  sizeof(pool_lv->lvid.id[1]),
+							  (void *)pool_lv)) {
+				radix_tree_destroy(pool_seen);
+				goto_bad;
+			}
 		}
 		radix_tree_destroy(pool_seen);
 	}
@@ -3479,10 +3484,11 @@ void setup_async_lvs(struct cmd_context *cmd, struct dm_list *lvs)
 		    lv_is_external_origin(lvl->lv) || /* used by thin volumes */
 		    !seg_is_striped(first_seg(lvl->lv))) /* only striped */
 			continue;
-		radix_tree_insert_ptr(cmd->async_lv_set,
-				      &lvl->lv->lvid.id[1],
-				      sizeof(lvl->lv->lvid.id[1]),
-				      lvl->lv);
+		if (!radix_tree_insert_ptr(cmd->async_lv_set,
+					   &lvl->lv->lvid.id[1],
+					   sizeof(lvl->lv->lvid.id[1]),
+					   lvl->lv))
+			goto_bad;
 		count++;
 	}
 
@@ -3490,6 +3496,7 @@ void setup_async_lvs(struct cmd_context *cmd, struct dm_list *lvs)
 		if (!(cmd->async_ctx = dm_async_ctx_create(0)))
 			log_warn("WARNING: Async context creation failed, using synchronous deactivation.");
 	} else {
+bad:
 		radix_tree_destroy(cmd->async_lv_set);
 		cmd->async_lv_set = NULL;
 	}
