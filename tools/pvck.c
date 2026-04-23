@@ -119,7 +119,7 @@ static char *_chars_to_hexstr(const void *in, void *out, int num, int max, const
 	}
 
 	for (n = 0; n < num; n++) {
-		ret = snprintf(tmp+off, max-off, "%x", *i & 0xFF);
+		ret = snprintf(tmp+off, max-off, "%x", (unsigned)(*i & 0xFF));
 		off += ret;
 		i++;
 	}
@@ -407,7 +407,7 @@ static bool _read_bytes(struct device *dev, struct devicefile *def, uint64_t sta
 
 static int _dump_all_text(struct cmd_context *cmd, struct settings *set, const char *tofile,
 			  struct device *dev, struct devicefile *def,
-			  int mda_num, uint64_t mda_offset, uint64_t mda_size, char *buf)
+			  unsigned mda_num, uint64_t mda_offset, uint64_t mda_size, char *buf)
 {
 	FILE *fp = NULL;
 	char line[MAX_LINE_CHECK + 3];
@@ -432,7 +432,7 @@ static int _dump_all_text(struct cmd_context *cmd, struct settings *set, const c
 
 	if (tofile) {
 		if (!(fp = fopen(tofile, "wx"))) {
-			log_error("Failed to create file %s", tofile);
+			log_error("Failed to create file %s.", tofile);
 			return 0;
 		}
 	}
@@ -726,7 +726,7 @@ static int _check_pv_header(struct pv_header *ph)
  * mda_offset/mda_size are from the pv_header/disk_locn and could
  * be incorrect.
  */
-static int _check_mda_header(struct mda_header *mh, int mda_num, uint64_t mda_offset, uint64_t mda_size, int *found_header)
+static int _check_mda_header(struct mda_header *mh, unsigned mda_num, uint64_t mda_offset, uint64_t mda_size, int *found_header)
 {
 	char str[256];
 	uint32_t crc;
@@ -737,28 +737,34 @@ static int _check_mda_header(struct mda_header *mh, int mda_num, uint64_t mda_of
 		       MDA_HEADER_SIZE - sizeof(mh->checksum_xl));
 
 	if (crc != htole32(mh->checksum_xl)) {
-		log_print("CHECK: mda_header_%d.checksum expected 0x%x", mda_num, crc);
+		log_print("CHECK: mda_header_%u.checksum expected 0x%x",
+			  mda_num, crc);
 		bad++;
 	}
 
 	if (memcmp(mh->magic, FMTT_MAGIC, sizeof(mh->magic))) {
-		log_print("CHECK: mda_header_%d.magic expected 0x%s", mda_num, _chars_to_hexstr((const void *)&FMTT_MAGIC, str, 16, 256, "mda_header.magic"));
+		log_print("CHECK: mda_header_%u.magic expected 0x%s",
+			  mda_num, _chars_to_hexstr((const void *)&FMTT_MAGIC,
+						    str, 16, 256, "mda_header.magic"));
 		good_magic = 0;
 		bad++;
 	}
 
 	if (htole32(mh->version) != FMTT_VERSION) {
-		log_print("CHECK: mda_header_%d.version expected %u", mda_num, FMTT_VERSION);
+		log_print("CHECK: mda_header_%u.version expected %u",
+			  mda_num, (unsigned) FMTT_VERSION);
 		bad++;
 	}
 
 	if (htole64(mh->start) != mda_offset) {
-		log_print("CHECK: mda_header_%d.start does not match pv_header.disk_locn.offset %llu", mda_num, (unsigned long long)mda_offset);
+		log_print("CHECK: mda_header_%u.start does not match pv_header.disk_locn.offset %llu",
+			  mda_num, (unsigned long long)mda_offset);
 		bad++;
 	}
 
 	if (htole64(mh->size) != mda_size) {
-		log_print("CHECK: mda_header_%d.size does not match pv_header.disk_locn.size %llu", mda_num, (unsigned long long)mda_size);
+		log_print("CHECK: mda_header_%u.size does not match pv_header.disk_locn.size %llu",
+			  mda_num, (unsigned long long)mda_size);
 		bad++;
 	}
 
@@ -783,7 +789,7 @@ static int _check_mda_header(struct mda_header *mh, int mda_num, uint64_t mda_of
 
 static int _dump_raw_locn(struct device *dev, struct devicefile *def, int print_fields,
 			  struct raw_locn *rlocn, int rlocn_index, uint64_t rlocn_offset,
-			  int mda_num, uint64_t mda_offset, uint64_t mda_size,
+			  unsigned mda_num, uint64_t mda_offset, uint64_t mda_size,
 			  uint64_t *meta_offset_ret,
 			  uint64_t *meta_size_ret,
 			  uint32_t *meta_checksum_ret)
@@ -791,8 +797,8 @@ static int _dump_raw_locn(struct device *dev, struct devicefile *def, int print_
 	uint64_t meta_offset, meta_size;
 	uint32_t meta_checksum;
 	uint32_t meta_flags;
-	int mn = mda_num; /* 1 or 2 */
-	int ri = rlocn_index; /* 0 or 1 */
+	unsigned mn = mda_num; /* 1 or 2 */
+	unsigned ri = rlocn_index; /* 0 or 1 */
 	int wrapped = 0;
 
 	meta_offset = htole64(rlocn->offset);
@@ -804,20 +810,25 @@ static int _dump_raw_locn(struct device *dev, struct devicefile *def, int print_
 		wrapped = 1;
 
 	if (print_fields) {
-		log_print("mda_header_%d.raw_locn[%d] at %llu # %s%s", mn, ri, (unsigned long long)rlocn_offset, (ri == 0) ? "commit" : "precommit", wrapped ? " wrapped" : "");
-		log_print("mda_header_%d.raw_locn[%d].offset %llu", mn, ri, (unsigned long long)meta_offset);
-		log_print("mda_header_%d.raw_locn[%d].size %llu", mn, ri, (unsigned long long)meta_size);
-		log_print("mda_header_%d.raw_locn[%d].checksum 0x%x", mn, ri, meta_checksum);
+		log_print("mda_header_%u.raw_locn[%u] at %llu # %s%s",
+			  mn, ri, (unsigned long long)rlocn_offset,
+			  (ri == 0) ? "commit" : "precommit", wrapped ? " wrapped" : "");
+		log_print("mda_header_%u.raw_locn[%u].offset %llu",
+			  mn, ri, (unsigned long long)meta_offset);
+		log_print("mda_header_%u.raw_locn[%u].size %llu",
+			  mn, ri, (unsigned long long)meta_size);
+		log_print("mda_header_%u.raw_locn[%u].checksum 0x%x",
+			  mn, ri, meta_checksum);
 
 		if (meta_flags & RAW_LOCN_IGNORED)
-			log_print("mda_header_%d.raw_locn[%d].flags 0x%x # RAW_LOCN_IGNORED", mn, ri, meta_flags);
+			log_print("mda_header_%u.raw_locn[%u].flags 0x%x # RAW_LOCN_IGNORED", mn, ri, meta_flags);
 		else
-			log_print("mda_header_%d.raw_locn[%d].flags 0x%x", mn, ri, meta_flags);
+			log_print("mda_header_%u.raw_locn[%u].flags 0x%x", mn, ri, meta_flags);
 	}
 
 	/* The precommit pointer will usually be empty. */
 	if ((rlocn_index == 1) && meta_offset)
-		log_print("CHECK: mda_header_%d.raw_locn[%d] for precommit not empty", mn, ri);
+		log_print("CHECK: mda_header_%u.raw_locn[%u] for precommit not empty", mn, ri);
 
 	/* This metadata area is not being used to hold text metadata. */
 	/* Old, out of date text metadata may exist if the area was once used. */
@@ -829,7 +840,7 @@ static int _dump_raw_locn(struct device *dev, struct devicefile *def, int print_
 	 * the 512 bytes used by the mda_header sector.
 	 */
 	if (meta_size > (mda_size - 512)) {
-		log_print("CHECK: mda_header_%d.raw_locn[%d].size larger than metadata area size", mn, ri);
+		log_print("CHECK: mda_header_%u.raw_locn[%u].size larger than metadata area size", mn, ri);
 		/* If meta_size is bad, try to continue using a reasonable value */
 		meta_size = (mda_size - 512);
 	}
@@ -869,7 +880,7 @@ static int _dump_meta_area(struct device *dev, struct devicefile *def, const cha
 	}
 
 	if (!(fp = fopen(tofile, "wx"))) {
-		log_error("Failed to create file %s", tofile);
+		log_error("Failed to create file %s.", tofile);
 		free(meta_buf);
 		return 0;
 	}
@@ -893,7 +904,7 @@ static int _dump_meta_area(struct device *dev, struct devicefile *def, const cha
 
 static int _dump_current_text(struct device *dev, struct devicefile *def,
 			      int print_fields, int print_metadata, const char *tofile,
-			      int mda_num, int rlocn_index,
+			      unsigned mda_num, unsigned rlocn_index,
 			      uint64_t mda_offset, uint64_t mda_size,
 			      uint64_t meta_offset, uint64_t meta_size,
 			      uint32_t meta_checksum)
@@ -903,13 +914,13 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 	char *vgname = NULL;
 	uint32_t crc;
 	uint32_t seqno = 0;
-	int mn = mda_num; /* 1 or 2 */
-	int ri = rlocn_index; /* 0 or 1 */
+	unsigned mn = mda_num; /* 1 or 2 */
+	unsigned ri = rlocn_index; /* 0 or 1 */
 	int bad = 0;
 
 	if (!(meta_buf = zalloc(meta_size + 1))) {
-		log_print("CHECK: mda_header_%d.raw_locn[%d] no mem for metadata text size %llu", mn, ri,
-			  (unsigned long long)meta_size);
+		log_print("CHECK: mda_header_%u.raw_locn[%u] no mem for metadata text size %llu",
+			  mn, ri, (unsigned long long)meta_size);
 		return 0;
 	}
 
@@ -930,7 +941,8 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 		uint32_t size_b = wrap;
 
 		if (!_read_bytes(dev, def, offset_a, size_a, meta_buf)) {
-			log_print("CHECK: failed to read metadata text at mda_header_%d.raw_locn[%d].offset %llu size %llu part_a %llu %llu", mn, ri,
+			log_print("CHECK: failed to read metadata text at mda_header_%u.raw_locn[%u].offset %llu size %llu part_a %llu %llu",
+				  mn, ri,
 				  (unsigned long long)meta_offset, (unsigned long long)meta_size,
 				  (unsigned long long)offset_a, (unsigned long long)size_a);
 			free(meta_buf);
@@ -938,7 +950,8 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 		}
 
 		if (!_read_bytes(dev, def, offset_b, size_b, meta_buf + size_a)) {
-			log_print("CHECK: failed to read metadata text at mda_header_%d.raw_locn[%d].offset %llu size %llu part_b %llu %llu", mn, ri,
+			log_print("CHECK: failed to read metadata text at mda_header_%u.raw_locn[%u].offset %llu size %llu part_b %llu %llu",
+				  mn, ri,
 				  (unsigned long long)meta_offset, (unsigned long long)meta_size,
 				  (unsigned long long)offset_b, (unsigned long long)size_b);
 			free(meta_buf);
@@ -946,7 +959,8 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 		}
 	} else {
 		if (!_read_bytes(dev, def, mda_offset + meta_offset, meta_size, meta_buf)) {
-			log_print("CHECK: failed to read metadata text at mda_header_%d.raw_locn[%d].offset %llu size %llu", mn, ri,
+			log_print("CHECK: failed to read metadata text at mda_header_%u.raw_locn[%u].offset %llu size %llu",
+				  mn, ri,
 				  (unsigned long long)meta_offset, (unsigned long long)meta_size);
 			free(meta_buf);
 			return 0;
@@ -956,7 +970,7 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 	meta_buf[meta_size] = 0;
 	crc = calc_crc(INITIAL_CRC, (uint8_t *)meta_buf, meta_size);
 	if (crc != meta_checksum) {
-		log_print("CHECK: metadata text at %llu crc does not match mda_header_%d.raw_locn[%d].checksum",
+		log_print("CHECK: metadata text at %llu crc does not match mda_header_%u.raw_locn[%u].checksum",
 			  (unsigned long long)(mda_offset + meta_offset), mn, ri);
 		bad++;
 	}
@@ -1003,7 +1017,7 @@ static int _dump_current_text(struct device *dev, struct devicefile *def,
 	} else {
 		FILE *fp;
 		if (!(fp = fopen(tofile, "wx"))) {
-			log_error("Failed to create file %s", tofile);
+			log_error("Failed to create file %s.", tofile);
 			goto out;
 		}
 
@@ -1282,7 +1296,7 @@ static int _dump_mda_header(struct cmd_context *cmd, struct settings *set,
 	uint64_t meta_offset = 0; /* bytes */
 	uint64_t meta_size = 0;   /* bytes */
 	uint32_t meta_checksum = 0;
-	int mda_num = (mda_offset <= 65536) ? 1 : 2;
+	unsigned mda_num = (mda_offset <= 65536) ? 1 : 2;
 	int bad = 0;
 
 	*checksum0_ret = 0; /* checksum from raw_locn[0] */
@@ -1306,12 +1320,12 @@ static int _dump_mda_header(struct cmd_context *cmd, struct settings *set,
 	mh = (struct mda_header *)buf;
 
 	if (print_fields) {
-		log_print("mda_header_%d at %llu # metadata area", mda_num, (unsigned long long)mda_offset);
-		log_print("mda_header_%d.checksum 0x%x", mda_num, htole32(mh->checksum_xl));
-		log_print("mda_header_%d.magic 0x%s", mda_num, _chars_to_hexstr(mh->magic, str, 16, 256, "mda_header.magic"));
-		log_print("mda_header_%d.version %u", mda_num, htole32(mh->version));
-		log_print("mda_header_%d.start %llu", mda_num, (unsigned long long)htole64(mh->start));
-		log_print("mda_header_%d.size %llu", mda_num, (unsigned long long)htole64(mh->size));
+		log_print("mda_header_%u at %llu # metadata area", mda_num, (unsigned long long)mda_offset);
+		log_print("mda_header_%u.checksum 0x%x", mda_num, htole32(mh->checksum_xl));
+		log_print("mda_header_%u.magic 0x%s", mda_num, _chars_to_hexstr(mh->magic, str, 16, 256, "mda_header.magic"));
+		log_print("mda_header_%u.version %u", mda_num, htole32(mh->version));
+		log_print("mda_header_%u.start %llu", mda_num, (unsigned long long)htole64(mh->start));
+		log_print("mda_header_%u.size %llu", mda_num, (unsigned long long)htole64(mh->size));
 	}
 
 	if (!_check_mda_header(mh, mda_num, mda_offset, mda_size, found_header))
@@ -1446,7 +1460,7 @@ static int _dump_metadata(struct cmd_context *cmd, const char *dump, struct sett
 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0; /* bytes */
 	uint32_t mda1_checksum, mda2_checksum;
 	int mda_count = 0;
-	int mda_num = 1;
+	unsigned mda_num = 1;
 	int bad = 0;
 
 	if (arg_is_set(cmd, file_ARG)) {
@@ -1524,7 +1538,7 @@ static int _dump_found(struct cmd_context *cmd, struct settings *set, uint64_t l
 		log_print("Found label on %s, sector %llu, type=LVM2 001",
 			  dev_name(dev), (unsigned long long)labelsector);
 	else {
-		log_error("Could not find LVM label on %s", dev_name(dev));
+		log_error("Could not find LVM label on %s.", dev_name(dev));
 		return 0;
 	}
 
@@ -1558,7 +1572,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
 	char *buf;
 	uint64_t mda1_offset = 0, mda1_size = 0, mda2_offset = 0, mda2_size = 0; /* bytes */
 	uint64_t mda_offset = 0, mda_size = 0; /* bytes */
-	int mda_num = 0;
+	unsigned mda_num = 0;
 	int found_label = 0;
 	int mda_count = 0;
 	int set_vals = 0;
@@ -1632,7 +1646,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
 		}
 
 		if (set->mda2_offset_set || set->mda2_size_set)
-			log_print("Ignoring mda2 values from settings.");
+			log_print("Ignoring mda2 values from settings");
 
 		goto search;
 	}
@@ -1703,7 +1717,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
 		mda_offset = 4096;
 		mda_size = ONE_MB_IN_BYTES - 4096;
 
-		log_print("Using common defaults for first mda: offset %llu size %llu.",
+		log_print("Using common defaults for first mda: offset %llu size %llu",
 			  (unsigned long long)mda_offset, (unsigned long long)mda_size);
 		log_print("Override defaults with --settings \"mda_offset=<bytes> mda_size=<bytes>\"");
 
@@ -1730,7 +1744,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
 		mda_offset = dev_bytes - extra_bytes - ONE_MB_IN_BYTES;
 		mda_size = dev_bytes - mda_offset;
 
-		log_print("Using defaults for second mda: offset %llu size %llu.",
+		log_print("Using defaults for second mda: offset %llu size %llu",
 			  (unsigned long long)mda_offset, (unsigned long long)mda_size);
 		log_print("Override defaults with --settings \"mda_offset=<bytes> mda_size=<bytes>\"");
 	} else {
@@ -1740,13 +1754,13 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
 
  search:
 	if ((mda_num == 1) && ((mda1_offset && mda1_offset != mda_offset) || (mda1_size && mda1_size != mda_size))) {
-		log_print("Ignoring mda1_offset %llu mda1_size %llu from pv_header.",
+		log_print("Ignoring mda1_offset %llu mda1_size %llu from pv_header",
 			  (unsigned long long)mda1_offset,
 			  (unsigned long long)mda1_size);
 	}
 
 	if ((mda_num == 2) && ((mda2_offset && mda2_offset != mda_offset) || (mda2_size && mda2_size != mda_size))) {
-		log_print("Ignoring mda2_offset %llu mda2_size %llu from pv_header.",
+		log_print("Ignoring mda2_offset %llu mda2_size %llu from pv_header",
 			  (unsigned long long)mda2_offset,
 			  (unsigned long long)mda2_size);
 	}
@@ -1856,7 +1870,7 @@ static int _get_one_setting(struct cmd_context *cmd, struct settings *set, char 
 		return 1;
 	}
 bad:
-	log_error("Invalid setting: %s", key);
+	log_error("Invalid setting: %s.", key);
 	return 0;
 }
 
@@ -1866,7 +1880,7 @@ static int _get_settings(struct cmd_context *cmd, struct settings *set)
 	const char *str;
 	char key[64];
 	char val[64];
-	unsigned num;
+	int num;
 	unsigned pos;
 
 	/*
@@ -1890,7 +1904,7 @@ static int _get_settings(struct cmd_context *cmd, struct settings *set)
 			memset(val, 0, sizeof(val));
 
 			if (sscanf(str + pos, " %63[^=]=%63s %n", key, val, &num) != 2) {
-				log_error("Invalid setting at: %s", str+pos);
+				log_error("Invalid setting at: %s.", str+pos);
 				return 0;
 			}
 
@@ -1939,7 +1953,7 @@ static int _repair_label_header(struct cmd_context *cmd, const char *repair,
 	}
 
 	if (!dev_read_bytes(dev, lh_offset, 512, buf)) {
-	        log_error("Failed to read label_header at %llu", (unsigned long long)lh_offset);
+	        log_error("Failed to read label_header at %llu.", (unsigned long long)lh_offset);
 	        return 0;
 	}
 
@@ -1949,7 +1963,7 @@ static int _repair_label_header(struct cmd_context *cmd, const char *repair,
 
 	/* sanity check */
 	if ((void *)pvh != (void *)(buf + pvh_offset - lh_offset)) {
-	        log_error("Problem with pv_header offset calculation");
+	        log_error("Problem with pv_header offset calculation.");
 	        return 0;
 	}
 
@@ -1975,7 +1989,7 @@ static int _repair_label_header(struct cmd_context *cmd, const char *repair,
 		return 0;
 
 	if (!dev_write_bytes(dev, lh_offset, 512, buf)) {
-	        log_error("Failed to write new header");
+	        log_error("Failed to write new header.");
 	        return 0;
 	}
 	return 1;
@@ -2344,7 +2358,7 @@ static int _repair_pv_header(struct cmd_context *cmd, const char *repair,
 	 * This same buffer is modified and written back.
 	 */
 	if (!dev_read_bytes(dev, lh_offset, 512, head_buf)) {
-	        log_error("Failed to read label_header at %llu", (unsigned long long)lh_offset);
+	        log_error("Failed to read label_header at %llu.", (unsigned long long)lh_offset);
 		goto fail;
 	}
 
@@ -2410,7 +2424,7 @@ static int _repair_pv_header(struct cmd_context *cmd, const char *repair,
 	}
 
 	if (dev_with_pvid && (dev_with_pvid != dev)) {
-		log_error("Cannot use PV UUID %s which exists on %s", pvid, dev_name(dev_with_pvid));
+		log_error("Cannot use PV UUID %s which exists on %s.", pvid, dev_name(dev_with_pvid));
 		goto fail;
 	}
 
@@ -2497,7 +2511,7 @@ static int _repair_pv_header(struct cmd_context *cmd, const char *repair,
 		goto fail;
 
 	if (!dev_write_bytes(dev, lh_offset, 512, head_buf)) {
-	        log_error("Failed to write new header");
+	        log_error("Failed to write new header.");
 		goto fail;
 	}
 
@@ -2520,7 +2534,7 @@ static int _update_mda(struct cmd_context *cmd, struct metadata_file *mf, struct
 
 	max_size = ((mda_size - 512) / 2) - 512;
 	if (mf->text_size > mda_size) {
-		log_error("Metadata text %llu too large for mda_size %llu max %llu",
+		log_error("Metadata text %llu too large for mda_size %llu max %llu.",
 			  (unsigned long long)mf->text_size,
 			  (unsigned long long)mda_size,
 			  (unsigned long long)max_size);
@@ -2574,12 +2588,12 @@ static int _update_mda(struct cmd_context *cmd, struct metadata_file *mf, struct
 		goto fail;
 
 	if (!dev_write_bytes(dev, text_offset, mf->text_size, mf->text_buf)) {
-		log_error("Failed to write new mda text");
+		log_error("Failed to write new mda text.");
 		goto fail;
 	}
 
 	if (!dev_write_bytes(dev, mda_offset, 512, buf)) {
-		log_error("Failed to write new mda header");
+		log_error("Failed to write new mda header.");
 		goto fail;
 	}
 
@@ -2626,7 +2640,7 @@ static int _repair_metadata(struct cmd_context *cmd, const char *repair,
 
 	if (!mda_count && set->mda_offset_set && set->mda_size_set &&
 	    !set->mda_offset && !set->mda_size) {
-		log_print("No metadata areas on device to repair.");
+		log_print("No metadata areas on device to repair");
 		return 1;
 	}
 
@@ -2823,22 +2837,22 @@ static int _dump_backup_to_raw(struct cmd_context *cmd, struct settings *set)
 	}
 
 	if (!input) {
-		log_error("Set backup file in --settings backup_file=path");
+		log_error("Set backup file in --settings backup_file=path.");
 		return 0;
 	}
 
 	if ((fd = open(input, O_RDONLY)) < 0) {
-		log_error("Cannot open file: %s", input);
+		log_error("Cannot open file: %s.", input);
 		return 0;
 	}
 
 	if (fstat(fd, &sb)) {
-		log_error("Cannot access file: %s", input);
+		log_error("Cannot access file: %s.", input);
 		goto fail_close;
 	}
 
 	if (!(back_size = (uint64_t)sb.st_size)) {
-		log_error("Empty file: %s", input);
+		log_error("Empty file: %s.", input);
 		goto fail_close;
 	}
 
@@ -2847,7 +2861,7 @@ static int _dump_backup_to_raw(struct cmd_context *cmd, struct settings *set)
 
 	rv = read(fd, back_buf, back_size);
 	if (rv != (ssize_t)back_size) {
-		log_error("Cannot read file: %s", input);
+		log_error("Cannot read file: %s.", input);
 		free(back_buf);
 		goto fail_close;
 	}
@@ -2873,7 +2887,7 @@ static int _dump_backup_to_raw(struct cmd_context *cmd, struct settings *set)
 	} else {
 		FILE *fp;
 		if (!(fp = fopen(tofile, "wx"))) {
-			log_error("Failed to create file %s", tofile);
+			log_error("Failed to create file %s.", tofile);
 			ret = 0;
 			goto out;
 		}
@@ -2966,17 +2980,17 @@ static int _read_metadata_file(struct cmd_context *cmd, struct metadata_file *mf
 	int fd;
 
 	if ((fd = open(mf->filename, O_RDONLY)) < 0) {
-		log_error("Cannot open file: %s", mf->filename);
+		log_error("Cannot open file: %s.", mf->filename);
 		return 0;
 	}
 
 	if (fstat(fd, &sb)) {
-		log_error("Cannot access file: %s", mf->filename);
+		log_error("Cannot access file: %s.", mf->filename);
 		goto out;
 	}
 
 	if (!(text_size = (uint64_t)sb.st_size)) {
-		log_error("Empty file: %s", mf->filename);
+		log_error("Empty file: %s.", mf->filename);
 		goto out;
 	}
 
@@ -2985,7 +2999,7 @@ static int _read_metadata_file(struct cmd_context *cmd, struct metadata_file *mf
 
 	rv = read(fd, text_buf, text_size);
 	if (rv != (ssize_t)text_size) {
-		log_error("Cannot read file: %s", mf->filename);
+		log_error("Cannot read file: %s.", mf->filename);
 		free(text_buf);
 		goto out;
 	}
