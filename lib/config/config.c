@@ -1508,6 +1508,9 @@ static void _log_array_value_used(struct dm_pool *mem, const struct dm_config_no
 	struct dm_config_node_out_spec out_spec = { 0 };
 	uint32_t old_format_flags;
 
+	if (verbose_level() < _LOG_INFO)
+		return;
+
 	out_handle.mem = mem;
 	out_spec.line_fn = _config_array_line;
 
@@ -1517,15 +1520,15 @@ static void _log_array_value_used(struct dm_pool *mem, const struct dm_config_no
 		DM_CONFIG_VALUE_FMT_COMMON_ARRAY);
 
 	if (!dm_config_write_one_node_out(cn, &out_spec, &out_handle)) {
-		log_error("_log_array_value_used: failed to write node value");
+		log_error("_log_array_value_used: failed to write node value.");
 		out_handle.mem = NULL;
 	}
 
 	if (default_used)
-		log_very_verbose("%s not found in config: defaulting to %s",
+		log_very_verbose("%s not found in config: defaulting to %s.",
 				 path, out_handle.mem ? out_handle.str : "<unknown>");
 	else
-		log_very_verbose("Setting %s to %s",
+		log_very_verbose("Setting %s to %s.",
 				 path, out_handle.mem ? out_handle.str : "<unknown>");
 
 	if (out_handle.mem)
