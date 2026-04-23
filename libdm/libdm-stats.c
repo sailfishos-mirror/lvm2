@@ -4622,7 +4622,7 @@ static void _stats_cleanup_region_ids(struct dm_stats *dms, uint64_t *regions,
 
 	for (i = 0; i < nr_regions; i++)
 		if (!_stats_delete_region(dms, regions[i]))
-			log_error("Could not delete region " FMTu64 ".", i);
+			log_error("Could not delete region " FMTu64 ".", regions[i]);
 }
 
 /*
