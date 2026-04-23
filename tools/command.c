@@ -134,6 +134,10 @@ const struct lv_type *get_lv_type(int lvt_enum)
 
 struct command_name_args command_names_args[LVM_COMMAND_COUNT] = { { 0 } };
 
+/* array of pointers into val_names[] sorted alphabetically (by val name) */
+
+static const struct val_name *val_names_alpha[VAL_COUNT + 1];
+
 /* array of pointers into opt_names[] that is sorted alphabetically (by long opt name) */
 
 static const struct opt_name *opt_names_alpha[ARG_COUNT + 1];
@@ -201,25 +205,38 @@ static void _split_line(char *buf, int *argc, char **argv, char sep)
 	*argc = i;
 }
 
-/* convert value string, e.g. Number, to foo_VAL enum */
+/* compare val_name pointers by name, used for qsort and bsearch */
+static int _val_name_sort_compare(const void *a, const void *b)
+{
+	return strcmp((*(const struct val_name **)a)->name,
+		     (*(const struct val_name **)b)->name);
+}
 
+/*
+ * Convert value string, e.g. "Number" or "LV_new", to foo_VAL enum;
+ * copies prefix before '_' into key and bsearches val_names_alpha
+ */
 static int _val_str_to_num(char *str)
 {
-	char name[MAX_LINE_ARGC];
-	char *new;
-	int i;
+	struct val_name key;
+	const struct val_name *key_ptr = &key;
+	const struct val_name **vn;
+	unsigned i;
 
-	/* compare the name before any suffix like _new or _<lvtype> */
+	for (i = 0; i < sizeof(key.name) - 1; i++) {
+		if (!str[i] || str[i] == '_')
+			break;
+		((char *)key.name)[i] = str[i];
+	}
 
-	if (!_dm_strncpy(name, str, sizeof(name)))
-		return 0; /* Buffer is too short */
+	if (i >= sizeof(key.name) - 1)
+		return 0;
 
-	if ((new = strchr(name, '_')))
-		*new = '\0';
+	((char *)key.name)[i] = '\0';
 
-	for (i = 0; i < VAL_COUNT; ++i)
-		if (!strncmp(name, val_names[i].name, val_names[i].name_len))
-			return val_names[i].val_enum;
+	if ((vn = bsearch(&key_ptr, val_names_alpha, VAL_COUNT,
+			  sizeof(*val_names_alpha), _val_name_sort_compare)))
+		return (*vn)->val_enum;
 
 	return 0;
 }
@@ -1328,6 +1345,16 @@ static void _create_opt_names_alpha(void)
 	qsort(opt_names_alpha, ARG_COUNT, sizeof(*opt_names_alpha), _long_name_compare);
 }
 
+static void _create_val_names_alpha(void)
+{
+	int i;
+
+	for (i = 0; i < VAL_COUNT; i++)
+		val_names_alpha[i] = &val_names[i];
+
+	qsort(val_names_alpha, VAL_COUNT, sizeof(*val_names_alpha), _val_name_sort_compare);
+}
+
 static int _copy_line(const char **line, size_t max_line, int *position)
 {
 	size_t len;
@@ -1410,6 +1437,7 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
 		run_name = NULL;
 
 	_create_opt_names_alpha();
+	_create_val_names_alpha();
 
 	/* Process each line of command-lines-input.h (from command-lines.in) */
 
