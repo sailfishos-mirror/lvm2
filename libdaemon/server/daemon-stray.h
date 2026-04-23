@@ -74,40 +74,40 @@ static void _daemon_get_filename(int fd, char *filename, size_t size)
 }
 
 static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
-				     const char *command, pid_t ppid,
-				     const char *parent_cmdline)
+				     const char *command, pid_t ppid)
 {
 	char filename[PATH_MAX];
+	char parent_cmdline[64];
 	int r;
 	int flags;
 
-	/* Ignore bad file descriptors */
-	if (!is_valid_fd(fd))
-		return;
-
-	if (!suppress_warnings)
-		_daemon_get_filename(fd, filename, sizeof(filename));
-
-	/* Retrieve FD flags before closing */
 	flags = fcntl(fd, F_GETFD);
+	if (flags == -1)
+		return;
 
 	/*
 	 * Skip descriptors marked close-on-exec.
 	 * These are intentionally opened by well-behaved libraries
 	 * (e.g. a PKCS#11 module) that properly set FD_CLOEXEC.
 	 */
-	if (flags >= 0 && (flags & FD_CLOEXEC))
+	if (flags & FD_CLOEXEC)
 		return;
+
+	if (!suppress_warnings && (fd > STDERR_FILENO))
+		_daemon_get_filename(fd, filename, sizeof(filename));
 
 	r = close(fd);
 	if ((fd <= STDERR_FILENO) || suppress_warnings)
 		return;
 
+	if (r && errno == EBADF)
+		return;
+
+	_daemon_get_cmdline(ppid, parent_cmdline, sizeof(parent_cmdline));
+
 	if (!r)
 		fprintf(stderr, "File descriptor %d (%s) leaked on "
 			"%s invocation.", fd, filename, command);
-	else if (errno == EBADF)
-		return;
 	else
 		fprintf(stderr, "Close failed on stray file descriptor "
 			"%d (%s): %s", fd, filename, strerror(errno));
@@ -129,7 +129,6 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 	struct rlimit rlim;
 	int fd;
 	pid_t ppid = getppid();
-	char parent_cmdline[64];
 	static const char _fd_dir[] = DEFAULT_PROC_DIR "/self/fd";
 	struct dirent *dirent;
 	DIR *d;
@@ -139,7 +138,6 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 		/* Skipping close of descriptors within valgrind execution. */
 		return 1;
 #endif /* HAVE_VALGRIND */
-	_daemon_get_cmdline(ppid, parent_cmdline, sizeof(parent_cmdline));
 
 	if ((d = opendir(_fd_dir))) {
 		/* Discover opened descriptors from /proc/self/fd listing */
@@ -151,7 +149,7 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 			    (fd != custom_fds->err) &&
 			    (fd != custom_fds->report))
 				_daemon_close_descriptor(fd, suppress_warnings,
-							 command, ppid, parent_cmdline);
+							 command, ppid);
 		}
 
 		(void) closedir(d);
@@ -166,8 +164,8 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 			if ((fd != custom_fds->out) &&
 			    (fd != custom_fds->err) &&
 			    (fd != custom_fds->report))
-				_daemon_close_descriptor(fd, suppress_warnings, command,
-							 ppid, parent_cmdline);
+				_daemon_close_descriptor(fd, suppress_warnings,
+							 command, ppid);
 		}
 	} else
 		return 0; /* broken system */

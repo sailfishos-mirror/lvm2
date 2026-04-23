@@ -37,7 +37,7 @@ static void test_close_preserves_cloexec(void *fixture)
 	fd = open("/dev/null", O_RDONLY | O_CLOEXEC);
 	T_ASSERT(fd >= 0);
 
-	_daemon_close_descriptor(fd, 1, "test", getpid(), "unit-test");
+	_daemon_close_descriptor(fd, 1, "test", getpid());
 
 	/* fd must still be valid - not closed */
 	T_ASSERT(is_valid_fd(fd));
@@ -55,7 +55,7 @@ static void test_close_removes_non_cloexec(void *fixture)
 	T_ASSERT(fd >= 0);
 	T_ASSERT(fcntl(fd, F_SETFD, 0) == 0);
 
-	_daemon_close_descriptor(fd, 1, "test", getpid(), "unit-test");
+	_daemon_close_descriptor(fd, 1, "test", getpid());
 
 	/* fd must have been closed */
 	T_ASSERT(!is_valid_fd(fd));
@@ -64,7 +64,7 @@ static void test_close_removes_non_cloexec(void *fixture)
 static void test_close_ignores_bad_fd(void *fixture)
 {
 	/* Must not crash on invalid fd */
-	_daemon_close_descriptor(9999, 1, "test", getpid(), "unit-test");
+	_daemon_close_descriptor(9999, 1, "test", getpid());
 }
 
 static void test_close_stray_fds(void *fixture)
