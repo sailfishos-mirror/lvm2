@@ -51,7 +51,7 @@ The main LV may already exist, and is located on larger, slower devices.
 A main LV would be created with a command like:
 .P
 .EX
-# lvcreate -n main -L Size vg /dev/slow_hhd
+# lvcreate -n main -L Size vg /dev/slow_hdd
 .EE
 .
 .SS 2. Identify fast LV to use as the cache
@@ -65,7 +65,7 @@ special LV will be used to hold the cache:
 # lvs -a
 \  LV   Attr       Type   Devices
 \  fast -wi------- linear /dev/fast_ssd
-\  main -wi------- linear /dev/slow_hhd
+\  main -wi------- linear /dev/slow_hdd
 .EE
 .
 .SS 3. Start caching the main LV
@@ -114,7 +114,7 @@ using dm-cache (with cachepool):
 \  [fast_cpool]                    cache-pool fast_pool_cdata(0)
 \  [fast_cpool_cdata]              linear     /dev/fast_ssd
 \  [fast_cpool_cmeta]              linear     /dev/fast_ssd
-\  [main_corig]                    linear     /dev/slow_hhd
+\  [main_corig]                    linear     /dev/slow_hdd
 .EE
 .P
 using dm-cache (with cachevol):
@@ -124,7 +124,7 @@ using dm-cache (with cachevol):
 \  LV           Pool        Type   Devices
 \  main         [fast_cvol] cache  main_corig(0)
 \  [fast_cvol]              linear /dev/fast_ssd
-\  [main_corig]             linear /dev/slow_hhd
+\  [main_corig]             linear /dev/slow_hdd
 .EE
 .P
 using dm-writecache (with cachevol):
@@ -134,7 +134,7 @@ using dm-writecache (with cachevol):
 \  LV            Pool        Type       Devices
 \  main          [fast_cvol] writecache main_wcorig(0)
 \  [fast_cvol]               linear     /dev/fast_ssd
-\  [main_wcorig]             linear     /dev/slow_hhd
+\  [main_wcorig]             linear     /dev/slow_hdd
 .EE
 .
 .SS 5. Use the main LV
@@ -151,7 +151,7 @@ use the --uncache:
 .P
 # lvs -a
 \  LV   VG Attr       Type   Devices
-\  main vg -wi------- linear /dev/slow_hhd
+\  main vg -wi------- linear /dev/slow_hdd
 .EE
 .P
 To stop caching the main LV, separate the fast LV from the main LV.  This
@@ -164,7 +164,7 @@ attached.
 # lvs -a
 \  LV   VG Attr       Type   Devices
 \  fast vg -wi------- linear /dev/fast_ssd
-\  main vg -wi------- linear /dev/slow_hhd
+\  main vg -wi------- linear /dev/slow_hdd
 .EE
 .
 .SS 7. Create a new LV with caching
@@ -174,10 +174,10 @@ using the following command:
 .P
 .EX
 # lvcreate --type cache|writecache -n Name -L Size
-	--cachedevice /dev/fast_ssd vg /dev/slow_hhd
+	--cachedevice /dev/fast_ssd vg /dev/slow_hdd
 .EE
 .P
-The main LV is created with the specified Name and Size from the slow_hhd.
+The main LV is created with the specified Name and Size from the slow_hdd.
 A hidden fast LV is created on the fast_ssd and is then attached to the
 new main LV.  If the fast_ssd is unused, the entire disk will be used as
 the cache unless the --cachesize option is used to specify a size for the
