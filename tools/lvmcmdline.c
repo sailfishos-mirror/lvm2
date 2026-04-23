@@ -63,8 +63,6 @@ extern struct command_name_args command_names_args[];
  * Currently ~6 MiB (206 commands x ~31 KB each) - placed in .bss segment.
  */
 struct command commands[COMMAND_COUNT];
-static struct command *commands_idx[COMMAND_COUNT];
-
 static struct cmdline_context _cmdline;
 
 /*
@@ -1281,32 +1279,10 @@ static void _set_valid_args_for_command_name(int ci)
 	int opt_enum; /* foo_ARG from args.h */
 	int opt_syn;
 	int i, ro, oo, io;
-	int first = 0, last = COMMAND_COUNT - 1, middle;
-	const char *name = command_names[ci].name;
 
-	/* all_args is indexed by the foo_ARG enum vals */
-	/* Binary search in sorted array of long options (with duplicates) */
-	while (first <= last) {
-		middle = first + (last - first) / 2;
-		if ((i = strcmp(commands_idx[middle]->name, name)) < 0)
-			first = middle + 1;
-		else if (i > 0)
-			last = middle - 1;
-		else {
-			/* Matching command found.
-			 * As sorted array contains duplicates, found 1st. and last such cmd. */
-			i = middle;
-			while (middle > first && !strcmp(commands_idx[middle - 1]->name, name))
-				middle--;
-			while (i < last && !strcmp(commands_idx[i + 1]->name, name))
-				i++;
-			last = i;
-			break;
-		}
-	}
-
-	while (middle <= last) {
-		i = commands_idx[middle++]->command_index;
+	for (i = 0; i < COMMAND_COUNT; i++) {
+		if (commands[i].lvm_command_enum != ci)
+			continue;
 		for (ro = 0; ro < (commands[i].ro_count + commands[i].any_ro_count); ro++) {
 			opt_enum = commands[i].required_opt_args[ro].opt;
 			all_args[opt_enum] = 1;
@@ -1376,14 +1352,6 @@ static void _unregister_commands(void)
 	_cmdline.num_command_names = 0;
 }
 
-static int _command_name_compare(const void *on1, const void *on2)
-{
-	const struct command * const *optname1 = on1;
-	const struct command * const *optname2 = on2;
-
-	return strcmp((*optname1)->name, (*optname2)->name);
-}
-
 int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
 {
 	int i;
@@ -1404,18 +1372,13 @@ int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
 	_cmdline.commands = commands;
 	_cmdline.num_commands = COMMAND_COUNT;
 
-	for (i = 0; i < COMMAND_COUNT; i++) {
-		commands_idx[i] = &commands[i];
+	for (i = 0; i < COMMAND_COUNT; i++)
 		commands[i].command_index = i;
-	}
 
-	/* Sort all commands by its name for quick binary search */
-	qsort(commands_idx, COMMAND_COUNT, sizeof(*commands_idx), _command_name_compare);
-
-	for (i = 0; i < LVM_COMMAND_COUNT; ++i)
+	for (i = 0; i < LVM_COMMAND_COUNT; i++)
 		_set_valid_args_for_command_name(i);
 
-	_cmdline.num_command_names = i; /* Also counted how many command entries we have */
+	_cmdline.num_command_names = LVM_COMMAND_COUNT;
 	_cmdline.command_names = command_names;
 	_cmdline.command_names_args = command_names_args;
 
