@@ -2578,7 +2578,7 @@ uint64_t dm_stats_get_counter(const struct dm_stats *dms,
 
 	region_id = (region_id == DM_STATS_REGION_CURRENT)
 		     ? dms->cur_region : region_id ;
-	area_id = (area_id == DM_STATS_REGION_CURRENT)
+	area_id = (area_id == DM_STATS_AREA_CURRENT)
 		   ? dms->cur_area : area_id ;
 
 	sum_regions = !!(region_id & DM_STATS_WALK_GROUP);
@@ -3002,7 +3002,7 @@ int dm_stats_get_metric(const struct dm_stats *dms, int metric,
 	 */
 	region_id = (region_id == DM_STATS_REGION_CURRENT)
 		     ? dms->cur_region : region_id ;
-	area_id = (area_id == DM_STATS_REGION_CURRENT)
+	area_id = (area_id == DM_STATS_AREA_CURRENT)
 		   ? dms->cur_area : area_id ;
 
 	if (metric < 0 || metric >= DM_STATS_NR_METRICS) {
