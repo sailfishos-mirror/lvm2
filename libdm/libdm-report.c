@@ -1532,7 +1532,7 @@ static int _do_check_value_is_strictly_reserved(unsigned type, const void *res_v
 			} else if (sel_range) {
 				/* only selection value is a range */
 				if (((_uint64 val >= _uint64 res_val) && (_uint64 val <= _uint64 res_val)) ||
-				    (fs && ((fs->value->v.i >= _uint64 res_val) && (fs->value->next->v.i <= _uint64 res_val))))
+				    (fs && ((fs->value->v.i <= _uint64 res_val) && (fs->value->next->v.i >= _uint64 res_val))))
 					return 1;
 			} else {
 				/* neither selection value nor reserved value is a range */
@@ -1563,7 +1563,7 @@ static int _do_check_value_is_strictly_reserved(unsigned type, const void *res_v
 			} else if (sel_range) {
 				/* only selection value is a range */
 				if ((_dbl_greater_or_equal(_dbl val, _dbl res_val) && (_dbl_less_or_equal(_dbl val, _dbl res_val))) ||
-				    (fs && (_dbl_greater_or_equal(fs->value->v.d, _dbl res_val) && _dbl_less_or_equal(fs->value->next->v.d, _dbl res_val))))
+				    (fs && (_dbl_less_or_equal(fs->value->v.d, _dbl res_val) && _dbl_greater_or_equal(fs->value->next->v.d, _dbl res_val))))
 					return 1;
 			} else {
 				/* neither selection value nor reserved value is a range */
