@@ -334,6 +334,7 @@ struct dm_tree_node {
 	void *callback_data;
 
 	int activated;                  /* tracks activation during preload */
+	int suspended_locally;		/* suspended by this tree operation */
 };
 
 struct dm_tree {
@@ -1955,6 +1956,13 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
 		if (!info.exists || info.suspended)
 			continue;
 
+		if (child->suspended_locally) {
+			log_error("ABORTING: Device %s (%u:%u) was resumed externally "
+				  "during suspend - concurrent device-mapper access?",
+				  name, dinfo->major, dinfo->minor);
+			return 0;
+		}
+
 		/* If child has some real messages send them */
 		if ((child->props.send_messages > 1) && r) {
 			if (!(r = _node_send_messages(child, uuid_prefix, uuid_prefix_len, 1)))
@@ -1979,6 +1987,7 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
 
 		/* Update cached info */
 		child->info = newinfo;
+		child->suspended_locally = 1;
 	}
 
 	/* Then suspend any child nodes */
@@ -2108,6 +2117,7 @@ static int _reactivate_siblings(struct dm_tree_node *dnode,
 			r = 0;
 			continue;
 		}
+		child->suspended_locally = 0;
 	}
 
 	return r;
@@ -2195,6 +2205,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
 				r = 0;
 				continue;
 			}
+			child->suspended_locally = 0;
 
 			/*
 			 * FIXME: Implement delayed error reporting
@@ -3452,6 +3463,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 			r = 0;
 			continue;
 		}
+		child->suspended_locally = 0;
 
 		if (node_created) {
 			/* When creating new node also check transaction_id. */
