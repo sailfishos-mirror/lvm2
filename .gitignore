@@ -124,6 +124,7 @@ test/lib/dm-version-expected
 test/lib/dmeventd
 test/lib/dmsetup
 test/lib/dmstats
+test/lib/dmvdostats
 test/lib/fail
 test/lib/flavour-ndev-cluster
 test/lib/flavour-ndev-cluster-lvmpolld
@@ -132,6 +133,7 @@ test/lib/flavour-ndev-lvmetad
 test/lib/flavour-ndev-lvmetad-lvmpolld
 test/lib/flavour-ndev-lvmpolld
 test/lib/flavour-ndev-vanilla
+test/lib/flavour-ndev-vanilla-extended
 test/lib/flavour-udev-cluster
 test/lib/flavour-udev-cluster-lvmpolld
 test/lib/flavour-udev-lvmetad
@@ -144,6 +146,7 @@ test/lib/flavour-udev-lvmpolld
 test/lib/flavour-udev-vanilla
 test/lib/fsadm
 test/lib/get
+test/lib/gen_data_blocks
 test/lib/inittest
 test/lib/invalid
 test/lib/lvm
