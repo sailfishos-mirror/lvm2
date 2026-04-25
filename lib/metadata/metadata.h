@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2013 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
@@ -486,7 +486,7 @@ struct volume_group *vg_from_config_tree(struct cmd_context *cmd, const struct d
  */
 
 /*
- * Given mirror image or mirror log segment, find corresponding mirror segment 
+ * Given mirror image or mirror log segment, find corresponding mirror segment
  */
 int fixup_imported_mirrors(struct volume_group *vg);
 

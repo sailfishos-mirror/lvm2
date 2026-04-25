@@ -2148,7 +2148,7 @@ static void _add_getopt_arg(int opt_enum, char **optstrp, struct option **longop
 /*
  * getopt_long() has returned goval which indicates which option it's found.
  * We need to translate that goval to an enum value from the args array.
- * 
+ *
  * For options with both long and short forms, goval is the character value
  * of the short option.  For options with only a long form, goval is the
  * corresponding enum value plus 128.
@@ -2616,7 +2616,7 @@ static int _get_current_settings(struct cmd_context *cmd)
 	 * itself rather than having them printed in vg_read.
 	 */
 	cmd->vg_read_print_access_error = 1;
-		
+
 	if (arg_is_set(cmd, nosuffix_ARG))
 		cmd->current_settings.suffix = 0;
 

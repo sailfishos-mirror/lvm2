@@ -1225,16 +1225,16 @@ static int _online_devs(struct cmd_context *cmd, int do_all, struct dm_list *pvs
 				if (!_count_pvid_files_from_lookup_file(cmd, dev, &pvs_online, &pvs_offline, &vgname))
 					pvs_unknown = 1;
 			}
-	
+
 			if (pvs_unknown) {
 				log_print_pvscan(cmd, "PV %s online, VG unknown.", dev_name(dev));
 				vg_complete = 0;
-	
+
 			} else if (pvs_offline) {
 				log_print_pvscan(cmd, "PV %s online, VG %s incomplete (need %d).",
 						 dev_name(dev), vgname, pvs_offline);
 				vg_complete = 0;
-	
+
 			} else {
 				log_print_pvscan(cmd, "PV %s online, VG %s is complete.", dev_name(dev), vgname);
 				if (!str_list_add(cmd->mem, complete_vgnames, dm_pool_strdup(cmd->mem, vgname)))
@@ -1489,7 +1489,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	 * devs belonging to other devices files.
 	 * Enable/disable this behavior with a config setting?
 	 */
-	 
+
 	log_debug("pvscan_cache_args: filter devs nodata");
 
 	/*
@@ -1664,7 +1664,7 @@ static int _get_autoactivation(struct cmd_context *cmd, int event_activation, in
 		*skip_command = 1;
 		return 1;
 	}
-	
+
 	if (!event_activation) {
 		log_print_pvscan(cmd, "Skip pvscan for event with event_activation=0.");
 		*skip_command = 1;

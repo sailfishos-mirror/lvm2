@@ -203,7 +203,7 @@ int vgreduce(struct cmd_context *cmd, int argc, char **argv)
 			  "physical volume paths.");
 		return EINVALID_CMD_LINE;
 	}
-	
+
 	if (!argc) { /* repairing */
 		log_error("Please give volume group name.");
 		return EINVALID_CMD_LINE;

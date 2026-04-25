@@ -159,7 +159,7 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 
 	if (!str)
 		return 0;
- 
+
 	dm_strncpy(buf, str, sizeof(buf));
 
 	split_line(buf, &argc, argv, MAX_LOCKARGS, ',');
@@ -181,7 +181,7 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 			log_error("Unknown lockargs option value: %s", argv[i]);
 			return 0;
 		}
-	} 
+	}
 
 	/*
 	 * . nopersist and timeout: default
@@ -1759,7 +1759,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 	case -EPROTONOSUPPORT:
 		log_error("VG %s start failed: lock manager %s is not supported by lvmlockd", vg->name, lock_type);
 		break;
-	case -ELOCKREPAIR: 
+	case -ELOCKREPAIR:
 		log_error("VG %s start failed: sanlock lease needs repair", vg->name);
 		break;
 	default:
@@ -3292,7 +3292,7 @@ static int _lockd_lvcreate_lock_thin(struct cmd_context *cmd, struct volume_grou
 	 */
 	cmd->lockd_creating_thin_pool = creating_thin_pool;
 	cmd->lockd_creating_thin_volume = creating_thin_volume;
-                         
+
 	/*
 	 * If a thin pool was just created, then it's already locked.
 	 * If a thin pool was not just created, then we need to lock
@@ -3339,7 +3339,7 @@ int lockd_lvcreate_lock(struct cmd_context *cmd, struct volume_group *vg, struct
 		log_debug("lockd_lvcreate_lock creating_thin_pool %d creating_thin_volume %d created pool %d volume %d",
 			  creating_thin_pool, creating_thin_volume,
 			  cmd->lockd_created_thin_pool, cmd->lockd_created_thin_volume);
-                         
+
 		return _lockd_lvcreate_lock_thin(cmd, vg, lp, creating_thin_pool, creating_thin_volume);
 	}
 
@@ -4427,7 +4427,7 @@ int lockd_rename_vg_before(struct cmd_context *cmd, struct volume_group *vg)
 			log_error("Lockspace for \"%s\" not stopped on other hosts", vg->name);
 		return 0;
 	}
-	
+
 	if (!ret) {
 		log_error("lockd_rename_vg_before lvmlockd result %d", result);
 		return 0;
@@ -4484,7 +4484,7 @@ int lockd_rename_vg_final(struct cmd_context *cmd, struct volume_group *vg, int 
 		} else {
 			ret = (result < 0) ? 0 : 1;
 		}
-	
+
 		daemon_reply_destroy(reply);
 
 		if (!ret) {

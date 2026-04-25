@@ -665,17 +665,17 @@ static int _all_md_components(struct cmd_context *cmd, struct lvmcache_info *inf
 	struct device *dev_md = NULL;
 	struct device *dev;
 	int real_dup = 0;
- 
+
 	*dev_md_out = NULL;
 
 	/* There will often be no info struct because of the extra_md_checks function. */
- 
+
 	if (info && (cmd->dev_types->md_major == MAJOR(info->dev->dev)))
 		dev_md = info->dev;
- 
+
 	dm_list_iterate_items(devl, altdevs) {
 		dev = devl->dev;
- 
+
 		if (cmd->dev_types->md_major == MAJOR(dev->dev)) {
 			if (dev_md) {
 				/* md devs themselves are dups */
@@ -693,13 +693,13 @@ static int _all_md_components(struct cmd_context *cmd, struct lvmcache_info *inf
 			}
 		}
 	}
- 
+
 	if (real_dup)
 		return 0;
- 
+
 	if (dev_md)
 		log_debug("Found md device %s for PVID %s.", dev_name(dev_md), pvid);
- 
+
 	*dev_md_out = dev_md;
 	return 1;
 }
@@ -1455,7 +1455,7 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 			 * looks like an md device, then it seems very likely
 			 * to be an md component, so do a full check on it even
 			 * if the user has set "start".
-			 * 
+			 *
 			 * In "auto" mode, do a full check if either the size
 			 * or the name indicates a possible md component.
 			 */
@@ -2307,7 +2307,7 @@ void lvmcache_update_vg_from_read(struct volume_group *vg, int *incorrect_pv_cla
 		}
 
 		log_debug_cache("lvmcache_update_vg %s for %s", vg->name, dev_name(info->dev));
-		
+
 		/*
 		 * FIXME: use a different function that just attaches info's that
 		 * had no metadata onto the correct vginfo.
@@ -2644,7 +2644,7 @@ int lvmcache_populate_pv_fields(struct lvmcache_info *info,
 				struct physical_volume *pv)
 {
 	struct data_area_list *da;
-	
+
 	if (!info->label) {
 		log_error("No cached label for orphan PV %s", pv_dev_name(pv));
 		return 0;

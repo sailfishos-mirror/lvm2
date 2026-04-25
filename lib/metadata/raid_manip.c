@@ -187,7 +187,7 @@ char *top_level_lv_name(struct volume_group *vg, const char *lv_name)
 		log_error("Failed to allocate string for new LV name.");
 		return NULL;
 	}
-        
+
 	if ((suffix = first_substring(new_lv_name, "_rimage_", "_rmeta_",
 						   "_mimage_", "_mlog_", NULL)))
 		*suffix = '\0';
@@ -1861,7 +1861,7 @@ static int _raid_reshape_add_images(struct logical_volume *lv,
 		log_print_unless_silent("Ignoring layout change on device adding reshape.");
 
 	if (seg_is_any_raid10(seg) && (new_image_count % seg->data_copies)) {
-		log_error("Can't reshape %s LV %s to odd number of stripes.", 
+		log_error("Can't reshape %s LV %s to odd number of stripes.",
 			  lvseg_name(seg), display_lvname(lv));
 		return 0;
 	}
@@ -2476,7 +2476,7 @@ static int _raid_reshape(struct logical_volume *lv,
 	} else if (!_vg_write_commit_backup(lv->vg))
 		return_0;
 
-	return 1; 
+	return 1;
 	/* FIXME force_repair ? _lv_cond_repair(lv) : 1; */
 }
 
@@ -3986,7 +3986,7 @@ static int _alloc_and_add_rmeta_devs_for_lv(struct logical_volume *lv, struct dm
 }
 
 /*
- * Eliminate the extracted LVs on @removal_lvs from @vg incl. vg write, commit and backup 
+ * Eliminate the extracted LVs on @removal_lvs from @vg incl. vg write, commit and backup
  */
 static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
 						      struct dm_list *removal_lvs,
@@ -4461,13 +4461,13 @@ static int _convert_raid0_to_striped(struct logical_volume *lv,
 
 		/* Eliminate the residual LVs, write VG, commit it and take a backup */
 		return _eliminate_extracted_lvs(lv->vg, removal_lvs);
-	} 
+	}
 
 	return 1;
 }
 
 /*
- * Inserts hidden LVs for all segments and the parallel areas in lv and moves 
+ * Inserts hidden LVs for all segments and the parallel areas in lv and moves
  * given segments and areas across.
  *
  * Optionally updates metadata and reloads mappings.
@@ -4571,7 +4571,7 @@ static struct lv_segment *_convert_striped_to_raid0(struct logical_volume *lv,
 /*
  * Takeover.
  *
- * Change the user's requested segment type to 
+ * Change the user's requested segment type to
  * the appropriate more-refined one for takeover.
  *
  *  raid can takeover striped,raid0 if there is only one stripe zone
@@ -7638,7 +7638,7 @@ int partial_raid_lv_supports_degraded_activation(const struct logical_volume *cl
 {
 	int not_capable = 0;
 	struct logical_volume * lv = (struct logical_volume *)clv; /* drop const */
-	
+
 	if (lv_raid_has_integrity(lv)) {
 		log_error("Integrity must be removed before degraded or partial activation of raid.");
 		return 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
@@ -153,7 +153,7 @@ force_t arg_force_value(const struct cmd_context *cmd);
 unsigned grouped_arg_count(const struct arg_values *av, int a);
 unsigned grouped_arg_is_set(const struct arg_values *av, int a);
 const char *grouped_arg_str_value(const struct arg_values *av, int a, const char *def);
-int32_t grouped_arg_int_value(const struct arg_values *av, int a, const int32_t def); 
+int32_t grouped_arg_int_value(const struct arg_values *av, int a, const int32_t def);
 
 const char *command_name(struct cmd_context *cmd);
 

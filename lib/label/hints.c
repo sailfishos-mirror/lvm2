@@ -510,7 +510,7 @@ int validate_hints(struct cmd_context *cmd, struct dm_list *hints)
 		if (!hint->chosen)
 			continue;
 
-		/* 
+		/*
 		 * label_scan was unable to read the dev so we don't know its pvid.
 		 * Since we are unable to verify the hint is correct, it's possible
 		 * that the PVID is actually found on a different device, so don't
@@ -1042,7 +1042,7 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	else
 		fprintf(fp, "devices_file:.\n");
 
-	/* 
+	/*
 	 * iterate through all devs and write a line for each
 	 * dev flagged DEV_SCAN_FOUND_LABEL
 	 */
@@ -1467,7 +1467,7 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
 		*newhints = NEWHINTS_REFRESH;
 		return 0;
 	}
-	
+
 	/*
 	 * A command that changes global state clears the content
 	 * of the hints file so it will be recreated, and we must

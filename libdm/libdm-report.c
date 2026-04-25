@@ -1447,7 +1447,7 @@ int dm_report_set_output_field_name_prefix(struct dm_report *rh, const char *out
 	}
 
 	rh->output_field_name_prefix = _toupperstr(prefix);
-	
+
 	return 1;
 }
 
@@ -1691,7 +1691,7 @@ static int _cmp_field_double(struct dm_report *rh, uint32_t field_num, const cha
 		case FLD_CMP_NUMBER|FLD_CMP_LT|FLD_CMP_EQUAL:
 			if (_check_value_is_strictly_reserved(rh, field_num, DM_REPORT_FIELD_TYPE_SIZE, &val, fs))
 				return 0;
-			return range ? _dbl_less_or_equal(val, sel2) : _dbl_less_or_equal(val, sel1); 
+			return range ? _dbl_less_or_equal(val, sel2) : _dbl_less_or_equal(val, sel1);
 
 		default:
 			log_error(INTERNAL_ERROR "_cmp_field_double: unsupported number "

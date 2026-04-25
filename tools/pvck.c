@@ -92,7 +92,7 @@ static char *_chars_to_str(const void *in, void *out, int num, int max, const ch
 	return out;
 }
 
-/* 
+/*
  * This is used to print mda_header.magic as a series of hex values
  * since it only contains some printable chars.
  */
@@ -1166,7 +1166,7 @@ static int _dump_label_and_pv_header(struct cmd_context *cmd, uint64_t labelsect
 			 * mda1 offset is page size from machine that created it,
 			 * warn if it's not one of the expected page sizes.
 			 */
-			if ((*mda1_offset != 4096) && 
+			if ((*mda1_offset != 4096) &&
 			    (*mda1_offset != 8192) &&
 			    (*mda1_offset != 16384) &&
 			    (*mda1_offset != 65536)) {
@@ -1976,7 +1976,7 @@ static int _repair_label_header(struct cmd_context *cmd, const char *repair,
 	               LABEL_SIZE - ((uint8_t *) &lh->offset_xl - (uint8_t *) lh));
 
 	lh->crc_xl = htole32(crc);
-       
+
 	log_print("Writing label_header.crc 0x%08x", crc);
 
 	if (arg_is_set(cmd, test_ARG)) {

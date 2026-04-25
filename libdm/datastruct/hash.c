@@ -237,7 +237,7 @@ static struct dm_hash_node **_find_str_with_val(struct dm_hash_table *t,
 {
 	struct dm_hash_node **c;
 	unsigned h;
-       
+
 	h = _hash(key, len) & t->mask_slots;
 
 	for (c = &t->slots[h]; *c; c = &((*c)->next)) {

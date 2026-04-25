@@ -547,7 +547,7 @@ int crypt_resize_script(struct cmd_context *cmd, struct logical_volume *lv, stru
  * The helper script does the following steps for reduce:
  * devpath = $cryptpath ? $cryptpath : $lvpath
  * if needs_unmount
- * 	umount $mountdir 
+ * 	umount $mountdir
  * if needs_fsck
  * 	e2fsck -f -p $devpath
  * if needs_mount
@@ -637,7 +637,7 @@ int fs_reduce_script(struct cmd_context *cmd, struct logical_volume *lv, struct 
  * The helper script does the following steps for extend:
  * devpath = $cryptpath ? $cryptpath : $lvpath
  * if needs_unmount
- * 	umount $mountdir 
+ * 	umount $mountdir
  * if needs_fsck
  * 	e2fsck -f -p $devpath
  * if needs_crypt

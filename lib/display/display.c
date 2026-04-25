@@ -190,7 +190,7 @@ static const char *_display_size(const struct cmd_context *cmd,
 				 uint64_t size, dm_size_suffix_t suffix_type)
 {
 	return dm_size_to_string(cmd->mem, size, cmd->current_settings.unit_type,
-				 cmd->si_unit_consistency, 
+				 cmd->si_unit_consistency,
 				 cmd->current_settings.unit_factor,
 				 cmd->current_settings.suffix,
 				 suffix_type);

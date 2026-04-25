@@ -38,7 +38,7 @@
  *
  *
  * VARIABLES:
- * 
+ *
  * id:                         Unique identifier.
  *
  * name:                       Configuration node name.

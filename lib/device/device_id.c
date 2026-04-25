@@ -51,8 +51,8 @@ static const char _searched_file_new[] = DEFAULT_RUN_DIR "/searched_devnames_new
 static const char _searched_file_dir[] = DEFAULT_RUN_DIR;
 
 /* Only for displaying in lvmdevices command output. */
-char devices_file_hostname_orig[PATH_MAX]; 
-char devices_file_product_uuid_orig[PATH_MAX]; 
+char devices_file_hostname_orig[PATH_MAX];
+char devices_file_product_uuid_orig[PATH_MAX];
 
 static uint64_t _get_refresh_timestamp(unsigned int add_seconds)
 {
@@ -329,7 +329,7 @@ int pv_device_id_is_stale(const struct physical_volume *pv)
  *    filters.  lvmcache is populated with summary info about each PV
  *    during this phase.
  * 5. device_ids_validate() checks if the PVIDs saved in the devices
- *    file are correct based on the PVIDs read from disk in the 
+ *    file are correct based on the PVIDs read from disk in the
  *    previous step.  If not it updates the devices file.
  *
  * cmd->use_devices reflect the entries in the devices file.
@@ -812,7 +812,7 @@ static int _dev_read_sys_serial(struct cmd_context *cmd, struct device *dev,
 		if (outbuf[0])
 			return 1;
 	}
-	
+
 	devname = dev_name(dev);
 	if (!strncmp(devname, "/dev/vd", 7)) {
 		char path[PATH_MAX];
@@ -1278,7 +1278,7 @@ int device_ids_read(struct cmd_context *cmd)
 {
 	char line[PATH_MAX];
 	char buf[PATH_MAX];
-	char check_id[PATH_MAX]; 
+	char check_id[PATH_MAX];
 	char *idtype, *idname, *devname, *pvid, *part;
 	struct dev_use *du;
 	FILE *fp;
@@ -3448,7 +3448,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs, 
 		if (!du->pvid)
 			continue;
 
-		/* 
+		/*
 		 * Correctly matched du and dev.
 		 * The DEVNAME hint could still need an update.
 		 */
@@ -3568,7 +3568,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs, 
 	 * devs that have not been scanned yet.
 	 */
 	dm_list_iterate_items(du, &cmd->use_devices) {
-		/* 
+		/*
 		 * Only search for devname type entries unless the refresh
 		 * trigger is set due to a machine change, in which case
 		 * we look for missing PVIDs on new devs with real idtypes.
@@ -4243,7 +4243,7 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 		 * dev in search_list_devs has a proper/stable device id
 		 * (e.g. wwid, serial, loop, mpath), then we don't need to
 		 * read it to check for missing PVIDs.
-		 * 
+		 *
 		 * search_for_devnames="all" means we should search every
 		 * device, so we skip this optimization.
 		 *

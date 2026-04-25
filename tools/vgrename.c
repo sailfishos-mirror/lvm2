@@ -141,8 +141,8 @@ static int _vgrename_single(struct cmd_context *cmd, const char *vg_name,
 
 		else if (lvs_in_vg_activated(vg)) {
 			if (!vg_refresh_visible(cmd, vg)) {
-				log_error("Renaming \"%s\" to \"%s\" failed", 
-					old_path, new_path);
+				log_error("Renaming \"%s\" to \"%s\" failed.",
+					  old_path, new_path);
 				goto error;
 			}
 		}

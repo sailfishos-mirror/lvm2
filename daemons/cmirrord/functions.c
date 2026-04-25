@@ -1066,7 +1066,7 @@ static int clog_flush(struct dm_ulog_request *rq, int server)
 		if (r)
 			LOG_ERROR("[%s] Error writing to disk log",
 				  SHORT_UUID(lc->uuid));
-		else 
+		else
 			LOG_DBG("[%s] Disk log written", SHORT_UUID(lc->uuid));
 	}
 

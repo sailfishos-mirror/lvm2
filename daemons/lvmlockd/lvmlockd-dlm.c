@@ -348,7 +348,7 @@ int lm_rem_lockspace_dlm(struct lockspace *ls, int free_vg)
 	 * to tell any other nodes to leave the lockspace.  This is not really
 	 * necessary since there should be no harm in having an unused
 	 * lockspace sitting around.  A new "notification lock" would need to
-	 * be added with a callback to signal this. 
+	 * be added with a callback to signal this.
 	 */
 
 	rv = dlm_release_lockspace(ls->name, lmd->dh, 1);
@@ -595,7 +595,7 @@ int lm_lock_dlm(struct lockspace *ls, struct resource *r, int ld_mode,
 	}
 
 	/*
-	 * The dlm lvb bug means that converting NL->EX will not return 
+	 * The dlm lvb bug means that converting NL->EX will not return
 	 * the latest lvb, so we have to convert NL->PR->EX to reread it.
 	 */
 	if (dlm_has_lvb_bug && (ld_mode == LD_LK_EX)) {

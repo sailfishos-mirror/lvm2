@@ -67,7 +67,7 @@ int dm_uuid_has_prefix(char *sysbuf, const char *prefix)
 	 * If it's a kpartx partitioned dm device the dm uuid will
 	 * be part%d-<prefix>...  e.g. part1-mpath-abc...
 	 * Check for the prefix after the part%-
-	 */ 
+	 */
 	if (!strncmp(sysbuf, "part", 4)) {
 		const char *dash = strchr(sysbuf, '-');
 
@@ -145,7 +145,7 @@ int dev_is_used_by_active_lv(struct cmd_context *cmd, struct device *dev, int *u
 		 * dirent->d_name is the dev name of the holder, e.g. "dm-1"
 		 * from this name, create path "/dev/dm-1" to run stat on.
 		 */
-		
+
 		if (dm_snprintf(dm_dev_path, sizeof(dm_dev_path), "%s%s", cmd->dev_dir, holder_name) < 0)
 			continue;
 

@@ -1959,7 +1959,7 @@ static int _setup_devices_list(struct cmd_context *cmd)
  * devices files, the dmeventd-generated command will fail when
  * it doesn't find the VG.
  */
- 
+
 static int _setup_devices_file_dmeventd(struct cmd_context *cmd)
 {
 	char path[PATH_MAX];
@@ -2086,7 +2086,7 @@ int setup_devices_file(struct cmd_context *cmd)
 			return 0;
 		}
 	}
-	
+
 	if (dm_snprintf(cmd->devices_file_path, sizeof(cmd->devices_file_path),
 			"%s/devices/%s", cmd->system_dir, filename) < 0) {
 		log_error("Failed to copy devices file path");
@@ -2151,7 +2151,7 @@ int setup_devices(struct cmd_context *cmd)
 	 * then they are clearly intending to use the devices file, so we
 	 * can create it.  Or, if they specify a non-system devices file
 	 * with pvcreate/vgcreate, then they clearly want to use a devices
-	 * file and we can create it (and creating a non-system devices file 
+	 * file and we can create it (and creating a non-system devices file
 	 * would not cause existing PVs to disappear from the main system.)
 	 *
 	 * An exception is if pvcreate/vgcreate get to device_id_write and

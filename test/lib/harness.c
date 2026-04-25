@@ -441,7 +441,7 @@ static void run(int i, char *f) {
 			struct timeval selectwait = { .tv_usec = 500000 }; /* 0.5s */
 
 			if ((fullbuffer && fullbuffer++ == 8000) ||
-			    (write_timeout > 0 && no_write > write_timeout)) 
+			    (write_timeout > 0 && no_write > write_timeout))
 			{
 			timeout:
 				kill(pid, SIGINT);

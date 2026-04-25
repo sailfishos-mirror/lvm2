@@ -148,7 +148,7 @@ int dev_ext_enable(struct device *dev, dev_ext_t src)
 
 	if (dev->ext.enabled && (dev->ext.src != src) && !dev_ext_release(dev)) {
 		log_error("%s: Failed to enable external handle [%s].",
-			   dev_name(dev), _ext_registry[src].name); 
+			   dev_name(dev), _ext_registry[src].name);
 		return 0;
 	}
 

@@ -2655,7 +2655,7 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
 		argv[++args] = rem_key_buf;
 	}
 
-	/* 
+	/*
 	 * The list of devices is already known here, so by supplying them,
 	 * lvmpersist can avoid running another lvm command to get the list
 	 * from the VG name.  We still provide the VG name so that lvmpersist

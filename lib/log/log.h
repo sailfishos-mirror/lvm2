@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
@@ -28,7 +28,7 @@
  * In addition, messages will be logged to file or syslog if they
  * are more serious than the log level specified with the log/debug_level
  * parameter in the configuration file.  These messages get the file
- * and line number prepended.  'stack' (without arguments) can be used 
+ * and line number prepended.  'stack' (without arguments) can be used
  * to log this information at debug level.
  *
  * log_sys_error and log_sys_very_verbose are for errors from system calls

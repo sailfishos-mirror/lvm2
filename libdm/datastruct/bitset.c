@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
  *
  * This file is part of the device-mapper userspace tools.
@@ -25,7 +25,7 @@ dm_bitset_t dm_bitset_create(struct dm_pool *mem, unsigned num_bits)
 	unsigned n = (num_bits / DM_BITS_PER_INT) + 2;
 	size_t size = sizeof(int) * n;
 	dm_bitset_t bs;
-	
+
 	if (mem)
 		bs = dm_pool_zalloc(mem, size);
 	else

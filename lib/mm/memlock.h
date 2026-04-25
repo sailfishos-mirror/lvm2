@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
@@ -21,7 +21,7 @@ struct cmd_context;
 /*
  * Inside a critical section, memory is always locked.
  *
- * After leaving the critical section, memory stays locked until 
+ * After leaving the critical section, memory stays locked until
  * memlock_unlock() is called.  This happens with
  * sync_local_dev_names() and sync_dev_names().
  *

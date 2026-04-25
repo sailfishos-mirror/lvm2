@@ -99,7 +99,7 @@ bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_
 
 // Writing bytes and zeroing bytes are very similar, so we factor out
 // this common code.
- 
+
 struct updater;
 
 typedef bool (*partial_update_fn)(struct updater *u, int di, block_address bb, uint64_t offset, size_t len);
@@ -122,7 +122,7 @@ static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 
 	byte_range_to_block_range(cache, start, len, &bb, &be);
 
-	// If the last block is partial, we will require a read, so let's 
+	// If the last block is partial, we will require a read, so let's
 	// prefetch it.
 	if ((start + len) % block_size)
         	bcache_prefetch(cache, di, (start + len) / block_size);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+ * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
  * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
  *
  * This file is part of the device-mapper userspace tools.
@@ -395,7 +395,7 @@ void dm_free_wrapper(void *ptr)
 	free(ptr);
 }
 
-void *dm_realloc_wrapper(void *p, unsigned int s, 
+void *dm_realloc_wrapper(void *p, unsigned int s,
 			 const char *file __attribute__((unused)),
 			 int line __attribute__((unused)))
 {

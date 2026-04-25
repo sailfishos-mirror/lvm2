@@ -1027,10 +1027,10 @@ static char *_dup_tok(struct parser *p)
 
 /*
  * node_lookup_fn is either:
- *   _find_config_node to perform a lookup starting from a given config_node 
+ *   _find_config_node to perform a lookup starting from a given config_node
  *   in a config_tree;
  * or
- *   _find_first_config_node to find the first config_node in a set of 
+ *   _find_first_config_node to find the first config_node in a set of
  *   cascaded trees.
  */
 typedef const struct dm_config_node *node_lookup_fn(const void *start, const char *path);

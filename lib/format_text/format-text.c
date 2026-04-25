@@ -937,7 +937,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 				   vg->name, vg->seqno,
 				   (unsigned long long)write1_last - extra_size,
 				   (unsigned long long)write1_last, extra_size);
-		  
+
 		if (write1_size > write_buf_size) {
 			/* sanity check, shouldn't happen */
 			log_error("VG %s %u %s adjusted metadata end %llu extra %u larger than write buffer %llu",
@@ -950,7 +950,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 
 	if (write2_over) {
 		extra_size = 512 - write2_over; /* this many extra zero bytes written after metadata text */
-		write2_size += extra_size; 
+		write2_size += extra_size;
 		write2_last = write2_start + write2_size - 1;
 
 		log_debug_metadata("VG %s %u metadata last align from %llu to %llu (+%u) (wrapped)",
@@ -981,7 +981,7 @@ static int _vg_write_raw(struct format_instance *fid, struct volume_group *vg,
 
 	dev_set_last_byte(mdac->area.dev, mda_start + mdah->size);
 
-	log_debug_metadata("VG %s %u metadata write at %llu size %llu (wrap %llu)", 
+	log_debug_metadata("VG %s %u metadata write at %llu size %llu (wrap %llu)",
 			   vg->name, vg->seqno,
 			   (unsigned long long)write1_start,
 			   (unsigned long long)write1_size,
@@ -2715,7 +2715,7 @@ int text_wipe_outdated_pv_mda(struct cmd_context *cmd, struct device *dev,
 	rlocn_slot1->offset = 0;
 	rlocn_slot1->size = 0;
 	rlocn_slot1->checksum = 0;
-         
+
 	if (!_raw_write_mda_header(cmd->fmt, dev, mda_is_primary(mda), start_byte, mdab)) {
 		log_error("Failed to write outdated pv mda header on %s", dev_name(dev));
 		return 0;

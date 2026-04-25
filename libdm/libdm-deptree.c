@@ -624,7 +624,7 @@ static struct dm_tree_node *_find_dm_tree_node_by_uuid(struct dm_tree *dtree,
 			break;
 		};
 	}
-	
+
 	default_uuid_prefix = dm_uuid_prefix();
 	default_uuid_prefix_len = strlen(default_uuid_prefix);
 
@@ -3582,7 +3582,7 @@ int dm_tree_node_add_snapshot_origin_target(struct dm_tree_node *dnode,
 		dnode->props.reactivate_siblings = 1;
 
 	/*
-	 * Don't resume the origin immediately in case it is a non-trivial 
+	 * Don't resume the origin immediately in case it is a non-trivial
 	 * target that must not be active more than once concurrently!
 	 */
 	origin_node->props.delay_resume_if_new = 1;

@@ -661,7 +661,7 @@ static response poll_init(client_handle h, struct lvmpolld_state *ls, request re
 	if (pdlv && pdlv_get_polling_finished(pdlv)) {
 		WARN(ls, "%s: %s %s", PD_LOG_PREFIX, "Force removal of uncollected info for LV",
 			 lvid);
-		/* 
+		/*
 		 * lvmpolld has to remove uncollected results in this case.
 		 * otherwise it would have to refuse request for new polling
 		 * lv with same id.
