@@ -23,7 +23,7 @@
  * Interface taken from kernel header arch/s390/include/uapi/asm/dasd.h
  */
 
-/* 
+/*
  * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
  * Copyright IBM Corp. 1999, 2000
  * EMC Symmetrix ioctl Copyright EMC Corporation, 2008
@@ -33,7 +33,7 @@
 #define DASD_IOCTL_LETTER 'D'
 #define DASD_API_VERSION 6
 
-/* 
+/*
  * struct dasd_information2_t
  * represents any data about the device, which is visible to userspace.
  *  including format and features.

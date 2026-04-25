@@ -760,7 +760,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 }
 
 /*
- * We don't know ahead of time if we will find some VG metadata 
+ * We don't know ahead of time if we will find some VG metadata
  * that is larger than the total size of the bcache, which would
  * prevent us from reading/writing the VG since we do not dynamically
  * increase the bcache size when we find it's too small.  In these
@@ -971,7 +971,7 @@ static void _clear_scan_state(struct cmd_context *cmd, struct dm_list *devs)
  * system startup when the hints file is not useful, but he pvs_online
  * files can provide a similar optimization to the hints file.
  */
- 
+
 int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 			 int *found_none, int *found_all, int *found_incomplete)
 {

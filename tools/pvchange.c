@@ -128,7 +128,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
 
 		if (arg_is_set(cmd, deltag_ARG) && !change_tag(cmd, NULL, NULL, pv, deltag_ARG))
 			goto_bad;
-	
+
 		done = 1;
 	}
 
@@ -143,7 +143,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
 			goto_bad;
 
 		done = 1;
-	} 
+	}
 
 	if (arg_is_set(cmd, uuid_ARG)) {
 		/* --uuid: Change PV ID randomly */

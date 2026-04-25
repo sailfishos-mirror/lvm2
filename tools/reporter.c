@@ -695,7 +695,7 @@ int report_for_selection(struct cmd_context *cmd,
 	 *   select_match_*(processing_handle with selection_handle) ->
 	 *     report for selection ->
 	 *     	 (creating new processing_handle here with internal reporting disabled!!!)
-	 *       reporting_fn OR process_each_* (using *new* processing_handle with original selection_handle) 
+	 *       reporting_fn OR process_each_* (using *new* processing_handle with original selection_handle)
 	 *
 	 * The selection_handle is still reused so we can track
 	 * whether any of the items the top-level one is composed

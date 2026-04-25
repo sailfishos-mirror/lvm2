@@ -816,8 +816,8 @@ static int _process_config(struct cmd_context *cmd)
 	}
 
 	if ((cn = find_config_tree_array(cmd, activation_mlock_filter_CFG, NULL)))
-		for (cv = cn->v; cv; cv = cv->next) 
-			if ((cv->type != DM_CFG_STRING) || !cv->v.str[0]) 
+		for (cv = cn->v; cv; cv = cv->next)
+			if ((cv->type != DM_CFG_STRING) || !cv->v.str[0])
 				log_error("Ignoring invalid activation/mlock_filter entry in config file");
 
 	cmd->metadata_read_only = find_config_tree_bool(cmd, global_metadata_read_only_CFG, NULL);
@@ -1311,7 +1311,7 @@ bad:
 }
 
 /*
- *   cmd->filter == 
+ *   cmd->filter ==
  *     persistent(cache) filter -> sysfs filter -> internal filter -> global regex filter ->
  *     regex_filter -> type filter -> usable device filter ->
  *     mpath component filter -> partitioned filter -> md component filter -> fw raid filter

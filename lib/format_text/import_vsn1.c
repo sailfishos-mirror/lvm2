@@ -1317,7 +1317,7 @@ static void _read_desc(struct dm_pool *mem,
  *          and save the data in struct volume_group
  * FIXME: why are these separate?
  */
-static int _read_vgsummary(const struct format_type *fmt, const struct dm_config_tree *cft, 
+static int _read_vgsummary(const struct format_type *fmt, const struct dm_config_tree *cft,
 			   struct lvmcache_vgsummary *vgsummary)
 {
 	const struct dm_config_node *vgn;

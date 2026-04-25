@@ -36,8 +36,8 @@
 #include "libdm/misc/dm-ioctl.h"
 
 /*
- * Ensure build compatibility.  
- * The hard-coded versions here are the highest present 
+ * Ensure build compatibility.
+ * The hard-coded versions here are the highest present
  * in the _cmd_data arrays.
  */
 
@@ -477,7 +477,7 @@ static int _open_control(void)
 	 */
 	if (!_open_and_assign_control_fd(control))
 		goto_bad;
-	
+
 	if (!_create_dm_bitset(1)) {
 		log_error("Failed to set up list of device-mapper major numbers");
 		return 0;
@@ -599,7 +599,7 @@ static int _check_version(char *version, size_t size, int log_suppress)
 }
 
 /*
- * Find out device-mapper's major version number the first time 
+ * Find out device-mapper's major version number the first time
  * this is called and whether or not we support it.
  */
 int dm_check_version(void)
@@ -1243,19 +1243,19 @@ static int _lookup_dev_name(uint64_t dev, char *buf, size_t len)
 	unsigned next = 0;
 	struct dm_task *dmt;
 	int r = 0;
- 
+
 	if (!(dmt = dm_task_create(DM_DEVICE_LIST)))
 		return 0;
- 
+
 	if (!dm_task_run(dmt))
 		goto out;
 
 	if (!(names = dm_task_get_names(dmt)))
 		goto out;
- 
+
 	if (!names->dev)
 		goto out;
- 
+
 	do {
 		names = (struct dm_names *)((char *) names + next);
 		if (names->dev == dev) {
@@ -1879,7 +1879,7 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
 		t1 = t1->next;
 		t2 = t2->next;
 	}
-	
+
 	if (!t1 && !t2) {
 		dmt->dmi.v4 = task->dmi.v4;
 		task->dmi.v4 = NULL;
@@ -1931,7 +1931,7 @@ static int _check_children_not_suspended_v4(struct dm_task *dmt, uint64_t device
 	task->event_nr = dmt->event_nr & DM_UDEV_FLAGS_MASK;
 	task->cookie_set = dmt->cookie_set;
 	task->add_node = dmt->add_node;
-	
+
 	if (!(r = dm_task_run(task)))
 		goto out;
 
@@ -1948,7 +1948,7 @@ static int _check_children_not_suspended_v4(struct dm_task *dmt, uint64_t device
 					     "(%u:%u)", info.major, info.minor);
 		else
 			log_error(INTERNAL_ERROR "Attempt to suspend device %s%s%s%.0d%s%.0d%s%s"
-				  "that uses already-suspended device (%u:%u)", 
+				  "that uses already-suspended device (%u:%u)",
 				  DEV_NAME(dmt) ? : "", DEV_UUID(dmt) ? : "",
 				  dmt->major > 0 ? "(" : "",
 				  dmt->major > 0 ? dmt->major : 0,

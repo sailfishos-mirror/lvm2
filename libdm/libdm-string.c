@@ -115,7 +115,7 @@ int dm_split_lvm_name(struct dm_pool *mem, const char *dmname,
 
 /*
  * On error, up to glibc 2.0.6, snprintf returned -1 if buffer was too small;
- * From glibc 2.1 it returns number of chars (excl. trailing null) that would 
+ * From glibc 2.1 it returns number of chars (excl. trailing null) that would
  * have been written had there been room.
  *
  * dm_snprintf reverts to the old behaviour.
@@ -461,8 +461,8 @@ static int _close_enough(double d1, double d2)
 #define SIZE_BUF 128
 
 const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
-			      char unit_type, int use_si_units, 
-			      uint64_t unit_factor, int include_suffix, 
+			      char unit_type, int use_si_units,
+			      uint64_t unit_factor, int include_suffix,
 			      dm_size_suffix_t suffix_type)
 {
 	unsigned base = BASE_UNKNOWN;

@@ -123,10 +123,10 @@ bool bcache_flush(struct bcache *cache);
 
 /*
  * Removes a block from the cache.
- * 
+ *
  * If the block is dirty it will be written back first.  If the writeback fails
  * false will be returned.
- * 
+ *
  * If the block is currently held false will be returned.
  */
 bool bcache_invalidate(struct bcache *cache, int di, block_address index);

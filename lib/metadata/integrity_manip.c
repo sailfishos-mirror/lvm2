@@ -181,7 +181,7 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
 		return_0;
 
 	seg_top = first_seg(lv);
-		                
+
 	if (!(segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_STRIPED)))
 		return_0;
 
@@ -515,7 +515,7 @@ bad:
  *   segment1: striped: pv2:A
  * rimage_1_imeta
  *   segment1: striped: pv2:B
- *    
+ *
  */
 
 int lv_add_integrity_to_raid(struct logical_volume *lv, struct dm_integrity_settings *settings,

@@ -56,7 +56,7 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
 	}
 
 	/*
-	 * We want to allow importing devices of foreign and shared 
+	 * We want to allow importing devices of foreign and shared
 	 * VGs, but we do not want to update device_ids in those VGs.
 	 *
 	 * If --foreign is set, then foreign VGs will be passed
@@ -103,7 +103,7 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
 static int _get_rootvg_dev(struct cmd_context *cmd, char **dm_uuid_out, int *skip)
 {
 	char path[PATH_MAX];
-	struct stat info; 
+	struct stat info;
 
 	/*
 	 * When --auto is set, the command does nothing

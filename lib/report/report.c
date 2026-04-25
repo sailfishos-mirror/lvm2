@@ -1933,7 +1933,7 @@ static int _do_metadatalv_disp(struct dm_report *rh, struct dm_pool *mem __attri
 	struct logical_volume *metadata_lv = lv_metadata_lv(lv);
 
 	if (!metadata_lv)
-		return _field_set_value(field, "", NULL);		
+		return _field_set_value(field, "", NULL);
 
 	if (uuid)
 		return _uuid_disp(rh, mem, field, &metadata_lv->lvid.id[1], private);

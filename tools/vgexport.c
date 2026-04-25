@@ -55,7 +55,7 @@ static int vgexport_single(struct cmd_context *cmd __attribute__((unused)),
 
 	if (!vg_write(vg) || !vg_commit(vg))
 		goto_bad;
-	
+
 	if ((op = arg_str_value(cmd, persist_ARG, NULL))) {
 		if (!strcmp(op, "stop") && !persist_stop(cmd, vg))
 			log_warn("WARNING: PR stop failed, see lvmpersist stop.");

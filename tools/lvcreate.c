@@ -348,7 +348,7 @@ static int _update_extents_params(struct volume_group *vg,
 			return 0;
 		}
 
-		/* For mirrors and raid with percentages based on physical extents, convert the total number of PEs 
+		/* For mirrors and raid with percentages based on physical extents, convert the total number of PEs
 		 * into the number of logical extents per image (minimum 1) */
 		/* FIXME Handle all the supported raid layouts here based on already-known segtype. */
 		if ((lcp->percent != PERCENT_ORIGIN) && lp->mirrors) {

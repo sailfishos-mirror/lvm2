@@ -1,5 +1,5 @@
 // Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-// 
+//
 // This file is part of LVM2.
 //
 // This copyrighted material is made available to anyone wishing to use,

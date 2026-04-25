@@ -1096,7 +1096,7 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char 
 
 		/*
 		 * With a prev offset, start search after that.
-		 * Without a prev offset, start search from the beginning. 
+		 * Without a prev offset, start search from the beginning.
 		 */
 		if (prev_args && !lock_lv_offset_from_args(prev_args, &prev_offset))
 			offset = prev_offset + align_size;
@@ -1438,7 +1438,7 @@ int lm_ex_disable_gl_sanlock(struct lockspace *ls)
 	rd1.rs.num_disks = 1;
 	memcpy(rd1.rs.disks[0].path, lms->ss.host_id_disk.path, SANLK_PATH_LEN-1);
 	rd1.rs.disks[0].offset = lms->align_size * GL_LOCK_BEGIN;
-	
+
 	rd1.rs.flags = lms->rs_flags;
 	rd2.rs.flags = lms->rs_flags;
 
@@ -2666,7 +2666,7 @@ static int release_rename(struct lockspace *ls, struct resource *r)
 
 /*
  * rds->vb is stored in le
- * 
+ *
  * r_version is r->version
  *
  * for GL locks lvmlockd just increments this value

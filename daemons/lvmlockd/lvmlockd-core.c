@@ -993,7 +993,7 @@ static const char *op_mode_str(int op, int mode)
 	switch (mode) {
 	case LD_LK_IV:
 		return "lock_iv";
-	case LD_LK_UN: 
+	case LD_LK_UN:
 		return "unlock";
 	case LD_LK_NL:
 		return "lock_nl";
@@ -3234,7 +3234,7 @@ static void *lockspace_thread_main(void *arg_in)
 						free_resource(r);
 					}
 				}
-				
+
 				/*
 				 * check all resources for transient locks the client
 				 * was holding that should be automatically unlocked
@@ -4845,7 +4845,7 @@ static int client_send_result(struct client *cl, struct action *act)
 
 	if ((act->flags & LD_AF_WARN_GL_REMOVED) || gl_vg_removed)
 		strcat(result_flags, "WARN_GL_REMOVED,");
-	
+
 	if (act->flags & LD_AF_SH_EXISTS)
 		strcat(result_flags, "SH_EXISTS,");
 
@@ -5407,7 +5407,7 @@ static int str_to_lm(const char *str)
 		return LD_LM_DLM;
 	if (!strcmp(str, "idm"))
 		return LD_LM_IDM;
-	return -2; 
+	return -2;
 }
 
 static uint32_t str_to_opts(const char *str)
@@ -6571,7 +6571,7 @@ static void adopt_locks(void)
 	 *
 	 * If an ls in vg_lockd has no active lvs and does not have
 	 * a matching entry in ls_found, then skip it.
-	 * 
+	 *
 	 * An ls in ls_found should always have a matching ls in
 	 * vg_lockd.  If it doesn't, then maybe the vg has been
 	 * removed even though the lockspace for the vg is still
@@ -6645,7 +6645,7 @@ static void adopt_locks(void)
 			/* The VG wasn't started in the previous lvmlockd. */
 			log_debug("No ls found for vg %s", ls->vg_name);
 		}
-		
+
 		list_del(&ls->list);
 		free_pvs_path(&ls->pvs);
 		free(ls);
@@ -6856,7 +6856,7 @@ static void adopt_locks(void)
 		}
 
 		/*
-		 * lock adopt results 
+		 * lock adopt results
 		 */
 
 		if (act->result == -EADOPT_RETRY) {

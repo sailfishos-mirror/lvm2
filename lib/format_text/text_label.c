@@ -141,7 +141,7 @@ static int _text_write(struct label *label, void *buf)
 
 	mda1 = da1 + 2;
 	mda2 = mda1 + 1;
-	
+
 	if (!htole64(pvhdr->disk_areas_xl[mda1].offset) &&
 	    !htole64(pvhdr->disk_areas_xl[mda1].size))
 		mda1 = mda2 = 0;

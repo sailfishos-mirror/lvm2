@@ -32,7 +32,7 @@ static int _copy_pvid_file_field(const char *field, char *buf, int bufsize, char
 {
 	char *p;
 	int i = 0;
-	
+
 	if (!(p = strstr(buf, field)))
 		return 0;
 

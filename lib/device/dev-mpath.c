@@ -501,7 +501,7 @@ static int _dev_is_mpath_component_sysfs(struct cmd_context *cmd, struct device 
 		}
 		dm_dev_major = MAJOR(info.st_rdev);
 		dm_dev_minor = MINOR(info.st_rdev);
-	
+
 		if (dm_dev_major != dt->device_mapper_major) {
 			log_debug_devs("dev_is_mpath_component %s holder %s %u:%u does not have dm major.",
 					dev_name(dev), dm_dev_path, dm_dev_major, dm_dev_minor);

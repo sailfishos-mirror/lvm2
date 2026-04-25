@@ -5665,7 +5665,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 			if (!(seg_size = lp->extents - existing_logical_extents))
 				return 1;  /* No change in metadata size */
 		}
-	} else { 
+	} else {
 		/* If reducing, find stripes, stripesize & size of last segment */
 
 		if (lp->sign == SIGN_MINUS)  {

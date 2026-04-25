@@ -233,7 +233,7 @@ int lock_file(const char *file, uint32_t flags)
 	(void) dm_prepare_selinux_context(file, S_IFREG);
 	if (_prioritise_write_locks)
 		r = _do_write_priority_flock(file, &ll->lf, operation, nonblock);
-	else 
+	else
 		r = _do_flock(file, &ll->lf, operation, nonblock);
 	(void) dm_prepare_selinux_context(NULL, 0);
 

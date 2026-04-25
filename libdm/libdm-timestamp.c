@@ -15,7 +15,7 @@
 
 /*
  * Abstract out the time methods used so they can be adjusted later -
- * the results of these routines should stay in-core.  
+ * the results of these routines should stay in-core.
  */
 
 #include "libdm/misc/dmlib.h"

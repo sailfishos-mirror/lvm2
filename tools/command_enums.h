@@ -66,7 +66,7 @@ enum {
 /* Process all VGs if none specified on the command line. */
 #define ALL_VGS_IS_DEFAULT	0x00000004
 /* Process all devices with --all if none are specified on the command line. */
-#define ENABLE_ALL_DEVS		0x00000008	
+#define ENABLE_ALL_DEVS		0x00000008
 /* Command may try to interpret a vgname arg as a uuid. */
 #define ALLOW_UUID_AS_NAME	0x00000010
 /* Command needs a shared lock on a VG; it only reads the VG. */

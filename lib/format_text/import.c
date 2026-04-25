@@ -144,7 +144,7 @@ struct volume_group *text_read_metadata(struct format_instance *fid,
 		return_NULL;
 
 	/* Does the metadata match the already-cached VG? */
-	skip_parse = vg_fmtdata && 
+	skip_parse = vg_fmtdata &&
 		     ((*vg_fmtdata)->cached_mda_checksum == checksum) &&
 		     ((*vg_fmtdata)->cached_mda_size == (size + size2));
 

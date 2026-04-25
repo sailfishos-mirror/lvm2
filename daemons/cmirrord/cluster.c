@@ -1506,7 +1506,7 @@ static void cpg_leave_callback(struct clog_cpg *match,
 				i++;
 
 		if (i == member_list_entries) {
-			/* 
+			/*
 			 * Last node who could have given me a checkpoint just left.
 			 * Setting log state to VALID and acting as 'first join'.
 			 */

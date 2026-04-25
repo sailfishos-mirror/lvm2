@@ -461,7 +461,7 @@ static int _print_vg(struct formatter *f, struct volume_group *vg)
 
 	if (!_out_list(f, &vg->tags, "tags"))
 		return_0;
- 
+
 	if (vg->system_id && *vg->system_id)
 		outf(f, "system_id = \"%s\"", vg->system_id);
 

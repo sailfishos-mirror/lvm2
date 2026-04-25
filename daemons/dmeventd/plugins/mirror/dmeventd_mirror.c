@@ -41,7 +41,7 @@ static void _process_status_code(dm_status_mirror_health_t health,
 	 *    S => Sync - A synchronization failure occurred, mirror out-of-sync
 	 *    R => Read - A read failure occurred, mirror data unaffected
 	 *    U => Unclassified failure (bug)
-	 */ 
+	 */
 	switch (health) {
 	case DM_STATUS_MIRROR_ALIVE:
 		return;
