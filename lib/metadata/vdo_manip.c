@@ -35,7 +35,7 @@
 #define VDO_BASE_MEMORY_OVERHEAD_MB		38	/* 38 MiB VDO memory overhead */
 
 /* Memory calculation fractions */
-#define VDO_SWAP_USAGE_FRACTION			2/3	/* Use 2/3 of available swap */
+#define VDO_SWAP_USAGE_FRACTION(x)		(((x) * 2) / 3)	/* Use 2/3 of available swap */
 
 /* Buffer sizes */
 #define VDO_FORMAT_OUTPUT_BUF_SIZE		256	/* For output line from vdoformat */
@@ -730,8 +730,8 @@ static int _get_memory_info(struct cmd_context *cmd, uint64_t *total_mb, uint64_
 	(void)fclose(fp);
 
 	/* use at most 2/3 of swap space to keep machine usable */
-	can_swap = (anon_pages + shmem) * VDO_SWAP_USAGE_FRACTION;
-	swap_free = swap_free * VDO_SWAP_USAGE_FRACTION;
+	can_swap = VDO_SWAP_USAGE_FRACTION(anon_pages + shmem);
+	swap_free = VDO_SWAP_USAGE_FRACTION(swap_free);
 
 	if (can_swap > swap_free)
 		can_swap = swap_free;
