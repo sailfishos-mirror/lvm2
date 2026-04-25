@@ -762,6 +762,10 @@ int fill_vdo_target_params(struct cmd_context *cmd,
 	if (vtp->use_metadata_hints)
 		log_info("Deprecated VDO setting use_metadata_hints specified.");
 
+	log_print("VDO config loaded: use_kernel_format=%d slab_size_mb=%u sparse=%d index_mem=%u",
+		  vtp->use_kernel_format, vtp->slab_size_mb, vtp->use_sparse_index,
+		  (uint32_t)vtp->index_memory_size_mb);
+
 	return 1;
 }
 

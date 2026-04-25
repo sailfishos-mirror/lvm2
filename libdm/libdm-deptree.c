@@ -3026,6 +3026,12 @@ static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t 
 		    seg->vdo_params.logical_threads,
 		    seg->vdo_params.physical_threads);
 
+	log_print("VDO table line (before format params): use_kernel_format=%d slab_size=%uMB index_mem=%uMB sparse=%d",
+		  seg->vdo_params.use_kernel_format,
+		  seg->vdo_params.slab_size_mb,
+		  seg->vdo_params.index_memory_size_mb,
+		  seg->vdo_params.use_sparse_index);
+
 	/* Add format parameters for kernel direct formatting */
 	if (seg->vdo_params.use_kernel_format) {
 		/* Convert slab size from MB to 4KiB blocks */
@@ -3044,7 +3050,11 @@ static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t 
 
 		/* Sparse index setting */
 		EMIT_PARAMS(pos, " indexSparse %s", seg->vdo_params.use_sparse_index ? "on" : "off");
+
+		log_print("VDO table line: added kernel format params (slabSize indexMemory indexSparse)");
 	}
+
+	log_print("VDO table line final: %s", params);
 
 	return 1;
 }
