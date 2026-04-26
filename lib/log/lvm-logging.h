@@ -31,14 +31,14 @@ __attribute__ ((format(printf, 5, 6)))
 void print_log_libdm(int level, const char *file, int line, int dm_errno_or_class,
 		     const char *format, ...);
 
-#define LOG_LINE(l, x...) \
-    print_log(l, __FILE__, __LINE__ , 0, ## x)
+#define LOG_LINE(l, ...) \
+    print_log(l, __FILE__, __LINE__ , 0, ##__VA_ARGS__)
 
-#define LOG_LINE_WITH_ERRNO(l, e, x...) \
-    print_log(l, __FILE__, __LINE__ , e, ## x)
+#define LOG_LINE_WITH_ERRNO(l, e, ...) \
+    print_log(l, __FILE__, __LINE__ , e, ##__VA_ARGS__)
 
-#define LOG_LINE_WITH_CLASS(l, c, x...) \
-    print_log(l, __FILE__, __LINE__ , c, ## x)
+#define LOG_LINE_WITH_CLASS(l, c, ...) \
+    print_log(l, __FILE__, __LINE__ , c, ##__VA_ARGS__)
 
 #include "lib/log/log.h"
 

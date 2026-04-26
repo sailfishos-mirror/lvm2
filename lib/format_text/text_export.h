@@ -18,10 +18,10 @@
 
 #include <stdint.h>
 
-#define outsize(args...) do {if (!out_size(args)) return_0;} while (0)
-#define outhint(args...) do {if (!out_hint(args)) return_0;} while (0)
-#define outfc(args...) do {if (!out_text_with_comment(args)) return_0;} while (0)
-#define outf(args...) do {if (!out_text(args)) return_0;} while (0)
+#define outsize(...) do {if (!out_size(__VA_ARGS__)) return_0;} while (0)
+#define outhint(...) do {if (!out_hint(__VA_ARGS__)) return_0;} while (0)
+#define outfc(...) do {if (!out_text_with_comment(__VA_ARGS__)) return_0;} while (0)
+#define outf(...) do {if (!out_text(__VA_ARGS__)) return_0;} while (0)
 #define outnl(f) do {if (!out_newline(f)) return_0;} while (0)
 
 struct formatter;
