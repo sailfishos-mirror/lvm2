@@ -106,7 +106,7 @@ static void _explain_error_codes(int retcode)
 	/* lvmpolld specific return codes */
 	case LVMPD_RET_DUP_FAILED:
 		log_error("lvmpolld failed to duplicate file descriptors.");
-		/* fall through */
+		break;
 	case LVMPD_RET_EXC_FAILED:
 		log_error("lvmpolld failed to exec() lvm binary.");
 		break;
@@ -334,8 +334,8 @@ int lvmpolld_request_info(const struct poll_operation_id *id, const struct daemo
 
 	*finished = 1;
 
-	if (!id->uuid) {
-		log_error(INTERNAL_ERROR "Use of lvmpolld requires uuid being set.");
+	if (!id->uuid || !id->vg_name || !id->lv_name) {
+		log_error(INTERNAL_ERROR "Use of lvmpolld requires uuid, vg_name and lv_name.");
 		return 0;
 	}
 

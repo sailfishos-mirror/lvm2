@@ -391,7 +391,8 @@ void lvmpolld_thread_data_destroy(void *thread_private)
 		 * FIXME: skip this step if lvmpolld is activated
 		 * 	  by systemd.
 		 */
-		if (!pdlv_get_polling_finished(data->pdlv))
+		if (!pdlv_get_polling_finished(data->pdlv) &&
+		    data->pdlv->cmd_pid > 0)
 			kill(data->pdlv->cmd_pid, SIGTERM);
 		pdlv_set_polling_finished(data->pdlv, 1);
 		pdst_locked_dec(data->pdlv->pdst);
