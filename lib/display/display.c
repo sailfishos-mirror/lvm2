@@ -133,9 +133,11 @@ const char *get_percent_string(percent_type_t def)
 
 static const char *_lv_name(const struct logical_volume *lv)
 {
+	const struct logical_volume *cow;
+
 	/* Never try to display names of the internal snapshot structures. */
-	if (lv_is_snapshot(lv))
-		return find_cow(lv)->name;
+	if (lv_is_snapshot(lv) && (cow = find_cow(lv)))
+		return cow->name;
 
 	return lv->name;
 }
