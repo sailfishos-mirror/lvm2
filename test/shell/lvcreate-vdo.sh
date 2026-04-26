@@ -40,8 +40,8 @@ lvcreate --type vdo -L4G -n $lv1 $vg/$lv2 >out 2>&1
 # new vdoformat prints some more info
 if grep "data slabs" out ; then
 	# check we have match vdo_slab_size_mb == 128MB (aux.sh)
-	# accept new & old vdoformat line (128.00 MB & 128 MB)
-	grep -E "each 128.*MB" out
+	# accept new & old vdoformat line (128.00 MB & 128 MB & 128.00 MiB)
+	grep -E "each 128.*M.?B" out
 fi
 
 check lv_field $vg/$lv1 size "<1.24g"
