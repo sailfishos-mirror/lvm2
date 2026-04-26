@@ -261,16 +261,16 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
 		if (!strcmp(fmt, FMTd64)) {
 			int64_t value = va_arg(ap, int64_t);
 			if (!(cn = make_int_node(cft, key, value, parent, pre_sib)))
-				return 0;
+				return NULL;
 		} else if (!strcmp(fmt, "%s")) {
 			char *value = va_arg(ap, char *);
 			if (!(cn = make_text_node(cft, key, value, parent, pre_sib)))
-				return 0;
+				return NULL;
 		} else if (!strcmp(fmt, "%t")) {
 			struct dm_config_tree *tree = va_arg(ap, struct dm_config_tree *);
 			cn = dm_config_clone_node(cft, tree->root, 1);
 			if (!cn)
-				return 0;
+				return NULL;
 			cn->key = key;
 			chain_node(cn, parent, pre_sib);
 		} else {

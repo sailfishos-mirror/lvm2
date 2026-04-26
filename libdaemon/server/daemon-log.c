@@ -63,6 +63,8 @@ static const struct backend _backend[] = {
 
 void daemon_log(log_state *s, int type, const char *message) {
 	int i = 0;
+	if (type < 0 || type >= DAEMON_LOG_TYPE_COUNT)
+		return;
 	while ( _backend[i].id ) {
 		if ((int)(s->log_config[type] & _backend[i].id) == _backend[i].id )
 			_backend[i].log( s, &s->backend_state[i], type, message );
@@ -72,6 +74,8 @@ void daemon_log(log_state *s, int type, const char *message) {
 
 static int _type_interesting(log_state *s, int type) {
 	int i = 0;
+	if (type < 0 || type >= DAEMON_LOG_TYPE_COUNT)
+		return 0;
 	while ( _backend[i].id ) {
 		if ((int)(s->log_config[type] & _backend[i].id) == _backend[i].id )
 			return 1;
@@ -141,7 +145,7 @@ void daemon_log_multi(log_state *s, int type, const char *prefix, const char *me
 
 void daemon_log_enable(log_state *s, int outlet, int type, int enable)
 {
-	if (type >= 32)
+	if (type < 0 || type >= DAEMON_LOG_TYPE_COUNT)
 		return;
 
 	if (enable)
@@ -154,7 +158,7 @@ static int _parse_one(log_state *s, int outlet, const char *type, int enable)
 {
 	int i;
 	if (!strcmp(type, "all"))
-		for (i = 0; i < 32; ++i)
+		for (i = 0; i < DAEMON_LOG_TYPE_COUNT; ++i)
 			daemon_log_enable(s, outlet, i, enable);
 	else if (!strcmp(type, "fatal"))
 		daemon_log_enable(s, outlet, DAEMON_LOG_FATAL, enable);
@@ -168,6 +172,8 @@ static int _parse_one(log_state *s, int outlet, const char *type, int enable)
 		daemon_log_enable(s, outlet, DAEMON_LOG_WIRE, enable);
 	else if (!strcmp(type, "debug"))
 		daemon_log_enable(s, outlet, DAEMON_LOG_DEBUG, enable);
+	else
+		return 0;
 
 	return 1;
 }
