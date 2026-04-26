@@ -123,9 +123,9 @@
 #define log_sys_error_suppress(s, x, y) \
 		log_err_suppress(s, "%s%s%s failed: %s", y, *y ? ": " : "", x, strerror(errno))
 #define log_sys_very_verbose(x, y) \
-		log_info("%s: %s failed: %s", y, x, strerror(errno))
+		log_info("%s%s%s failed: %s", y, *y ? ": " : "", x, strerror(errno))
 #define log_sys_debug(x, y) \
-		log_debug("%s: %s failed: %s", y, x, strerror(errno))
+		log_debug("%s%s%s failed: %s", y, *y ? ": " : "", x, strerror(errno))
 
 #define return_0	do { stack; return 0; } while (0)
 #define return_NULL	do { stack; return NULL; } while (0)
