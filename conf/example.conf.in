@@ -703,6 +703,13 @@ allocation {
 	# This configuration option has an automatic default value.
 	# vdo_use_sparse_index = 0
 
+	# Configuration option allocation/vdo_use_kernel_format.
+	# Use kernel direct formatting for VDO volume.
+	# When enabled (1), uses kernel direct formatting (requires dm-vdo 9.2.0+).
+	# When disabled (0), uses traditional userspace vdoformat tool.
+	# This configuration option has an automatic default value.
+	# vdo_use_kernel_format = 1
+
 	# Configuration option allocation/vdo_index_memory_size_mb.
 	# Specifies the amount of index memory in MiB for VDO volume.
 	# The value must be at least 256MiB and at most 1TiB.
@@ -1383,10 +1390,10 @@ global {
 	# Configuration option global/vdo_disabled_features.
 	# Features to not use in the vdo driver.
 	# This can be helpful for testing, or to avoid using a feature that is
-	# causing problems. Features include: online_rename, version4
+	# causing problems. Features include: online_rename, version4, kernel_format
 	#
 	# Example
-	# vdo_disabled_features = [ "online_rename", "version4" ]
+	# vdo_disabled_features = [ "online_rename", "version4", "kernel_format" ]
 	#
 	# This configuration option does not have a default value defined.
 
