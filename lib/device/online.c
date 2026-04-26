@@ -352,9 +352,8 @@ check_duplicate:
 
 	/* Don't know how vgname might not match, but it's not good so fail. */
 
-	if ((file_major != major) || (file_minor != minor))
-		log_error_pvscan(cmd, "PV %s %u:%u is duplicate for PVID %s on %u:%u %s.",
-			         dev_name(dev), major, minor, dev->pvid, file_major, file_minor, file_devname);
+	log_error_pvscan(cmd, "PV %s %u:%u is duplicate for PVID %s on %u:%u %s.",
+		         dev_name(dev), major, minor, dev->pvid, file_major, file_minor, file_devname);
 
 	if (file_vgname[0] && vgname && strcmp(file_vgname, vgname))
 		log_error_pvscan(cmd, "PV %s has unexpected VG %s vs %s.",
