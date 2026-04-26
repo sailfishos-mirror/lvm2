@@ -4704,8 +4704,8 @@ int report_devtypes(void *handle)
 {
 	int devtypeind = 0;
 
-	while (_dev_known_types[devtypeind].name[0])
-		if (!_report_devtype_single(handle, &_dev_known_types[devtypeind++]))
+	while (dev_known_types[devtypeind].name[0])
+		if (!_report_devtype_single(handle, &dev_known_types[devtypeind++]))
 			return 0;
 
 	return 1;

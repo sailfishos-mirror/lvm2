@@ -41,6 +41,57 @@
 #include <dirent.h>
 
 /*
+ * Devices are only checked for partition tables if their minor number
+ * is a multiple of the number corresponding to their type below
+ * i.e. this gives the granularity of whole-device minor numbers.
+ * Use 1 if the device is not partitionable.
+ *
+ * The list can be supplemented with devices/types in the config file.
+ */
+const dev_known_type_t dev_known_types[] = {
+	{"sd", 16, "SCSI disk"},
+	{"ide", 64, "IDE disk"},
+	/* "mdp" must precede "md" - strncmp prefix-match would shadow it */
+	{"mdp", 1, "Partitionable MD"},
+	{"md", 1, "Multiple Disk (MD/SoftRAID)"},
+	{"loop", 1, "Loop device"},
+	{"ramdisk", 1, "RAM disk"},
+	{"device-mapper", 1, "Mapped device"},
+	{"dasd", 4, "DASD disk (IBM S/390, zSeries)"},
+	{"dac960", 8, "DAC960"},
+	{"nbd", 16, "Network Block Device"},
+	{"ida", 16, "Compaq SMART2"},
+	{"cciss", 16, "Compaq CCISS array"},
+	{"ubd", 16, "User-mode virtual block device"},
+	{"ataraid", 16, "ATA Raid"},
+	{"drbd", 16, "Distributed Replicated Block Device (DRBD)"},
+	{"rbd", 16, "Ceph rados object as a Linux block device"},
+	{"emcpower", 16, "EMC Powerpath"},
+	{"power2", 16, "EMC Powerpath"},
+	{"i2o_block", 16, "i2o Block Disk"},
+	{"iseries/vd", 8, "iSeries disks"},
+	{"gnbd", 1, "Network block device"},
+	{"aoe", 16, "ATA over Ethernet"},
+	{"xvd", 16, "Xen virtual block device"},
+	{"vdisk", 8, "SUN's LDOM virtual block device"},
+	{"ps3disk", 16, "PlayStation 3 internal disk"},
+	{"virtblk", 8, "VirtIO disk"},
+	{"mmc", 16, "MMC block device"},
+	{"blkext", 1, "Extended device partitions"},
+	{"fio", 16, "Fusion IO"},
+	{"mtip32xx", 16, "Micron PCIe SSD"},
+	{"vtms", 16, "Violin Memory"},
+	{"skd", 16, "STEC"},
+	{"scm", 8, "Storage Class Memory (IBM S/390)"},
+	{"bcache", 1, "bcache block device cache"},
+	{"nvme", 64, "NVM Express"},
+	{"zvol", 16, "ZFS Zvols"},
+	{"VxDMP", 16, "Veritas Dynamic Multipathing"},
+	{"zram", 1, "zram block device"},
+	{"", 0, ""}
+};
+
+/*
  * An nvme device has major number 259 (BLKEXT), minor number <minor>,
  * and reading /sys/dev/block/259:<minor>/device/dev shows a character
  * device cmajor:cminor where cmajor matches the major number of the
@@ -332,13 +383,13 @@ struct dev_types *create_dev_types(const char *proc_dir,
 
 		/* Go through the valid device names and if there is a
 		   match store max number of partitions */
-		for (j = 0; _dev_known_types[j].name[0]; j++) {
-			dev_len = strlen(_dev_known_types[j].name);
+		for (j = 0; dev_known_types[j].name[0]; j++) {
+			dev_len = strlen(dev_known_types[j].name);
 			if (dev_len <= strlen(line + i) &&
-			    !strncmp(_dev_known_types[j].name, line + i, dev_len) &&
+			    !strncmp(dev_known_types[j].name, line + i, dev_len) &&
 			    (line_maj < NUMBER_OF_MAJORS)) {
 				dt->dev_type_array[line_maj].max_partitions =
-					_dev_known_types[j].max_partitions;
+					dev_known_types[j].max_partitions;
 				break;
 			}
 		}
