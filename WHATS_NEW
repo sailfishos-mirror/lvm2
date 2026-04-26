@@ -1,5 +1,7 @@
 Version 2.03.42 - 
 ==================
+  Support formatting vdo volumes with kernel vdo target (version >= 9.2).
+  Add vdo_format.c with pre-format logical size computation for kernel format.
   Add --enable-asan/--enable-tsan to build with sanitizer options.
   Mirror cleans orphaned missing DM nodes on image removal.
   Splitcache deactivates individually activated component.
