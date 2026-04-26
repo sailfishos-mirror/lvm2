@@ -39,13 +39,13 @@ static int _copy_pvid_file_field(const char *field, char *buf, int bufsize, char
 	p += strlen(field);
 
 	while (1) {
+		if (p >= (buf + bufsize))
+			return 0;
+
 		if (*p == '\n')
 			break;
 		if (*p == '\0')
 			break;
-
-		if (p >= (buf + bufsize))
-			return 0;
 		if (i >= outsize-1)
 			return 0;
 
