@@ -2327,10 +2327,9 @@ int dm_tree_node_set_thin_pool_error_if_no_space(struct dm_tree_node *node,
 int dm_tree_node_set_thin_pool_read_only(struct dm_tree_node *node,
 					 unsigned read_only);
 /*
- * FIXME: Defines below are based on kernel's dm-thin.c defines
- * MAX_DEV_ID ((1 << 24) - 1)
+ * Based on kernel's dm-thin.c MAX_DEV_ID ((1 << 24) - 1)
  */
-#define DM_THIN_MAX_DEVICE_ID (UINT32_C((1 << 24) - 1))
+#define DM_THIN_MAX_DEVICE_ID ((UINT32_C(1) << 24) - 1)
 int dm_tree_node_add_thin_target(struct dm_tree_node *node,
 				 uint64_t size,
 				 const char *pool_uuid,
