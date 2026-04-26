@@ -131,7 +131,7 @@ int dmeventd_lvm2_run(const char *cmdline)
 int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 			  const char *cmd, const char *device)
 {
-	static char _internal_prefix[] =  "_dmeventd_";
+	static const char _internal_prefix[] =  "_dmeventd_";
 	char *vg = NULL, *lv = NULL, *layer;
 	int r;
 	struct env_data *env_data;

@@ -49,7 +49,7 @@ struct lvmcache_vgsummary {
 	const char *vgname;
 	char vgid[ID_LEN + 1];
 	uint64_t vgstatus;
-	char *creation_host;
+	const char *creation_host;
 	const char *system_id;
 	const char *lock_type;
 	uint32_t seqno;
