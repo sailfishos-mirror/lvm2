@@ -83,7 +83,7 @@ static void _exit_handler(int sig)
 
 static int _is_idle(daemon_state s)
 {
-	return s.idle && s.idle->is_idle && !s.threads->next;
+	return s.idle && s.idle->is_idle && s.threads && !s.threads->next;
 }
 
 static struct timespec *_get_timeout(daemon_state s)
@@ -93,7 +93,7 @@ static struct timespec *_get_timeout(daemon_state s)
 
 static void _reset_timeout(daemon_state s)
 {
-	if (s.idle) {
+	if (s.idle && s.idle->ptimeout) {
 		s.idle->ptimeout->tv_sec = 1;
 		s.idle->ptimeout->tv_nsec = 0;
 	}
@@ -462,10 +462,12 @@ static void *_client_thread(void *state)
 
 		req.cft = config_tree_from_string_without_dup_node_check(req.buffer.mem);
 
-		if (!req.cft)
+		if (!req.cft) {
 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer.mem);
-		else
-			daemon_log_cft(ts->s.log, DAEMON_LOG_WIRE, "<- ", req.cft->root);
+			goto fail;
+		}
+
+		daemon_log_cft(ts->s.log, DAEMON_LOG_WIRE, "<- ", req.cft->root);
 
 		res = _builtin_handler(ts->s, ts->client, req);
 
@@ -488,7 +490,10 @@ static void *_client_thread(void *state)
 		}
 
 		daemon_log_multi(ts->s.log, DAEMON_LOG_WIRE, "-> ", res.buffer.mem);
-		buffer_write(ts->client.socket_fd, &res.buffer);
+		if (!buffer_write(ts->client.socket_fd, &res.buffer)) {
+			buffer_destroy(&res.buffer);
+			goto fail;
+		}
 
 		buffer_destroy(&res.buffer);
 	}

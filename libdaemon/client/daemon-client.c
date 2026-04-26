@@ -81,8 +81,7 @@ error:
 		log_sys_error("close", "daemon_open");
 	h.socket_fd = -1;
 
-	if (r.cft)
-		daemon_reply_destroy(r);
+	daemon_reply_destroy(r);
 
 	free((char *)h.protocol);
 	h.protocol = NULL;

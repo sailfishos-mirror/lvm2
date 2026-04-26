@@ -41,25 +41,34 @@
 #include <valgrind.h>
 #endif
 
-static void _daemon_get_cmdline(pid_t pid, char *cmdline, size_t size)
+static inline void _daemon_get_cmdline(pid_t pid, char *cmdline, size_t size)
 {
 	char buf[sizeof(DEFAULT_PROC_DIR) + 32];
-	int fd, n = 0;
+	ssize_t n = 0;
+	int fd;
+
+	if (size <= 1)
+		return;
 
 	snprintf(buf, sizeof(buf), DEFAULT_PROC_DIR "/%u/cmdline",
 		 (unsigned) pid);
 	/* FIXME Use generic read code. */
 	if ((fd = open(buf, O_RDONLY)) >= 0) {
-		if ((n = read(fd, cmdline, size - 1)) < 0) {
-			//perror("read", buf);
+		if ((n = read(fd, cmdline, size - 1)) < 0)
 			n = 0;
-		}
+		else if (n >= (ssize_t) size)
+			n = (ssize_t) size - 1;
 		(void) close(fd);
 	}
 	cmdline[n] = '\0';
+
+	/* /proc cmdline uses \0 between arguments - replace with spaces */
+	while (n > 1)
+		if (!cmdline[--n])
+			cmdline[n] = ' ';
 }
 
-static void _daemon_get_filename(int fd, char *filename, size_t size)
+static inline void _daemon_get_filename(int fd, char *filename, size_t size)
 {
 	char buf[sizeof(DEFAULT_PROC_DIR) + 32];
 	ssize_t lsize;
@@ -73,13 +82,14 @@ static void _daemon_get_filename(int fd, char *filename, size_t size)
 		filename[lsize] = '\0';
 }
 
-static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
-				     const char *command, pid_t ppid)
+static void _daemon_close_descriptor(int fd, int suppress_warnings,
+				     const char *command, pid_t ppid,
+				     const char *parent_cmdline)
 {
 	char filename[PATH_MAX];
-	char parent_cmdline[64];
-	int r;
+	int close_errno;
 	int flags;
+	int r;
 
 	flags = fcntl(fd, F_GETFD);
 	if (flags == -1)
@@ -97,20 +107,19 @@ static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
 		_daemon_get_filename(fd, filename, sizeof(filename));
 
 	r = close(fd);
+	close_errno = errno;
 	if ((fd <= STDERR_FILENO) || suppress_warnings)
 		return;
 
-	if (r && errno == EBADF)
+	if (r && close_errno == EBADF)
 		return;
-
-	_daemon_get_cmdline(ppid, parent_cmdline, sizeof(parent_cmdline));
 
 	if (!r)
 		fprintf(stderr, "File descriptor %d (%s) leaked on "
 			"%s invocation.", fd, filename, command);
 	else
-		fprintf(stderr, "Close failed on stray file descriptor "
-			"%d (%s): %s", fd, filename, strerror(errno));
+		fprintf(stderr, "Close failed on stray file descriptor %d (%s): %s.",
+			fd, filename, strerror(close_errno));
 
 	fprintf(stderr, " Parent PID %d: %s\n", (int)ppid, parent_cmdline);
 }
@@ -126,12 +135,13 @@ static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
 static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 				  int from_fd, const struct custom_fds *custom_fds)
 {
-	struct rlimit rlim;
-	int fd;
-	pid_t ppid = getppid();
 	static const char _fd_dir[] = DEFAULT_PROC_DIR "/self/fd";
+	char parent_cmdline[256];
+	struct rlimit rlim;
 	struct dirent *dirent;
+	pid_t ppid = getppid();
 	DIR *d;
+	int fd;
 
 #ifdef HAVE_VALGRIND
 	if (RUNNING_ON_VALGRIND)
@@ -139,9 +149,16 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 		return 1;
 #endif /* HAVE_VALGRIND */
 
+	if (!suppress_warnings)
+		_daemon_get_cmdline(ppid, parent_cmdline, sizeof(parent_cmdline));
+	else
+		parent_cmdline[0] = '\0';
+
 	if ((d = opendir(_fd_dir))) {
 		/* Discover opened descriptors from /proc/self/fd listing */
 		while ((dirent = readdir(d))) {
+			if (dirent->d_name[0] < '0' || dirent->d_name[0] > '9')
+				continue;
 			fd = atoi(dirent->d_name);
 			if ((fd > from_fd) &&
 			    (fd != dirfd(d)) &&
@@ -149,7 +166,8 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 			    (fd != custom_fds->err) &&
 			    (fd != custom_fds->report))
 				_daemon_close_descriptor(fd, suppress_warnings,
-							 command, ppid);
+							 command, ppid,
+							 parent_cmdline);
 		}
 
 		(void) closedir(d);
@@ -165,7 +183,8 @@ static int daemon_close_stray_fds(const char *command, int suppress_warnings,
 			    (fd != custom_fds->err) &&
 			    (fd != custom_fds->report))
 				_daemon_close_descriptor(fd, suppress_warnings,
-							 command, ppid);
+							 command, ppid,
+							 parent_cmdline);
 		}
 	} else
 		return 0; /* broken system */
