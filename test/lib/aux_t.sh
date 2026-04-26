@@ -2019,11 +2019,13 @@ get_vdo_stat() {
 wait_for_vdo_index() {
 	local dmname="$1"
 	local i
-	for i in $(seq 1 30); do
-		local state
-		state=$(dmsetup status "$dmname" | awk '{for(i=1;i<=NF;i++) if($i=="online") {print "online"; exit}}')
-		test "$state" = "online" && return 0
-		sleep 1
+	for i in {1..50}; do
+		local status=()
+		status=( $(dmsetup status "$dmname") )
+		# Index state comes before compression state in VDO status;
+		# check "opening" is absent to avoid matching compression "online"
+		[[ "${status[6]}" = "online" ]] && return 0
+		sleep .1
 	done
 	echo "Timed out waiting for VDO index to come online"
 	return 1
