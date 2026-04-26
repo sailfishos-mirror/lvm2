@@ -618,6 +618,9 @@ int vdostats_report_device(struct dm_report *rh,
 	struct dm_vdo_stats_full *full;
 	int r;
 
+	if (!stats_str)
+		return 0;
+
 	full = dm_vdo_stats_parse(NULL, stats_str, DM_VDO_STATS_BASIC);
 	if (!full)
 		return 0;
