@@ -147,7 +147,7 @@ int dev_is_lv(struct cmd_context *cmd, struct device *dev)
 	char buffer[128];
 
 	if (dev_dm_uuid(cmd, dev, buffer, sizeof(buffer)) &&
-	    !strncmp(buffer, UUID_PREFIX, sizeof(UUID_PREFIX) - 1))
+	    dm_uuid_has_prefix(buffer, UUID_PREFIX))
 		return 1;
 
 	return 0;
