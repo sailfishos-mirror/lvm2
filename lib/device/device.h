@@ -147,8 +147,8 @@ struct device {
 	/* private */
 	int fd;
 	int open_count;
-	int physical_block_size; /* From BLKPBSZGET: lowest possible sector size that the hardware can operate on without reverting to read-modify-write operations */
-	int logical_block_size;  /* From BLKSSZGET: lowest possible block size that the storage device can address */
+	unsigned int physical_block_size; /* From BLKPBSZGET: lowest possible sector size that the hardware can operate on without reverting to read-modify-write operations */
+	unsigned int logical_block_size;  /* From BLKSSZGET: lowest possible block size that the storage device can address */
 	int read_ahead;
 	int bcache_fd;
 	int bcache_di;
