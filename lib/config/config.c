@@ -2585,7 +2585,7 @@ uint64_t get_default_allocation_cache_pool_max_chunks_CFG(struct cmd_context *cm
 	 *       newer targets may scale better.
 	 */
 	uint64_t default_max_chunks = DEFAULT_CACHE_POOL_MAX_CHUNKS;
-	uint64_t max_chunks = find_config_tree_int(cmd, allocation_cache_pool_max_chunks_CFG, profile);
+	uint64_t max_chunks = find_config_tree_int64(cmd, allocation_cache_pool_max_chunks_CFG, profile);
 
 	if (!max_chunks)
 		max_chunks = default_max_chunks;
