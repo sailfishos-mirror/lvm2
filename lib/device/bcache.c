@@ -991,13 +991,13 @@ static struct block *_new_block(struct bcache *cache, int di, block_address i, b
 				if (!_wait_all(cache))
 					return NULL;
 				if (dm_list_size(&cache->errored) >= cache->max_io) {
-					log_debug("bcache no new blocks for di %d index %u with >%u errors.",
-						  di, (uint32_t) i, cache->max_io);
+					log_debug("bcache no new blocks for di %d index %llu with >%u errors.",
+						  di, (unsigned long long) i, cache->max_io);
 					return NULL;
 				}
 			} else {
-				log_debug("bcache no new blocks for di %d index %u",
-					  di, (uint32_t) i);
+				log_debug("bcache no new blocks for di %d index %llu",
+					  di, (unsigned long long) i);
 				return NULL;
 			}
 		}
@@ -1290,7 +1290,7 @@ bool bcache_get(struct bcache *cache, int di, block_address i,
 bad:
 	*result = NULL;
 
-	log_error("bcache failed to get block %u di %d", (uint32_t) i, di);
+	log_error("bcache failed to get block %llu di %d", (unsigned long long) i, di);
 	return false;
 }
 

@@ -30,7 +30,7 @@ static int _vgimport_single(struct cmd_context *cmd,
 	}
 
 	if (vg_status(vg) & PARTIAL_VG) {
-		log_error("Volume group \"%s\" is partially missing", vg_name);
+		log_error("Volume group \"%s\" is partially missing.", vg_name);
 		goto bad;
 	}
 
@@ -38,7 +38,7 @@ static int _vgimport_single(struct cmd_context *cmd,
 
 	if (!vg_is_shared(vg)) {
 		if (cmd->system_id && !(vg->system_id = dm_pool_strdup(vg->vgmem, cmd->system_id))) {
-			log_error("Failed to set system_id for VG %s.", vg_name);
+			log_error("Failed to set system_id for VG \"%s\".", vg_name);
 			goto bad;
 		}
 	}
@@ -72,7 +72,7 @@ bad:
 int vgimport(struct cmd_context *cmd, int argc, char **argv)
 {
 	if (!argc && !arg_is_set(cmd, all_ARG) && !arg_is_set(cmd, select_ARG)) {
-		log_error("Please supply volume groups or -S for selection or use -a for all.");
+		log_error("Please supply volume groups or use -S for selection or use -a for all.");
 		return EINVALID_CMD_LINE;
 	}
 
