@@ -526,7 +526,7 @@ int unmangle_string(const char *str, const char *str_name, size_t len,
 		return -1;
 	}
 
-	for (i = 0, j = 0; str[i]; i++, j++) {
+	for (i = 0, j = 0; i < len && str[i]; i++, j++) {
 		if (strict && !(_is_whitelisted_char(str[i]) || str[i]=='\\')) {
 			log_error("The %s \"%s\" should be mangled but "
 				  "it contains blacklisted characters.", str_name, str);
@@ -534,8 +534,12 @@ int unmangle_string(const char *str, const char *str_name, size_t len,
 			goto out;
 		}
 
+		if (buf_len - j < 2)
+			goto bad;
+
 		if (str[i] == '\\' && str[i+1] == 'x') {
-			if (!sscanf(&str[i+2], "%2x%" DM_TO_STRING(DM_NAME_LEN) "s",
+			if ((len - i < 4) ||
+			    !sscanf(&str[i+2], "%2x%" DM_TO_STRING(DM_NAME_LEN) "s",
 				    &code, str_rest)) {
 				log_debug_activation("Hex encoding mismatch detected in %s \"%s\" "
 						     "while trying to unmangle it.", str_name, str);
@@ -555,6 +559,9 @@ int unmangle_string(const char *str, const char *str_name, size_t len,
 out:
 	buf[j] = '\0';
 	return r;
+bad:
+	log_error("Unmangled form of the %s too long for \"%s\".", str_name, str);
+	return -1;
 }
 
 static int _dm_task_set_name(struct dm_task *dmt, const char *name,
