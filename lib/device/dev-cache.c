@@ -1344,7 +1344,8 @@ int dm_devs_cache_update(void)
 
 	if (!(_cache.dm_devnos = radix_tree_create(NULL, NULL)) ||
 	    !(_cache.dm_uuids = radix_tree_create(NULL, NULL))) {
-		return_0; // FIXME
+		dm_devs_cache_destroy();
+		return_0;
 	}
 
 	log_debug_cache("Creating DM cache for devno and uuid.");
@@ -1352,12 +1353,16 @@ int dm_devs_cache_update(void)
 	dm_list_iterate_items(dm_dev, _cache.dm_devs) {
 		d = _shuffle_devno(dm_dev->devno);
 
-		if (!radix_tree_insert_ptr(_cache.dm_devnos, &d, sizeof(d), dm_dev))
+		if (!radix_tree_insert_ptr(_cache.dm_devnos, &d, sizeof(d), dm_dev)) {
+			dm_devs_cache_destroy();
 			return_0;
+		}
 
 		if (dm_dev->uuid[0] &&
-		    !radix_tree_insert_ptr(_cache.dm_uuids, dm_dev->uuid, strlen(dm_dev->uuid), dm_dev))
+		    !radix_tree_insert_ptr(_cache.dm_uuids, dm_dev->uuid, strlen(dm_dev->uuid), dm_dev)) {
+			dm_devs_cache_destroy();
 			return_0;
+		}
 	}
 
 	//radix_tree_dump(_cache.dm_devnos, stdout);
