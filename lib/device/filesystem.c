@@ -113,6 +113,11 @@ static int _fs_get_mnt(struct fs_info *fsi, dev_t devt)
 	struct stat stme;
 	FILE *fme = NULL;
 	struct mntent *me;
+	/*
+	 * st_dev of mnt_dir in btrfs is an anonymous device number,
+	 * use mnt_fsname and st_rdev instead.
+	 */
+	int is_btrfs = !strcmp(fsi->fstype, "btrfs");
 
 	/*
 	 * Note: used swap devices are not considered as mount points,
@@ -124,6 +129,8 @@ static int _fs_get_mnt(struct fs_info *fsi, dev_t devt)
 		return_0;
 
 	while ((me = getmntent(fme))) {
+		const char *stat_path = is_btrfs ? me->mnt_fsname : me->mnt_dir;
+
 		if (strcmp(me->mnt_type, fsi->fstype))
 			continue;
 		if (me->mnt_dir[0] != '/')
@@ -131,25 +138,19 @@ static int _fs_get_mnt(struct fs_info *fsi, dev_t devt)
 		if (me->mnt_fsname[0] != '/')
 			continue;
 
-		/*
-		 * st_dev of mnt_dir in btrfs is an anonymous device number,
-		 * use mnt_fsname instead.
-		 */
-		if (!strcmp(fsi->fstype, "btrfs")) {
-			if (stat(me->mnt_fsname, &stme) < 0)
-				log_sys_error("stat", me->mnt_fsname);
-			if (stme.st_rdev != devt)
-				continue;
-		} else {
-			if (stat(me->mnt_dir, &stme) < 0)
-				continue;
-			if (stme.st_dev != devt)
-				continue;
-			fsi->mounted = 1;
+		if (stat(stat_path, &stme) < 0) {
+			log_sys_error("stat", stat_path);
+			continue;
 		}
+
+		if ((is_btrfs ? stme.st_rdev : stme.st_dev) != devt)
+			continue;
+
+		fsi->mounted = 1;
 
 		log_debug("fs_get_info %s is mounted \"%s\"", fsi->fs_dev_path, me->mnt_dir);
 		dm_strncpy(fsi->mount_dir, me->mnt_dir, sizeof(fsi->mount_dir));
+		break; /* found mount */
 	}
 	endmntent(fme);
 
