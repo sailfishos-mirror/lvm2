@@ -21,6 +21,7 @@
 #include "libdm/misc/dm-logging.h"
 #include "libdm/libdevmapper.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,8 +84,9 @@ static uint64_t _parse_uint64(const char *str)
 	char *end;
 	uint64_t val;
 
+	errno = 0;
 	val = strtoull(str, &end, 10);
-	if (end == str || *end != '\0')
+	if (end == str || *end != '\0' || errno == ERANGE)
 		return 0;
 
 	return val;
