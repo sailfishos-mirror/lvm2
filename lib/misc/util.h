@@ -42,12 +42,13 @@ static inline __attribute__((warn_unused_result))
  * and comparisons for older compilers.
  */
 #ifdef HAVE___BUILTIN_CLZ
-#define clz(x) __builtin_clz((x))
+#define clz(x) ((x) ? __builtin_clz((x)) : 32)
 #else /* ifdef HAVE___BUILTIN_CLZ */
-static unsigned _dm_clz(unsigned x)
+static inline unsigned _dm_clz(unsigned x)
 {
-	int n;
+	unsigned n;
 
+	/* branchless: if (!x) return 32; if (x >> 31) return 0; */
 	if ((int)x <= 0) return (~x >> 26) & 32;
 
 	n = 1;
@@ -78,9 +79,9 @@ static unsigned _dm_clz(unsigned x)
 #endif /* ifdef HAVE___BUILTIN_CLZ */
 
 #ifdef HAVE___BUILTIN_CLZLL
-#define clzll(x) __builtin_clzll((x))
+#define clzll(x) ((x) ? __builtin_clzll((x)) : 64)
 #else /* ifdef HAVE___BUILTIN_CLZLL */
-static unsigned _dm_clzll(unsigned long long x)
+static inline unsigned _dm_clzll(unsigned long long x)
 {
 	if (x <= 0xffffffff)
 		return 32 + clz((unsigned) (x & 0xffffffff));
