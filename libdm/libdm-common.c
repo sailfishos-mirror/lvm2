@@ -475,7 +475,7 @@ int mangle_string(const char *str, const char *str_name, size_t len,
 			if (buf_len - j < 4)
 				goto bad2;
 
-			sprintf(&buf[j], "\\x%02x", (unsigned char) str[i]);
+			(void) sprintf(&buf[j], "\\x%02x", (unsigned char) str[i]);
 			j+=4;
 
 			need_mangling = 1;
@@ -535,7 +535,8 @@ int unmangle_string(const char *str, const char *str_name, size_t len,
 		}
 
 		if (str[i] == '\\' && str[i+1] == 'x') {
-			if (!sscanf(&str[i+2], "%2x%" DM_TO_STRING(DM_NAME_LEN) "s",
+			if ((len - i < 4) ||
+			    !sscanf(&str[i+2], "%2x%" DM_TO_STRING(DM_NAME_LEN) "s",
 				    &code, str_rest)) {
 				log_debug_activation("Hex encoding mismatch detected in %s \"%s\" "
 						     "while trying to unmangle it.", str_name, str);
