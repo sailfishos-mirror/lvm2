@@ -334,7 +334,9 @@ static void _daemonize(daemon_state s)
 	sigset_t my_sigset;
 	struct custom_fds custom_fds = {
 		/* Do not close fds preloaded by systemd! */
-		.out = (_systemd_activation) ? SD_FD_SOCKET_SERVER : -1
+		.out = (_systemd_activation) ? SD_FD_SOCKET_SERVER : -1,
+		.err = -1,
+		.report = -1,
 	};
 
 	if ((fd = open("/dev/null", O_RDWR)) == -1) {
