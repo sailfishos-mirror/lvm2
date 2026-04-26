@@ -325,7 +325,8 @@ static void _print_verbose(const char *name,
 			   const struct _verbose_derived *vd)
 {
 	unsigned i;
-	size_t max_len, na;
+	size_t max_len;
+	int na;
 	char buf[MAX_FMT_BUF];
 	const char *l;
 
