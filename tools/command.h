@@ -212,8 +212,8 @@ struct command {
 	struct cmd_rule rules[CMD_MAX_RULES];
 
 	/* usually only one autotype, in one case there are two */
-	char *autotype;
-	char *autotype2;
+	const char *autotype;
+	const char *autotype2;
 
 	uint16_t any_ro_count;
 
