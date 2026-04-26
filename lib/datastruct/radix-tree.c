@@ -20,7 +20,7 @@
 #include "lib/datastruct/radix-tree-adaptive.c"
 #endif
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 struct visitor {
 	struct radix_tree_iterator it;
@@ -42,7 +42,7 @@ static bool _visitor(struct radix_tree_iterator *it,
 	return true;
 }
 
-bool radix_tree_values(struct radix_tree *rt, const void *key, size_t keylen,
+bool radix_tree_values(const struct radix_tree *rt, const void *key, size_t keylen,
 		       union radix_value **values, unsigned *nr_values)
 {
 	struct visitor vt = {
@@ -52,7 +52,7 @@ bool radix_tree_values(struct radix_tree *rt, const void *key, size_t keylen,
 	};
 
 	if (vt.values) {
-		// build set of all values in current radix tree
+		/* build set of all values in current radix tree */
 		radix_tree_iterate(rt, key, keylen, &vt.it);
 		*nr_values = vt.pos;
 		*values = vt.values;
@@ -62,4 +62,4 @@ bool radix_tree_values(struct radix_tree *rt, const void *key, size_t keylen,
 	return false;
 }
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
