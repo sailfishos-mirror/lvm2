@@ -1343,9 +1343,8 @@ int dm_devs_cache_update(void)
 	   overhead of radix trees and just do list searches on dm_devs */
 
 	if (!(_cache.dm_devnos = radix_tree_create(NULL, NULL)) ||
-	    !(_cache.dm_uuids = radix_tree_create(NULL, NULL))) {
-		return_0; // FIXME
-	}
+	    !(_cache.dm_uuids = radix_tree_create(NULL, NULL)))
+		goto_bad;
 
 	log_debug_cache("Creating DM cache for devno and uuid.");
 	/* Insert every active DM device into radix trees */
@@ -1353,18 +1352,19 @@ int dm_devs_cache_update(void)
 		d = _shuffle_devno(dm_dev->devno);
 
 		if (!radix_tree_insert_ptr(_cache.dm_devnos, &d, sizeof(d), dm_dev))
-			return_0;
+			goto_bad;
 
 		if (dm_dev->uuid[0] &&
 		    !radix_tree_insert_ptr(_cache.dm_uuids, dm_dev->uuid, strlen(dm_dev->uuid), dm_dev))
-			return_0;
+			goto_bad;
 	}
-
-	//radix_tree_dump(_cache.dm_devnos, stdout);
-	//radix_tree_dump(_cache.dm_uuids, stdout);
 
 	_cache.use_dm_devs_cache = 1;
 	return 1;
+
+bad:
+	dm_devs_cache_destroy();
+	return 0;
 }
 
 void dm_devs_cache_label_invalidate(struct cmd_context *cmd)
