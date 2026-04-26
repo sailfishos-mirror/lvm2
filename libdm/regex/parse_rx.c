@@ -164,8 +164,7 @@ static int _rx_get_token(struct parse_sp *ps)
 				range = 1;
 				ptr++;
 				if (ptr == ps->rx_end) {
-					log_error("Incomplete range"
-						  "specification");
+					log_error("Incomplete range specification.");
 					return -1;
 				}
 				c = *ptr;

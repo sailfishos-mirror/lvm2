@@ -57,7 +57,7 @@ static int _get_crypt_path(dev_t lv_devt, char *lv_path, char *crypt_path)
 	/* If the crypt dev is not active, there will be no LV holder. */
 	if (!(dr = opendir(holders_path))) {
 		if (errno == ENOENT)
-			log_error("Missing %s for %s.", crypt_path, lv_path);
+			log_error("Missing %s for %s.", holders_path, lv_path);
 		else
 			log_error("Cannot open %s.", holders_path);
 		return 0;

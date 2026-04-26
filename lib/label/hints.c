@@ -738,7 +738,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 		keylen = sizeof("hints_version:") - 1;
 		if (!strncmp(_hint_line, "hints_version:", keylen)) {
 			if (sscanf(_hint_line + keylen, "%d.%d", &hv_major, &hv_minor) != 2) {
-				log_debug("ignore hints with unknown version %d.%d", hv_major, hv_minor);
+				log_debug("ignore hints with unknown version \"%s\".", _hint_line + keylen);
 				*needs_refresh = 1;
 				break;
 			}

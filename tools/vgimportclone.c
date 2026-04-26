@@ -465,12 +465,12 @@ retry_name:
 	log_debug("import vg on new devices");
 
 	if (!lock_vol(cmd, vp.new_vgname, LCK_VG_WRITE, NULL)) {
-		log_error("Can't get lock for new VG name %s", vp.new_vgname);
+		log_error("Can't get lock for new VG name %s.", vp.new_vgname);
 		goto out;
 	}
 
 	if (!lock_vol(cmd, vp.old_vgname, LCK_VG_WRITE, NULL)) {
-		log_error("Can't get lock for VG name %s", vp.old_vgname);
+		log_error("Can't get lock for VG name %s.", vp.old_vgname);
 		unlock_vg(cmd, NULL, vp.new_vgname);
 		goto out;
 	}

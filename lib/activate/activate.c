@@ -1133,7 +1133,7 @@ int lv_raid_data_offset(const struct logical_volume *lv, uint64_t *data_offset)
 	if (!lv_info(lv->vg->cmd, lv, 0, NULL, 0, 0))
 		return 0;
 
-	log_debug_activation("Checking raid data offset and dev sectors for LV %s.",
+	log_debug_activation("Checking raid data offset for LV %s.",
 			     display_lvname(lv));
 
 	if (!lv_raid_status(lv, &raid_status))
