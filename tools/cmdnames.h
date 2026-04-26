@@ -13,6 +13,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#define xx(a, b, c...) a
+#define xx(a, b, ...) a
 
 #include "commands.h"
