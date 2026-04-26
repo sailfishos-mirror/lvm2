@@ -2845,13 +2845,17 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 
 		dm_list_iterate_items(dw, &dev->wwids) {
 			if (!strcmp(dw->id, du_idname)) {
-				if (!(id = zalloc(sizeof(struct dev_id))))
-					return_0;
+				int idtype;
 				/* scsi/nvme types are 1,2,3 and idtypes are DEV_ID_TYPE_ */
 				if (dev_is_nvme(dev))
-					id->idtype = nvme_type_to_idtype(dw->nvme_type);
+					idtype = nvme_type_to_idtype(dw->nvme_type);
 				else
-					id->idtype = scsi_type_to_idtype(dw->scsi_type);
+					idtype = scsi_type_to_idtype(dw->scsi_type);
+				if (idtype < 0)
+					continue;
+				if (!(id = zalloc(sizeof(struct dev_id))))
+					return_0;
+				id->idtype = idtype;
 				if (!(id->idname = strdup(dw->id))) {
 					free(id);
 					return_0;
