@@ -429,14 +429,18 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
 		unsigned i, j = 0;
 		memcpy(tmp_path, mtab_mntpath, sizeof(tmp_path));
 		memset(mtab_mntpath, 0, sizeof(mtab_mntpath));
-		for (i = 0; i < sizeof(tmp_path); i++) {
+		for (i = 0; i < sizeof(tmp_path) && tmp_path[i]; i++) {
 			if (tmp_path[i] == ' ') {
+				if (j + 4 >= sizeof(mtab_mntpath))
+					break;
 				mtab_mntpath[j++] = '\\';
 				mtab_mntpath[j++] = '0';
 				mtab_mntpath[j++] = '4';
 				mtab_mntpath[j++] = '0';
 				continue;
 			}
+			if (j + 1 >= sizeof(mtab_mntpath))
+				break;
 			mtab_mntpath[j++] = tmp_path[i];
 		}
 	}
