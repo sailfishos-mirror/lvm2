@@ -604,11 +604,11 @@ int fill_vdo_target_params(struct cmd_context *cmd,
 	/* TODO: Maybe add more lvm cmdline switches to set profile settings. */
 
 	vtp->use_compression =
-		find_config_tree_int(cmd, allocation_vdo_use_compression_CFG, profile);
+		find_config_tree_bool(cmd, allocation_vdo_use_compression_CFG, profile);
 	vtp->use_deduplication =
-		find_config_tree_int(cmd, allocation_vdo_use_deduplication_CFG, profile);
+		find_config_tree_bool(cmd, allocation_vdo_use_deduplication_CFG, profile);
 	vtp->use_metadata_hints =
-		find_config_tree_int(cmd, allocation_vdo_use_metadata_hints_CFG, profile);
+		find_config_tree_bool(cmd, allocation_vdo_use_metadata_hints_CFG, profile);
 	vtp->minimum_io_size =
 		find_config_tree_int(cmd, allocation_vdo_minimum_io_size_CFG, profile) >> SECTOR_SHIFT;
 	vtp->block_map_cache_size_mb =
@@ -616,7 +616,7 @@ int fill_vdo_target_params(struct cmd_context *cmd,
 	vtp->block_map_era_length =
 		find_config_tree_int(cmd, allocation_vdo_block_map_era_length_CFG, profile);
 	vtp->use_sparse_index =
-		find_config_tree_int(cmd, allocation_vdo_use_sparse_index_CFG, profile);
+		find_config_tree_bool(cmd, allocation_vdo_use_sparse_index_CFG, profile);
 	vtp->index_memory_size_mb =
 		find_config_tree_int64(cmd, allocation_vdo_index_memory_size_mb_CFG, profile);
 	vtp->slab_size_mb =

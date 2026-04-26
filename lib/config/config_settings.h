@@ -742,18 +742,18 @@ cfg(allocation_physical_extent_size_CFG, "physical_extent_size", allocation_CFG_
 	"Default physical extent size in KiB to use for new VGs.\n")
 
 #define VDO_1ST_VSN vsn(2, 3, 0)
-cfg(allocation_vdo_use_compression_CFG, "vdo_use_compression", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_COMPRESSION, VDO_1ST_VSN, NULL, 0, NULL,
+cfg(allocation_vdo_use_compression_CFG, "vdo_use_compression", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_COMPRESSION, VDO_1ST_VSN, NULL, 0, NULL,
 	"Enables or disables compression when creating a VDO volume.\n"
 	"Compression may be disabled if necessary to maximize performance\n"
 	"or to speed processing of data that is unlikely to compress.\n")
 
-cfg(allocation_vdo_use_deduplication_CFG, "vdo_use_deduplication", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_DEDUPLICATION, VDO_1ST_VSN, NULL, 0, NULL,
+cfg(allocation_vdo_use_deduplication_CFG, "vdo_use_deduplication", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_DEDUPLICATION, VDO_1ST_VSN, NULL, 0, NULL,
 	"Enables or disables deduplication when creating a VDO volume.\n"
 	"Deduplication may be disabled in instances where data is not expected\n"
 	"to have good deduplication rates but compression is still desired.\n")
 
-cfg_runtime(allocation_vdo_use_metadata_hints_CFG, "vdo_use_metadata_hints", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, VDO_1ST_VSN, vsn(2, 3, 27), NULL,
-	"Deprecated enablement whether VDO volume should tag its latency-critical\n"
+cfg_runtime(allocation_vdo_use_metadata_hints_CFG, "vdo_use_metadata_hints", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, VDO_1ST_VSN, vsn(2, 3, 27), NULL,
+	"Deprecated. Controls whether VDO volume tags its latency-critical\n"
 	"writes with the REQ_SYNC flag. Some device mapper targets such as dm-raid5\n"
 	"process writes with this flag at a higher priority.\n")
 
@@ -779,7 +779,7 @@ cfg(allocation_vdo_check_point_frequency_CFG, "vdo_check_point_frequency", alloc
 	"Deprecated option to set default check point frequency for VDO volume.\n")
 
 /* vdo format */
-cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_SPARSE_INDEX, VDO_1ST_VSN, NULL, 0, NULL,
+cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_SPARSE_INDEX, VDO_1ST_VSN, NULL, 0, NULL,
 	"Enables sparse indexing for VDO volume.\n")
 
 /* vdo format */
