@@ -149,6 +149,7 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 		*layer = '\0';
 
 	if (!strncmp(cmd, _internal_prefix, sizeof(_internal_prefix) - 1)) {
+		dmeventd_lvm2_lock();
 		/* check if ENVVAR wasn't already resolved */
 		dm_list_iterate_items(env_data, &_env_registry)
 			if (!strcmp(cmd, env_data->cmd)) {
@@ -158,7 +159,6 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 
 		if (!env) {
 			/* run lvm2 command to find out setting value */
-			dmeventd_lvm2_lock();
 			if (!dmeventd_lvm2_run(cmd) ||
 			    !(env = getenv(cmd))) {
 				dmeventd_lvm2_unlock();
@@ -167,10 +167,10 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 			}
 			/* output of internal command passed via env var */
 			env = dm_pool_strdup(_mem_pool, env); /* copy with lock */
-			dmeventd_lvm2_unlock();
 			if (!env ||
 			    !(env_data = dm_pool_zalloc(_mem_pool, sizeof(*env_data))) ||
 			    !(env_data->cmd = dm_pool_strdup(_mem_pool, cmd))) {
+				dmeventd_lvm2_unlock();
 				log_error("Unable to allocate env memory.");
 				return 0;
 			}
@@ -179,6 +179,7 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 			dm_list_add(&_env_registry, &env_data->list);
 		}
 		cmd = env;
+		dmeventd_lvm2_unlock();
 	}
 
 	r = dm_snprintf(buffer, size, "%s %s/%s", cmd, vg, lv);
