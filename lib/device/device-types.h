@@ -35,11 +35,12 @@ typedef struct {
 static const dev_known_type_t _dev_known_types[] = {
 	{"sd", 16, "SCSI disk"},
 	{"ide", 64, "IDE disk"},
+	/* "mdp" must precede "md" - strncmp prefix-match would shadow it */
+	{"mdp", 1, "Partitionable MD"},
 	{"md", 1, "Multiple Disk (MD/SoftRAID)"},
 	{"loop", 1, "Loop device"},
 	{"ramdisk", 1, "RAM disk"},
 	{"device-mapper", 1, "Mapped device"},
-	{"mdp", 1, "Partitionable MD"},
 	{"dasd", 4, "DASD disk (IBM S/390, zSeries)"},
 	{"dac960", 8, "DAC960"},
 	{"nbd", 16, "Network Block Device"},
