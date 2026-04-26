@@ -34,6 +34,7 @@
 #define REASON_MISSING_VGNAME "request requires vgname set"
 #define REASON_POLLING_FAILED "polling of lvm command failed"
 #define REASON_ILLEGAL_ABORT_REQUEST "abort only supported with PVMOVE polling operation"
+#define REASON_INVALID_POLL_TYPE "invalid poll type"
 #define REASON_DIFFERENT_OPERATION_IN_PROGRESS "Different operation on LV already in progress"
 #define REASON_INVALID_INTERVAL "request requires interval set"
 #define REASON_ENOMEM "not enough memory"
@@ -102,6 +103,9 @@ static int _init(struct daemon_state *s)
 
 	if (!ls->id_to_pdlv_poll || !ls->id_to_pdlv_abort) {
 		FATAL(ls, "%s: %s", PD_LOG_PREFIX, "Failed to allocate internal data structures");
+		pdst_destroy(ls->id_to_pdlv_poll);
+		pdst_destroy(ls->id_to_pdlv_abort);
+		ls->id_to_pdlv_poll = ls->id_to_pdlv_abort = NULL;
 		return 0;
 	}
 
@@ -154,6 +158,9 @@ static int _fini(struct daemon_state *s)
 
 	DEBUGLOG(s, "fini");
 
+	if (!ls->id_to_pdlv_poll || !ls->id_to_pdlv_abort)
+		goto out;
+
 	DEBUGLOG(s, "sending cancel requests");
 
 	_lvmpolld_global_lock(ls);
@@ -182,7 +189,7 @@ static int _fini(struct daemon_state *s)
 
 	pdst_destroy(ls->id_to_pdlv_poll);
 	pdst_destroy(ls->id_to_pdlv_abort);
-
+out:
 	pthread_key_delete(key);
 
 	return 1;
@@ -628,7 +635,7 @@ static response poll_init(client_handle h, struct lvmpolld_state *ls, request re
 	unsigned abort_polling = daemon_request_int(req, LVMPD_PARM_ABORT, 0);
 
 	if (type >= POLL_TYPE_MAX)
-		return reply(LVMPD_RESP_EINVAL, REASON_ILLEGAL_ABORT_REQUEST);
+		return reply(LVMPD_RESP_EINVAL, REASON_INVALID_POLL_TYPE);
 
 	if (abort_polling && type != PVMOVE)
 		return reply(LVMPD_RESP_EINVAL, REASON_ILLEGAL_ABORT_REQUEST);

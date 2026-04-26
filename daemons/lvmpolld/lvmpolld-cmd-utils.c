@@ -81,7 +81,7 @@ const char **cmdargv_ctr(const struct lvmpolld_lv *pdlv, const char *lvm_binary,
 
 	/* one of: "convert", "pvmove", "merge", "merge_thin" */
 	if (!add_to_cmd_arr(&cmd_argv, "--polloperation", &i) ||
-	    !add_to_cmd_arr(&cmd_argv, _polling_ops[pdlv->type], &i))
+	    !add_to_cmd_arr(&cmd_argv, polling_op(pdlv->type), &i))
 		goto err;
 
 	/* vg/lv name */
