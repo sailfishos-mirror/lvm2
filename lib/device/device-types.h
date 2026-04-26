@@ -18,10 +18,12 @@
 
 #include <stdint.h>
 
+#define DEV_KNOWN_NAME_LEN 15
+
 typedef struct {
-	const char name[15];
-	const int8_t max_partitions;
-	const char *desc;
+	const char name[DEV_KNOWN_NAME_LEN];
+	const uint8_t max_partitions;
+	const char * const desc;
 } dev_known_type_t;
 
 /*

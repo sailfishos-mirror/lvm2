@@ -27,6 +27,6 @@
 
 /* *INDENT-OFF* */
 FIELD(DEVTYPES, devtype, STR, "DevType", name, 7, chars, devtype_name, "Name of Device Type exactly as it appears in /proc/devices.", 0)
-FIELD(DEVTYPES, devtype, NUM, "MaxParts", max_partitions, 8, int8, devtype_max_partitions, "Maximum number of partitions. (How many device minor numbers get reserved for each device.)", 0)
+FIELD(DEVTYPES, devtype, NUM, "MaxParts", max_partitions, 8, uint8, devtype_max_partitions, "Maximum number of partitions. (How many device minor numbers get reserved for each device.)", 0)
 FIELD(DEVTYPES, devtype, STR, "Description", desc, 11, string, devtype_description, "Description of Device Type.", 0)
 /* *INDENT-ON* */
