@@ -1,5 +1,7 @@
 Version 2.03.42 - 
 ==================
+  Support formatting vdo volumes with kernel vdo target (version >= 9.2).
+  Add vdo_format.c with pre-format logical size computation for kernel format.
   Fix autoactivation on top of MD and loop devices if udev db records incomplete.
   Make MD device ready state check in udev to be in sync with MD udev rules.
 

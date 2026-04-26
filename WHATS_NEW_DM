@@ -1,3 +1,7 @@
+Version 1.02.216 - 
+===================
+  Add use_kernel_format to dm_vdo_target_params.
+
 Version 1.02.215 - 15th May 2026
 ================================
   Fix ttree insert/lookup depth mismatch in libdm.
