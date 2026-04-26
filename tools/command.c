@@ -315,7 +315,7 @@ unsigned command_id_to_enum(const char *str)
 	if ((name = bsearch(str, cmd_names[1].name, CMD_COUNT - 1,
 			    sizeof(cmd_names[0]),
 			    (int (*)(const void*, const void*))strcmp)))
-		return (name - cmd_names[0].name) / sizeof(cmd_names[0]);
+		return ((const struct cmd_name *)(const void *)name)->cmd_enum;
 
 	log_error("Cannot find command %s.", str);
 
@@ -324,6 +324,9 @@ unsigned command_id_to_enum(const char *str)
 
 const char *command_enum(unsigned command_enum)
 {
+	if (command_enum > CMD_COUNT)
+		return "unknown";
+
 	return cmd_names[command_enum].name;
 }
 
