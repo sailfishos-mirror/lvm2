@@ -2412,13 +2412,13 @@ static int _uint32_disp(struct dm_report *rh, struct dm_pool *mem __attribute__(
 	return dm_report_field_uint32(rh, field, data);
 }
 
-static int _int8_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
+static int _uint8_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
 		       struct dm_report_field *field,
 		       const void *data, void *private __attribute__((unused)))
 {
-	const int32_t val = *(const int8_t *)data;
+	const uint32_t val = *(const uint8_t *)data;
 
-	return dm_report_field_int32(rh, field, &val);
+	return dm_report_field_uint32(rh, field, &val);
 }
 
 static int _int32_disp(struct dm_report *rh, struct dm_pool *mem __attribute__((unused)),
