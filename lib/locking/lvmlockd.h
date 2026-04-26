@@ -227,7 +227,6 @@ static inline int lockd_free_vg_before(struct cmd_context *cmd, struct volume_gr
 
 static inline void lockd_free_vg_final(struct cmd_context *cmd, struct volume_group *vg)
 {
-	return;
 }
 
 static inline int lockd_rename_vg_before(struct cmd_context *cmd, struct volume_group *vg)
@@ -256,6 +255,11 @@ static inline int lockd_start_wait(struct cmd_context *cmd)
 }
 
 static inline int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32_t *cur_gen)
+{
+	return 0;
+}
+
+static inline int lockd_vg_is_busy(struct cmd_context *cmd, struct volume_group *vg)
 {
 	return 0;
 }
@@ -380,11 +384,6 @@ static inline int lockd_lvremove_lock(struct cmd_context *cmd, struct logical_vo
 static inline void lockd_lvremove_done(struct cmd_context *cmd, struct logical_volume *lv, struct logical_volume *lv_other,
 		int other_unlock)
 {
-}
-
-static inline int lockd_vg_is_busy(struct cmd_context *cmd, struct volume_group *vg)
-{
-	return 0;
 }
 
 static inline int lockd_setlockargs(struct cmd_context *cmd, struct volume_group *vg, const char *set_args, uint64_t *our_key_held)
