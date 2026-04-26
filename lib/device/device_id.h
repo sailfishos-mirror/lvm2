@@ -21,7 +21,7 @@
 
 void free_du(struct dev_use *du);
 void free_dus(struct dm_list *dus);
-void free_did(struct dev_id *did);
+void free_did(struct dev_id *id);
 void free_dids(struct dm_list *ids);
 const char *idtype_to_str(uint16_t idtype);
 uint16_t idtype_from_str(const char *str);
