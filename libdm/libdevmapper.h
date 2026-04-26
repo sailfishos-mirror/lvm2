@@ -2555,13 +2555,13 @@ int dm_bit_get_prev(dm_bitset_t bs, int last_bit);
 #define DM_BITS_PER_INT ((unsigned)sizeof(int) * CHAR_BIT)
 
 #define dm_bit(bs, i) \
-   ((bs)[((i) / DM_BITS_PER_INT) + 1] & (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+   ((bs)[((i) / DM_BITS_PER_INT) + 1] & (0x1U << ((i) & (DM_BITS_PER_INT - 1))))
 
 #define dm_bit_set(bs, i) \
-   ((bs)[((i) / DM_BITS_PER_INT) + 1] |= (0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+   ((bs)[((i) / DM_BITS_PER_INT) + 1] |= (0x1U << ((i) & (DM_BITS_PER_INT - 1))))
 
 #define dm_bit_clear(bs, i) \
-   ((bs)[((i) / DM_BITS_PER_INT) + 1] &= ~(0x1 << ((i) & (DM_BITS_PER_INT - 1))))
+   ((bs)[((i) / DM_BITS_PER_INT) + 1] &= ~(0x1U << ((i) & (DM_BITS_PER_INT - 1))))
 
 #define dm_bit_set_all(bs) \
    memset((bs) + 1, -1, ((*(bs) / DM_BITS_PER_INT) + 1) * sizeof(int))
