@@ -94,6 +94,6 @@ struct cmd_data {
 int dm_ioctl_exec(int fd, struct dm_task *dmt, struct dm_ioctl *dmi);
 
 int dm_check_version(void);
-uint64_t dm_task_get_existing_table_size(struct dm_task *dmt);
+uint64_t dm_task_get_existing_table_size(const struct dm_task *dmt);
 
 #endif

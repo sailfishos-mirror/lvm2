@@ -104,7 +104,7 @@ int dev_manager_transient(struct dev_manager *dm, const struct logical_volume *l
 int dev_manager_mknodes(const struct logical_volume *lv);
 
 int dev_manager_device_uses_vg(struct device *dev,
-			       struct volume_group *vg);
+			       const struct volume_group *vg);
 
 int dev_manager_check_prefix_dm_major_minor(uint32_t major, uint32_t minor, const char *prefix);
 int dev_manager_get_dm_active_devices(const char *prefix, struct dm_list **devs,

@@ -72,7 +72,7 @@ int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str)
 }
 
 /* Add contents of sll2 to sll */
-int str_list_add_list(struct dm_pool *mem, struct dm_list *sll, struct dm_list *sll2)
+int str_list_add_list(struct dm_pool *mem, struct dm_list *sll, const struct dm_list *sll2)
 {
 	struct dm_str_list *sl;
 

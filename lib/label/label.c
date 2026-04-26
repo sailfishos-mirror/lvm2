@@ -873,7 +873,7 @@ void prepare_open_file_limit(struct cmd_context *cmd, unsigned int num_devs)
  * anything has the pvid, even a dev that might be filtered.
  */
 
-int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out)
+int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device **dev_out)
 {
 	char buf[LABEL_SIZE] __attribute__((aligned(8)));
 	struct dev_iter *iter;

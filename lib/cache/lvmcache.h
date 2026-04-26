@@ -128,12 +128,12 @@ int lvmcache_add_da(struct lvmcache_info *info, uint64_t start, uint64_t size);
 int lvmcache_add_ba(struct lvmcache_info *info, uint64_t start, uint64_t size);
 
 void lvmcache_set_ext_version(struct lvmcache_info *info, uint32_t version);
-uint32_t lvmcache_ext_version(struct lvmcache_info *info);
+uint32_t lvmcache_ext_version(const struct lvmcache_info *info);
 void lvmcache_set_ext_flags(struct lvmcache_info *info, uint32_t flags);
-uint32_t lvmcache_ext_flags(struct lvmcache_info *info);
+uint32_t lvmcache_ext_flags(const struct lvmcache_info *info);
 
 const struct format_type *lvmcache_fmt(struct lvmcache_info *info);
-struct label *lvmcache_get_label(struct lvmcache_info *info);
+struct label *lvmcache_get_label(const struct lvmcache_info *info);
 struct label *lvmcache_get_dev_label(struct device *dev);
 int lvmcache_has_dev_info(struct device *dev);
 
@@ -156,9 +156,9 @@ int lvmcache_foreach_ba(struct lvmcache_info *info,
 int lvmcache_foreach_pv(struct lvmcache_vginfo *vginfo,
 			int (*fun)(struct lvmcache_info *, void *), void *baton);
 
-uint64_t lvmcache_device_size(struct lvmcache_info *info);
+uint64_t lvmcache_device_size(const struct lvmcache_info *info);
 void lvmcache_set_device_size(struct lvmcache_info *info, uint64_t size);
-struct device *lvmcache_device(struct lvmcache_info *info);
+struct device *lvmcache_device(const struct lvmcache_info *info);
 unsigned lvmcache_mda_count(struct lvmcache_info *info);
 uint64_t lvmcache_smallest_mda_size(struct lvmcache_info *info);
 

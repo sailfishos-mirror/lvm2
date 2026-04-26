@@ -58,7 +58,7 @@ int dev_is_scsi(struct cmd_context *cmd, struct device *dev)
 	return major_is_scsi_device(cmd->dev_types, MAJOR(dev->dev));
 }
 
-int dm_uuid_has_prefix(char *sysbuf, const char *prefix)
+int dm_uuid_has_prefix(const char *sysbuf, const char *prefix)
 {
 	if (!strncmp(sysbuf, prefix, strlen(prefix)))
 		return 1;

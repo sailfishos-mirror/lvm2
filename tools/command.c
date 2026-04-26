@@ -948,7 +948,7 @@ static void _add_pos_arg(struct command *cmd, char *str, int required)
 
 /* Process something that follows a pos arg, which is not a new pos arg. */
 
-static void _update_prev_pos_arg(struct command *cmd, char *str, int required)
+static void _update_prev_pos_arg(struct command *cmd, const char *str, int required)
 {
 	struct arg_def *def;
 
@@ -1066,7 +1066,8 @@ static void _add_required_opt_line(struct cmd_context *cmdtool, struct command *
  * and flag CMD_FLAG_ANY_REQUIRED_OPT is set on the cmd indicating
  * this special case.
  */
-static void _include_required_opt_args(struct cmd_context *cmdtool, struct command *cmd, char *str)
+static void _include_required_opt_args(struct cmd_context *cmdtool, struct command *cmd,
+				       const char *str)
 {
 	char *oo_line;
 	char *line;

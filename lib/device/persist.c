@@ -2120,7 +2120,7 @@ int persist_upgrade_ex(struct cmd_context *cmd, struct volume_group *vg, uint64_
  * change the PR sh access (standard for shared VGs.)
  */
 
-int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_key, int local_host_id,
+int persist_vgcreate_begin(struct cmd_context *cmd, const char *vg_name, const char *local_key, int local_host_id,
 			   uint32_t set_flags, struct dm_list *devs)
 {
 	struct device_list *devl;
