@@ -1096,7 +1096,7 @@ int fs_get_blkid(const char *pathname, struct fs_info *fsi)
 		fssize = strtoull(str, NULL, 0);
 
 	if (!blkid_probe_lookup_value(probe, "UUID", &str, &len) && len)
-		memcpy(fsi->uuid, str, UUID_LEN);
+		dm_strncpy(fsi->uuid, str, sizeof(fsi->uuid));
 
 	blkid_free_probe(probe);
 
