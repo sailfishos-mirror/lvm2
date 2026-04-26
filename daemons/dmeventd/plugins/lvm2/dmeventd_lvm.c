@@ -149,12 +149,16 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 		*layer = '\0';
 
 	if (!strncmp(cmd, _internal_prefix, sizeof(_internal_prefix) - 1)) {
-		/* check if ENVVAR wasn't already resolved */
+		/* Resolve internal command name to actual command string.
+		 * Use _register_mutex for _env_registry/_mem_pool access,
+		 * _event_mutex only for lvm2_run() on cache miss. */
+		pthread_mutex_lock(&_register_mutex);
 		dm_list_iterate_items(env_data, &_env_registry)
 			if (!strcmp(cmd, env_data->cmd)) {
 				env = env_data->data;
 				break;
 			}
+		pthread_mutex_unlock(&_register_mutex);
 
 		if (!env) {
 			/* run lvm2 command to find out setting value */
@@ -166,17 +170,20 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 				return 0;
 			}
 			/* output of internal command passed via env var */
-			env = dm_pool_strdup(_mem_pool, env); /* copy with lock */
 			dmeventd_lvm2_unlock();
-			if (!env ||
+
+			pthread_mutex_lock(&_register_mutex);
+			if (!(env = dm_pool_strdup(_mem_pool, env)) ||
 			    !(env_data = dm_pool_zalloc(_mem_pool, sizeof(*env_data))) ||
 			    !(env_data->cmd = dm_pool_strdup(_mem_pool, cmd))) {
+				pthread_mutex_unlock(&_register_mutex);
 				log_error("Unable to allocate env memory.");
 				return 0;
 			}
 			env_data->data = env;
 			/* add to ENVVAR registry */
 			dm_list_add(&_env_registry, &env_data->list);
+			pthread_mutex_unlock(&_register_mutex);
 		}
 		cmd = env;
 	}
