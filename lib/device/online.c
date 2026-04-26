@@ -187,7 +187,7 @@ int get_pvs_online(struct dm_list *pvs_online, const char *vgname)
 		if (file_devname[0])
 			dm_strncpy(po->devname, file_devname, sizeof(po->devname));
 
-		log_debug("Found PV online %s for VG %s %s", path, vgname, file_devname);
+		log_debug("Found PV online %s for VG %s %s", path, vgname ?: "", file_devname);
 		dm_list_add(pvs_online, &po->list);
 	}
 
