@@ -1388,6 +1388,16 @@ const char *get_vdo_index_state_name(enum dm_vdo_index_state state);
 const char *get_vdo_operating_mode_name(enum dm_vdo_operating_mode mode);
 const char *get_vdo_write_policy_name(enum dm_vdo_write_policy policy);
 uint64_t get_vdo_pool_virtual_size(const struct lv_segment *vdo_pool_seg);
+struct vdo_pool_info {
+	uint64_t data_blocks;
+	uint64_t uds_blocks;
+	unsigned slab_count;
+	unsigned data_per_slab;
+};
+
+int vdo_pool_info(uint64_t pool_size_sectors,
+		  const struct dm_vdo_target_params *vtp,
+		  struct vdo_pool_info *info);
 int update_vdo_pool_virtual_size(struct lv_segment *vdo_pool_seg);
 uint32_t get_vdo_pool_max_extents(const struct dm_vdo_target_params *vtp,
 				  uint32_t extent_size);
