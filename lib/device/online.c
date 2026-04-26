@@ -232,7 +232,7 @@ int online_vg_file_create(struct cmd_context *cmd, const char *vgname)
 
 	log_debug("Create vg online: %s", path);
 
-	fd = open(path, O_CREAT | O_EXCL | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
+	fd = open(path, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		log_debug("Failed to create %s: %d", path, errno);
 		return 0;
