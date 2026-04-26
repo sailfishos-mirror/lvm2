@@ -66,7 +66,7 @@ static void _process_status_code(dm_status_mirror_health_t health,
 	}
 }
 
-static int _get_mirror_event(struct dso_state *state, char *params)
+static int _get_mirror_event(struct dso_state *state, const char *params)
 {
 	int r = ME_INSYNC;
 	unsigned i;

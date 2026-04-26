@@ -221,7 +221,7 @@ void reinsert_changed_pv_area(struct pv_area *pva)
 	_insert_area(&pva->map->areas, pva, 1);
 }
 
-uint32_t pv_maps_size(struct dm_list *pvms)
+uint32_t pv_maps_size(const struct dm_list *pvms)
 {
 	struct pv_map *pvm;
 	uint32_t pe_count = 0;

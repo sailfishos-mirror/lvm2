@@ -58,7 +58,7 @@ int persist_clear(struct cmd_context *cmd, struct volume_group *vg);
 
 int persist_start_extend(struct cmd_context *cmd, struct volume_group *vg);
 
-int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_key, int local_host_id,
+int persist_vgcreate_begin(struct cmd_context *cmd, const char *vg_name, const char *local_key, int local_host_id,
 			   uint32_t set_flags, struct dm_list *devs);
 int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags);
 

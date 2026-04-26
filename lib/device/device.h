@@ -235,7 +235,7 @@ int dev_open_readonly_quiet(struct device *dev);
 int dev_close(struct device *dev);
 int dev_close_immediate(struct device *dev);
 
-int dev_fd(struct device *dev);
+int dev_fd(const struct device *dev);
 const char *dev_name(const struct device *dev);
 
 void dev_flush(struct device *dev);
@@ -254,6 +254,6 @@ int device_list_remove(struct dm_list *devices, struct device *dev);
 int device_list_add(struct dm_pool *mem, struct dm_list *devices, struct device *dev);
 struct device_list *device_list_find_dev(struct dm_list *devices, struct device *dev);
 
-char *strdup_pvid(char *pvid);
+char *strdup_pvid(const char *pvid);
 
 #endif

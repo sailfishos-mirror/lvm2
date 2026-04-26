@@ -109,7 +109,7 @@ static uint64_t _new_refresh_timestamp(struct cmd_context *cmd)
  * . return a buffer is ID_LEN+1 in size, even
  *   if the pvid string is shorter.
  */
-char *strdup_pvid(char *pvid)
+char *strdup_pvid(const char *pvid)
 {
 	char *buf;
 	if (!(buf = zalloc(ID_LEN + 1)))
@@ -589,7 +589,7 @@ static int _dev_has_lvmlv_uuid(struct cmd_context *cmd, struct device *dev, char
  * The numbers 1,2,3 for NAA,EUI,T10 are part of the standard
  * and are used in the vpd data.
  */
-static int _scsi_wwid_type_num(char *id)
+static int _scsi_wwid_type_num(const char *id)
 {
 	if (!strncmp(id, "naa.", 4))
 		return 3;
@@ -628,7 +628,7 @@ int idtype_to_scsi_type(int idtype)
  * sysfs wwid file will return "nvme." identifier when one of the
  * others is not available.
  */
-static int _nvme_wwid_type_num(char *id)
+static int _nvme_wwid_type_num(const char *id)
 {
 	if (!strncmp(id, "uuid.", 5))
 		return 3;		/* UUID is 16 bytes */
@@ -680,7 +680,7 @@ void free_wwids(struct dm_list *ids)
  * in /etc/multipath/wwids.
  */
 
-struct dev_wwid *dev_add_wwid(char *id, int dw_type, int is_nvme, struct dm_list *ids)
+struct dev_wwid *dev_add_wwid(const char *id, int dw_type, int is_nvme, struct dm_list *ids)
 {
 	struct dev_wwid *dw;
 	uint16_t scsi_type = 0;
@@ -705,12 +705,12 @@ struct dev_wwid *dev_add_wwid(char *id, int dw_type, int is_nvme, struct dm_list
 	return dw;
 }
 
-struct dev_wwid *dev_add_scsi_wwid(char *id, int dw_type, struct dm_list *ids)
+struct dev_wwid *dev_add_scsi_wwid(const char *id, int dw_type, struct dm_list *ids)
 {
 	return dev_add_wwid(id, dw_type, 0, ids);
 }
 
-struct dev_wwid *dev_add_nvme_wwid(char *id, int dw_type, struct dm_list *ids)
+struct dev_wwid *dev_add_nvme_wwid(const char *id, int dw_type, struct dm_list *ids)
 {
 	return dev_add_wwid(id, dw_type, 1, ids);
 }

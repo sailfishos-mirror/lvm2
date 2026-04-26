@@ -165,7 +165,7 @@ out:
 	return 0;
 }
 
-int lv_passes_auto_activation_filter(struct cmd_context *cmd, struct logical_volume *lv)
+int lv_passes_auto_activation_filter(struct cmd_context *cmd, const struct logical_volume *lv)
 {
 	const struct dm_config_node *cn;
 
@@ -1015,7 +1015,7 @@ int lv_check_not_in_use(const struct logical_volume *lv, int error_if_used)
 /*
  * Returns 1 if percent set, else 0 on failure.
  */
-int lv_check_transient(struct logical_volume *lv)
+int lv_check_transient(const struct logical_volume *lv)
 {
 	int r;
 	struct dev_manager *dm;

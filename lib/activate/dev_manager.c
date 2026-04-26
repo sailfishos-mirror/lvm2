@@ -4167,7 +4167,7 @@ int dev_manager_suspend(struct dev_manager *dm, const struct logical_volume *lv,
  * Returns 1 if uncertain.
  */
 int dev_manager_device_uses_vg(struct device *dev,
-			       struct volume_group *vg)
+			       const struct volume_group *vg)
 {
 	struct dm_tree *dtree;
 	struct dm_tree_node *root;

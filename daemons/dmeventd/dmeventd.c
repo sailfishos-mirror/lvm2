@@ -335,7 +335,7 @@ static void _free_dso_data(struct dso_data *data)
 	free(data);
 }
 
-static struct dso_data *_alloc_dso_data(struct message_data *data)
+static struct dso_data *_alloc_dso_data(const struct message_data *data)
 {
 	struct dso_data *ret = (__typeof__(ret)) zalloc(sizeof(*ret));
 
@@ -735,7 +735,7 @@ fail:
 	return ret;
 }
 
-static struct dm_task *_get_device_status(struct thread_status *ts)
+static struct dm_task *_get_device_status(const struct thread_status *ts)
 {
 	struct dm_task *dmt;
 
@@ -821,7 +821,7 @@ static uint64_t _get_device_inode(struct thread_status *ts)
  * Returns thread with BOTH _global_mutex and thread->mutex held.
  * Caller must unlock thread->mutex first, then _global_mutex.
  */
-static struct thread_status *_lookup_thread_status(struct message_data *data)
+static struct thread_status *_lookup_thread_status(const struct message_data *data)
 {
 	struct thread_status *thread;
 
@@ -843,7 +843,7 @@ static struct thread_status *_lookup_thread_status(struct message_data *data)
  * Returns thread with BOTH _global_mutex and thread->mutex held.
  * Caller must unlock thread->mutex first, then _global_mutex.
  */
-static struct thread_status *_lookup_grace_thread_status(struct message_data *data)
+static struct thread_status *_lookup_grace_thread_status(const struct message_data *data)
 {
 	struct thread_status *thread;
 
@@ -1552,7 +1552,7 @@ static int _update_events(struct thread_status *thread)
 }
 
 /* Return success on daemon active check. */
-static int _active(struct message_data *message_data)
+static int _active(const struct message_data *message_data)
 {
 	return 0;
 }
@@ -1562,7 +1562,7 @@ static int _active(struct message_data *message_data)
  *
  * Only one caller at a time here as with register_for_event().
  */
-static int _unregister_for_event(struct message_data *message_data)
+static int _unregister_for_event(const struct message_data *message_data)
 {
 	struct thread_status *thread;
 	int ret = 0;
@@ -1757,7 +1757,8 @@ static int _registered_device(struct message_data *message_data,
 	return 0;
 }
 
-static int _want_registered_device(char *dso_name, char *device_uuid,
+static int _want_registered_device(const char *dso_name,
+				   const char *device_uuid,
 				   struct thread_status *thread)
 {
 	/* If DSO names and device paths are equal. */
@@ -1853,7 +1854,7 @@ static int _get_next_registered_device(struct message_data *message_data)
 	return _get_registered_dev(message_data, 1);
 }
 
-static int _set_timeout(struct message_data *message_data)
+static int _set_timeout(const struct message_data *message_data)
 {
 	struct thread_status *thread;
 	unsigned timeout = message_data->timeout_secs;
@@ -2121,7 +2122,7 @@ static int _client_write(struct dm_event_fifos *fifos,
  * We put the request handling functions into
  * a list because of the growing number.
  */
-static int _handle_request(struct dm_event_daemon_message *msg,
+static int _handle_request(const struct dm_event_daemon_message *msg,
 			  struct message_data *message_data)
 {
 	switch (msg->cmd) {

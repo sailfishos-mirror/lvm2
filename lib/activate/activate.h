@@ -180,9 +180,9 @@ int lv_activation_filter(struct cmd_context *cmd, const char *lvid_s,
  * Checks against the auto_activation_volume_list and
  * returns 1 if the LV should be activated, 0 otherwise.
  */
-int lv_passes_auto_activation_filter(struct cmd_context *cmd, struct logical_volume *lv);
+int lv_passes_auto_activation_filter(struct cmd_context *cmd, const struct logical_volume *lv);
 
-int lv_check_transient(struct logical_volume *lv);
+int lv_check_transient(const struct logical_volume *lv);
 /*
  * Returns 1 if percent has been set, else 0.
  */

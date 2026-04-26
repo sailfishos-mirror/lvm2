@@ -2863,11 +2863,11 @@ int lvmcache_has_dev_info(struct device *dev)
  * The lifetime of the label returned is tied to the lifetime of the
  * lvmcache_info which is the same as lvmcache itself.
  */
-struct label *lvmcache_get_label(struct lvmcache_info *info) {
+struct label *lvmcache_get_label(const struct lvmcache_info *info) {
 	return info->label;
 }
 
-uint64_t lvmcache_device_size(struct lvmcache_info *info) {
+uint64_t lvmcache_device_size(const struct lvmcache_info *info) {
 	return info->device_size;
 }
 
@@ -2875,7 +2875,7 @@ void lvmcache_set_device_size(struct lvmcache_info *info, uint64_t size) {
 	info->device_size = size;
 }
 
-struct device *lvmcache_device(struct lvmcache_info *info) {
+struct device *lvmcache_device(const struct lvmcache_info *info) {
 	return info->dev;
 }
 void lvmcache_set_ext_version(struct lvmcache_info *info, uint32_t version)
@@ -2883,7 +2883,7 @@ void lvmcache_set_ext_version(struct lvmcache_info *info, uint32_t version)
 	info->ext_version = version;
 }
 
-uint32_t lvmcache_ext_version(struct lvmcache_info *info) {
+uint32_t lvmcache_ext_version(const struct lvmcache_info *info) {
 	return info->ext_version;
 }
 
@@ -2891,7 +2891,7 @@ void lvmcache_set_ext_flags(struct lvmcache_info *info, uint32_t flags) {
 	info->ext_flags = flags;
 }
 
-uint32_t lvmcache_ext_flags(struct lvmcache_info *info) {
+uint32_t lvmcache_ext_flags(const struct lvmcache_info *info) {
 	return info->ext_flags;
 }
 

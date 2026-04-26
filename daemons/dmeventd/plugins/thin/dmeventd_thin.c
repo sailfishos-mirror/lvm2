@@ -106,7 +106,7 @@ static int _run_command(struct dso_state *state)
 	return 1;
 }
 
-static int _use_policy(struct dm_task *dmt, struct dso_state *state)
+static int _use_policy(const struct dm_task *dmt, struct dso_state *state)
 {
 #if THIN_DEBUG
 	log_debug("dmeventd executes: %s.", state->cmd_str);

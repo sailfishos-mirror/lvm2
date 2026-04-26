@@ -1888,7 +1888,7 @@ struct device *dev_iter_get(struct cmd_context *cmd, struct dev_iter *iter)
 	return NULL;
 }
 
-int dev_fd(struct device *dev)
+int dev_fd(const struct device *dev)
 {
 	return dev->fd;
 }

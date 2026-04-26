@@ -36,9 +36,9 @@ union lvid {
 	char s[2 * sizeof(struct id) + 1 + 7];
 };
 
-int lvid_create(union lvid *lvid, struct id *vgid);
+int lvid_create(union lvid *lvid, const struct id *vgid);
 int id_create(struct id *id);
-int id_valid(struct id *id);
+int id_valid(const struct id *id);
 int id_equal(const struct id *lhs, const struct id *rhs);
 
 /*

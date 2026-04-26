@@ -1151,7 +1151,7 @@ static void _print_desc_man(const char *desc)
 		printf("%s\n", buf);
 }
 
-static const char *_upper_command_name(char *str)
+static const char *_upper_command_name(const char *str)
 {
 	static char str_upper[32];
 	int i = 0;
@@ -1434,7 +1434,7 @@ static void _print_man_secondary(char *name)
 	}
 }
 
-static void _print_opt_list(const char *prefix, int *opt_list, int opt_count)
+static void _print_opt_list(const char *prefix, const int *opt_list, int opt_count)
 {
 	int i;
 	int opt_enum;

@@ -95,7 +95,7 @@ unsigned long dev_optimal_io_size(struct dev_types *dt, struct device *dev);
 unsigned long dev_discard_max_bytes(struct dev_types *dt, struct device *dev);
 unsigned long dev_discard_granularity(struct dev_types *dt, struct device *dev);
 
-int dm_uuid_has_prefix(char *sysbuf, const char *prefix);
+int dm_uuid_has_prefix(const char *sysbuf, const char *prefix);
 
 int dev_is_rotational(struct dev_types *dt, struct device *dev);
 

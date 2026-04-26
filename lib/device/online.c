@@ -60,7 +60,7 @@ static int _copy_pvid_file_field(const char *field, char *buf, int bufsize, char
 
 #define MAX_PVID_FILE_SIZE 512
 
-int online_pvid_file_read(char *path, unsigned *major, unsigned *minor, char *vgname, char *devname)
+int online_pvid_file_read(const char *path, unsigned *major, unsigned *minor, char *vgname, char *devname)
 {
 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
 	ssize_t rv;

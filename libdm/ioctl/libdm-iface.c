@@ -1791,7 +1791,7 @@ static int _create_and_load_v4(struct dm_task *dmt)
 	return 0;
 }
 
-uint64_t dm_task_get_existing_table_size(struct dm_task *dmt)
+uint64_t dm_task_get_existing_table_size(const struct dm_task *dmt)
 {
 	return dmt->existing_table_size;
 }

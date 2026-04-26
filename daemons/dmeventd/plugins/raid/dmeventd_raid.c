@@ -32,7 +32,7 @@ DM_EVENT_LOG_FN("raid")
 
 /* FIXME Reformat to 80 char lines. */
 
-static int _process_raid_event(struct dso_state *state, char *params, const char *device)
+static int _process_raid_event(struct dso_state *state, const char *params, const char *device)
 {
 	struct dm_status_raid *status;
 	const char *d;

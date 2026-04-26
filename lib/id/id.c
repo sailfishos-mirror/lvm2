@@ -27,7 +27,7 @@ static const char _c[] =
 static int _built_inverse;
 static char _inverse_c[256];
 
-int lvid_create(union lvid *lvid, struct id *vgid)
+int lvid_create(union lvid *lvid, const struct id *vgid)
 {
 	memcpy(lvid->id, vgid, sizeof(*lvid->id));
 	return id_create(&lvid->id[1]);
@@ -72,7 +72,7 @@ static void _build_inverse(void)
 		_inverse_c[(int) *ptr] = (char) 0x1;
 }
 
-static int _id_valid(struct id *id, int e)
+static int _id_valid(const struct id *id, int e)
 {
 	int i;
 
@@ -90,7 +90,7 @@ static int _id_valid(struct id *id, int e)
 	return 1;
 }
 
-int id_valid(struct id *id)
+int id_valid(const struct id *id)
 {
 	return _id_valid(id, 1);
 }

@@ -119,7 +119,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 			 int *found_none, int *found_all, int *found_incomplete);
 
 
-int label_scan_for_pvid(struct cmd_context *cmd, char *pvid, struct device **dev_out);
+int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device **dev_out);
 
 /*
  * Wrappers around bcache equivalents.
