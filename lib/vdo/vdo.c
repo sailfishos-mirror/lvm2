@@ -410,6 +410,9 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
 	if (!(data_uuid = build_dm_uuid(mem, seg_lv(seg, 0), lv_layer(seg_lv(seg, 0)))))
 		return_0;
 
+	/* Pass kernel format params only during initial formatting */
+	seg->vdo_params.use_kernel_format = (seg->lv->status & LV_VDOFORMAT) ? 1 : 0;
+
 	/* VDO uses virtual size instead of its physical size */
 	if (!dm_tree_node_add_vdo_target(node, get_vdo_pool_virtual_size(seg),
 					 !(attrs & VDO_FEATURE_VERSION4) ? 2 : 4,
@@ -434,7 +437,7 @@ static int _vdo_target_present(struct cmd_context *cmd,
 	} _features[] = {
 		{ 6, 2, 3, VDO_FEATURE_ONLINE_RENAME, "online_rename" },
 		{ 8, 2, 0, VDO_FEATURE_VERSION4, "version4" },
-		{ 9, 2, 0, VDO_FEATURE_DIRECT_FORMAT, "direct_format" },
+		{ 9, 2, 0, VDO_FEATURE_KERNEL_FORMAT, "kernel_format" },
 	};
 	static const char _lvmconf[] = "global/vdo_disabled_features";
 	static int _vdo_checked = 0;

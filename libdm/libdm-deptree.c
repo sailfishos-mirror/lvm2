@@ -4609,13 +4609,14 @@ void dm_tree_node_set_callback(struct dm_tree_node *dnode,
 	dnode->callback_data = data;
 }
 
-int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
-				uint64_t size,
-				uint32_t vdo_version,
-				const char *vdo_pool_name,
-				const char *data_uuid,
-				uint64_t data_size,
-				const struct dm_vdo_target_params *vtp)
+DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_vdo_target, 1_02_215)
+	(struct dm_tree_node *node,
+	 uint64_t size,
+	 uint32_t vdo_version,
+	 const char *vdo_pool_name,
+	 const char *data_uuid,
+	 uint64_t data_size,
+	 const struct dm_vdo_target_params *vtp)
 {
 	struct load_segment *seg;
 
@@ -4698,5 +4699,43 @@ int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
 	return dm_tree_node_add_cache_target(node, size, feature_flags & mask,
 					     metadata_uuid, data_uuid, origin_uuid,
 					     policy_name, policy_settings, data_block_size);
+}
+
+/*
+ * Retain ABI compatibility after adding use_kernel_format field
+ * to dm_vdo_target_params in version 1.02.215.
+ *
+ * Old binaries compiled against 1.02.213 have struct dm_vdo_target_params
+ * without the use_kernel_format field at the end. The wrapper copies only
+ * the old fields and leaves use_kernel_format=0 (old apps use userspace
+ * vdoformat).
+ *
+ * dm_vdo_validate_target_params does not need versioning as it never
+ * accesses the use_kernel_format field.
+ */
+
+DM_EXPORT_SYMBOL(dm_tree_node_add_vdo_target, 1_02_213)
+int dm_tree_node_add_vdo_target_v1_02_213(struct dm_tree_node *node,
+					   uint64_t size,
+					   uint32_t vdo_version,
+					   const char *vdo_pool_name,
+					   const char *data_uuid,
+					   uint64_t data_size,
+					   const struct dm_vdo_target_params *vtp);
+int dm_tree_node_add_vdo_target_v1_02_213(struct dm_tree_node *node,
+					   uint64_t size,
+					   uint32_t vdo_version,
+					   const char *vdo_pool_name,
+					   const char *data_uuid,
+					   uint64_t data_size,
+					   const struct dm_vdo_target_params *vtp)
+{
+	struct dm_vdo_target_params vtp_compat = { 0 };
+
+	/* Old callers pass struct without use_kernel_format at the end */
+	memcpy(&vtp_compat, vtp, offsetof(struct dm_vdo_target_params, use_kernel_format));
+
+	return dm_tree_node_add_vdo_target(node, size, vdo_version, vdo_pool_name,
+					   data_uuid, data_size, &vtp_compat);
 }
 #endif
