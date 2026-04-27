@@ -22,8 +22,8 @@
  * liblvm2cmd thread-safe so this can go away.
  */
 
-#ifndef _DMEVENTD_LVMWRAP_H
-#define _DMEVENTD_LVMWRAP_H
+#ifndef DMEVENTD_LVM_H
+#define DMEVENTD_LVM_H
 
 #include <stddef.h>
 
@@ -73,4 +73,4 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 		dmeventd_lvm2_exit();\
 	} while(0)
 
-#endif /* _DMEVENTD_LVMWRAP_H */
+#endif /* DMEVENTD_LVM_H */

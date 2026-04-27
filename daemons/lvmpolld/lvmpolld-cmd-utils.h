@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LVMPOLLD_CMD_UTILS_H
-#define _LVM_LVMPOLLD_CMD_UTILS_H
+#ifndef LVM_LVMPOLLD_CMD_UTILS_H
+#define LVM_LVMPOLLD_CMD_UTILS_H
 
 #include "lvmpolld-data-utils.h"
 
@@ -22,4 +22,4 @@ const char **cmdenvp_ctr(const struct lvmpolld_lv *pdlv);
 
 const char *polling_op(enum poll_type);
 
-#endif /* _LVM_LVMPOLLD_CMD_UTILS_H */
+#endif /* LVM_LVMPOLLD_CMD_UTILS_H */

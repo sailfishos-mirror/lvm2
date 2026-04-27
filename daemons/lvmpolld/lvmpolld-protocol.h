@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LVMPOLLD_PROTOCOL_H
-#define _LVM_LVMPOLLD_PROTOCOL_H
+#ifndef LVM_LVMPOLLD_PROTOCOL_H
+#define LVM_LVMPOLLD_PROTOCOL_H
 
 #include "daemons/lvmpolld/polling_ops.h"
 
@@ -50,4 +50,4 @@
 #define LVMPD_RET_DUP_FAILED	100
 #define LVMPD_RET_EXC_FAILED	101
 
-#endif /* _LVM_LVMPOLLD_PROTOCOL_H */
+#endif /* LVM_LVMPOLLD_PROTOCOL_H */

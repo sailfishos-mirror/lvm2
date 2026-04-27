@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_EXEC_H
-#define _LVM_EXEC_H
+#ifndef LVM_EXEC_H
+#define LVM_EXEC_H
 
 #include "lib/misc/lib.h"
 

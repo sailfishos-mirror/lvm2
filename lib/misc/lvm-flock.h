@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_FLOCK_H
-#define _LVM_FLOCK_H
+#ifndef LVM_FLOCK_H
+#define LVM_FLOCK_H
 
 #include <stdint.h>
 
@@ -23,4 +23,4 @@ void init_flock(struct cmd_context *cmd);
 int lock_file(const char *file, uint32_t flags);
 void release_flocks(int unlock);
 
-#endif /* _LVM_FLOCK_H */
+#endif /* LVM_FLOCK_H */

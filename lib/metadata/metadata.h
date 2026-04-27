@@ -18,8 +18,8 @@
  * associated physical and logical volumes.
  */
 
-#ifndef _LVM_METADATA_H
-#define _LVM_METADATA_H
+#ifndef LVM_METADATA_H
+#define LVM_METADATA_H
 
 #include "ctype.h"
 #include "lib/device/dev-cache.h"

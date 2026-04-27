@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _ONLINE_H
-#define _ONLINE_H
+#ifndef ONLINE_H
+#define ONLINE_H
 
 #include "lib/commands/toolcontext.h"
 #include "lib/device/device.h"

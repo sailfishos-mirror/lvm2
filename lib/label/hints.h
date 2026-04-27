@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_HINTS_H
-#define _LVM_HINTS_H
+#ifndef LVM_HINTS_H
+#define LVM_HINTS_H
 
 #include "lib/commands/toolcontext.h"
 

@@ -15,8 +15,8 @@
 
 /* Most source files should include this file or lib.h or dmlib.h */
 
-#ifndef _LVM_TOOL_H
-#define _LVM_TOOL_H
+#ifndef LVM_TOOL_H
+#define LVM_TOOL_H
 
 #include "base/memory/zalloc.h"
 #include "libdm/libdevmapper.h"
@@ -24,4 +24,4 @@
 
 #include <unistd.h>
 
-#endif	/* _LVM_TOOL_H */
+#endif	/* LVM_TOOL_H */

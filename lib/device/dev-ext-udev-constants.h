@@ -12,6 +12,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#ifndef LVM_DEV_EXT_UDEV_CONSTANTS_H
+#define LVM_DEV_EXT_UDEV_CONSTANTS_H
+
 /*************************************************************************
  * Properties saved in udev db and accessible via libudev and used by LVM *
  *************************************************************************/
@@ -54,4 +57,6 @@
 
 /* the value of size sysfs attribute is size in bytes */
 #define DEV_EXT_UDEV_SYSFS_ATTR_SIZE            "size"
+
+#endif
 

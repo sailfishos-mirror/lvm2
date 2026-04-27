@@ -16,8 +16,8 @@
 /*
  * This file must be included first by every library source file.
  */
-#ifndef _LVM_LIB_H
-#define _LVM_LIB_H
+#ifndef LVM_LIB_H
+#define LVM_LIB_H
 
 #include "libdm/libdevmapper.h"
 #include "base/memory/zalloc.h"

@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_DAEMON_CLIENT_H
-#define _LVM_DAEMON_CLIENT_H
+#ifndef LVM_DAEMON_CLIENT_H
+#define LVM_DAEMON_CLIENT_H
 
 #include "libdaemon/client/config-util.h"
 

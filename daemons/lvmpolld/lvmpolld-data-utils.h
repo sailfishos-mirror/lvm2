@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LVMPOLLD_DATA_UTILS_H
-#define _LVM_LVMPOLLD_DATA_UTILS_H
+#ifndef LVM_LVMPOLLD_DATA_UTILS_H
+#define LVM_LVMPOLLD_DATA_UTILS_H
 
 #include "libdm/libdevmapper.h"
 
@@ -220,4 +220,4 @@ static inline void pdst_locked_remove(struct lvmpolld_store *pdst, const char *k
 struct lvmpolld_thread_data *lvmpolld_thread_data_constructor(struct lvmpolld_lv *pdlv);
 void lvmpolld_thread_data_destroy(void *thread_private);
 
-#endif /* _LVM_LVMPOLLD_DATA_UTILS_H */
+#endif /* LVM_LVMPOLLD_DATA_UTILS_H */

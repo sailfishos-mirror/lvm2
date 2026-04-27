@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_INTL_H
-#define _LVM_INTL_H
+#ifndef LVM_INTL_H
+#define LVM_INTL_H
 
 #ifdef INTL_PACKAGE
 #  include <libintl.h>

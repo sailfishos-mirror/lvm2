@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_STR_LIST_H
-#define _LVM_STR_LIST_H
+#ifndef LVM_STR_LIST_H
+#define LVM_STR_LIST_H
 
 struct dm_list;
 struct dm_pool;

@@ -1,3 +1,6 @@
+#ifndef TEST_UNIT_MATCHER_DATA_H
+#define TEST_UNIT_MATCHER_DATA_H
+
 #include <stddef.h>
 
 struct check_item {
@@ -1013,3 +1016,5 @@ static const struct check_item devices[] = {
 	{ "/dev/vcsa7", 0 },
 	{ NULL, 0 }
 };
+
+#endif

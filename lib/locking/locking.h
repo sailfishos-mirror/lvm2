@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LOCKING_H
-#define _LVM_LOCKING_H
+#ifndef LVM_LOCKING_H
+#define LVM_LOCKING_H
 
 #include "lib/id/id.h"
 #include "lib/config/config.h"

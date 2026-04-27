@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_DAEMON_IO_H
-#define _LVM_DAEMON_IO_H
+#ifndef LVM_DAEMON_IO_H
+#define LVM_DAEMON_IO_H
 
 #include "libdaemon/client/config-util.h"
 
@@ -22,4 +22,4 @@
 int buffer_read(int fd, struct buffer *buffer);
 int buffer_write(int fd, const struct buffer *buffer);
 
-#endif /* _LVM_DAEMON_IO_H */
+#endif /* LVM_DAEMON_IO_H */

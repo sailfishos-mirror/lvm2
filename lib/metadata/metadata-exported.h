@@ -18,8 +18,8 @@
  * for library export.
  */
 
-#ifndef _LVM_METADATA_EXPORTED_H
-#define _LVM_METADATA_EXPORTED_H
+#ifndef LVM_METADATA_EXPORTED_H
+#define LVM_METADATA_EXPORTED_H
 
 #include "lib/id/id.h"
 #include "lib/metadata/pv.h"

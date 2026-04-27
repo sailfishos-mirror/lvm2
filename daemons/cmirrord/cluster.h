@@ -9,8 +9,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_CLOG_CLUSTER_H
-#define _LVM_CLOG_CLUSTER_H
+#ifndef LVM_CLOG_CLUSTER_H
+#define LVM_CLOG_CLUSTER_H
 
 #include "libdm/libdevmapper.h"
 #include "libdm/misc/dm-log-userspace.h"
@@ -73,4 +73,4 @@ int destroy_cluster_cpg(char *uuid);
 
 int cluster_send(struct clog_request *rq);
 
-#endif /* _LVM_CLOG_CLUSTER_H */
+#endif /* LVM_CLOG_CLUSTER_H */

@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_COMMAND_ENUMS_H
-#define _LVM_COMMAND_ENUMS_H
+#ifndef LVM_COMMAND_ENUMS_H
+#define LVM_COMMAND_ENUMS_H
 
 /*
  * cmd_enum.h uses the generated cmds.h to create the enum with an ID
@@ -96,4 +96,4 @@ enum {
 
 #include "command-count.h" /* defines COMMAND_COUNT */
 
-#endif /* _LVM_COMMAND_ENUMS_H */
+#endif /* LVM_COMMAND_ENUMS_H */

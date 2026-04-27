@@ -19,8 +19,8 @@
  * compatibility with older glibc versions (< 2.9) and non-glibc systems.
  */
 
-#ifndef _LVM_XLATE_H
-#define _LVM_XLATE_H
+#ifndef LVM_XLATE_H
+#define LVM_XLATE_H
 
 #ifdef __linux__
 #  include <endian.h>

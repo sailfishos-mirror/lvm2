@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_REPORT_H
-#define _LVM_REPORT_H
+#ifndef LVM_REPORT_H
+#define LVM_REPORT_H
 
 #include "lib/metadata/metadata-exported.h"
 #include "lib/label/label.h"

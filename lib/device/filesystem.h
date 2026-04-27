@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _FILESYSTEM_H
-#define _FILESYSTEM_H
+#ifndef LVM_FILESYSTEM_H
+#define LVM_FILESYSTEM_H
 
 #include "lib/device/device.h"
 

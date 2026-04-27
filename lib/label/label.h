@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LABEL_H
-#define _LVM_LABEL_H
+#ifndef LVM_LABEL_H
+#define LVM_LABEL_H
 
 #include "lib/id/id.h"
 #include "lib/device/device.h"

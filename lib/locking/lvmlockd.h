@@ -8,8 +8,8 @@
  * of the GNU Lesser General Public License v.2.1.
  */
 
-#ifndef _LVMLOCKD_H
-#define _LVMLOCKD_H
+#ifndef LVMLOCKD_H
+#define LVMLOCKD_H
 
 #include "libdaemon/client/config-util.h"
 #include "libdaemon/client/daemon-client.h"
@@ -394,4 +394,4 @@ static inline int lockd_setlockargs(struct cmd_context *cmd, struct volume_group
 
 #endif	/* LVMLOCKD_SUPPORT */
 
-#endif	/* _LVMLOCKD_H */
+#endif	/* LVMLOCKD_H */

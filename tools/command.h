@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_COMMAND_H
-#define _LVM_COMMAND_H
+#ifndef LVM_COMMAND_H
+#define LVM_COMMAND_H
 
 #include "tools/command_enums.h"
 

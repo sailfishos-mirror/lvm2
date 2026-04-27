@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_TOOLCONTEXT_H
-#define _LVM_TOOLCONTEXT_H
+#ifndef LVM_TOOLCONTEXT_H
+#define LVM_TOOLCONTEXT_H
 
 #include "lib/device/dev-cache.h"
 #include "lib/device/dev-type.h"

@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_TOOL_POLLING_OPS_H
-#define _LVM_TOOL_POLLING_OPS_H
+#ifndef LVM_LVMPOLLD_POLLING_OPS_H
+#define LVM_LVMPOLLD_POLLING_OPS_H
 
 /* this file is also part of lvmpolld protocol */
 
@@ -22,4 +22,4 @@
 #define MERGE_POLL "merge"
 #define MERGE_THIN_POLL "merge_thin"
 
-#endif /* _LVM_TOOL_POLLING_OPS_H */
+#endif /* LVM_LVMPOLLD_POLLING_OPS_H */

@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_DEFAULTS_H
-#define _LVM_DEFAULTS_H
+#ifndef LVM_DEFAULTS_H
+#define LVM_DEFAULTS_H
 
 
 /*
@@ -346,4 +346,4 @@
 
 #define DEFAULT_DEVICE_IDS_REFRESH 10
 
-#endif				/* _LVM_DEFAULTS_H */
+#endif				/* LVM_DEFAULTS_H */

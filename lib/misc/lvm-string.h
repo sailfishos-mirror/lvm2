@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_STRING_H
-#define _LVM_STRING_H
+#ifndef LVM_STRING_H
+#define LVM_STRING_H
 
 #define NAME_LEN 128
 #define UUID_PREFIX "LVM-"
