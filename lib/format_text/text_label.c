@@ -230,10 +230,10 @@ void del_das(struct dm_list *das)
 	}
 }
 
-int add_ba(struct dm_pool *mem, struct dm_list *eas,
+int add_ba(struct dm_pool *mem, struct dm_list *bas,
 	   uint64_t start, uint64_t size)
 {
-	return add_da(mem, eas, start, size);
+	return add_da(mem, bas, start, size);
 }
 
 void del_bas(struct dm_list *bas)
