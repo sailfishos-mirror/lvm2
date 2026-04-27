@@ -55,7 +55,7 @@ static int lvmdbusd_running(void)
 
 	errno = 0;
 	fd = open(lockfile, O_RDWR);
-	if (-1 == fd) {
+	if (fd == -1) {
 		errno_cpy = errno;
 		if (errno_cpy == ENOENT) {
 			return 0;
@@ -69,7 +69,7 @@ static int lvmdbusd_running(void)
 	/* Need to ensure we close lock FD now */
 	errno = 0;
 	rc = lockf(fd, F_TEST, 0);
-	if (-1 != rc) {
+	if (rc != -1) {
 		/* Not locked, thus not running */
 		running = 0;
 	} else {
