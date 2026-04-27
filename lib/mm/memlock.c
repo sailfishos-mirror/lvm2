@@ -170,7 +170,9 @@ static void _allocate_memory(void)
 #define MAX_AREAS 32
 	void *stack_mem;
 	struct rlimit limit;
-	int i, area = 0, missing = _size_malloc_tmp;
+	int i, area = 0;
+	size_t alloc_size = _size_malloc_tmp;
+	ssize_t missing = _size_malloc_tmp;
 	size_t hblks;
 	char *areas[MAX_AREAS];
 
@@ -204,8 +206,8 @@ static void _allocate_memory(void)
 		struct MALLINFO inf = MALLINFO();
 		hblks = inf.hblks;
 
-		if ((areas[area] = malloc(_size_malloc_tmp)))
-			_touch_memory(areas[area], _size_malloc_tmp);
+		if ((areas[area] = malloc(alloc_size)))
+			_touch_memory(areas[area], alloc_size);
 
 		inf = MALLINFO();
 
@@ -214,16 +216,16 @@ static void _allocate_memory(void)
 			   not to; we try with twice as many areas, each half
 			   the size, to circumvent the faulty logic in glibc */
 			free(areas[area]);
-			_size_malloc_tmp /= 2;
+			alloc_size /= 2;
 		} else {
 			++ area;
-			missing -= _size_malloc_tmp;
+			missing -= alloc_size;
 		}
 
 		if (area == MAX_AREAS && missing > 0) {
 			/* Too bad. Warn the user and proceed, as things are
 			 * most likely going to work out anyway. */
-			log_warn("WARNING: Failed to reserve memory, %d bytes missing.", missing);
+			log_warn("WARNING: Failed to reserve memory, %zd bytes missing.", missing);
 			break;
 		}
 	}
