@@ -17,7 +17,8 @@
 
 //----------------------------------------------------------------
 
-static inline void *zalloc(size_t len)
+static inline __attribute__((__malloc__, __warn_unused_result__))
+	void *zalloc(size_t len)
 {
 	return calloc(1, len);
 }
