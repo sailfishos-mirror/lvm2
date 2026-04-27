@@ -46,12 +46,30 @@ int vdo_parse_uint64(const char *b, const char *e, void *context)
 {
 	uint64_t *r = context, n;
 
+	if (b == e) {
+		log_debug("VDO uint64 parse: empty token.");
+		*r = 0;
+		return 0;
+	}
+
 	n = 0;
 	while (b != e) {
-		if (!isdigit((unsigned char)*b))
-			return 0;
+		unsigned d;
 
-		n = (n * 10) + (*b - '0');
+		if (!isdigit((unsigned char)*b)) {
+			log_debug("VDO uint64 parse: invalid character.");
+			*r = 0;
+			return 0;
+		}
+
+		d = *b - '0';
+		if (n > (UINT64_MAX - d) / 10) {
+			log_debug("VDO uint64 parse: overflow.");
+			*r = 0;
+			return 0;
+		}
+
+		n = (n * 10) + d;
 		b++;
 	}
 
