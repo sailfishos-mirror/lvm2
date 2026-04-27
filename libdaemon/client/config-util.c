@@ -199,11 +199,15 @@ struct dm_config_node *make_text_node(struct dm_config_tree *cft,
 				      struct dm_config_node *pre_sib)
 {
 	struct dm_config_node *cn;
+	struct dm_config_value *cv;
 
-	if (!(cn = make_config_node(cft, key, parent, pre_sib)) ||
-	    !(cn->v = dm_config_create_value(cft)))
-		return NULL;
+	if (!(cv = dm_config_create_value(cft)))
+		return_NULL;
 
+	if (!(cn = make_config_node(cft, key, parent, pre_sib)))
+		return_NULL;
+
+	cn->v = cv;
 	cn->v->type = DM_CFG_STRING;
 	cn->v->v.str = value;
 	return cn;
@@ -216,11 +220,15 @@ struct dm_config_node *make_int_node(struct dm_config_tree *cft,
 				     struct dm_config_node *pre_sib)
 {
 	struct dm_config_node *cn;
+	struct dm_config_value *cv;
 
-	if (!(cn = make_config_node(cft, key, parent, pre_sib)) ||
-	    !(cn->v = dm_config_create_value(cft)))
-		return NULL;
+	if (!(cv = dm_config_create_value(cft)))
+		return_NULL;
 
+	if (!(cn = make_config_node(cft, key, parent, pre_sib)))
+		return_NULL;
+
+	cn->v = cv;
 	cn->v->type = DM_CFG_INT;
 	cn->v->v.i = value;
 	return cn;
