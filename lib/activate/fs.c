@@ -164,8 +164,8 @@ static int _mk_link(const char *dev_dir, const char *vg_name,
 	 * (as well as any existing LVM2 symlink). */
 	if (!lstat(lvm1_group_path, &buf)) {
 		if (!S_ISCHR(buf.st_mode)) {
-			log_error("Non-LVM1 character device found at %s",
-				  lvm1_group_path);
+			log_warn("WARNING: Non-LVM1 character device found at %s.",
+				 lvm1_group_path);
 		} else {
 			_rm_blks(vg_path);
 
