@@ -117,7 +117,7 @@
 .
 .SH NAME
 .
-vgimportdevices \(em Add devices for a VG to the devices file.
+vgimportdevices \(em Add devices for a VG to the devices file
 .
 .SH SYNOPSIS
 .

@@ -672,7 +672,7 @@ Used by: \fBconfig\fP, \fBdevtypes\fP, \fBdumpconfig\fP, \fBformats\fP, \fBfullr
 \fB-H\fP|\fB--history\fP
 Include historical LVs in the output.
 (This has no effect unless LVs were removed while
-\fBlvm.conf\fP(5) \fBmetadata/record_lvs_history\fP was enabled.
+\fBlvm.conf\fP(5) \fBmetadata/record_lvs_history\fP was enabled.)
 .br
 Used by: \fBlvdisplay\fP, \fBlvs\fP
 .

@@ -1806,7 +1806,7 @@ the images should be placed on.
 There are two mirroring implementations: "raid1" and "mirror".
 These are the names of the corresponding LV types, or "segment types".
 Use the --type option to specify which to use (raid1 is default,
-and mirror is legacy)
+and mirror is legacy).
 Use \fBlvm.conf\fP(5) \fBglobal/mirror_segtype_default\fP and
 \fBglobal/raid10_segtype_default\fP to configure the default types.
 See the --nosync option for avoiding initial image synchronization.
