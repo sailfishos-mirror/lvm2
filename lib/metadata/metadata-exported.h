@@ -217,7 +217,7 @@
 #define VGMETADATACOPIES_ALL UINT32_MAX
 #define VGMETADATACOPIES_UNMANAGED 0
 
-#define vg_is_archived(vg)	(((vg)->status & ARCHIVED_VG) ? 1 : 0)
+#define vg_is_archived(vg)	((vg_status((vg)) & ARCHIVED_VG) ? 1 : 0)
 
 /* lv_is_locked() is now a function in lv.c to check sub-LVs too */
 #define lv_is_partial(lv)	(((lv)->status & PARTIAL_LV) ? 1 : 0)
