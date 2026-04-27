@@ -99,9 +99,9 @@ static void _initialise_crc32(void)
 }
 
 #ifndef DEBUG_CRC32
-uint32_t calc_crc(uint32_t initial, const uint8_t *buf, uint32_t size)
+uint32_t calc_crc(uint32_t initial, const uint8_t *buf, size_t size)
 #else
-static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t size)
+static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, size_t size)
 #endif
 {
 	const uint32_t *ptr = (const uint32_t *) buf;
@@ -146,13 +146,13 @@ static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t siz
 
 /* Calculate an endian-independent CRC of supplied buffer */
 #ifndef DEBUG_CRC32
-uint32_t calc_crc(uint32_t initial, const uint8_t *buf, uint32_t size)
+uint32_t calc_crc(uint32_t initial, const uint8_t *buf, size_t size)
 #else
-static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t size)
+static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, size_t size)
 #endif
 {
 	const uint32_t *start = (const uint32_t *) buf;
-	const uint32_t *end = (const uint32_t *) (buf + (size & 0xfffffffc));
+	const uint32_t *end = (const uint32_t *) (buf + (size & ~(size_t)3));
 	uint32_t crc = initial;
 
 	/* Process 4 bytes per iteration */
@@ -178,7 +178,7 @@ static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t siz
 #endif // __x86_64__
 
 #ifdef DEBUG_CRC32
-static uint32_t _calc_crc_old(uint32_t initial, const uint8_t *buf, uint32_t size)
+static uint32_t _calc_crc_old(uint32_t initial, const uint8_t *buf, size_t size)
 {
 	static const uint32_t _crctab[] = {
 		0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
@@ -186,7 +186,8 @@ static uint32_t _calc_crc_old(uint32_t initial, const uint8_t *buf, uint32_t siz
 		0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
 		0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
 	};
-	uint32_t i, crc = initial;
+	size_t i;
+	uint32_t crc = initial;
 
 	for (i = 0; i < size; i++) {
 		crc ^= *buf++;
@@ -196,7 +197,7 @@ static uint32_t _calc_crc_old(uint32_t initial, const uint8_t *buf, uint32_t siz
 	return crc;
 }
 
-uint32_t calc_crc(uint32_t initial, const uint8_t *buf, uint32_t size)
+uint32_t calc_crc(uint32_t initial, const uint8_t *buf, size_t size)
 {
 	uint32_t new_crc = _calc_crc_new(initial, buf, size);
 	uint32_t old_crc = _calc_crc_old(initial, buf, size);

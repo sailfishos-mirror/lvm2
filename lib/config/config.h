@@ -238,7 +238,7 @@ struct dm_config_tree *remove_config_tree_by_source(struct cmd_context *cmd, con
 struct cft_check_handle *get_config_tree_check_handle(struct cmd_context *cmd, struct dm_config_tree *cft);
 config_source_t config_get_source_type(struct dm_config_tree *cft);
 
-typedef uint32_t (*checksum_fn_t) (uint32_t initial, const uint8_t *buf, uint32_t size);
+typedef uint32_t (*checksum_fn_t) (uint32_t initial, const uint8_t *buf, size_t size);
 
 struct dm_config_tree *config_open(config_source_t source, const char *filename, int keep_open);
 int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_reason_t reason,
