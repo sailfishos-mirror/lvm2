@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_SHAREDLIB_H
-#define _LVM_SHAREDLIB_H
+#ifndef LVM_SHAREDLIB_H
+#define LVM_SHAREDLIB_H
 
 #include "lib/config/config.h"
 #include <dlfcn.h>

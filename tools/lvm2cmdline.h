@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_CMDLINE_H
-#define _LVM_CMDLINE_H
+#ifndef LVM2_CMDLINE_H
+#define LVM2_CMDLINE_H
 
 struct cmd_context;
 

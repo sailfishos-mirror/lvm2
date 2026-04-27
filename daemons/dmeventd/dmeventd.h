@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef __DMEVENTD_DOT_H__
-#define __DMEVENTD_DOT_H__
+#ifndef DMEVENTD_DOT_H
+#define DMEVENTD_DOT_H
 
 #include <stdint.h>
 
@@ -75,4 +75,4 @@ int init_fifos(struct dm_event_fifos *fifos);
 void fini_fifos(struct dm_event_fifos *fifos);
 int dm_event_get_version(struct dm_event_fifos *fifos, int *version);
 
-#endif /* __DMEVENTD_DOT_H__ */
+#endif /* DMEVENTD_DOT_H */

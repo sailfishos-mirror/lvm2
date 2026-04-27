@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_PERCENT_H
-#define _LVM_PERCENT_H
+#ifndef LVM_PERCENT_H
+#define LVM_PERCENT_H
 #include <stdint.h>
 
 typedef enum {

@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_TOOLS_H
-#define _LVM_TOOLS_H
+#ifndef LVM_TOOLS_H
+#define LVM_TOOLS_H
 
 #include "tools/errors.h"
 #include "tools/tool.h"

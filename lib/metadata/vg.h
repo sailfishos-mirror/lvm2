@@ -12,8 +12,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_VG_H
-#define _LVM_VG_H
+#ifndef LVM_VG_H
+#define LVM_VG_H
 
 #include "lib/id/id.h"
 #include "libdm/libdevmapper.h"
@@ -203,4 +203,4 @@ char *vg_attr_dup(struct dm_pool *mem, const struct volume_group *vg);
 char *vg_uuid_dup(const struct volume_group *vg);
 char *vg_tags_dup(const struct volume_group *vg);
 
-#endif /* _LVM_VG_H */
+#endif /* LVM_VG_H */

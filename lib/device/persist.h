@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _PERSIST_H
-#define _PERSIST_H
+#ifndef PERSIST_H
+#define PERSIST_H
 
 #define PR_STR_WE   "WE"
 #define PR_STR_EA   "EA"

@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_MATH_H
-#define _LVM_MATH_H
+#ifndef LVM_MATH_H
+#define LVM_MATH_H
 
 /* Greatest common divisor */
 unsigned long gcd(unsigned long n1, unsigned long n2);

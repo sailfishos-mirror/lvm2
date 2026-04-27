@@ -8,8 +8,8 @@
  * of the GNU Lesser General Public License v.2.1.
  */
 
-#ifndef _LVM_LVMLOCKD_INTERNAL_H
-#define _LVM_LVMLOCKD_INTERNAL_H
+#ifndef LVM_LVMLOCKD_INTERNAL_H
+#define LVM_LVMLOCKD_INTERNAL_H
 
 #include "base/memory/container_of.h"
 
@@ -874,4 +874,4 @@ static inline int lm_support_idm(void)
 
 #endif /* Seagate IDM support */
 
-#endif	/* _LVM_LVMLOCKD_INTERNAL_H */
+#endif	/* LVM_LVMLOCKD_INTERNAL_H */

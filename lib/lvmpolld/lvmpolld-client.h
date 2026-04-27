@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LVMPOLLD_CLIENT_H
-#define _LVM_LVMPOLLD_CLIENT_H
+#ifndef LVM_LVMPOLLD_CLIENT_H
+#define LVM_LVMPOLLD_CLIENT_H
 #  ifdef LVMPOLLD_SUPPORT
 
 #	include "libdaemon/client/daemon-client.h"
@@ -49,4 +49,4 @@ void lvmpolld_set_socket(const char *socket);
 
 #  endif /* LVMPOLLD_SUPPORT */
 
-#endif /* _LVM_LVMPOLLD_CLIENT_H */
+#endif /* LVM_LVMPOLLD_CLIENT_H */

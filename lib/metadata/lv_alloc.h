@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LV_ALLOC_H
-#define _LVM_LV_ALLOC_H
+#ifndef LVM_LV_ALLOC_H
+#define LVM_LV_ALLOC_H
 
 #include "lib/metadata/metadata-exported.h"
 

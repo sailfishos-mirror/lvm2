@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_LVCONVERT_H
-#define _LVM_LVCONVERT_H
+#ifndef LVM_LVCONVERT_POLL_H
+#define LVM_LVCONVERT_POLL_H
 
 #include "lib/lvmpolld/polldaemon.h"
 
@@ -48,4 +48,4 @@ progress_t poll_thin_merge_progress(struct cmd_context *cmd,
 				    const char *name __attribute__((unused)),
 				    struct daemon_parms *parms);
 
-#endif  /* _LVM_LVCONVERT_H */
+#endif  /* LVM_LVCONVERT_POLL_H */

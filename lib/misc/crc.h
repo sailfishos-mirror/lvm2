@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_CRC_H
-#define _LVM_CRC_H
+#ifndef LVM_CRC_H
+#define LVM_CRC_H
 
 #include <inttypes.h>
 

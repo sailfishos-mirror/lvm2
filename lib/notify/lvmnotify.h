@@ -8,8 +8,8 @@
  * of the GNU Lesser General Public License v.2.1.
  */
 
-#ifndef _LVMNOTIFY_H
-#define _LVMNOTIFY_H
+#ifndef LVMNOTIFY_H
+#define LVMNOTIFY_H
 
 struct cmd_context;
 

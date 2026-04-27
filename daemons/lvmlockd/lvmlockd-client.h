@@ -8,8 +8,8 @@
  * of the GNU Lesser General Public License v.2.1.
  */
 
-#ifndef _LVM_LVMLOCKD_CLIENT_H
-#define _LVM_LVMLOCKD_CLIENT_H
+#ifndef LVM_LVMLOCKD_CLIENT_H
+#define LVM_LVMLOCKD_CLIENT_H
 
 #include "libdaemon/client/daemon-client.h"
 
@@ -69,4 +69,4 @@ static inline void lvmlockd_close(daemon_handle h)
 #define LOCKARGS_CAW		0x00000040 /* user only */
 #define LOCKARGS_NOCAW		0x00000080 /* user only */
 
-#endif	/* _LVM_LVMLOCKD_CLIENT_H */
+#endif	/* LVM_LVMLOCKD_CLIENT_H */

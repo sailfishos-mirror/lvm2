@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_DAEMON_LOG_H
-#define _LVM_DAEMON_LOG_H
+#ifndef LVM_DAEMON_LOG_H
+#define LVM_DAEMON_LOG_H
 
 enum { DAEMON_LOG_FATAL = 0 /* usually preceding daemon death */
      , DAEMON_LOG_ERROR = 1 /* something serious has happened */

@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_UTIL_H
-#define _LVM_UTIL_H
+#ifndef DM_TOOLS_UTIL_H
+#define DM_TOOLS_UTIL_H
 
 #include "libdm/libdevmapper.h"
 

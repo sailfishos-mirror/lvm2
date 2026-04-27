@@ -5,8 +5,8 @@
  * This file is released under the LGPL.
  */
 
-#ifndef _LINUX_DM_IOCTL_V4_H
-#define _LINUX_DM_IOCTL_V4_H
+#ifndef LINUX_DM_IOCTL_V4_H
+#define LINUX_DM_IOCTL_V4_H
 
 #include <stdint.h>
 
@@ -385,4 +385,4 @@ enum {
  */
 #define DM_IMA_MEASUREMENT_FLAG	(1 << 19) /* In */
 
-#endif				/* _LINUX_DM_IOCTL_H */
+#endif				/* LINUX_DM_IOCTL_V4_H */

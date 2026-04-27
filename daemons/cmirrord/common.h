@@ -9,8 +9,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_CLOG_COMMON_H
-#define _LVM_CLOG_COMMON_H
+#ifndef LVM_CLOG_COMMON_H
+#define LVM_CLOG_COMMON_H
 
 /*
  * If there are problems when forking off to become a daemon,
@@ -32,4 +32,4 @@
 #define DM_ULOG_REQUEST_DATA_SIZE \
 	(DM_ULOG_REQUEST_SIZE - sizeof(struct dm_ulog_request))
 
-#endif /* _LVM_CLOG_COMMON_H */
+#endif /* LVM_CLOG_COMMON_H */

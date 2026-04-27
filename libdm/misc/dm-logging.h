@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _DM_LOGGING_H
-#define _DM_LOGGING_H
+#ifndef DM_LOGGING_H
+#define DM_LOGGING_H
 
 #include "libdm/libdevmapper.h"
 

@@ -11,8 +11,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_PROPERTIES_H
-#define _LVM_PROPERTIES_H
+#ifndef LVM_PROPERTIES_H
+#define LVM_PROPERTIES_H
 
 #include "libdm/libdevmapper.h"
 #include "lib/metadata/metadata.h"

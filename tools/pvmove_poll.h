@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_PVMOVE_H
-#define _LVM_PVMOVE_H
+#ifndef LVM_PVMOVE_POLL_H
+#define LVM_PVMOVE_POLL_H
 
 struct cmd_context;
 struct dm_list;
@@ -27,4 +27,4 @@ int pvmove_update_metadata(struct cmd_context *cmd, struct volume_group *vg,
 int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		  struct logical_volume *lv_mirr, struct dm_list *lvs_changed);
 
-#endif  /* _LVM_PVMOVE_H */
+#endif  /* LVM_PVMOVE_POLL_H */

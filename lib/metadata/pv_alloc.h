@@ -12,7 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_PV_ALLOC_H
+#ifndef LVM_PV_ALLOC_H
+#define LVM_PV_ALLOC_H
 
 #include <inttypes.h>
 

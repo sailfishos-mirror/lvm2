@@ -12,11 +12,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LIBDM_KDEV_H
-#define _LIBDM_KDEV_H
+#ifndef LIBDM_KDEV_H
+#define LIBDM_KDEV_H
 
 #define MAJOR(dev)      (((unsigned)dev & 0xfff00) >> 8)
 #define MINOR(dev)      (((unsigned)dev & 0xff) | (((unsigned)dev >> 12) & 0xfff00))
 #define MKDEV(ma,mi)    (((dev_t)mi & 0xff) | ((dev_t)ma << 8) | (((dev_t)mi & ~0xff) << 12))
 
-#endif
+#endif /* LIBDM_KDEV_H */

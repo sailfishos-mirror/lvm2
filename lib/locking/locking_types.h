@@ -13,6 +13,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#ifndef LVM_LOCKING_TYPES_H
+#define LVM_LOCKING_TYPES_H
+
 #include "lib/metadata/metadata.h"
 #include "lib/config/config.h"
 
@@ -36,3 +39,5 @@ struct locking_type {
 
 int init_file_locking(struct locking_type *locking, struct cmd_context *cmd,
 		      int suppress_messages);
+
+#endif

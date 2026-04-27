@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_DEV_CACHE_H
-#define _LVM_DEV_CACHE_H
+#ifndef LVM_DEV_CACHE_H
+#define LVM_DEV_CACHE_H
 
 #include "lib/device/device.h"
 #include "lib/device/dev-type.h"

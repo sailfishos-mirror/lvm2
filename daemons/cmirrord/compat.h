@@ -5,8 +5,8 @@
  * modify, copy, or redistribute it subject to the terms and conditions
  * of the GNU Lesser General Public License v.2.1.
  */
-#ifndef _LVM_CLOG_COMPAT_H
-#define _LVM_CLOG_COMPAT_H
+#ifndef LVM_CLOG_COMPAT_H
+#define LVM_CLOG_COMPAT_H
 
 #include <stddef.h>
 
@@ -26,4 +26,4 @@ struct clog_request;
 int clog_request_to_network(struct clog_request *rq);
 int clog_request_from_network(void *data, size_t data_len);
 
-#endif /* _LVM_CLOG_COMPAT_H */
+#endif /* LVM_CLOG_COMPAT_H */

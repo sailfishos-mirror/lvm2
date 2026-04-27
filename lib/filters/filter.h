@@ -14,8 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_FILTER_H
-#define _LVM_FILTER_H
+#ifndef LVM_FILTER_H
+#define LVM_FILTER_H
 
 #include "lib/device/dev-cache.h"
 #include "lib/device/dev-type.h"
@@ -59,4 +59,4 @@ struct dev_filter *usable_filter_create(struct cmd_context *cmd, struct dev_type
 #define DEV_FILTERED_DEVICES_LIST	0x00001000
 #define DEV_FILTERED_IS_LV		0x00002000
 
-#endif 	/* _LVM_FILTER_H */
+#endif 	/* LVM_FILTER_H */

@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_TEXT_IMPORT_EXPORT_H
-#define _LVM_TEXT_IMPORT_EXPORT_H
+#ifndef LVM_TEXT_IMPORT_EXPORT_H
+#define LVM_TEXT_IMPORT_EXPORT_H
 
 #include "lib/config/config.h"
 #include "lib/metadata/metadata.h"

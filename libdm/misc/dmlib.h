@@ -16,8 +16,8 @@
 /*
  * This file must be included first by every library source file.
  */
-#ifndef _DM_LIB_H
-#define _DM_LIB_H
+#ifndef DM_LIB_H
+#define DM_LIB_H
 
 /*
  * Symbol export control macros

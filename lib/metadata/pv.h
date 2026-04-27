@@ -12,8 +12,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_PV_H
-#define _LVM_PV_H
+#ifndef LVM_PV_H
+#define LVM_PV_H
 
 #include "lib/id/id.h"
 #include "libdm/libdevmapper.h"
@@ -107,4 +107,4 @@ int is_used_pv(const struct physical_volume *pv);
 int is_pv(const struct physical_volume *pv);
 struct label *pv_label(const struct physical_volume *pv);
 
-#endif /* _LVM_PV_H */
+#endif /* LVM_PV_H */

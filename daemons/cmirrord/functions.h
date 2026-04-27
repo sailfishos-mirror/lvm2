@@ -9,8 +9,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-#ifndef _LVM_CLOG_FUNCTIONS_H
-#define _LVM_CLOG_FUNCTIONS_H
+#ifndef LVM_CLOG_FUNCTIONS_H
+#define LVM_CLOG_FUNCTIONS_H
 
 #include "libdm/libdevmapper.h"
 #include "libdm/dm-tools/util.h"
@@ -33,4 +33,4 @@ int log_get_state(struct dm_ulog_request *rq);
 int log_status(void);
 void log_debug(void);
 
-#endif /* _LVM_CLOG_FUNCTIONS_H */
+#endif /* LVM_CLOG_FUNCTIONS_H */

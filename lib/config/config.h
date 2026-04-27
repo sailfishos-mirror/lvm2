@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_CONFIG_H
-#define _LVM_CONFIG_H
+#ifndef LVM_CONFIG_H
+#define LVM_CONFIG_H
 
 #include "libdm/libdevmapper.h"
 #include "lib/device/device.h"

@@ -10,8 +10,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_CLOG_LOGGING_H
-#define _LVM_CLOG_LOGGING_H
+#ifndef LVM_CLOG_LOGGING_H
+#define LVM_CLOG_LOGGING_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -70,4 +70,4 @@ extern int log_resend_requests;
 #define LOG_PRINT(f, arg...) LOG_OUTPUT(LOG_NOTICE, f, ## arg)
 #define LOG_ERROR(f, arg...) LOG_OUTPUT(LOG_ERR, f, ## arg)
 
-#endif /* _LVM_CLOG_LOGGING_H */
+#endif /* LVM_CLOG_LOGGING_H */

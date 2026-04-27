@@ -15,8 +15,8 @@
 /*
  * This file must be included first by every lvmpolld source file.
  */
-#ifndef _LVM_LVMPOLLD_COMMON_H
-#define _LVM_LVMPOLLD_COMMON_H
+#ifndef LVM_LVMPOLLD_COMMON_H
+#define LVM_LVMPOLLD_COMMON_H
 
 #include "tools/tool.h"
 
@@ -26,4 +26,4 @@
 #include <assert.h>
 #include <errno.h>
 
-#endif	/* _LVM_LVMPOLLD_COMMON_H */
+#endif	/* LVM_LVMPOLLD_COMMON_H */

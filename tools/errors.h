@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _LVM_ERRORS_H
-#define _LVM_ERRORS_H
+#ifndef LVM_ERRORS_H
+#define LVM_ERRORS_H
 
 #define ECMD_PROCESSED		1
 #define ENO_SUCH_CMD		2

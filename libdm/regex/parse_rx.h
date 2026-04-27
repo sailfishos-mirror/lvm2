@@ -13,8 +13,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef _DM_PARSE_REGEX_H
-#define _DM_PARSE_REGEX_H
+#ifndef DM_PARSE_REGEX_H
+#define DM_PARSE_REGEX_H
 
 #include "libdm/misc/dmlib.h"
 
