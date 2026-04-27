@@ -116,7 +116,7 @@ test1:
       --enable-app-machineid
       --enable-editline
       --disable-readline
-      --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+      --enable-lvmlockd-dlm
       --enable-fsadm
       --enable-write_install
       --enable-pkgconfig
@@ -124,8 +124,6 @@ test1:
       --enable-dmeventd
       --enable-blkid_wiping
       --enable-udev_sync
-      --with-thin=internal
-      --with-cache=internal
       --enable-lvmpolld
       --enable-lvmlockd-sanlock
       --enable-dbus-service --enable-notify-dbus
@@ -167,14 +165,14 @@ test-job:
           --with-default-use-devices-file=0
           --with-cluster=internal
           --enable-cmirrord
-          --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+          --enable-lvmlockd-dlm
       - TAG: rhel9
         CONFIGURE: >
           --with-default-use-devices-file=1
           --enable-app-machineid
           --enable-editline
           --disable-readline
-          --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+          --enable-lvmlockd-dlm
       - TAG: rhel10
         CONFIGURE: >
           --with-default-use-devices-file=1
@@ -187,7 +185,7 @@ test-job:
           --enable-app-machineid
           --enable-editline
           --disable-readline
-          --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+          --enable-lvmlockd-dlm
       # f43 (latest supported fedora) is serving as first test - test1
       # - TAG: f43
       #   CONFIGURE: >
@@ -195,7 +193,7 @@ test-job:
       #     --enable-app-machineid
       #     --enable-editline
       #     --disable-readline
-      #     --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol
+      #     --enable-lvmlockd-dlm
       # f44+ are not yet supported by gitlab runner
       # - TAG: f44
       #   CONFIGURE: >
@@ -229,8 +227,6 @@ test-job:
       --enable-dmeventd
       --enable-blkid_wiping
       --enable-udev_sync
-      --with-thin=internal
-      --with-cache=internal
       --enable-lvmpolld
       --enable-lvmlockd-sanlock
       --enable-dbus-service --enable-notify-dbus

@@ -23,7 +23,7 @@ CONFIGURE="\
       --enable-app-machineid\
       --enable-editline\
       --disable-readline\
-      --enable-lvmlockd-dlm --enable-lvmlockd-dlmcontrol\
+      --enable-lvmlockd-dlm\
       --enable-fsadm\
       --enable-write_install\
       --enable-pkgconfig\
@@ -31,8 +31,6 @@ CONFIGURE="\
       --enable-dmeventd\
       --enable-blkid_wiping\
       --enable-udev_sync\
-      --with-thin=internal\
-      --with-cache=internal\
       --enable-lvmpolld\
       --enable-lvmlockd-sanlock\
       --enable-dbus-service --enable-notify-dbus\
