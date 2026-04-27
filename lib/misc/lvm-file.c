@@ -66,6 +66,8 @@ int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
 		if (!fcntl(*fd, F_SETLK, &lock))
 			return 1;
 
+		if (unlink(buffer) && errno != ENOENT)
+			log_sys_debug("unlink", buffer);
 		if (close(*fd))
 			log_sys_error("close", buffer);
 	}
