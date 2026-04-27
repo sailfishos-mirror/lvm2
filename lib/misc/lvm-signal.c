@@ -149,7 +149,7 @@ int sigint_usleep(useconds_t usec)
 	return (sigint_caught() || r) ? 0 : 1;
 }
 
-void block_signals(uint32_t flags __attribute__((unused)))
+void block_signals(void)
 {
 	sigset_t set;
 
