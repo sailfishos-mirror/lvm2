@@ -3471,7 +3471,7 @@ struct cmd_context *init_lvm(unsigned set_connections,
 	 */
 	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
 
-	if (!(cmd = create_toolcontext(0, NULL, 1, threaded, set_connections, set_filters))) {
+	if (!(cmd = create_toolcontext(NULL, 1, threaded, set_connections, set_filters))) {
 		return_NULL;
 	}
 
