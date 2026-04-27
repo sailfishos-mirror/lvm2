@@ -2267,10 +2267,11 @@ int dm_tree_node_add_replicator_dev_target(struct dm_tree_node *node,
 #define DM_THIN_MIN_DATA_BLOCK_SIZE (UINT32_C(128))
 #define DM_THIN_MAX_DATA_BLOCK_SIZE (UINT32_C(2097152))
 /*
- * Max supported size for thin pool metadata device (17045913600 bytes)
- * drivers/md/dm-thin-metadata.h THIN_METADATA_MAX_SECTORS
- * But here DM_THIN_MAX_METADATA_SIZE got defined incorrectly
- * Correct size is (UINT64_C(255) * ((1 << 14) - 64) * (4096 / (1 << 9)))
+ * This does not match kernel THIN_METADATA_MAX_SECTORS (33292800 sectors).
+ * The correct formula is (UINT64_C(255) * ((1 << 14) - 64) * (4096 / (1 << 9)))
+ * but this older incorrect value (33161216) is used by crop_metadata logic
+ * (DEFAULT_THIN_POOL_MAX_METADATA_SIZE in defaults.h) and cannot be changed
+ * without breaking existing thin pool metadata cropping behavior.
  */
 #define DM_THIN_MAX_METADATA_SIZE   (UINT64_C(255) * (1 << 14) * (4096 / (1 << 9)) - 256 * 1024)
 
