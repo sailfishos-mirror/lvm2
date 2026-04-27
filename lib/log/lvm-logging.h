@@ -20,6 +20,9 @@
 
 #include <stdint.h>
 
+struct dm_report;
+struct id;
+
 __attribute__ ((format(printf, 5, 6)))
 void print_log(int level, const char *file, int line, int dm_errno_or_class,
 	       const char *format, ...);
