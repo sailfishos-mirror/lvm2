@@ -66,9 +66,9 @@ struct command_name_args {
  */
 
 /* arg_def flags */
-#define ARG_DEF_FLAG_NEW_VG             1 << 0
-#define ARG_DEF_FLAG_NEW_LV             1 << 1
-#define ARG_DEF_FLAG_MAY_REPEAT         1 << 2
+#define ARG_DEF_FLAG_NEW_VG             (1 << 0)
+#define ARG_DEF_FLAG_NEW_LV             (1 << 1)
+#define ARG_DEF_FLAG_MAY_REPEAT         (1 << 2)
 
 static inline int val_bit_is_set(uint64_t val_bits, int val_enum)
 {
