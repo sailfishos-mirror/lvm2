@@ -566,9 +566,7 @@ static inline int lm_get_lockspaces_dlm(struct list_head *ls_rejoin)
 
 static inline int lm_data_size_dlm(void)
 {
-	if (daemon_test)
-		return 0;
-	return -1;
+	return 0;
 }
 
 static inline int lm_is_running_dlm(void)
@@ -731,7 +729,7 @@ static inline int lm_get_lockspaces_sanlock(struct list_head *ls_rejoin)
 
 static inline int lm_data_size_sanlock(void)
 {
-	return -1;
+	return 0;
 }
 
 static inline int lm_is_running_sanlock(void)
@@ -799,7 +797,7 @@ static inline int lm_support_idm(void)
 
 static inline int lm_data_size_idm(void)
 {
-	return -1;
+	return 0;
 }
 
 static inline int lm_init_vg_idm(char *ls_name, char *vg_name, uint32_t flags,
