@@ -26,6 +26,7 @@
 #include "dev_manager.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/config/config.h"
+#include "lib/locking/locking.h"
 #include "lib/metadata/segtype.h"
 #include "lib/misc/sharedlib.h"
 #include "lib/misc/lvm-signal.h"

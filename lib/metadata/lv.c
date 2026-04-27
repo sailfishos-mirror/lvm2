@@ -20,6 +20,8 @@
 #include "lib/commands/toolcontext.h"
 #include "lib/metadata/segtype.h"
 #include "lib/datastruct/str_list.h"
+#include "lib/config/config.h"
+#include "lib/config/defaults.h"
 #include "lib/locking/lvmlockd.h"
 #include "lib/datastruct/radix-tree.h"
 
