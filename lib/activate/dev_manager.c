@@ -3126,8 +3126,7 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
 				return_0;
 			num_error_areas++;
 		} else if (seg_type(seg, s) == AREA_PV) {
-			struct device *dev = seg_dev(seg, s);
-			name = dm_list_empty(&dev->aliases) ? NULL : dev_name(dev);
+			name = dev_name(seg_dev(seg, s));
 
 			if (!dm_tree_node_add_target_area(node, name, NULL,
 				    (seg_pv(seg, s)->pe_start + (extent_size * seg_pe(seg, s)))))
