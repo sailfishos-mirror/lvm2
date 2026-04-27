@@ -197,6 +197,9 @@ void sync_dir(const char *file)
 	int fd;
 	char *dir, *c;
 
+	if (!file || !*file)
+		return;
+
 	if (!(dir = strdup(file))) {
 		log_error("sync_dir failed in strdup");
 		return;
