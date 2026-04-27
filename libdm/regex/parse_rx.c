@@ -115,16 +115,16 @@ static void _single_char(struct parse_sp *ps, unsigned int c, const char *ptr)
 
 /*
  * Get the next token from the regular expression.
- * Returns: 1 success, 0 end of input, -1 error.
+ * Returns: 1 success (including end of input), 0 error.
  */
 static int _rx_get_token(struct parse_sp *ps)
 {
 	int neg = 0, range = 0;
 	char c, lc = 0;
 	const char *ptr = ps->cursor;
-	if (ptr == ps->rx_end) {	/* end of input ? */
+	if (ptr == ps->rx_end) {	/* end of input */
 		ps->type = -1;
-		return 0;
+		return 1;
 	}
 
 	switch (*ptr) {
@@ -165,7 +165,8 @@ static int _rx_get_token(struct parse_sp *ps)
 				ptr++;
 				if (ptr == ps->rx_end) {
 					log_error("Incomplete range specification.");
-					return -1;
+					ps->type = -1;
+					return 0;
 				}
 				c = *ptr;
 			} else
@@ -199,7 +200,7 @@ static int _rx_get_token(struct parse_sp *ps)
 
 		if (ptr >= ps->rx_end) {
 			ps->type = -1;
-			return -1;
+			return 0;
 		}
 
 		ps->type = 0;
@@ -244,7 +245,7 @@ static int _rx_get_token(struct parse_sp *ps)
 			log_error("Badly quoted character at end "
 				  "of expression");
 			ps->type = -1;
-			return -1;
+			return 0;
 		}
 
 		ps->type = 0;
@@ -282,16 +283,20 @@ static struct rx_node *_node(struct dm_pool *mem, int type,
 {
 	struct rx_node *n = dm_pool_zalloc(mem, sizeof(*n));
 
-	if (n) {
-		if (type == CHARSET && !(n->charset = dm_bitset_create(mem, 256))) {
-			dm_pool_free(mem, n);
-			return NULL;
-		}
-
-		n->type = type;
-		n->left = l;
-		n->right = r;
+	if (!n) {
+		log_error("Regex node allocation failed.");
+		return NULL;
 	}
+
+	if (type == CHARSET && !(n->charset = dm_bitset_create(mem, 256))) {
+		log_error("Regex charset node allocation failed.");
+		dm_pool_free(mem, n);
+		return NULL;
+	}
+
+	n->type = type;
+	n->left = l;
+	n->right = r;
 
 	return n;
 }
@@ -306,21 +311,24 @@ static struct rx_node *_term(struct parse_sp *ps)
 			return_NULL;
 
 		dm_bit_copy(n->charset, ps->charset);
-		_rx_get_token(ps);	/* match charset */
+		if (!_rx_get_token(ps))
+			return_NULL;
 		break;
 
 	case '(':
-		_rx_get_token(ps);	/* match '(' */
+		if (!_rx_get_token(ps))
+			return_NULL;
 		n = _or_term(ps);
 		if (ps->type != ')') {
 			log_error("missing ')' in regular expression");
-			return 0;
+			return NULL;
 		}
-		_rx_get_token(ps);	/* match ')' */
+		if (!_rx_get_token(ps))
+			return_NULL;
 		break;
 
 	default:
-		n = 0;
+		n = NULL;
 	}
 
 	return n;
@@ -354,7 +362,8 @@ static struct rx_node *_closure_term(struct parse_sp *ps)
 		if (!n)
 			return_NULL;
 
-		_rx_get_token(ps);
+		if (!_rx_get_token(ps))
+			return_NULL;
 		l = n;
 	}
 
@@ -390,7 +399,8 @@ static struct rx_node *_or_term(struct parse_sp *ps)
 	if (ps->type != '|')
 		return l;
 
-	_rx_get_token(ps);		/* match '|' */
+	if (!_rx_get_token(ps))
+		return_NULL;
 
 	if (!(r = _or_term(ps))) {
 		log_error("Badly formed 'or' expression");
@@ -628,7 +638,7 @@ static struct rx_node *_optimise(struct dm_pool *mem, struct rx_node *r)
 struct rx_node *rx_parse_tok(struct dm_pool *mem,
 			     const char *begin, const char *end)
 {
-	struct rx_node *r;
+	struct rx_node *r = NULL;
 	struct parse_sp *ps = dm_pool_zalloc(mem, sizeof(*ps));
 
 	if (!ps)
@@ -636,25 +646,26 @@ struct rx_node *rx_parse_tok(struct dm_pool *mem,
 
 	ps->mem = mem;
 	if (!(ps->charset = dm_bitset_create(mem, 256))) {
-		log_error("Regex charset allocation failed");
-		dm_pool_free(mem, ps);
-		return NULL;
+		log_error("Regex charset allocation failed.");
+		goto bad;
 	}
 	ps->cursor = begin;
 	ps->rx_end = end;
-	_rx_get_token(ps);		/* load the first token */
+	if (!_rx_get_token(ps)) {
+		log_error("Parse error in regex.");
+		goto bad;
+	}
 
 	if (!(r = _or_term(ps))) {
-		log_error("Parse error in regex");
-		dm_pool_free(mem, ps);
-		return NULL;
+		log_error("Parse error in regex.");
+		goto bad;
 	}
 
-	if (!(r = _optimise(mem, r))) {
-		log_error("Regex optimisation error");
+	if (!(r = _optimise(mem, r)))
+		log_error("Regex optimisation error.");
+bad:
+	if (!r)
 		dm_pool_free(mem, ps);
-		return NULL;
-	}
 
 	return r;
 }

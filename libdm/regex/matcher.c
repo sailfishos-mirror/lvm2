@@ -540,8 +540,9 @@ static uint32_t _fingerprint(struct printer *p)
         while ((node = _pop_node(p))) {
                 result = _combine(result, (node->final < 0) ? 0 : node->final);
                 for (c = 0; c < 256; c++)
-                        result = _combine(result,
-                                          _push_node(p, node->lookup[c]));
+			if (node->lookup[c])
+				result = _combine(result,
+						  _push_node(p, node->lookup[c]));
         }
 
         return result;
