@@ -156,10 +156,10 @@ static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t siz
 	/* Process 4 bytes per iteration */
 	while (start < end) {
 		crc = crc ^ htole32(*start++);
-		crc = _crctab[crc & 0xff] ^ crc >> 8;
-		crc = _crctab[crc & 0xff] ^ crc >> 8;
-		crc = _crctab[crc & 0xff] ^ crc >> 8;
-		crc = _crctab[crc & 0xff] ^ crc >> 8;
+		crc = _crctab[crc & 0xff] ^ (crc >> 8);
+		crc = _crctab[crc & 0xff] ^ (crc >> 8);
+		crc = _crctab[crc & 0xff] ^ (crc >> 8);
+		crc = _crctab[crc & 0xff] ^ (crc >> 8);
 	}
 
 	/* Process any bytes left over */
@@ -167,7 +167,7 @@ static uint32_t _calc_crc_new(uint32_t initial, const uint8_t *buf, uint32_t siz
 	size = size & 0x3;
 	while (size--) {
 		crc = crc ^ *buf++;
-		crc = _crctab[crc & 0xff] ^ crc >> 8;
+		crc = _crctab[crc & 0xff] ^ (crc >> 8);
 	}
 
 	return crc;
