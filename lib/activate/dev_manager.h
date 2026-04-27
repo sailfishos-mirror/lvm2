@@ -30,7 +30,7 @@ struct lv_seg_status;
 
 int read_only_lv(const struct logical_volume *lv, const struct lv_activate_opts *laopts, const char *layer);
 
-int get_crypt_table_offset(dev_t crypt_devt, uint32_t *offset_bytes);
+int get_crypt_table_offset(dev_t crypt_devt, uint64_t *offset_bytes);
 
 /*
  * Constructor and destructor.

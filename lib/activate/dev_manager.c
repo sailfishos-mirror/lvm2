@@ -4212,7 +4212,7 @@ out:
  * The offset needs to be subtracted from the LV size to get the
  * size used to resize the crypt device.
  */
-int get_crypt_table_offset(dev_t crypt_devt, uint32_t *offset_bytes)
+int get_crypt_table_offset(dev_t crypt_devt, uint64_t *offset_bytes)
 {
 	struct dm_task *dmt;
 	uint64_t start, length;
@@ -4264,6 +4264,6 @@ int get_crypt_table_offset(dev_t crypt_devt, uint32_t *offset_bytes)
 	if (!offset_str[0])
 		return_0;
 
-	*offset_bytes = ((uint32_t)strtoul(offset_str, NULL, 0) * 512);
+	*offset_bytes = (uint64_t)strtoul(offset_str, NULL, 0) * 512;
 	return 1;
 }

@@ -6591,8 +6591,9 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
 			goto out;
 		}
 		fsinfo.new_size_bytes -= fsinfo.crypt_offset_bytes;
-		log_print_unless_silent("File system size %llub is adjusted for crypt data offset %ub.",
-					(unsigned long long)fsinfo.new_size_bytes, fsinfo.crypt_offset_bytes);
+		log_print_unless_silent("File system size %llub is adjusted for crypt data offset %llub.",
+					(unsigned long long)fsinfo.new_size_bytes,
+					(unsigned long long)fsinfo.crypt_offset_bytes);
 	}
 
 	/*
@@ -6725,8 +6726,9 @@ static int _fs_extend_check_fsinfo(struct cmd_context *cmd, struct logical_volum
 	fsinfo->new_size_bytes = newsize_bytes_lv;
 	if (fsinfo->needs_crypt) {
 		fsinfo->new_size_bytes -= fsinfo->crypt_offset_bytes;
-		log_print_unless_silent("File system size %llub is adjusted for crypt data offset %ub.",
-					(unsigned long long)fsinfo->new_size_bytes, fsinfo->crypt_offset_bytes);
+		log_print_unless_silent("File system size %llub is adjusted for crypt data offset %llub.",
+					(unsigned long long)fsinfo->new_size_bytes,
+					(unsigned long long)fsinfo->crypt_offset_bytes);
 	}
 
 	/*
