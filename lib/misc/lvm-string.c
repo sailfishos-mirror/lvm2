@@ -115,8 +115,10 @@ void copy_systemid_chars(const char *src, char *dst)
 	int len = 0;
 	char c;
 
-	if (!s || !*s)
+	if (!s || !*s) {
+		*d = '\0';
 		return;
+	}
 
 	/* Skip non-alphanumeric starting characters */
 	while (*s && !isalnum(*s))
