@@ -1380,7 +1380,7 @@ int64_t find_config_tree_int64(struct cmd_context *cmd, int id, struct profile *
 	const cfg_def_item_t *item = cfg_def_get_item_p(id);
 	char path[CFG_PATH_MAX_LEN];
 	int profile_applied;
-	int i64;
+	int64_t i64;
 
 	profile_applied = _apply_local_profile(cmd, profile);
 	_cfg_def_make_path(path, sizeof(path), item->id, item, 0);
