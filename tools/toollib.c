@@ -3017,6 +3017,8 @@ int get_lvt_enum(struct logical_volume *lv)
 		return striped_LVT;
 	if (lv_is_thin_volume(lv))
 		return thin_LVT;
+	if (lv_is_thin_pool_data(lv))
+		return thinpooldata_LVT;
 	if (lv_is_thin_pool(lv))
 		return thinpool_LVT;
 	if (lv_is_cache(lv))
@@ -3031,6 +3033,11 @@ int get_lvt_enum(struct logical_volume *lv)
 		return vdopooldata_LVT;
 	if (lv_is_mirror(lv))
 		return mirror_LVT;
+	/* FIXME: specific raid subtypes need to be checked after generic
+	 * lv_is_raid() - code using raid_LVT expects all raid LVs to
+	 * match it (e.g. lvconvert cache pool conversion).
+	 * Needs a proper fix to distinguish subtype queries from
+	 * generic raid membership checks. */
 	if (lv_is_raid(lv))
 		return raid_LVT;
 	if (seg_is_any_raid0(seg))
