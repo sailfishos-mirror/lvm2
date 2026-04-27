@@ -147,6 +147,9 @@ unsigned lvm_even_rand(unsigned *seed, unsigned max)
 {
 	unsigned r, ret;
 
+	if (!max)
+		return 0;
+
 	do {
 		r = (unsigned) rand_r(seed);
 		ret = r % max;
