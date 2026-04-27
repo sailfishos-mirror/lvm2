@@ -181,11 +181,13 @@ static inline void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
 
 static inline int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 {
+	*flags = 0;
 	return 0;
 }
 
 static inline int lockd_lockargs_get_meta_flags(const char *str, uint32_t *flags)
 {
+	*flags = 0;
 	return 0;
 }
 
@@ -271,7 +273,7 @@ static inline int lockd_global_create(struct cmd_context *cmd, const char *def_m
 	 * a shared lock type should fail.
 	 */
 	if (is_lockd_type(vg_lock_type)) {
-		fprintf(stderr, "Using a shared lock type requires lvmlockd.\n");
+		log_error("Using a shared lock type requires lvmlockd.");
 		return 0;
 	}
 	return 1;
@@ -341,7 +343,7 @@ static inline void lockd_free_removed_lvs(struct cmd_context *cmd, struct volume
 
 static inline const char *lockd_running_lock_type(struct cmd_context *cmd, int *found_multiple)
 {
-	fprintf(stderr, "Using a shared lock type requires lvmlockd.\n");
+	log_error("Using a shared lock type requires lvmlockd.");
 	return NULL;
 }
 
@@ -357,6 +359,8 @@ static inline int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_para
 
 static inline int lockd_query_lv(struct cmd_context *cmd, const struct logical_volume *lv, int *ex, int *sh)
 {
+	*ex = 0;
+	*sh = 0;
 	return 0;
 }
 
