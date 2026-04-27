@@ -19,6 +19,11 @@ unsigned long gcd(unsigned long n1, unsigned long n2)
 {
 	unsigned long remainder;
 
+	if (!n1)
+		return n2;
+	if (!n2)
+		return n1;
+
 	do {
 		remainder = n1 % n2;
 		n1 = n2;
@@ -34,5 +39,5 @@ unsigned long lcm(unsigned long n1, unsigned long n2)
 	if (!n1 || !n2)
 		return 0;
 
-	return (n1 * n2) / gcd(n1, n2);
+	return (n1 / gcd(n1, n2)) * n2;
 }
