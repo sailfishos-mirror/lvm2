@@ -244,7 +244,7 @@ int validate_restricted_lvname_param(struct cmd_context *cmd, const char **vg_na
 				     const char **lv_name);
 
 int lvremove_single(struct cmd_context *cmd, struct logical_volume *lv,
-                    struct processing_handle *handle __attribute__((unused)));
+		    struct processing_handle *handle);
 
 int get_lvt_enum(struct logical_volume *lv);
 
