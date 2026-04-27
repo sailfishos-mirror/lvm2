@@ -876,7 +876,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 	if (!(lp->segtype = get_segtype_from_string(cmd, segtype_str)))
 		return_0;
 
-	if (seg_unknown(lp)) {
+	if (seg_is_unknown(lp)) {
 		log_error("Unable to create LV with unknown segment type %s.", segtype_str);
 		return 0;
 	}
