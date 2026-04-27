@@ -20,6 +20,7 @@
 #include "lib/misc/lvm-exec.h"
 #include "lib/activate/dev_manager.h"
 #include "lib/commands/toolcontext.h"
+#include "lib/config/config.h"
 
 #include <dirent.h>
 #include <mntent.h>

@@ -18,6 +18,7 @@
 #include "lib/display/display.h"
 #include "lib/activate/activate.h"
 #include "lib/commands/toolcontext.h"
+#include "lib/config/config.h"
 #include "lib/format_text/archiver.h"
 #include "lib/device/persist.h"
 #include "lib/datastruct/radix-tree.h"

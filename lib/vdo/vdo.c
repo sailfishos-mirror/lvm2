@@ -23,6 +23,7 @@
 #include "lib/metadata/metadata.h"
 #include "lib/metadata/lv_alloc.h"
 #include "lib/metadata/segtype.h"
+#include "lib/config/config.h"
 #include "lib/mm/memlock.h"
 #include "base/memory/zalloc.h"
 

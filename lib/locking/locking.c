@@ -17,6 +17,8 @@
 #include "lib/locking/locking.h"
 #include "lib/locking/lvmlockd.h"
 #include "locking_types.h"
+#include "lib/metadata/metadata.h"
+#include "lib/config/config.h"
 #include "lib/misc/lvm-string.h"
 #include "lib/activate/activate.h"
 #include "lib/commands/toolcontext.h"

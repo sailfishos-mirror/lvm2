@@ -19,6 +19,7 @@
 #include "lib/activate/activate.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/metadata/segtype.h"
+#include "lib/config/config.h"
 #include "lib/config/defaults.h"
 #include "lib/misc/lvm-signal.h"
 
