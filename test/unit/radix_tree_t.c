@@ -896,7 +896,123 @@ static void test_uniq_insert(void *fixture)
 	T_ASSERT_EQUAL(radix_tree_size(rt), vt.count);
 }
 
-//----------------------------------------------------------------
+/*
+ * Insert "AB" then "ABCD".  Verify that a short key that is a prefix
+ * of a longer key is stored and retrieved correctly when the short
+ * key is inserted first (creates VALUE_CHAIN via _insert_value).
+ */
+static void test_prefix_chain_split_zero(void *fixture)
+{
+	struct radix_tree *rt = fixture;
+	union radix_value v;
+	const uint8_t k_short[] = { 'A', 'B' };
+	const uint8_t k_long[]  = { 'A', 'B', 'C', 'D' };
+
+	v.n = 111;
+	T_ASSERT(radix_tree_insert(rt, k_short, sizeof(k_short), v));
+	T_ASSERT(radix_tree_is_well_formed(rt));
+
+	v.n = 222;
+	T_ASSERT(radix_tree_insert(rt, k_long, sizeof(k_long), v));
+	T_ASSERT(radix_tree_is_well_formed(rt));
+
+	/* Both keys must be retrievable */
+	T_ASSERT(radix_tree_lookup(rt, k_short, sizeof(k_short), &v));
+	if (v.n != 111)
+		test_fail("short key expected 111, got %u", (unsigned)v.n);
+
+	T_ASSERT(radix_tree_lookup(rt, k_long, sizeof(k_long), &v));
+	if (v.n != 222)
+		test_fail("long key expected 222, got %u", (unsigned)v.n);
+
+	T_ASSERT_EQUAL(radix_tree_size(rt), 2);
+}
+
+/*
+ * Same scenario but with a destructor - verifies the overwrite path
+ * calls the destructor for the old value before replacing it.
+ */
+static void test_overwrite_calls_dtr(void *fixture)
+{
+	struct counter c;
+	struct radix_tree *rt = radix_tree_create(_counting_dtr, &c);
+	T_ASSERT(rt);
+
+	c.c = 0;
+	memset(c.present, 1, sizeof(c.present));
+
+	{
+		union radix_value v;
+		uint8_t k[] = { 'x', 'y' };
+
+		v.n = 0;
+		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
+
+		/* overwrite same key - dtr must be called for old value */
+		v.n = 1;
+		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
+
+		if (c.c != 1)
+			test_fail("dtr expected 1 call on overwrite, got %u", c.c);
+		T_ASSERT(!c.present[0]);
+		T_ASSERT(c.present[1]);
+
+		T_ASSERT_EQUAL(radix_tree_size(rt), 1);
+	}
+
+	radix_tree_destroy(rt);
+}
+
+/*
+ * Overwrite a key that is stored as a VALUE_CHAIN (prefix of another key).
+ * Insert "AB"->100, "ABCD"->200 (makes "AB" a VALUE_CHAIN), then overwrite
+ * "AB"->300.  The overwrite must update the existing value in place, not
+ * create a nested VALUE_CHAIN.
+ */
+static void test_overwrite_value_chain(void *fixture)
+{
+	struct counter c;
+	struct radix_tree *rt = radix_tree_create(_counting_dtr, &c);
+	T_ASSERT(rt);
+
+	c.c = 0;
+	memset(c.present, 1, sizeof(c.present));
+
+	{
+		union radix_value v;
+		const uint8_t k_short[] = { 'A', 'B' };
+		const uint8_t k_long[]  = { 'A', 'B', 'C', 'D' };
+
+		v.n = 0;
+		T_ASSERT(radix_tree_insert(rt, k_short, sizeof(k_short), v));
+
+		v.n = 1;
+		T_ASSERT(radix_tree_insert(rt, k_long, sizeof(k_long), v));
+
+		T_ASSERT_EQUAL(radix_tree_size(rt), 2);
+
+		/* overwrite the prefix key */
+		v.n = 2;
+		T_ASSERT(radix_tree_insert(rt, k_short, sizeof(k_short), v));
+
+		if (c.c != 1)
+			test_fail("dtr expected 1 call on overwrite, got %u", c.c);
+		T_ASSERT(!c.present[0]);
+
+		T_ASSERT(radix_tree_lookup(rt, k_short, sizeof(k_short), &v));
+		T_ASSERT_EQUAL(v.n, 2);
+
+		T_ASSERT(radix_tree_lookup(rt, k_long, sizeof(k_long), &v));
+		T_ASSERT_EQUAL(v.n, 1);
+
+		/* size must still be 2, not 3 */
+		T_ASSERT_EQUAL(radix_tree_size(rt), 2);
+	}
+
+	radix_tree_destroy(rt);
+}
+
+/*----------------------------------------------------------------*/
 #define T(path, desc, fn) register_test(ts, "/base/data-struct/radix-tree/" path, desc, fn)
 
 void radix_tree_tests(struct dm_list *all_tests)
@@ -933,6 +1049,9 @@ void radix_tree_tests(struct dm_list *all_tests)
 	T("bcache-scenario-2", "A second series of keys from a bcache scenario", test_bcache_scenario2);
 	T("bcache-scenario-3", "A third series of keys from a bcache scenario", test_bcache_scenario3);
 	T("uniq-insert", "Test insert with test for uniq key", test_uniq_insert);
+	T("prefix-chain-split-zero", "prefix chain split with zero-length remainder", test_prefix_chain_split_zero);
+	T("overwrite-calls-dtr", "overwrite calls destructor for old value", test_overwrite_calls_dtr);
+	T("overwrite-value-chain", "overwrite a prefix key stored as value chain", test_overwrite_value_chain);
 
 	dm_list_add(all_tests, &ts->list);
 }

@@ -249,14 +249,16 @@ static unsigned min(unsigned lhs, unsigned rhs)
 static bool _insert_prefix_chain(struct radix_tree *rt, struct value *v, const uint8_t *kb, const uint8_t *ke, union radix_value rv)
 {
 	struct prefix_chain *pc = v->value.ptr;
+	struct prefix_chain *pc2;
+	struct value orig_child;
+	unsigned i, len, orig_len;
 
 	assert(pc->len);
 
 	if (*kb == pc->prefix[0]) {
 		/* There's a common prefix let's split the chain into two and
 		 * recurse. */
-		struct prefix_chain *pc2;
-		unsigned i, len = min(pc->len, ke - kb);
+		len = min(pc->len, ke - kb);
 
 		for (i = 0; i < len; i++)
 			if (kb[i] != pc->prefix[i])
@@ -269,13 +271,17 @@ static bool _insert_prefix_chain(struct radix_tree *rt, struct value *v, const u
 		memmove(pc2->prefix, pc->prefix + i, pc2->len);
 		pc2->child = pc->child;
 
-		// FIXME: this trashes pc so we can't back out
+		orig_child = pc->child;
+		orig_len = pc->len;
+
 		pc->child.type = PREFIX_CHAIN;
 		pc->child.value.ptr = pc2;
 		pc->len = i;
 
 		if (!_insert(rt, &pc->child, kb + i, ke, rv)) {
-			free(pc->child.value.ptr);
+			pc->child = orig_child;
+			pc->len = orig_len;
+			free(pc2);
 			return false;
 		}
 
@@ -288,11 +294,7 @@ static bool _insert_prefix_chain(struct radix_tree *rt, struct value *v, const u
 		n4->keys[0] = pc->prefix[0];
 		if (pc->len == 1) {
 			n4->values[0] = pc->child;
-			free(pc);
-			v->value.ptr = NULL;
 		} else {
-			memmove(pc->prefix, pc->prefix + 1, pc->len - 1);
-			pc->len--;
 			n4->values[0] = *v;
 		}
 
@@ -300,6 +302,13 @@ static bool _insert_prefix_chain(struct radix_tree *rt, struct value *v, const u
 		if (!_insert(rt, n4->values + 1, kb + 1, ke, rv)) {
 			free(n4);
 			return false;
+		}
+
+		if (pc->len == 1) {
+			free(pc);
+		} else {
+			memmove(pc->prefix, pc->prefix + 1, pc->len - 1);
+			pc->len--;
 		}
 
 		n4->nr_entries = 2;
@@ -436,7 +445,13 @@ static bool _insert(struct radix_tree *rt, struct value *v, const uint8_t *kb, c
 			rt->nr_entries++;
 
 		} else if (v->type == VALUE) {
+			_dtr(rt, v->value);
 			v->value = rv;
+
+		} else if (v->type == VALUE_CHAIN) {
+			struct value_chain *vc = v->value.ptr;
+			_dtr(rt, vc->value);
+			vc->value = rv;
 
 		} else {
 			/* All fields explicitly initialized */
