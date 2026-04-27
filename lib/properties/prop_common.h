@@ -73,12 +73,21 @@ static int _ ## NAME ## _set (void *obj, struct lvm_property_type *prop) \
 	return 1; \
 }
 
+#define GET_SNUM_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
+static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
+{ \
+	const struct TYPE *VAR = (const struct TYPE *)obj; \
+\
+	prop->value.signed_integer = VALUE; \
+	return 1; \
+}
+
 #define GET_STR_PROPERTY_FN(NAME, VALUE, TYPE, VAR)			\
 static int _ ## NAME ## _get (const void *obj, struct lvm_property_type *prop) \
 { \
 	const struct TYPE *VAR = (const struct TYPE *)obj; \
 \
-	prop->value.string = (char *)VALUE;	\
+	prop->value.string = VALUE;	\
 	return 1; \
 }
 
