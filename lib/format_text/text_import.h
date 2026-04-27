@@ -16,7 +16,7 @@
 #ifndef LVM_TEXT_IMPORT_H
 #define LVM_TEXT_IMPORT_H
 
-#include <inttypes.h>
+#include <stdint.h>
 
 struct lv_segment;
 struct dm_config_node;

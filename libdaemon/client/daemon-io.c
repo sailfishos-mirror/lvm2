@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <poll.h>
+#include <string.h>
 #include <unistd.h>
 
 /* Maximum incoming message size (16 MiB) to prevent unbounded allocation */

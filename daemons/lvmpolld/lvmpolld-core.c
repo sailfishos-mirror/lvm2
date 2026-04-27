@@ -20,7 +20,7 @@
 
 #include <getopt.h>
 #include <poll.h>
-#include <wait.h>
+#include <sys/wait.h>
 
 #define LVMPOLLD_SOCKET DEFAULT_RUN_DIR "/lvmpolld.socket"
 

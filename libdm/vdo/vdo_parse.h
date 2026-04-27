@@ -15,8 +15,6 @@
 #ifndef LIB_VDO_PARSE_H
 #define LIB_VDO_PARSE_H
 
-#include "libdm/libdevmapper.h"
-
 const char *vdo_parse_eat_space(const char *b, const char *e);
 int vdo_parse_tok_eq(const char *b, const char *e, const char *str);
 int vdo_parse_uint64(const char *b, const char *e, void *context);
