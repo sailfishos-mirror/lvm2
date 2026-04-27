@@ -1192,7 +1192,7 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
 						     seg_is_any_raid0(seg) ? 0 : _raid_stripes_count(seg),
 						     seg_is_raid10(seg) ? 1 :_raid_data_copies(seg));
 		if (!rimage_extents)
-			return 0;
+			return_0;
 
 		if (seg->meta_areas) {
 			uint32_t meta_area_reduction;
@@ -1201,7 +1201,7 @@ static int _release_and_discard_lv_segment_area(struct lv_segment *seg, uint32_t
 
 			if (seg_metatype(seg, s) != AREA_LV ||
 			    !(mlv = seg_metalv(seg, s)))
-				return 0;
+				return_0;
 
 			meta_area_reduction = raid_rmeta_extents_delta(vg->cmd, lv->le_count, lv->le_count - rimage_extents,
 								       seg->region_size, vg->extent_size);
@@ -1318,6 +1318,12 @@ int move_lv_segment_area(struct lv_segment *seg_to, uint32_t area_to,
 int set_lv_segment_area_pv(struct lv_segment *seg, uint32_t area_num,
 			   struct physical_volume *pv, uint32_t pe)
 {
+	if (area_num >= seg->area_count) {
+		log_error(INTERNAL_ERROR "Area number too high (%u >= %u) for segment of LV %s.",
+			  area_num, seg->area_count, display_lvname(seg->lv));
+		return 0;
+	}
+
 	seg->areas[area_num].type = AREA_PV;
 
 	if (!(seg_pvseg(seg, area_num) =
@@ -1338,7 +1344,7 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
 			 seg->lv->name, seg->le, area_num, lv->name, le);
 
 	if (area_num >= seg->area_count) {
-		log_error(INTERNAL_ERROR "Try to set too high area number (%u >= %u) for LV %s.",
+		log_error(INTERNAL_ERROR "Area number too high (%u >= %u) for segment of LV %s.",
 			  area_num, seg->area_count, display_lvname(seg->lv));
 		return 0;
 	}
@@ -7595,7 +7601,7 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 		    !(seg = find_seg_by_le(lv, current_le))) {
 			log_error("Failed to find segment for %s extent %" PRIu32,
 				  lv->name, current_le);
-			return 0;
+			return NULL;
 		}
 
 		/* Find next segment end */
