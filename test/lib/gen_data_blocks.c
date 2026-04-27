@@ -41,12 +41,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-// This is borrowed directly from the Linux kernel code
-#define container_of(ptr, type, member)             \
-  __extension__ ({                                  \
-  __typeof__(((type *)0)->member) *__mptr = (ptr);  \
-  (type *)((char *)__mptr - offsetof(type,member)); \
-    })
+#include "base/memory/container_of.h"
 
 // XXX - DeviceSlice should be renamed.  The name may have been appropriate
 //       once, but now it basically is the options from the command line that
@@ -158,6 +153,7 @@ static void fillRandomly(void *seedPtr, size_t seedLen, void *ptr, size_t len)
 
   for (i = 0; i < len; i++) {
     if (randMask < 0xff) {
+      /* coverity[dont_call] not security-related, test data patterns */
       randNum  = randNum * multiplier + random();
       randMask = randMask * multiplier + RAND_MAX;
     }
@@ -247,8 +243,9 @@ static DataStream *makeBlockStream(char *arg)
   double dedupe = 0.0;
   // arg can have the form "tag", or "tag,dedupe" or "tag,dedupe,compress"
   char *endTag = strchr(arg, ',');
-  BlockStream *pbs = malloc(sizeof(BlockStream));
-  memset(pbs, 0, sizeof(BlockStream));
+  BlockStream *pbs = calloc(1, sizeof(BlockStream));
+  if (!pbs)
+    exit(2);
   pbs->common.claim    = claimBS;
   pbs->common.generate = generateBS;
   pbs->common.report   = reportBS;
@@ -273,7 +270,7 @@ static DataStream *makeBlockStream(char *arg)
   if (strlen(arg) >= TAG_SIZE) {
     errx(2, "the tag string '%s' is too long", arg);
   }
-  strncpy(pbs->tag, arg, TAG_SIZE);
+  strncpy(pbs->tag, arg, TAG_SIZE - 1);
   if ((pbs->dedupe < 0) || (pbs->dedupe > DEDUPE_MODULUS)) {
     errx(2, "the dedupe fraction (%f) is invalid", dedupe);
   }
@@ -283,7 +280,8 @@ static DataStream *makeBlockStream(char *arg)
   if ((pbs->compress < 0.0) || (pbs->compress > 0.96)) {
     errx(2, "the compression fraction (%f) is invalid", pbs->compress);
   }
-  return &pbs->common;
+  /* 'common' is the first member of BlockStream */
+  return (DataStream *)pbs;
 }
 
 /**********************************************************************/
@@ -315,8 +313,9 @@ static void reportZS(DataStream *pds)
 /**********************************************************************/
 static DataStream *makeZeroStream(void)
 {
-  DataStream *pzs = malloc(sizeof(DataStream));
-  memset(pzs, 0, sizeof(DataStream));
+  DataStream *pzs = calloc(1, sizeof(DataStream));
+  if (!pzs)
+    exit(2);
   pzs->claim    = claimZS;
   pzs->generate = generateZS;
   pzs->report   = reportZS;
@@ -381,7 +380,7 @@ static int verifyDataStream(DataStream *pds, int n, void *buf, size_t bufSize)
       size_t i;
       unsigned char *buffer;
       unsigned char *block = malloc(bufSize);
-      if (block == NULL)
+      if (!block)
         errx(3, "memory allocation failure");
       generateDataStream(pds, n, block, bufSize);
       if (memcmp(buf, block, bufSize) == 0) {
@@ -531,9 +530,13 @@ static int verifySlice(const DeviceSlice *ds, DataStream *pds)
     ssize_t nRead = read(fd, buffer, ds->blockSize);
     if (nRead == -1) {
       warn("read failure on %s, block %d", ds->path, n);
+      free(buffer);
+      (void) close(fd);
       return 3;
     } else if (nRead != (ssize_t) ds->blockSize) {
       warnx("incomplete read on %s, block %d", ds->path, n);
+      free(buffer);
+      (void) close(fd);
       return 3;
     }
     if (verifyDataStream(pds, n, buffer, ds->blockSize) != 0) {
@@ -577,9 +580,13 @@ static int writeSlice(const DeviceSlice *ds, DataStream *pds)
     nWrite = write(fd, block, ds->blockSize);
     if (nWrite == -1) {
       warn("write failure on %s, block %d", ds->path, n);
+      free(block);
+      (void) close(fd);
       return 3;
     } else if (nWrite != (ssize_t) ds->blockSize) {
       warnx("incomplete write on %s, block %d", ds->path, n);
+      free(block);
+      (void) close(fd);
       return 3;
     }
     pds->counter++;
