@@ -189,8 +189,8 @@ static void _allocate_memory(void)
 			_size_stack = limit.rlim_cur;
 		if ((stack_mem = alloca(_size_stack)))
 			_touch_memory(stack_mem, _size_stack);
-	}
-	/* FIXME else warn user setting got ignored */
+	} else
+		log_warn("WARNING: Failed to get stack size limit, ignoring reserved_stack setting.");
 
 #ifdef HAVE_MALLINFO2
 	/* Prefer mallinfo2 call when available with newer glibc */
