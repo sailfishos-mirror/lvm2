@@ -50,6 +50,7 @@ static int _passes_usable_filter(struct cmd_context *cmd, struct dev_filter *f, 
 
 	dev->filtered_flags &= ~DEV_FILTERED_MINSIZE;
 	dev->filtered_flags &= ~DEV_FILTERED_UNUSABLE;
+	dev->filtered_flags &= ~DEV_FILTERED_IS_LV;
 
 	/* further checks are done on dm devices only */
 	if (dm_is_dm_major(MAJOR(dev->dev))) {
