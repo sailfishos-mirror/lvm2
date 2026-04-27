@@ -25,7 +25,6 @@ SOURCES =\
 	cache_segtype/cache.c \
 	commands/toolcontext.c \
 	config/config.c \
-	datastruct/btree.c \
 	datastruct/radix-tree.c \
 	datastruct/str_list.c \
 	device/bcache.c \
