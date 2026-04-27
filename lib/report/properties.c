@@ -74,23 +74,29 @@ static char *_raidsyncaction(const struct logical_volume *lv)
 	char *action;
 
 	if (!lv_raid_sync_action(lv, &action))
-		return 0;
+		return NULL;
 
 	return action;
 }
 
 static uint32_t _raidwritebehind(const struct logical_volume *lv)
 {
+	if (!lv_is_raid(lv))
+		return 0;
 	return first_seg(lv)->writebehind;
 }
 
 static uint32_t _raidminrecoveryrate(const struct logical_volume *lv)
 {
+	if (!lv_is_raid(lv))
+		return 0;
 	return first_seg(lv)->min_recovery_rate;
 }
 
 static uint32_t _raidmaxrecoveryrate(const struct logical_volume *lv)
 {
+	if (!lv_is_raid(lv))
+		return 0;
 	return first_seg(lv)->max_recovery_rate;
 }
 
@@ -98,7 +104,7 @@ static const char *_raidintegritymode(const struct logical_volume *lv)
 {
 	struct dm_integrity_settings *settings = NULL;
 
-	if (lv_raid_has_integrity((struct logical_volume *)lv))
+	if (lv_raid_has_integrity(lv))
 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
 	else if (lv_is_integrity(lv))
 		settings = &first_seg(lv)->integrity_settings;
@@ -117,7 +123,7 @@ static uint32_t _raidintegrityblocksize(const struct logical_volume *lv)
 {
 	struct dm_integrity_settings *settings = NULL;
 
-	if (lv_raid_has_integrity((struct logical_volume *)lv))
+	if (lv_raid_has_integrity(lv))
 		lv_get_raid_integrity_settings((struct logical_volume *)lv, &settings);
 	else if (lv_is_integrity(lv))
 		settings = &first_seg(lv)->integrity_settings;
