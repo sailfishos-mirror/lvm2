@@ -47,7 +47,7 @@ esac
 echo -e "\nChecking the files for significant changes:"
 
 # TODO: if changing spec/ we want to run make rpm, but do not need to run tests
-if git diff --name-only "${HEAD}" "^${TARGET}" | grep -v '^\(\.gitlab-ci.yml\|ci/\|WHATS_NEW\|VERSION\|man/\|doc/\|README\|TESTING\|COPYING\|INSTALL\|\.gitignore\|coverity\|ikiwiki.setup/\|nix/\|po/'"$IGNORE_SPEC"'\)'; then
+if git diff --name-only --merge-base "${TARGET}" "${HEAD}" | grep -v '^\(\.gitlab-ci.yml\|ci/\|WHATS_NEW\|VERSION\|man/\|doc/\|README\|TESTING\|COPYING\|INSTALL\|\.gitignore\|coverity\|ikiwiki.setup/\|nix/\|po/'"$IGNORE_SPEC"'\)'; then
 	echo "INFO: Changed files, running CI" >&2
 	exit 1
 else
