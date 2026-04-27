@@ -630,7 +630,7 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
 			seg_error("empty pvmove must use single error segment");
 	}
 
-	if (!seg_unknown(seg)) {
+	if (!seg_is_unknown(seg)) {
 		if (seg->segtype_private)
 			seg_error("set segtype_private");
 	}

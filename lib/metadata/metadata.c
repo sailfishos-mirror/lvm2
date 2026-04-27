@@ -1022,7 +1022,7 @@ int lv_has_unknown_segments(const struct logical_volume *lv)
 	struct lv_segment *seg;
 	/* foreach segment */
 	dm_list_iterate_items(seg, &lv->segments)
-		if (seg_unknown(seg))
+		if (seg_is_unknown(seg))
 			return 1;
 	return 0;
 }
