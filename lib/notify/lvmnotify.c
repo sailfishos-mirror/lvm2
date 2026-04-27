@@ -136,9 +136,11 @@ void lvmnotify_send(struct cmd_context *cmd)
 	if (ret < 0) {
 		if (sd_bus_error_has_name(&error, SD_BUS_SYSTEMD_NO_SUCH_UNIT_ERROR) ||
 		    sd_bus_error_has_name(&error, SD_BUS_DBUS_SERVICE_UNKNOWN_ERROR))
-			log_debug_dbus("%s: %s", _dbus_notification_failed_msg, error.message);
+			log_debug_dbus("%s: %s", _dbus_notification_failed_msg,
+				       error.message ?: "");
 		else
-			log_warn("WARNING: %s: %s", _dbus_notification_failed_msg, error.message);
+			log_warn("WARNING: %s: %s", _dbus_notification_failed_msg,
+				 error.message ?: "");
 		goto out;
 	}
 
