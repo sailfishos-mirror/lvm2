@@ -76,8 +76,10 @@ int lvm_fclose(FILE *fp, const char *filename);
 void lvm_stat_ctim(struct timespec *ctim, const struct stat *buf);
 
 /* Inspired by <sys/time.h>  timercmp() macro for timeval */
+#ifndef timespeccmp
 #define timespeccmp(tsp, usp, cmp)\
 	(((tsp)->tv_sec == (usp)->tv_sec) ?\
 		((tsp)->tv_nsec cmp (usp)->tv_nsec) :\
 		((tsp)->tv_sec cmp (usp)->tv_sec))
+#endif
 #endif
