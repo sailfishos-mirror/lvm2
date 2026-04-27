@@ -125,7 +125,7 @@
 .
 .SH NAME
 .
-vgconvert \(em Change volume group metadata format
+vgconvert \(em Removed: vgconvert has been removed along with the lvm1 format
 .
 .SH SYNOPSIS
 .

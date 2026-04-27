@@ -131,7 +131,7 @@ Display and manipulate configuration information
 Manage the devices file
 .TP 20
 .B vgimportdevices
-Add devices for a VG to the devices file.
+Add devices for a VG to the devices file
 .PD
 .
 .SH Physical Volume Commands
@@ -166,7 +166,7 @@ Restore volume group configuration
 Change volume group attributes
 .TP 20
 .B vgconvert
-Change volume group metadata format
+Removed: vgconvert has been removed along with the lvm1 format
 .TP 20
 .B vgcreate
 Create a volume group

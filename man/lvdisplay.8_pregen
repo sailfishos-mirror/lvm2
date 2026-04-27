@@ -679,7 +679,7 @@ Display help text.
 .O_history
 Include historical LVs in the output.
 (This has no effect unless LVs were removed while
-\fBlvm.conf\fP(5) \fBmetadata/record_lvs_history\fP was enabled.
+\fBlvm.conf\fP(5) \fBmetadata/record_lvs_history\fP was enabled.)
 .
 .TP
 .O_ignorelockingfailure
