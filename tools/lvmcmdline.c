@@ -1689,10 +1689,11 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 		/*
 		 * If the cmd def has an implied type, specified in AUTOTYPE,
 		 * then if the user command has --type, it must match.
+		 * Skip if type_arg matches neither autotype nor autotype2.
 		 */
-		if (type_arg && commands[i].autotype && strcmp(type_arg, commands[i].autotype))
-			continue;
-		if (type_arg && commands[i].autotype2 && strcmp(type_arg, commands[i].autotype2))
+		if (type_arg && commands[i].autotype &&
+		    strcmp(type_arg, commands[i].autotype) &&
+		    (!commands[i].autotype2 || strcmp(type_arg, commands[i].autotype2)))
 			continue;
 
 		/*
