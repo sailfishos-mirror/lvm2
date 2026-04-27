@@ -20,7 +20,7 @@
 #ifdef UDEV_SYNC_SUPPORT
 #include <libudev.h>
 
-struct udev *_udev;
+static struct udev *_udev;
 
 int udev_init_library_context(void)
 {
