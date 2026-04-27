@@ -16,23 +16,22 @@
 #ifndef LVM_LOCKING_TYPES_H
 #define LVM_LOCKING_TYPES_H
 
-#include "lib/metadata/metadata.h"
-#include "lib/config/config.h"
+#include <stdint.h>
 
-typedef int (*lock_resource_fn) (struct cmd_context * cmd, const char *resource,
+struct cmd_context;
+struct logical_volume;
+
+typedef int (*lock_resource_fn) (struct cmd_context *cmd, const char *resource,
 				 uint32_t flags, const struct logical_volume *lv);
-typedef int (*query_resource_fn) (const char *resource, const char *node, int *mode);
 
 typedef void (*fin_lock_fn) (void);
 typedef void (*reset_lock_fn) (void);
 
-#define LCK_FLOCK			0x00000001
+#define LCK_FLOCK			0x00000001U
 
 struct locking_type {
 	uint32_t flags;   /* 0 means file locking is disabled */
 	lock_resource_fn lock_resource;
-	query_resource_fn query_resource;
-
 	reset_lock_fn reset_locking;
 	fin_lock_fn fin_locking;
 };
