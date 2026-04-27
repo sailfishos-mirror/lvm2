@@ -63,7 +63,7 @@ make-rpm:
     - builder
   timeout: 10m
   script:
-    - if bash ci/dry-run.sh; then echo "# ./configure && make rpm"; exit 0; fi
+    - if bash ci/dry-run.sh --run-spec; then echo "# ./configure && make rpm"; exit 0; fi
     - ./configure
     - make rpm
   rules:
@@ -71,7 +71,7 @@ make-rpm:
       when: never
     - when: on_success
 
-make-rpm-all:
+make-all:
   stage: test1
   tags:
     - builder2

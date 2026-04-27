@@ -9,6 +9,22 @@ hash() {
 	git log -1 --pretty="format:%h" "$@"
 }
 
+IGNORE_SPEC='\|spec/'
+while [[ -n "$*" ]]; do
+case "$1" in
+	--run-spec)
+		shift
+		IGNORE_SPEC='' ;;
+	--)
+		shift
+		break ;;
+	-*)
+		die "Unknown uption '$1'" ;;
+	*)
+		break ;;
+esac
+done
+
 # TODO: This just compares HEAD with main. Do we care about other branches?
 HEAD="${1:-"HEAD"}"
 TARGET=${2:-"origin/main"}
@@ -30,7 +46,8 @@ esac
 
 echo -e "\nChecking the files for significant changes:"
 
-if git diff --name-only "${HEAD}" "^${TARGET}" | grep -v '^\(\.gitlab-ci.yml\|ci/\|WHATS_NEW\|VERSION\|man/\|doc/\|README\|TESTING\|COPYING\|INSTALL\|\.gitignore\|coverity\|ikiwiki.setup/\|nix/\|po/\)'; then
+# TODO: if changing spec/ we want to run make rpm, but do not need to run tests
+if git diff --name-only "${HEAD}" "^${TARGET}" | grep -v '^\(\.gitlab-ci.yml\|ci/\|WHATS_NEW\|VERSION\|man/\|doc/\|README\|TESTING\|COPYING\|INSTALL\|\.gitignore\|coverity\|ikiwiki.setup/\|nix/\|po/'"$IGNORE_SPEC"'\)'; then
 	echo "INFO: Changed files, running CI" >&2
 	exit 1
 else
