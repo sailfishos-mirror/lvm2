@@ -154,7 +154,7 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 
 	if (pipe(pipefd)) {
 		log_sys_error("pipe", "");
-		return 0;
+		return NULL;
 	}
 
 	log_verbose("Piping:%s", _verbose_args(argv, buf, sizeof(buf)));
@@ -162,10 +162,10 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 	if ((pdata->pid = fork()) == -1) {
 		log_sys_error("fork", "");
 		if (close(pipefd[0]))
-			log_sys_debug("close", "STDOUT");
+			log_sys_debug("close", "pipe[0]");
 		if (close(pipefd[1]))
-			log_sys_debug("close", "STDIN");
-		return 0;
+			log_sys_debug("close", "pipe[1]");
+		return NULL;
 	}
 
 	if (pdata->pid == 0) {
@@ -196,9 +196,9 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 	}
 
 	if (!(pdata->fp = fdopen(pipefd[0 /*read*/],  "r"))) {
-		log_sys_error("fdopen", "STDIN");
+		log_sys_error("fdopen", "pipe[0]");
 		if (close(pipefd[0]))
-			log_sys_error("close", "STDIN");
+			log_sys_error("close", "pipe[0]");
 		if (kill(pdata->pid, SIGKILL))
 			log_sys_error("kill", "");
 		else if (waitpid(pdata->pid, NULL, 0) != pdata->pid)
@@ -212,16 +212,22 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 int pipe_close(struct pipe_data *pdata)
 {
 	int status;
+	int r = 1;
 
-	if (fclose(pdata->fp))
-		log_sys_error("fclose", "STDIN");
+	if (fclose(pdata->fp)) {
+		log_sys_error("fclose", "pipe");
+		r = 0;
+	}
 
 	if (waitpid(pdata->pid, &status, 0) != pdata->pid) {
 		log_sys_error("waitpid", "");
 		return 0;
 	}
 
-	return (status == 0) ? 1 : 0;
+	if (!WIFEXITED(status) || WEXITSTATUS(status))
+		r = 0;
+
+	return r;
 }
 
 int prepare_exec_args(struct cmd_context *cmd,
