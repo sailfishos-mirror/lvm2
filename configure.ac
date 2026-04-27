@@ -1894,8 +1894,8 @@ VER=$(echo "$VER" | $AWK '{print $1}')
 LVM_RELEASE="\"$(echo "$VER" | $AWK -F '-' '{print $2}')\""
 VER=$(echo "$VER" | $AWK -F '-' '{print $1}')
 LVM_MAJOR=$(echo "$VER" | $AWK -F '.' '{print $1}')
-LVM_MINOR=$(echo "$VER" | $AWK -F '.' '{print $2}')
-LVM_PATCHLEVEL=$(echo "$VER" | $AWK -F '[[(.]]' '{print $3}')
+LVM_MINOR=$(echo "$VER" | $AWK -F '.' '{print $2 + 0}')
+LVM_PATCHLEVEL=$(echo "$VER" | $AWK -F '[[(.]]' '{print $3 + 0}')
 LVM_LIBAPI=$(echo "$VER" | $AWK -F '[[()]]' '{print $2}')
 
 AC_DEFINE_UNQUOTED(LVM_CONFIGURE_LINE, "$CONFIGURE_LINE", [configure command line used])
