@@ -20,7 +20,7 @@
 
 static void *_mem_init(void)
 {
-	struct dm_pool *mem = dm_pool_create("bitset test", 1024);
+	struct dm_pool *mem = dm_pool_create("regex test", 1024);
 	if (!mem) {
 		fprintf(stderr, "out of memory");
 		exit(1);
@@ -51,10 +51,10 @@ static void test_fingerprints(void *fixture)
 	struct dm_regex *scanner;
 
 	scanner = make_scanner(mem, dev_patterns);
-	T_ASSERT_EQUAL(dm_regex_fingerprint(scanner), 0x7f556c09);
+	T_ASSERT_EQUAL(dm_regex_fingerprint(scanner), 0xc0f6e9d0);
 
 	scanner = make_scanner(mem, random_patterns);
-	T_ASSERT_EQUAL(dm_regex_fingerprint(scanner), 0x9f11076c);
+	T_ASSERT_EQUAL(dm_regex_fingerprint(scanner), 0xeae862bc);
 }
 
 static void test_matching(void *fixture)
