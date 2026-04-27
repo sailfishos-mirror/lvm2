@@ -19,16 +19,12 @@
 #include <stdint.h>
 #include <unistd.h>
 
-void remove_ctrl_c_handler(void);
-void install_ctrl_c_handler(void);
-int init_signals(int suppress_messages);
-
 void sigint_allow(void);
 int sigint_caught(void);
 void sigint_restore(void);
 void sigint_clear(void);
 int sigint_usleep(useconds_t usec);
 
-void block_signals(uint32_t flags);
+void block_signals(void);
 void unblock_signals(void);
 #endif

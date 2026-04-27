@@ -184,7 +184,7 @@ static int _lock_vol(struct cmd_context *cmd, const char *resource, uint32_t fla
 {
 	int ret = 0;
 
-	block_signals(flags);
+	block_signals();
 
 	if ((ret = _locking.lock_resource(cmd, resource, flags, NULL)))
 		/* ensure signals are blocked while VG_GLOBAL lock is held */
