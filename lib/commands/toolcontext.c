@@ -1624,8 +1624,7 @@ void destroy_config_context(struct cmd_context *cmd)
 }
 
 /* Entry point */
-struct cmd_context *create_toolcontext(unsigned is_clvmd,
-				       const char *system_dir,
+struct cmd_context *create_toolcontext(const char *system_dir,
 				       unsigned set_buffering,
 				       unsigned threaded,
 				       unsigned set_connections,
@@ -1648,8 +1647,6 @@ struct cmd_context *create_toolcontext(unsigned is_clvmd,
 		log_error("Failed to allocate command context");
 		return NULL;
 	}
-	cmd->is_long_lived = is_clvmd;
-	cmd->is_clvmd = is_clvmd;
 	cmd->threaded = threaded ? 1 : 0;
 	cmd->handles_missing_pvs = 0;
 	cmd->handles_unknown_segments = 0;
