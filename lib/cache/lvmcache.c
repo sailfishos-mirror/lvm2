@@ -3238,6 +3238,8 @@ int lvmcache_verify_info_in_vg(struct volume_group *vg, struct lvmcache_info *in
 
 const char *dev_filtered_reason(struct device *dev)
 {
+	if (dev->filtered_flags & DEV_FILTERED_FWRAID)
+		return "device is a firmware RAID component";
 	if (dev->filtered_flags & DEV_FILTERED_REGEX)
 		return "device is rejected by filter config";
 	if (dev->filtered_flags & DEV_FILTERED_INTERNAL)
