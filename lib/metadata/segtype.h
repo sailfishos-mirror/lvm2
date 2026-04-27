@@ -158,7 +158,7 @@ struct dev_manager;
 #define segtype_is_any_raid10(segtype)	(segtype_is_raid10_near(segtype) || segtype_is_raid10_far(segtype) || segtype_is_raid10_offset(segtype))
 #define segtype_is_raid_with_meta(segtype)	(segtype_is_raid(segtype) && !segtype_is_raid0(segtype))
 #define segtype_is_striped_raid(segtype)        (segtype_is_raid(segtype) && !segtype_is_raid1(segtype))
-#define segtype_is_reshapable_raid(segtype)     ((segtype_is_striped_raid(segtype) && !segtype_is_any_raid0(segtype)) || segtype_is_raid10_near(segtype) || segtype_is_raid10_offset(segtype))
+#define segtype_is_reshapable_raid(segtype)     (segtype_is_striped_raid(segtype) && !segtype_is_any_raid0(segtype))
 #define segtype_is_snapshot(segtype)	((segtype)->flags & SEG_SNAPSHOT ? 1 : 0)
 #define segtype_is_striped(segtype)	((segtype)->flags & SEG_AREAS_STRIPED ? 1 : 0)
 #define segtype_is_thin(segtype)	((segtype)->flags & (SEG_THIN_POOL|SEG_THIN_VOLUME) ? 1 : 0)
