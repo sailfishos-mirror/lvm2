@@ -36,6 +36,9 @@
 #define SET_LV_NUM_PROPERTY_FN(NAME, SETFN) \
 	SET_NUM_PROPERTY_FN(NAME, SETFN, logical_volume, lv)
 
+#define GET_LV_SNUM_PROPERTY_FN(NAME, VALUE) \
+	GET_SNUM_PROPERTY_FN(NAME, VALUE, logical_volume, lv)
+
 #define GET_VG_STR_PROPERTY_FN(NAME, VALUE) \
 	GET_STR_PROPERTY_FN(NAME, VALUE, volume_group, vg)
 #define GET_PV_STR_PROPERTY_FN(NAME, VALUE) \
@@ -423,17 +426,17 @@ GET_LV_STR_PROPERTY_FN(lv_parent, lv_parent_dup(lv->vg->vgmem, lv))
 #define _lv_parent_set prop_not_implemented_set
 GET_LV_STR_PROPERTY_FN(lv_attr, lv_attr_dup(lv->vg->vgmem, lv))
 #define _lv_attr_set prop_not_implemented_set
-GET_LV_NUM_PROPERTY_FN(lv_major, lv->major)
+GET_LV_SNUM_PROPERTY_FN(lv_major, lv->major)
 #define _lv_major_set prop_not_implemented_set
-GET_LV_NUM_PROPERTY_FN(lv_minor, lv->minor)
+GET_LV_SNUM_PROPERTY_FN(lv_minor, lv->minor)
 #define _lv_when_full_get prop_not_implemented_get
 #define _lv_when_full_set prop_not_implemented_set
 #define _lv_minor_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_read_ahead, lv->read_ahead * SECTOR_SIZE)
 #define _lv_read_ahead_set prop_not_implemented_set
-GET_LV_NUM_PROPERTY_FN(lv_kernel_major, lv_kernel_major(lv))
+GET_LV_SNUM_PROPERTY_FN(lv_kernel_major, lv_kernel_major(lv))
 #define _lv_kernel_major_set prop_not_implemented_set
-GET_LV_NUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
+GET_LV_SNUM_PROPERTY_FN(lv_kernel_minor, lv_kernel_minor(lv))
 #define _lv_kernel_minor_set prop_not_implemented_set
 GET_LV_NUM_PROPERTY_FN(lv_kernel_read_ahead, lv_kernel_read_ahead(lv) * SECTOR_SIZE)
 #define _lv_kernel_read_ahead_set prop_not_implemented_set
