@@ -57,7 +57,7 @@ int pvhdr_read(struct device *dev, char *buf);
 int add_da(struct dm_pool *mem, struct dm_list *das,
 	   uint64_t start, uint64_t size);
 void del_das(struct dm_list *das);
-int add_ba(struct dm_pool *mem, struct dm_list *eas,
+int add_ba(struct dm_pool *mem, struct dm_list *bas,
 	   uint64_t start, uint64_t size);
 void del_bas(struct dm_list *bas);
 int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *mdas,
