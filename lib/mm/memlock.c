@@ -53,6 +53,12 @@ int critical_section(void)
 {
 	return 0;
 }
+
+int prioritized_section(void)
+{
+	return 0;
+}
+
 void memlock_init(struct cmd_context *cmd)
 {
 	return;
