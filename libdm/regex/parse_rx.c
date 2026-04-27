@@ -120,7 +120,7 @@ static void _single_char(struct parse_sp *ps, unsigned int c, const char *ptr)
 static int _rx_get_token(struct parse_sp *ps)
 {
 	int neg = 0, range = 0;
-	char c, lc = 0;
+	unsigned char c, lc = 0;
 	const char *ptr = ps->cursor;
 	if (ptr == ps->rx_end) {	/* end of input */
 		ps->type = -1;
@@ -175,17 +175,17 @@ static int _rx_get_token(struct parse_sp *ps)
 			if (range) {
 				/* add lc - c into the bitset */
 				if (lc > c) {
-					char tmp = c;
+					unsigned char tmp = c;
 					c = lc;
 					lc = tmp;
 				}
 
-				for (; lc <= c; lc++) {
+				do {
 					if (neg)
 						dm_bit_clear(ps->charset, lc);
 					else
 						dm_bit_set(ps->charset, lc);
-				}
+				} while (lc++ != c);
 				range = 0;
 			} else {
 				/* add c into the bitset */
