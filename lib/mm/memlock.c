@@ -709,8 +709,10 @@ void memlock_inc_daemon(struct cmd_context *cmd)
 
 void memlock_dec_daemon(struct cmd_context *cmd)
 {
-	if (!_memlock_count_daemon)
-		log_debug_mem(INTERNAL_ERROR "_memlock_count_daemon has dropped below 0.");
+	if (!_memlock_count_daemon) {
+		log_debug_mem(INTERNAL_ERROR "_memlock_count_daemon is already 0.");
+		return;
+	}
 	--_memlock_count_daemon;
 	log_debug_mem("memlock_count_daemon dec to %d", _memlock_count_daemon);
 	_unlock_mem_if_possible(cmd);
