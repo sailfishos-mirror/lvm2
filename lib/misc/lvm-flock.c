@@ -163,7 +163,10 @@ static int _do_write_priority_flock(const char *file, int *fd, int operation, ui
 	int r, fd_aux = -1;
 	char file_aux[PATH_MAX];
 
-	snprintf(file_aux, sizeof(file_aux), "%s%s", file, AUX_LOCK_SUFFIX);
+	if (dm_snprintf(file_aux, sizeof(file_aux), "%s%s", file, AUX_LOCK_SUFFIX) < 0) {
+		log_error("Auxiliary lock path too long for %s.", file);
+		return 0;
+	}
 
 	if ((r = _do_flock(file_aux, &fd_aux, LOCK_EX, nonblock))) {
 		if (operation == LOCK_EX) {
@@ -213,7 +216,7 @@ int lock_file(const char *file, uint32_t flags)
 		r = flock(ll->lf, operation);
 		if (!r)
 			return 1;
-		log_error("Failed to convert flock on %s %d", file, errno);
+		log_sys_error("flock", file);
 		return 0;
 	}
 
