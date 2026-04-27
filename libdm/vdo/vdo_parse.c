@@ -17,6 +17,7 @@
  */
 
 #include "vdo/vdo_parse.h"
+#include "libdm/misc/dmlib.h"
 
 #include <ctype.h>
 

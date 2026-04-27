@@ -16,7 +16,6 @@
 #include "lib/device/bcache.h"
 #include "lib/misc/lvm-signal.h"
 
-#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>

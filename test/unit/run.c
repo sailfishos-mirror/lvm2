@@ -14,7 +14,6 @@
 
 #include "units.h"
 
-#include <getopt.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>

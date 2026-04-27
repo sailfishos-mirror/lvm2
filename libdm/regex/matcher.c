@@ -16,7 +16,7 @@
 #include "libdm/misc/dmlib.h"
 #include "parse_rx.h"
 #include "ttree.h"
-#include "assert.h"
+#include <assert.h>
 
 struct dfa_state {
 	struct dfa_state *next;

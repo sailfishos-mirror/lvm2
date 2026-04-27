@@ -21,10 +21,11 @@
 #ifndef LVM_METADATA_H
 #define LVM_METADATA_H
 
-#include "ctype.h"
 #include "lib/device/dev-cache.h"
 #include "lib/misc/lvm-string.h"
 #include "lib/metadata/metadata-exported.h"
+
+#include <ctype.h>
 
 //#define MAX_STRIPES 128U
 //#define SECTOR_SHIFT 9L

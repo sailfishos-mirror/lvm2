@@ -25,7 +25,6 @@
 #include "lib/label/hints.h"
 #include "lib/misc/lvm-file.h"
 #include "lib/format_text/format-text.h"
-#include "lib/display/display.h"
 #include "lib/mm/memlock.h"
 #include "lib/datastruct/str_list.h"
 #include "lib/metadata/segtype.h"
