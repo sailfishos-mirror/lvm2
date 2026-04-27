@@ -16,6 +16,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 
 #ifdef UDEV_SYNC_SUPPORT
 #include <libudev.h>
@@ -111,12 +112,25 @@ int lvm_getpagesize(void)
 
 int read_urandom(void *buf, size_t len)
 {
+	struct stat st;
 	int fd;
 
-	/* FIXME: we should stat here, and handle other cases */
-	/* FIXME: use common _io() routine's open/read/close */
 	if ((fd = open("/dev/urandom", O_RDONLY)) < 0) {
-		log_sys_error("open", "read_urandom: /dev/urandom");
+		log_sys_error("open", "/dev/urandom");
+		return 0;
+	}
+
+	if (fstat(fd, &st)) {
+		log_sys_error("fstat", "/dev/urandom");
+		if (close(fd))
+			stack;
+		return 0;
+	}
+
+	if (!S_ISCHR(st.st_mode)) {
+		log_error("/dev/urandom is not a character device.");
+		if (close(fd))
+			stack;
 		return 0;
 	}
 
