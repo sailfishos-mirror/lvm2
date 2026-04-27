@@ -17,8 +17,15 @@
 
 //----------------------------------------------------------------
 
+#ifdef __GNUC__
+#define container_of(v, t, head) \
+    __extension__ ({                              \
+    __typeof__(((t *)0)->head) *_v = (v);         \
+    (t *)((char *)_v - offsetof(t, head)); })
+#else
 #define container_of(v, t, head) \
     ((t *)((char *)(v) - offsetof(t, head)))
+#endif
 
 //----------------------------------------------------------------
 
