@@ -2184,7 +2184,7 @@ int lm_rem_resource_sanlock(struct lockspace *ls, struct resource *r)
 	struct rd_sanlock *rds = (struct rd_sanlock *)r->lm_data;
 
 	/* FIXME: assert r->mode == UN or unlock if it's not? */
-#ifdef LVMLOCKD_USE_SANLOCK_LVB
+#if LVMLOCKD_USE_SANLOCK_LVB
 	free(rds->vb);
 #endif
 	memset(rds, 0, sizeof(struct rd_sanlock));
