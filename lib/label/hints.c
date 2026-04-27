@@ -855,7 +855,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 		}
 		memcpy(alloc_hint, &hint, sizeof(hint));
 
-		log_debug("add hint %s %s %d:%d %s", hint.name, hint.pvid, major, minor, vgname);
+		log_debug("add hint %s %s %d:%d %s", hint.name, hint.pvid, major, minor, vgname ?: "-");
 		dm_list_add(hints, &alloc_hint->list);
 		found++;
 	}
