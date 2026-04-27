@@ -164,7 +164,7 @@ struct metadata_area_ops {
 /* The primary metadata area on a device if the format supports more than one. */
 #define MDA_PRIMARY	 0x00000008
 
-#define mda_is_primary(mda) (((mda->status) & MDA_PRIMARY) ? 1 : 0)
+#define mda_is_primary(mda) ((((mda)->status) & MDA_PRIMARY) ? 1 : 0)
 #define MDA_CONTENT_REASON(primary_mda) ((primary_mda) ? DEV_IO_MDA_CONTENT : DEV_IO_MDA_EXTRA_CONTENT)
 #define MDA_HEADER_REASON(primary_mda)  ((primary_mda) ? DEV_IO_MDA_HEADER : DEV_IO_MDA_EXTRA_HEADER)
 
