@@ -30,6 +30,11 @@ void get_shared_library_path(struct cmd_context *cmd, const char *libname,
 	if (!path_len)
 		return;
 
+	if (!libname || !*libname) {
+		path[0] = '\0';
+		return;
+	}
+
 	/* If libname doesn't begin with '/' then use lib_dir/libname,
 	 * if present */
 	if (libname[0] == '/' ||
