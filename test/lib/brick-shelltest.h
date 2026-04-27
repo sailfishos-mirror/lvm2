@@ -82,11 +82,11 @@
 #include <unistd.h>
 #endif
 
-static const long TEST_SUITE_TIMEOUT = 4; // Timeout for the whole test suite in hours (4 hours)
-static const long TEST_TIMEOUT = 10 * 60; // Timeout for a single test in seconds (10 minutes)
-
 #ifndef BRICK_SHELLTEST_H
 #define BRICK_SHELLTEST_H
+
+static const long TEST_SUITE_TIMEOUT = 4; // Timeout for the whole test suite in hours (4 hours)
+static const long TEST_TIMEOUT = 10 * 60; // Timeout for a single test in seconds (10 minutes)
 
 namespace {
 
@@ -464,7 +464,7 @@ struct TimedBuffer {
         Line result = std::make_pair( 0, "" );
         if ( force && data.empty() )
             std::swap( result, incomplete );
-        else {
+        else if ( !data.empty() ) {
             result = data.front();
             data.pop_front();
         }
@@ -604,7 +604,7 @@ struct FileSink : FdSink {
             fd = open( file.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644 );
 #else
             fd = open( file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644 );
-            if ( fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
+            if ( fd >= 0 && fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
                 perror("failed to set FD_CLOEXEC on file");
 #endif
             if ( fd < 0 )
@@ -682,7 +682,7 @@ struct FileSource : Source {
             fd = open( file.c_str(), O_RDONLY | O_CLOEXEC | O_NONBLOCK );
 #else
             fd = open( file.c_str(), O_RDONLY | O_NONBLOCK );
-            if ( fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
+            if ( fd >= 0 && fcntl( fd, F_SETFD, FD_CLOEXEC ) < 0 )
                 perror("failed to set FD_CLOEXEC on file");
 #endif
             if ( fd >= 0 )
@@ -699,10 +699,9 @@ struct FileSource : Source {
 
 struct KMsg : Source {
     bool can_clear;
-    ssize_t buffer_size;
+    static const ssize_t buffer_size = 128 * 1024;
 
-    KMsg() : can_clear( hasenv("LVM_TEST_CAN_CLOBBER_DMESG") ),
-        buffer_size(128 * 1024)
+    KMsg() : can_clear( hasenv("LVM_TEST_CAN_CLOBBER_DMESG") )
     {
 #ifdef __unix
         struct utsname uts;
@@ -850,8 +849,11 @@ struct IO : Sink {
     }
 
     IO &operator= ( const IO &io ) {
-        this->~IO();
-        return *new (this) IO( io );
+        if ( this != &io ) {
+            this->~IO();
+            new (this) IO( io );
+        }
+        return *this;
     }
 
     void clear( int to_push = 1 ) {
