@@ -69,7 +69,7 @@ int udev_is_running(void)
 	r = udev_queue_get_udev_is_active(udev_queue);
 	udev_queue_unref(udev_queue);
 
-	return r;
+	return r > 0;
 
 bad:
 	log_debug_activation("Assuming udev is not running.");
