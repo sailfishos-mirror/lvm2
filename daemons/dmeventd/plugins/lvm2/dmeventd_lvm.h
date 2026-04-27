@@ -50,26 +50,33 @@ int dmeventd_lvm2_command(struct dm_pool *mem, char *buffer, size_t size,
 		rc;\
 	})
 
-#define dmeventd_lvm2_init_with_pool(name, st) \
-	({\
-		struct dm_pool *mem;\
-		st = NULL;\
-		if (dmeventd_lvm2_init()) {\
-			if ((mem = dm_pool_create(name, 2048)) &&\
-			    (st = dm_pool_zalloc(mem, sizeof(*st))))\
-				st->mem = mem;\
-			else {\
-				if (mem)\
-					dm_pool_destroy(mem);\
-				dmeventd_lvm2_exit();\
-			}\
-		}\
-		st;\
-	})
+static inline void *_dmeventd_lvm2_init_with_pool(const char *name, size_t size)
+{
+	struct dm_pool *mem;
 
-#define dmeventd_lvm2_exit_with_pool(pool) \
+	if (!dmeventd_lvm2_init())
+		return NULL;
+
+	if ((mem = dm_pool_create(name, 2048))) {
+		/* dso_state structs always have struct dm_pool *mem as first member */
+		struct dm_pool **st = dm_pool_zalloc(mem, size);
+		if (st) {
+			*st = mem;
+			return st;
+		}
+		dm_pool_destroy(mem);
+	}
+
+	dmeventd_lvm2_exit();
+	return NULL;
+}
+
+#define dmeventd_lvm2_init_with_pool(name, st) \
+	(st = _dmeventd_lvm2_init_with_pool(name, sizeof(*st)))
+
+#define dmeventd_lvm2_exit_with_pool(st) \
 	do {\
-		dm_pool_destroy(pool->mem);\
+		dm_pool_destroy(st->mem);\
 		dmeventd_lvm2_exit();\
 	} while(0)
 
