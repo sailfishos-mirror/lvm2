@@ -186,6 +186,9 @@ static void _xlate_mdah(struct mda_header *mdah)
 		rl->checksum = htole32(rl->checksum);
 		rl->offset = htole64(rl->offset);
 		rl->size = htole64(rl->size);
+		/* flags was not historically byte-swapped; detect cross-endian */
+		if (rl->flags > 0xFF)
+			rl->flags = bswap_32(rl->flags);
 		rl++;
 	}
 }
