@@ -293,7 +293,11 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 					   (*logical_size / 2));
 	}
 
-	slabbits = 31 - clz(vtp->slab_size_mb / DM_VDO_BLOCK_SIZE * 2 * 1024);  /* to KiB / block_size */
+	/* Convert slab_size from MiB to KiB / block_size */
+	slabbits = vtp->slab_size_mb / DM_VDO_BLOCK_SIZE * 2 * 1024;
+	if (!slabbits)
+		slabbits = 1;
+	slabbits = 31 - clz(slabbits);
 	log_debug("Slab size %s converted to %u bits.",
 		  display_mb_size(data_lv->vg->cmd, vtp->slab_size_mb), slabbits);
 
