@@ -34,7 +34,7 @@ int lvmnotify_is_supported(void)
 
 static int lvmdbusd_running(void)
 {
-	int fd = 0;
+	int fd = -1;
 	int rc = 0;
 	int errno_cpy = 0;
 	int running = 0;
