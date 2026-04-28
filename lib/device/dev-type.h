@@ -56,7 +56,7 @@ struct dev_types *create_dev_types(const char *proc_dir, const struct dm_config_
 /* Subsystems */
 int dev_subsystem_part_major(struct dev_types *dt, struct device *dev);
 const char *dev_subsystem_name(struct dev_types *dt, struct device *dev);
-int major_is_scsi_device(struct dev_types *dt, int major);
+int major_is_scsi_device(struct dev_types *dt, unsigned major);
 
 /* Signature/superblock recognition with position returned where found. */
 int dev_is_md_component(struct cmd_context *cmd, struct device *dev, uint64_t *offset_found, int full);
@@ -83,7 +83,7 @@ unsigned long dev_md_stripe_width(struct dev_types *dt, struct device *dev);
 int dev_is_md_with_end_superblock(struct dev_types *dt, struct device *dev);
 
 /* Partitioning */
-int major_max_partitions(struct dev_types *dt, int major);
+int major_max_partitions(struct dev_types *dt, unsigned major);
 int dev_is_partitioned(struct cmd_context *cmd, struct device *dev);
 int dev_get_primary_dev(struct dev_types *dt, struct device *dev, dev_t *result);
 int dev_get_partition_number(struct device *dev, int *num);
