@@ -27,7 +27,7 @@ struct logical_volume;
 typedef int (*command_fn) (struct cmd_context *cmd, int argc, char **argv);
 
 struct command_function {
-	int command_enum;
+	unsigned command_enum;
 	command_fn fn; /* new style */
 };
 
@@ -70,32 +70,32 @@ struct command_name_args {
 #define ARG_DEF_FLAG_NEW_LV             (1 << 1)
 #define ARG_DEF_FLAG_MAY_REPEAT         (1 << 2)
 
-static inline int val_bit_is_set(uint64_t val_bits, int val_enum)
+static inline int val_bit_is_set(uint64_t val_bits, unsigned int val_enum)
 {
 	return (val_bits & (1ULL << val_enum)) ? 1 : 0;
 }
 
-static inline uint64_t val_enum_to_bit(int val_enum)
+static inline uint64_t val_enum_to_bit(unsigned int val_enum)
 {
 	return (1ULL << val_enum);
 }
 
-static inline int lvp_bit_is_set(uint64_t lvp_bits, int lvp_enum)
+static inline int lvp_bit_is_set(uint64_t lvp_bits, unsigned int lvp_enum)
 {
 	return (lvp_bits & (1ULL << lvp_enum)) ? 1 : 0;
 }
 
-static inline uint64_t lvp_enum_to_bit(int lvp_enum)
+static inline uint64_t lvp_enum_to_bit(unsigned int lvp_enum)
 {
 	return (1ULL << lvp_enum);
 }
 
-static inline int lvt_bit_is_set(uint64_t lvt_bits, int lvt_enum)
+static inline int lvt_bit_is_set(uint64_t lvt_bits, unsigned int lvt_enum)
 {
 	return (lvt_bits & (1ULL << lvt_enum)) ? 1 : 0;
 }
 
-static inline uint64_t lvt_enum_to_bit(int lvt_enum)
+static inline uint64_t lvt_enum_to_bit(unsigned int lvt_enum)
 {
 	return (1ULL << lvt_enum);
 }
