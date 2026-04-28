@@ -278,10 +278,9 @@ int out_size(struct formatter *f, uint64_t size, const char *fmt, ...)
 	if (f->with_comment) {
 		if (!_sectors_to_units(size, buffer, sizeof(buffer)))
 			return 0;
-	} else
-		buffer[0] = 0;
+	}
 
-	_out_with_comment(f, buffer, fmt, ap);
+	_out_with_comment(f, f->with_comment ? buffer : NULL, fmt, ap);
 
 	return r;
 }
