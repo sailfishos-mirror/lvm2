@@ -4744,7 +4744,7 @@ void report_reset_cmdlog_seqnum(void)
 	_log_seqnum = 1;
 }
 
-int report_current_object_cmdlog(const char *type, const char *msg, int32_t ret_code)
+int report_current_object_cmdlog(const char *type, const char *msg, int ret_code)
 {
 	log_report_t log_state = log_get_report_state();
 
