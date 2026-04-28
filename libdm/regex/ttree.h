@@ -22,7 +22,7 @@ struct ttree;
 
 struct ttree *ttree_create(struct dm_pool *mem, unsigned int klen);
 
-void *ttree_lookup(struct ttree *tt, unsigned *key);
-int ttree_insert(struct ttree *tt, unsigned *key, void *data);
+void *ttree_lookup(const struct ttree *tt, const unsigned int *key);
+int ttree_insert(struct ttree *tt, const unsigned int *key, void *data);
 
 #endif
