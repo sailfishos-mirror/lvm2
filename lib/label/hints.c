@@ -286,6 +286,7 @@ static int _clear_hints(struct cmd_context *cmd)
 {
 	FILE *fp;
 	time_t t;
+	int r = 1;
 
 	if (!(fp = fopen(_hints_file, "w"))) {
 		log_debug("clear_hints open errno %d", errno);
@@ -298,13 +299,17 @@ static int _clear_hints(struct cmd_context *cmd)
 
 	fprintf(fp, "# Created empty by %s pid %d %s", cmd->name, getpid(), ctime(&t));
 
-	if (fflush(fp))
+	if (fflush(fp)) {
 		log_debug("clear_hints flush errno %d %s", errno, _hints_file);
+		r = 0;
+	}
 
-	if (fclose(fp))
+	if (fclose(fp)) {
 		log_debug("clear_hints close errno %d %s", errno, _hints_file);
+		r = 0;
+	}
 
-	return 1;
+	return r;
 }
 
 static int _lock_hints(struct cmd_context *cmd, int mode, int nonblock)
@@ -1130,8 +1135,10 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 		_unlink_newhints();
 
  out_close:
-	if (fclose(fp))
+	if (fclose(fp)) {
 		log_debug("write_hint_file close errno %d", errno);
+		ret = 0;
+	}
 
  out_unlock:
 	/* get_hints() took ex lock before returning with newhints set */
