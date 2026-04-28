@@ -68,7 +68,7 @@ static void _wipe(struct cmd_context *cmd, struct dev_filter *f, struct device *
 	}
 }
 
-struct dev_filter *composite_filter_create(int n, struct dev_filter **filters)
+struct dev_filter *composite_filter_create(unsigned int n, struct dev_filter **filters)
 {
 	struct dev_filter **filters_copy, *cft;
 
