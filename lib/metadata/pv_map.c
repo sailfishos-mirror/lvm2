@@ -71,6 +71,9 @@ static int _create_alloc_areas_for_pv(struct dm_pool *mem, struct pv_map *pvm,
 	struct pv_segment *peg;
 	uint32_t pe, end, area_len;
 
+	if (!count)
+		return 1;
+
 	/* Only select extents from start to end inclusive */
 	end = start + count - 1;
 	if (end > pvm->pv->pe_count - 1)
