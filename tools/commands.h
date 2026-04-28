@@ -188,7 +188,7 @@ xx(vgck,
    ALL_VGS_IS_DEFAULT | LOCKD_VG_SH)
 
 xx(vgconvert,
-   "Change volume group metadata format",
+   "Removed: vgconvert has been removed along with the lvm1 format",
    0)
 
 xx(vgcreate,
