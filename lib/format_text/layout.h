@@ -39,7 +39,7 @@ struct pv_header_extension {
 /* Fields with the suffix _xl should be xlate'd wherever they appear */
 /* On disk */
 struct pv_header {
-	int8_t pv_uuid[ID_LEN];
+	uint8_t pv_uuid[ID_LEN];
 
 	/* This size can be overridden if PV belongs to a VG */
 	uint64_t device_size_xl;	/* Bytes */
@@ -77,7 +77,7 @@ void rlocn_set_ignored(struct raw_locn *rlocn, unsigned mda_ignored);
 /* Structure size limited to one sector */
 struct mda_header {
 	uint32_t checksum_xl;	/* Checksum of rest of mda_header */
-	int8_t magic[16];	/* To aid scans for metadata */
+	uint8_t magic[16];	/* To aid scans for metadata */
 	uint32_t version;
 	uint64_t start;		/* Absolute start byte of mda_header */
 	uint64_t size;		/* Size of metadata area */
