@@ -161,10 +161,9 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 		return 0;
 	}
 
-	/* Allows the pvmove operation to complete even if 'orphaned' temporary volumes
-	 * cannot be deactivated due to being held open by another process.
-	 * The user can manually remove these volumes later when they are no longer in use. */
-	if (visible < vg_visible_lvs(lv_mirr->vg)) {
+	/* Sanity check: visible LV count must have decreased after removal;
+	 * an increase means cleanup failed and orphaned temp LVs remain. */
+	if (visible < vg_visible_lvs(vg)) {
 		log_error("ABORTING: Failed to remove temporary logical volume(s).");
 		log_print_unless_silent("Please remove orphan temporary logical volume(s) when possible.");
 		return 0;
