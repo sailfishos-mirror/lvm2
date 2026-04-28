@@ -208,13 +208,11 @@ void sync_dir(const char *file)
 	}
 
 	if (!dir_exists(dir)) {
-		c = dir + strlen(dir);
-		while (*c != '/' && c > dir)
-			c--;
-
-		if (c == dir)
-			*c++ = '.';
-
+		if (!(c = strrchr(dir, '/'))) {
+			dir[0] = '.';   /* bare filename: overwrite with '.' */
+			c = dir + 1;
+		} else if (c == dir)
+			c++;            /* file in root: advance past '/', keep "/" */
 		*c = '\0';
 	}
 
