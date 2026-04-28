@@ -168,7 +168,8 @@ static int _out_with_comment_file(struct formatter *f, const char *comment,
 		white_space[i] = '\t';
 	white_space[i] = '\0';
 	fputs(white_space, f->data.fp);
-	i = vfprintf(f->data.fp, fmt, ap);
+	if ((i = vfprintf(f->data.fp, fmt, ap)) < 0)
+		return 0;
 
 	if (comment) {
 		/*
