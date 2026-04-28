@@ -125,7 +125,7 @@ void report_reset_cmdlog_seqnum(void);
 #define REPORT_OBJECT_CMDLOG_NAME "status"
 #define REPORT_OBJECT_CMDLOG_SUCCESS "success"
 #define REPORT_OBJECT_CMDLOG_FAILURE "failure"
-int report_current_object_cmdlog(const char *type, const char *msg, int32_t ret_code);
+int report_current_object_cmdlog(const char *type, const char *msg, int ret_code);
 int report_output(void *handle);
 
 #endif
