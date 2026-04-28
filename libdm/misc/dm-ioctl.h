@@ -377,6 +377,7 @@ enum {
  * gets closed.
  */
 #define DM_DEFERRED_REMOVE		(1 << 17) /* In/Out */
+#define DM_DEFERRED_REMOVE_FLAG		DM_DEFERRED_REMOVE
 
 /*
  * If set, the device is suspended internally.

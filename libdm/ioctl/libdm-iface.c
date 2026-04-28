@@ -744,7 +744,7 @@ DM_EXPORT_NEW_SYMBOL(int, dm_task_get_info, 1_02_97)
 	info->live_table = dmt->dmi.v4->flags & DM_ACTIVE_PRESENT_FLAG ? 1 : 0;
 	info->inactive_table = dmt->dmi.v4->flags & DM_INACTIVE_PRESENT_FLAG ?
 	    1 : 0;
-	info->deferred_remove = dmt->dmi.v4->flags & DM_DEFERRED_REMOVE ? 1 : 0;
+	info->deferred_remove = dmt->dmi.v4->flags & DM_DEFERRED_REMOVE_FLAG ? 1 : 0;
 	info->internal_suspend = (dmt->dmi.v4->flags & DM_INTERNAL_SUSPEND_FLAG) ? 1 : 0;
 	info->target_count = dmt->dmi.v4->target_count;
 	info->open_count = dmt->dmi.v4->open_count;
@@ -1453,7 +1453,7 @@ static struct dm_ioctl *_flatten(struct dm_task *dmt, unsigned repeat_count)
 	if (dmt->skip_lockfs)
 		dmi->flags |= DM_SKIP_LOCKFS_FLAG;
 	if (dmt->deferred_remove && (dmt->type == DM_DEVICE_REMOVE || dmt->type == DM_DEVICE_REMOVE_ALL))
-		dmi->flags |= DM_DEFERRED_REMOVE;
+		dmi->flags |= DM_DEFERRED_REMOVE_FLAG;
 
 	if (dmt->secure_data) {
 		if (_dm_version_minor < 20)
