@@ -29,7 +29,7 @@ struct archive_params {
 	int enabled;
 	char *dir;
 	unsigned int keep_days;
-	unsigned int keep_number;
+	unsigned int keep_min;
 };
 
 struct backup_params {
@@ -59,7 +59,7 @@ int archive_init(struct cmd_context *cmd, const char *dir,
 	}
 
 	cmd->archive_params->keep_days = keep_days;
-	cmd->archive_params->keep_number = keep_min;
+	cmd->archive_params->keep_min = keep_min;
 	archive_enable(cmd, enabled);
 
 	return 1;
@@ -144,7 +144,7 @@ static int _archive(struct volume_group *vg, int compulsory)
 
 	if (!archive_vg(vg, vg->cmd->archive_params->dir, desc,
 			vg->cmd->archive_params->keep_days,
-			vg->cmd->archive_params->keep_number))
+			vg->cmd->archive_params->keep_min))
 		return_0;
 
 	vg->status |= ARCHIVED_VG;
