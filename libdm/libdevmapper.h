@@ -2808,7 +2808,7 @@ struct dm_list *dm_list_next(const struct dm_list *head, const struct dm_list *e
  * return another element f.
  */
 #define dm_struct_field(v, t, e, f) \
-    (((t *)((uintptr_t)(v) - offsetof(t, e))->f)
+    (((t *)((uintptr_t)(v) - offsetof(t, e)))->f)
 
 /*
  * Given the address v of a known element e in a known structure of type t,
