@@ -1,3 +1,6 @@
+Version 2.03.41 - 
+==================
+
 Version 2.03.40 - 28th April 2026
 =================================
   Reset warned flag in dmeventd raid plugin when device fully syncs.
