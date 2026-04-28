@@ -363,6 +363,12 @@ static int _poll_vg(struct cmd_context *cmd, const char *vgname,
 
 		id.lv_name = lv->name;
 		id.vg_name = vg->name;
+
+		if (!*lv->lvid.s) {
+			log_print_unless_silent("Missing LV uuid within: %s/%s", id.vg_name, id.lv_name);
+			continue;
+		}
+
 		id.uuid = lv->lvid.s;
 
 		idl = _poll_id_list_create(cmd->mem, &id);
@@ -757,7 +763,7 @@ int poll_daemon(struct cmd_context *cmd, unsigned background,
 		uint64_t lv_type, const struct poll_functions *poll_fns,
 		const char *progress_title, const struct poll_operation_id *id)
 {
-	struct daemon_parms parms;
+	struct daemon_parms parms = { 0 };
 
 	if (!_daemon_parms_init(cmd, &parms, background, poll_fns, progress_title, lv_type))
 		return_EINVALID_CMD_LINE;
