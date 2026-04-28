@@ -178,7 +178,7 @@ static void _async_destroy(struct io_engine *ioe)
 
 static int _last_byte_di;
 static uint64_t _last_byte_offset;
-static int _last_byte_sector_size;
+static size_t _last_byte_sector_size;
 
 static bool _async_issue(struct io_engine *ioe, enum dir d, int di,
 			 sector_t sb, sector_t se, void *data, void *context)
@@ -1508,13 +1508,14 @@ void bcache_abort_di(struct bcache *cache, int di)
 
 //----------------------------------------------------------------
 
-void bcache_set_last_byte(struct bcache *cache, int di, uint64_t offset, int sector_size)
+void bcache_set_last_byte(struct bcache *cache, int di, uint64_t offset, size_t sector_size)
 {
 	_last_byte_di = di;
 	_last_byte_offset = offset;
-	_last_byte_sector_size = sector_size;
 	if (!sector_size)
 		_last_byte_sector_size = 512;
+	else
+		_last_byte_sector_size = sector_size;
 }
 
 void bcache_unset_last_byte(struct bcache *cache, int di)

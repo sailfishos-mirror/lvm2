@@ -192,14 +192,14 @@ static bool _write_whole(struct updater *u, int di, block_address bb, block_addr
 	return true;
 }
 
-bool bcache_write_bytes(struct bcache *cache, int di, uint64_t start, size_t len, void *data)
+bool bcache_write_bytes(struct bcache *cache, int di, uint64_t start, size_t len, const void *data)
 {
         struct updater u;
 
         u.cache = cache;
         u.partial_fn = _write_partial;
         u.whole_fn = _write_whole;
-        u.data = data;
+        u.data = (void *) data;
 
 	return _update_bytes(&u, di, start, len);
 }
