@@ -21,12 +21,17 @@
 
 //----------------------------------------------------------------
 
-static void byte_range_to_block_range(struct bcache *cache, uint64_t start, size_t len,
+static bool byte_range_to_block_range(struct bcache *cache, uint64_t start, size_t len,
 				      block_address *bb, block_address *be)
 {
 	block_address block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
+
+	if ((uint64_t)len > UINT64_MAX - start)
+		return false;
+
 	*bb = start / block_size;
 	*be = (start + len + block_size - 1) / block_size;
+	return true;
 }
 
 static uint64_t _min(uint64_t lhs, uint64_t rhs)
@@ -43,7 +48,8 @@ void bcache_prefetch_bytes(struct bcache *cache, int di, uint64_t start, size_t 
 {
 	block_address bb, be;
 
-	byte_range_to_block_range(cache, start, len, &bb, &be);
+	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+		return;
 	while (bb < be) {
 		bcache_prefetch(cache, di, bb);
 		bb++;
@@ -62,7 +68,8 @@ bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len,
 
 	bcache_prefetch_bytes(cache, di, start, len);
 
-	byte_range_to_block_range(cache, start, len, &bb, &be);
+	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+		return false;
 
 	for (; bb != be; bb++) {
         	if (!bcache_get(cache, di, bb, 0, &b))
@@ -85,7 +92,8 @@ bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_
 	block_address bb, be;
 	bool result = true;
 
-	byte_range_to_block_range(cache, start, len, &bb, &be);
+	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+		return false;
 
 	for (; bb != be; bb++) {
 		if (!bcache_invalidate(cache, di, bb))
@@ -120,7 +128,8 @@ static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 	uint64_t block_offset = start % block_size;
 	uint64_t nr_whole;
 
-	byte_range_to_block_range(cache, start, len, &bb, &be);
+	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+		return false;
 
 	// If the last block is partial, we will require a read, so let's
 	// prefetch it.
