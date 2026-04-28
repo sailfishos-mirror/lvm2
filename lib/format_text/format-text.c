@@ -2284,6 +2284,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
 	uint64_t wipe_size = 8 << SECTOR_SHIFT;
 	uint64_t zero_len;
 	size_t page_size = lvm_getpagesize();
+	unsigned mda_size_min = 8 * (unsigned) page_size;
 	struct metadata_area *mda;
 	struct mda_context *mdac;
 	const char *limit_name;
@@ -2351,7 +2352,7 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
 		mda_start = LABEL_SCAN_SIZE;
 
 		/* Align MDA0 start with page size if possible. */
-		if (limit - mda_start >= MDA_SIZE_MIN) {
+		if (limit - mda_start >= mda_size_min) {
 			if ((adjustment = mda_start % page_size))
 				mda_start += (page_size - adjustment);
 		}
@@ -2488,9 +2489,9 @@ static int _text_pv_add_metadata_area(const struct format_type *fmt,
 				  mda_size, limit_name, limit);
 
 	if (mda_size) {
-		if (mda_size < MDA_SIZE_MIN) {
+		if (mda_size < mda_size_min) {
 			log_error("Metadata area size too small: " FMTu64 " bytes. "
-				  "It must be at least %u bytes.", mda_size, MDA_SIZE_MIN);
+				  "It must be at least %u bytes.", mda_size, mda_size_min);
 			goto bad;
 		}
 

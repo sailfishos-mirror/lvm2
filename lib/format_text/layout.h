@@ -108,12 +108,10 @@ struct mda_context {
 	struct raw_locn rlocn;	/* Store in-between write and commit */
 };
 
-/* FIXME Convert this at runtime */
 #define FMTT_MAGIC "\040\114\126\115\062\040\170\133\065\101\045\162\060\116\052\076"
 #define FMTT_VERSION 1
 #define MDA_HEADER_SIZE 512
 #define LVM2_LABEL "LVM2 001"
-#define MDA_SIZE_MIN (8 * (unsigned) lvm_getpagesize())
 #define MDA_ORIGINAL_ALIGNMENT 512	/* Original alignment used for start of VG metadata content */
 
 int read_metadata_location_summary(const struct format_type *fmt,
