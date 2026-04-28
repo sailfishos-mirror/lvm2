@@ -1452,7 +1452,8 @@ static int _set_dev_node_read_ahead(const char *dev_name,
 
 #else
 
-int get_dev_node_read_ahead(const char *dev_name, uint32_t *read_ahead)
+int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
+			    uint32_t *read_ahead)
 {
 	*read_ahead = 0;
 
