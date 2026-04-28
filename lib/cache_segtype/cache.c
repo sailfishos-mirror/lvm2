@@ -193,8 +193,9 @@ static int _settings_text_export(const struct lv_segment *seg,
 					  seg->policy_settings->key);
 				return 0;
 			}
-			if (seg->policy_settings->child)
-				out_config_node(f, seg->policy_settings);
+			if (seg->policy_settings->child &&
+			    !out_config_node(f, seg->policy_settings))
+				return_0;
 		}
 	}
 
