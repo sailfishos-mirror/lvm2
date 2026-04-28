@@ -22,7 +22,7 @@
 
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
-#define LABEL_SCAN_SECTORS 4L
+#define LABEL_SCAN_SECTORS 4ULL
 #define LABEL_SCAN_SIZE (LABEL_SCAN_SECTORS << SECTOR_SHIFT)
 
 struct labeller;

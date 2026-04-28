@@ -4991,9 +4991,9 @@ int pvcreate_params_from_args(struct cmd_context *cmd, struct pvcreate_params *p
 	pp->yes = arg_count(cmd, yes_ARG);
 	pp->force = (force_t) (int) arg_count(cmd, force_ARG);
 
-	if (arg_int_value(cmd, labelsector_ARG, 0) >= LABEL_SCAN_SECTORS) {
-		log_error("labelsector must be less than %lu.",
-			  (unsigned long) LABEL_SCAN_SECTORS);
+	if (arg_int_value(cmd, labelsector_ARG, 0) >= (int64_t)LABEL_SCAN_SECTORS) {
+		log_error("labelsector must be less than %llu.",
+			  LABEL_SCAN_SECTORS);
 		return 0;
 	}
 

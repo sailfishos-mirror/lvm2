@@ -189,7 +189,7 @@ int label_write(struct device *dev, struct label *label)
 	}
 
 	if ((LABEL_SIZE + (label->sector << SECTOR_SHIFT)) > LABEL_SCAN_SIZE) {
-		log_error("Label sector %" PRIu64 " beyond range (%ld)",
+		log_error("Label sector %" PRIu64 " beyond range (%llu).",
 			  label->sector, LABEL_SCAN_SECTORS);
 		return 0;
 	}
