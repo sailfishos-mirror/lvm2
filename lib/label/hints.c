@@ -1115,8 +1115,10 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	dev_iter_destroy(iter);
 
  out_flush:
-	if (fflush(fp))
-		stack;
+	if (fflush(fp)) {
+		log_sys_debug("fflush", _hints_file);
+		ret = 0;
+	}
 
 	log_debug("Wrote hint file with devs_hash %u count %u", hash, count);
 
