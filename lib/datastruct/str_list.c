@@ -54,7 +54,7 @@ int str_list_add_no_dup_check(struct dm_pool *mem, struct dm_list *sll, const ch
 	return _str_list_add_no_dup_check(mem, sll, str, 0);
 }
 
-int str_list_add_h_no_dup_check(struct dm_pool *mem, struct dm_list *sll, const char *str)
+int str_list_prepend_no_dup_check(struct dm_pool *mem, struct dm_list *sll, const char *str)
 {
 	return _str_list_add_no_dup_check(mem, sll, str, 1);
 }
@@ -149,16 +149,16 @@ int str_list_match_item(const struct dm_list *sll, const char *str)
 
 /*
  * Is at least one item on both lists?
- * If tag_matched is non-NULL, it is set to the tag that matched.
+ * If str_matched is non-NULL, it is set to the first matched string from sll.
  */
-int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **tag_matched)
+int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **str_matched)
 {
 	struct dm_str_list *sl;
 
 	dm_list_iterate_items(sl, sll)
 		if (str_list_match_item(sll2, sl->str)) {
-			if (tag_matched)
-				*tag_matched = sl->str;
+			if (str_matched)
+				*str_matched = sl->str;
 			return 1;
 		}
 

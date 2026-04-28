@@ -710,10 +710,10 @@ int lv_layout_and_role(struct dm_pool *mem, const struct logical_volume *lv,
 
 	/* finally, add either 'public' or 'private' role to the LV */
 	if (public_lv) {
-		if (!str_list_add_h_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_PUBLIC]))
+		if (!str_list_prepend_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_PUBLIC]))
 			goto_bad;
 	} else {
-		if (!str_list_add_h_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_PRIVATE]))
+		if (!str_list_prepend_no_dup_check(mem, *role, _lv_type_names[LV_TYPE_PRIVATE]))
 			goto_bad;
 	}
 
