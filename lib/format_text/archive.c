@@ -180,7 +180,7 @@ static struct dm_list *_scan_archive(struct dm_pool *mem,
 
 static void _remove_expired(const char *dir, const char *vgname,
 			    struct dm_list *archives, uint32_t archives_size,
-			    uint32_t retain_days, uint32_t min_archive)
+			    uint32_t retain_days, uint32_t min_archives)
 {
 	struct archive_file *bf;
 	struct stat sb;
@@ -190,7 +190,7 @@ static void _remove_expired(const char *dir, const char *vgname,
 
 	/* Make sure there are enough archives to even bother looking for
 	 * expired ones... */
-	if (archives_size <= min_archive)
+	if (archives_size <= min_archives)
 		return;
 
 	/* Convert retain_days into the time after which we must retain */
@@ -217,7 +217,7 @@ static void _remove_expired(const char *dir, const char *vgname,
 			log_sys_debug("unlink", path);
 
 		/* Don't delete any more if we've reached the minimum */
-		if (--archives_size <= min_archive)
+		if (--archives_size <= min_archives)
 			break;
 	}
 
@@ -229,7 +229,7 @@ static void _remove_expired(const char *dir, const char *vgname,
 
 int archive_vg(struct volume_group *vg,
 	       const char *dir, const char *desc,
-	       uint32_t retain_days, uint32_t min_archive)
+	       uint32_t retain_days, uint32_t min_archives)
 {
 	int i, fd, rnum, renamed = 0;
 	uint32_t ix = 0;
@@ -296,7 +296,7 @@ int archive_vg(struct volume_group *vg,
 		log_error("Archive rename failed for %s", temp_file);
 
 	_remove_expired(dir, vg->name, archives, dm_list_size(archives) + renamed, retain_days,
-			min_archive);
+			min_archives);
 
 	return 1;
 }

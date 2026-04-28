@@ -31,7 +31,7 @@
  */
 int archive_vg(struct volume_group *vg,
 	       const char *dir,
-	       const char *desc, uint32_t retain_days, uint32_t min_archive);
+	       const char *desc, uint32_t retain_days, uint32_t min_archives);
 
 /*
  * Displays a list of vg backups in a particular archive directory.
