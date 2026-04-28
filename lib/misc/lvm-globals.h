@@ -44,6 +44,7 @@ void init_background_polling(int polling);
 void init_ignore_suspended_devices(int ignore);
 void init_ignore_lvm_mirrors(int scan);
 void init_error_message_produced(int produced);
+int error_message_produced(void);
 void init_is_static(unsigned value);
 void init_udev_checking(int checking);
 void init_pv_min_size(uint64_t sectors);
