@@ -29,24 +29,31 @@ struct lv_segment;
 struct dm_config_node;
 
 int out_size(struct formatter *f, uint64_t size, const char *fmt, ...)
-    __attribute__ ((format(printf, 3, 4)));
+    __attribute__ ((format(printf, 3, 4)))
+    __attribute__ ((warn_unused_result));
 
 int out_hint(struct formatter *f, const char *fmt, ...)
-    __attribute__ ((format(printf, 2, 3)));
+    __attribute__ ((format(printf, 2, 3)))
+    __attribute__ ((warn_unused_result));
 
 int out_text(struct formatter *f, const char *fmt, ...)
-    __attribute__ ((format(printf, 2, 3)));
+    __attribute__ ((format(printf, 2, 3)))
+    __attribute__ ((warn_unused_result));
 
-int out_config_node(struct formatter *f, const struct dm_config_node *cn);
+int out_config_node(struct formatter *f, const struct dm_config_node *cn)
+    __attribute__ ((warn_unused_result));
 
 int out_areas(struct formatter *f, const struct lv_segment *seg,
-	      const char *type);
+	      const char *type)
+    __attribute__ ((warn_unused_result));
 
-int out_text_with_comment(struct formatter *f, const char* comment, const char *fmt, ...)
-    __attribute__ ((format(printf, 3, 4)));
+int out_text_with_comment(struct formatter *f, const char *comment, const char *fmt, ...)
+    __attribute__ ((format(printf, 3, 4)))
+    __attribute__ ((warn_unused_result));
 
 void out_inc_indent(struct formatter *f);
 void out_dec_indent(struct formatter *f);
-int out_newline(struct formatter *f);
+int out_newline(struct formatter *f)
+    __attribute__ ((warn_unused_result));
 
 #endif
