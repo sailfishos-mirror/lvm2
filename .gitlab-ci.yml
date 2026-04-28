@@ -93,7 +93,7 @@ make-all:
 # - spell checker
 # - autoformatter
 
-test1:
+test-single:
   stage: test1
   artifacts:
     paths:
@@ -155,8 +155,10 @@ test1:
 # - do make rpm and publish results as artifacts - we will use packit/COPR for this eventually
 
 # Run on any commits to main (master), rhel8, rhel9 branches
-test-job:
+test-all:
   stage: test
+  needs:
+    - test-single
   parallel:
     matrix:
       # TODO: Replace CONFIGURE with make rpm testing(?)
