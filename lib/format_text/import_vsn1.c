@@ -1303,8 +1303,8 @@ static struct volume_group *_read_vg(struct cmd_context *cmd,
 	return NULL;
 }
 
-static void _read_desc(struct dm_pool *mem,
-		       const struct dm_config_tree *cft, time_t *when, char **desc)
+static int _read_desc(struct dm_pool *mem,
+		      const struct dm_config_tree *cft, time_t *when, char **desc)
 {
 	const char *str;
 	unsigned int u = 0u;
@@ -1312,10 +1312,13 @@ static void _read_desc(struct dm_pool *mem,
 	if (!dm_config_get_str(cft->root, "description", &str))
 		str = "";
 
-	*desc = dm_pool_strdup(mem, str);
+	if (!(*desc = dm_pool_strdup(mem, str)))
+		return_0;
 
 	(void) dm_config_get_uint32(cft->root, "creation_time", &u);
 	*when = u;
+
+	return 1;
 }
 
 /*

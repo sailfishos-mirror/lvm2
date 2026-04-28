@@ -53,8 +53,8 @@ struct text_vg_version_ops {
 					 struct format_instance *fid,
 					 const struct dm_config_tree *cft);
 
-	void (*read_desc) (struct dm_pool * mem, const struct dm_config_tree *cf,
-			   time_t *when, char **desc);
+	int (*read_desc) (struct dm_pool * mem, const struct dm_config_tree *cf,
+			  time_t *when, char **desc);
 
 	int (*read_vgsummary) (const struct format_type *fmt,
 			       const struct dm_config_tree *cft,
