@@ -795,7 +795,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
 			const char *df_hint = _hint_line + keylen;
 			const char *df_config = find_config_tree_str(cmd, devices_devicesfile_CFG, NULL);
 			/* when a devices file is not used, hints should have devices_file:. */
-			if (!cmd->enable_devices_file || !df_hint || !df_config) {
+			if (!cmd->enable_devices_file || !df_config) {
 				if (df_hint[0] != '.') {
 					log_debug("ignore hints with different devices_file: not enabled vs %s", df_hint);
 					*needs_refresh = 1;
