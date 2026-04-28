@@ -22,7 +22,7 @@ struct node {
 };
 
 struct ttree {
-	int klen;
+	unsigned int klen;
 	struct dm_pool *mem;
 	struct node *root;
 };
@@ -38,7 +38,6 @@ static struct node **_lookup_single(struct node **c, unsigned int k)
 			c = &((*c)->r);
 
 		else {
-			c = &((*c)->m);
 			break;
 		}
 	}
@@ -46,14 +45,15 @@ static struct node **_lookup_single(struct node **c, unsigned int k)
 	return c;
 }
 
-void *ttree_lookup(struct ttree *tt, unsigned *key)
+void *ttree_lookup(const struct ttree *tt, const unsigned int *key)
 {
-	struct node **c = &tt->root;
-	int count = tt->klen;
+	struct node **c = (struct node **)&tt->root;
+	unsigned int count = tt->klen;
 
 	while (*c && count) {
 		c = _lookup_single(c, *key++);
-		count--;
+		if (--count && *c)
+			c = &((*c)->m);
 	}
 
 	return *c ? (*c)->data : NULL;
@@ -69,29 +69,33 @@ static struct node *_tree_node(struct dm_pool *mem, unsigned int k)
 	return n;
 }
 
-int ttree_insert(struct ttree *tt, unsigned int *key, void *data)
+int ttree_insert(struct ttree *tt, const unsigned int *key, void *data)
 {
 	struct node **c = &tt->root;
-	int count = tt->klen;
+	unsigned int count = tt->klen;
 	unsigned int k;
 
 	do {
 		k = *key++;
 		c = _lookup_single(c, k);
 		count--;
+		if (*c && count)
+			c = &((*c)->m);
 
 	} while (*c && count);
 
 	if (!*c) {
-		do {
+		for (;;) {
 			if (!(*c = _tree_node(tt->mem, k)))
 				return_0;
 
-			if (count) {
-				k = *key++;
-				c = &((*c)->m);
-			}
-		} while (count--);
+			if (!count)
+				break;
+
+			count--;
+			k = *key++;
+			c = &((*c)->m);
+		}
 	}
 	(*c)->data = data;
 
@@ -101,6 +105,9 @@ int ttree_insert(struct ttree *tt, unsigned int *key, void *data)
 struct ttree *ttree_create(struct dm_pool *mem, unsigned int klen)
 {
 	struct ttree *tt;
+
+	if (!klen)
+		return_NULL;
 
 	if (!(tt = dm_pool_zalloc(mem, sizeof(*tt))))
 		return_NULL;
