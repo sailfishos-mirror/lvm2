@@ -376,7 +376,7 @@ enum {
  * flag indicates that the device is scheduled to be removed when it
  * gets closed.
  */
-#define DM_DEFERRED_REMOVE		(1 << 17) /* In/Out */
+#define DM_DEFERRED_REMOVE_FLAG		(1 << 17) /* In/Out */
 
 /*
  * If set, the device is suspended internally.
