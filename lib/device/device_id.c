@@ -455,7 +455,7 @@ static void _remove_leading_underscores(char *buf, size_t bufsize)
 	free(tmpbuf);
 }
 
-static void _remove_trailing_underscores(char *buf, int bufsize)
+static void _remove_trailing_underscores(char *buf)
 {
 	char *end;
 
@@ -957,7 +957,7 @@ char *device_id_system_read(struct cmd_context *cmd, struct device *dev, uint16_
 	    (idtype == DEV_ID_TYPE_SYS_SERIAL)) {
 		memcpy(sysbuf2, sysbuf, sizeof(sysbuf2));
 		_remove_leading_underscores(sysbuf2, sizeof(sysbuf2));
-		_remove_trailing_underscores(sysbuf2, sizeof(sysbuf2));
+		_remove_trailing_underscores(sysbuf2);
 		if (idtype == DEV_ID_TYPE_SYS_WWID && !strncmp(sysbuf2, "t10", 3) && strstr(sysbuf2, "__"))
 			_reduce_repeating_underscores(sysbuf2, sizeof(sysbuf2));
 		if (memcmp(sysbuf, sysbuf2, sizeof(sysbuf)))
@@ -2739,7 +2739,7 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 	if (((du->idtype == DEV_ID_TYPE_SYS_WWID) || (du->idtype == DEV_ID_TYPE_SYS_SERIAL)) &&
 	    strchr(du_idname, '_')) {
 		_remove_leading_underscores(du_idname, sizeof(du_idname));
-		_remove_trailing_underscores(du_idname, sizeof(du_idname));
+		_remove_trailing_underscores(du_idname);
 		if (du->idtype == DEV_ID_TYPE_SYS_WWID && !strncmp(du_idname, "t10", 3) && strstr(du_idname, "__"))
 			_reduce_repeating_underscores(du_idname, sizeof(du_idname));
 	}
