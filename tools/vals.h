@@ -128,7 +128,22 @@ val(metadatatype_VAL, metadatatype_arg, "MetadataType", "lvm2")
 val(units_VAL, string_arg, "Units", "[Number]r|R|h|H|b|B|s|S|k|K|m|M|g|G|t|T|p|P|e|E")
 val(segtype_VAL, segtype_arg, "SegType", "linear|striped|snapshot|raid|mirror|thin|thin-pool|vdo|vdo-pool|cache|cache-pool|writecache")
 val(alloc_VAL, alloc_arg, "Alloc", "contiguous|cling|cling_by_tags|normal|anywhere|inherit")
-val(locktype_VAL, locktype_arg, "LockType", "sanlock|dlm|none")
+#ifdef LOCKDSANLOCK_SUPPORT
+#define LOCKTYPE_SANLOCK "sanlock|"
+#else
+#define LOCKTYPE_SANLOCK ""
+#endif
+#ifdef LOCKDDLM_SUPPORT
+#define LOCKTYPE_DLM "dlm|"
+#else
+#define LOCKTYPE_DLM ""
+#endif
+#ifdef LOCKDIDM_SUPPORT
+#define LOCKTYPE_IDM "idm|"
+#else
+#define LOCKTYPE_IDM ""
+#endif
+val(locktype_VAL, locktype_arg, "LockType", LOCKTYPE_SANLOCK LOCKTYPE_DLM LOCKTYPE_IDM "none")
 val(readahead_VAL, readahead_arg, "Readahead", "auto|none|Number")
 val(vgmetadatacopies_VAL, vgmetadatacopies_arg, "MetadataCopiesVG", "all|unmanaged|Number")
 val(pvmetadatacopies_VAL, pvmetadatacopies_arg, "MetadataCopiesPV", "0|1|2")
