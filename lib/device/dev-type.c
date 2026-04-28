@@ -508,7 +508,7 @@ const char *dev_subsystem_name(struct dev_types *dt, struct device *dev)
 	return "";
 }
 
-int major_max_partitions(struct dev_types *dt, int major)
+int major_max_partitions(struct dev_types *dt, unsigned major)
 {
 	if (major >= NUMBER_OF_MAJORS)
 		return 0;
@@ -516,7 +516,7 @@ int major_max_partitions(struct dev_types *dt, int major)
 	return dt->dev_type_array[major].max_partitions;
 }
 
-int major_is_scsi_device(struct dev_types *dt, int major)
+int major_is_scsi_device(struct dev_types *dt, unsigned major)
 {
 	if (major >= NUMBER_OF_MAJORS)
 		return 0;
