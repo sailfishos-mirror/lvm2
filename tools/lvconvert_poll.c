@@ -96,7 +96,7 @@ int thin_merge_finish(struct cmd_context *cmd,
 {
 	if (!swap_lv_identifiers(cmd, merge_lv, lv)) {
 		log_error("Failed to swap %s with merging %s.",
-			  display_lvname(lv), display_lvname(merge_lv));
+			  display_lvname(merge_lv), display_lvname(lv));
 		return 0;
 	}
 
