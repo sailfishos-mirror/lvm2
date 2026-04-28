@@ -3354,7 +3354,7 @@ int lvm_return_code(int ret)
 	return (ret == ECMD_PROCESSED ? 0 : ret);
 }
 
-int lvm_split(char *str, int *argc, char **argv, int max)
+int lvm_split(char *str, int *argc, char **argv, unsigned max)
 {
 	char *b = str, *e;
 	char quote = 0;
