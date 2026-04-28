@@ -79,9 +79,7 @@ static int _id_valid(const struct id *id, int e)
 	_build_inverse();
 
 	for (i = 0; i < ID_LEN; i++)
-		/* Cast to unsigned char: int8_t uuid with corrupt byte >= 0x80
-		 * would be negative and index before _inverse_c[] array. */
-		if (!_inverse_c[(unsigned char)id->uuid[i]]) {
+		if (!_inverse_c[id->uuid[i]]) {
 			if (e)
 				log_error("UUID contains invalid character '%c'", id->uuid[i]);
 			return 0;

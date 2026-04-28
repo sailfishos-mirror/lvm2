@@ -24,7 +24,7 @@
 struct dm_pool;
 
 struct id {
-	int8_t uuid[ID_LEN];
+	uint8_t uuid[ID_LEN];
 };
 
 /*
