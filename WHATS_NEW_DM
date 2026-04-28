@@ -1,6 +1,8 @@
 Version 1.02.214 - 
 ===================
   Detect external resume during suspend tree walk.
+  Add 'dmvdostats' alias for 'dmsetup vdostats'.
+  Add a 'vdostats' command to dmsetup to display VDO stats.
   Fix sorting for DM_REPORT_FIELD_TYPE_{PERCENT,STRING_LIST} reporting fields.
   Fix libdm rm_dev_node to work correctly for REMOVE-by-major:minor tasks.
   Guard libdm set_dev_node_read_ahead against NULL device name on resume.
