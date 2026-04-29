@@ -307,6 +307,8 @@ struct dev_types *create_dev_types(const char *proc_dir,
 	}
 
 	while (fgets(line, sizeof(line), pd) != NULL) {
+		/* Ensure null-termination when fgets() fills buffer completely. */
+		line[sizeof(line) - 1] = 0;
 		i = 0;
 		while (line[i] == ' ')
 			i++;
@@ -336,10 +338,10 @@ struct dev_types *create_dev_types(const char *proc_dir,
 			continue;
 
 		/* Find the start of the device major name */
-		while (line[i] != ' ' && line[i] != '\0')
-			i++;
-		while (line[i] == ' ')
-			i++;
+		for (; line[i] && line[i] != ' '; i++)
+			; /* skip non-space */
+		for (; line[i] == ' '; i++)
+			; /* skip space */
 
 		/* Major is SCSI device */
 		if (!strncmp("sd", line + i, 2) && isspace(*(line + i + 2)))
@@ -387,6 +389,7 @@ struct dev_types *create_dev_types(const char *proc_dir,
 			dev_len = strlen(dev_known_types[j].name);
 			if (dev_len <= strlen(line + i) &&
 			    !strncmp(dev_known_types[j].name, line + i, dev_len) &&
+			    (!line[i + dev_len] || isspace(line[i + dev_len])) &&
 			    (line_maj < NUMBER_OF_MAJORS)) {
 				dt->dev_type_array[line_maj].max_partitions =
 					dev_known_types[j].max_partitions;
