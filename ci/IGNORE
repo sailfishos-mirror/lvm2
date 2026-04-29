@@ -1,0 +1,27 @@
+# Comments are ignored.
+# Each of lines here SHOULD have a BZ or JIRA attached.
+
+# TODO: Retest these if they are stable in the branch!
+# TODO: We want to add possibility to check result file for a pattern.
+# - TEST PATTERN - ignore result only if the PATTERN is found in TEST's output.
+api/dbus
+shell/dmeventd-restart.sh
+shell/integrity
+shell/lvconvert-cache-abort.sh
+shell/lvconvert-mirror.sh
+shell/lvconvert-raid-reshape-stripes-load-fail.sh
+shell/lvconvert-repair-policy.sh
+shell/lvconvert-repair-thin.sh
+shell/lvconvert-thin.sh
+shell/lvcreate-cache.sh
+shell/lvcreate-thin-big.sh
+shell/lvresize-fs-crypt.sh
+shell/nomda-restoremissing.sh
+shell/open-file-limit.sh
+shell/system_id.sh
+shell/thin-foreign-dmeventd.sh
+shell/writecache-blocksize
+
+# mkfs.xfs metadata is by default taking too much space on small dev, causing tese to fail:
+shell/lvextend-caches-on-thindata.sh
+shell/lvremove-thindata-caches.sh
