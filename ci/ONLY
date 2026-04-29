@@ -1,0 +1,5 @@
+# In case for testing only a part of tests is relevant, it is possible to
+# use a patter to filter tests to run.
+#
+# NOTE: Make sure this is always enabled in main!
+.
