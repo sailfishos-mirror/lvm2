@@ -1,0 +1,25 @@
+# Comments are ignored.
+# Each of lines here SHOULD have a BZ or JIRA attached.
+
+# This is unstable test, it never worked properly in upstrem
+shell/lvconvert-raid-reshape-stripes-load-fail.sh
+
+# TODO: Retest all if they work in gating environment!
+# TODO: break dbus tests into particular test cases. We want logs for each
+# failed to be separately available!
+api/dbustest.sh
+#shell/001-basic.sh
+shell/fsadm-crypt.sh
+shell/inconsistent-metadata.sh
+shell/lvconvert-cache-abort.sh
+shell/lvconvert-raid-reshape.sh
+shell/lvconvert-raid-takeover.sh
+shell/lvm-on-md.sh
+shell/read-ahead.sh
+shell/thin-flags.sh
+shell/vgchange-many.sh
+
+# Testing skipping:
+#shell/.*
+#shell/vg
+#/vg
