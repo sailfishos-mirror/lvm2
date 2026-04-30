@@ -161,6 +161,9 @@ static void remove_lockfile(void)
 		LOG_ERROR("Unable to remove \"" CMIRRORD_PIDFILE "\" %s", strerror(errno));
 }
 
+/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+GCC_SUPPRESS_FD_WARNINGS
+
 /*
  * daemonize
  *
@@ -246,6 +249,8 @@ static void daemonize(void)
 	LOG_OPEN("cmirrord", LOG_PID, LOG_DAEMON);
 	/* coverity[leaked_handle] devnull is stdin/stdout/stderr */
 }
+
+GCC_UNSUPPRESS_WARNINGS
 
 /*
  * init_all
