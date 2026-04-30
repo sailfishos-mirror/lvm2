@@ -500,6 +500,14 @@ bad:
 #endif
 }
 
+static int _get_control_fd(void)
+{
+	if (_control_fd == -1)
+		_open_control();
+
+	return _control_fd;
+}
+
 static void _dm_zfree_string(char *string)
 {
 	if (string) {
@@ -2573,7 +2581,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt,
 	_dm_zfree_dmi(dmt->dmi.v4);
 	dmt->dmi.v4 = dmi;
 
-	r = _dm_ioctl_exec_retry(_control_fd, dmt);
+	r = _dm_ioctl_exec_retry(_get_control_fd(), dmt);
 
 	if (dmt->record_timestamp)
 		if (!dm_timestamp_get(_dm_ioctl_timestamp))
