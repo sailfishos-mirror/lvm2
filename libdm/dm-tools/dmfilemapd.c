@@ -627,6 +627,9 @@ check_unlinked:
 	return 1;
 }
 
+/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+GCC_SUPPRESS_FD_WARNINGS
+
 static int _daemonize(struct filemap_monitor *fm)
 {
 	pid_t pid = 0;
@@ -679,6 +682,8 @@ static int _daemonize(struct filemap_monitor *fm)
 	/* coverity[leaked_handle] fd is stdin/stdout/stderr */
 	return 1;
 }
+
+GCC_UNSUPPRESS_WARNINGS
 
 static int _update_regions(struct dm_stats *dms, struct filemap_monitor *fm)
 {

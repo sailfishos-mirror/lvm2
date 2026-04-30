@@ -416,9 +416,14 @@ static void *fork_and_poll(void *args)
 		/* child */
 		/* !!! Do not touch any posix thread primitives !!! */
 
+		/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+		GCC_SUPPRESS_FD_WARNINGS
+
 		if ((dup2(outfd, STDOUT_FILENO ) != STDOUT_FILENO) ||
 		    (dup2(errfd, STDERR_FILENO ) != STDERR_FILENO))
 			_exit(LVMPD_RET_DUP_FAILED);
+
+		GCC_UNSUPPRESS_WARNINGS
 
 		execve(*(pdlv->cmdargv), (char *const *)pdlv->cmdargv, (char *const *)pdlv->cmdenvp);
 

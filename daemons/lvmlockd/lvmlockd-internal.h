@@ -12,6 +12,7 @@
 #define LVM_LVMLOCKD_INTERNAL_H
 
 #include "base/memory/container_of.h"
+#include "lib/misc/util.h"
 
 #include <stdint.h>
 #include <pthread.h>
@@ -298,6 +299,9 @@ static inline void INIT_LIST_HEAD(struct list_head *list)
 	list->prev = list;
 }
 
+/* Suppress false positive buffer overflow warnings from gcc -fanalyzer. */
+GCC_SUPPRESS_BUFFER_WARNING
+
 static inline void __list_add(struct list_head *new,
                               struct list_head *prev,
                               struct list_head *next)
@@ -318,6 +322,8 @@ static inline void list_add(struct list_head *new, struct list_head *head)
 {
 	__list_add(new, head, head->next);
 }
+
+GCC_UNSUPPRESS_WARNINGS
 
 static inline void list_add_tail(struct list_head *new, struct list_head *head)
 {

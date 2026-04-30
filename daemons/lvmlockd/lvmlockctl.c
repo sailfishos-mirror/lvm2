@@ -852,6 +852,9 @@ static int do_stop_lockspaces(void)
 	return rv;
 }
 
+/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+GCC_SUPPRESS_FD_WARNINGS
+
 static int _reopen_fd_to_null(int fd)
 {
 	int null_fd;
@@ -881,6 +884,8 @@ out:
 
 	return r;
 }
+
+GCC_UNSUPPRESS_WARNINGS
 
 #define MAX_AV_COUNT 32
 #define ONE_ARG_LEN 1024
@@ -969,6 +974,10 @@ static void _run_command_pipe(const char *cmd_str, pid_t *pid_out, FILE **fp_out
 
 	if (pid == 0) {
 		/* Child -> writer, convert pipe[0] to STDOUT */
+
+		/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+		GCC_SUPPRESS_FD_WARNINGS
+
 		if (!_reopen_fd_to_null(STDIN_FILENO))
 			log_error("reopen STDIN error");
 		else if (close(pipefd[0 /*read*/]))
@@ -983,6 +992,9 @@ static void _run_command_pipe(const char *cmd_str, pid_t *pid_out, FILE **fp_out
 			execvp(av[0], av);
 			log_error("execvp error %d", errno);
 		}
+
+		GCC_UNSUPPRESS_WARNINGS
+
 		_exit(errno);
 	}
 

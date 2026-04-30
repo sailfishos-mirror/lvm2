@@ -112,6 +112,12 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
 	return 1;
 }
 
+/*
+ * Static analyzer can't track FD aliasing through dup2().
+ * When null_fd == fd, the FD is not leaked - it's still accessible via fd.
+ * The fd parameter comes from controlled call sites (STDIN/STDOUT/STDERR).
+ */
+GCC_SUPPRESS_FD_WARNINGS
 static int _reopen_fd_to_null(int fd)
 {
 	int null_fd;
@@ -141,6 +147,7 @@ out:
 
 	return r;
 }
+GCC_UNSUPPRESS_WARNINGS
 
 FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 		int sync_needed, struct pipe_data *pdata)
@@ -168,6 +175,8 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 		return NULL;
 	}
 
+	/* Static analyzer doesn't understand STDOUT_FILENO is valid after close+dup2 */
+	GCC_SUPPRESS_FD_WARNINGS
 	if (pdata->pid == 0) {
 		/* Child -> writer, convert pipe[0] to STDOUT */
 		if (!_reopen_fd_to_null(STDIN_FILENO))
@@ -186,6 +195,7 @@ FILE *pipe_open(struct cmd_context *cmd, const char *const argv[],
 		}
 		_exit(errno);
 	}
+	GCC_UNSUPPRESS_WARNINGS
 
 	/* Parent -> reader */
 	if (close(pipefd[1 /*write*/])) {

@@ -17,6 +17,32 @@
 
 #include "libdm/libdevmapper.h"
 
+/*
+ * GCC -fanalyzer has limitations in certain code patterns.
+ */
+#if defined(__GNUC__) && !defined(__clang__)
+# define GCC_SUPPRESS_FD_WARNINGS \
+	_Pragma("GCC diagnostic push") \
+	_Pragma("GCC diagnostic ignored \"-Wanalyzer-fd-leak\"") \
+	_Pragma("GCC diagnostic ignored \"-Wanalyzer-fd-use-without-check\"")
+
+# define GCC_SUPPRESS_LEAK_WARNING \
+	_Pragma("GCC diagnostic push") \
+	_Pragma("GCC diagnostic ignored \"-Wanalyzer-malloc-leak\"")
+
+# define GCC_SUPPRESS_BUFFER_WARNING \
+	_Pragma("GCC diagnostic push") \
+	_Pragma("GCC diagnostic ignored \"-Wanalyzer-out-of-bounds\"")
+
+# define GCC_UNSUPPRESS_WARNINGS \
+	_Pragma("GCC diagnostic pop")
+#else
+# define GCC_SUPPRESS_FD_WARNINGS
+# define GCC_SUPPRESS_LEAK_WARNING
+# define GCC_SUPPRESS_BUFFER_WARNING
+# define GCC_UNSUPPRESS_WARNINGS
+#endif
+
 #define min(a, b) ({ __typeof__(a) _a = (a); \
 		     __typeof__(b) _b = (b); \
 		     (void) (&_a == &_b); \
