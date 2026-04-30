@@ -1805,6 +1805,11 @@ static int _lvmcache_update_vgname(struct cmd_context *cmd,
 	if (!vgname || (info && info->vginfo && !strcmp(info->vginfo->vgname, vgname)))
 		return 1;
 
+	if (!vgid) {
+		log_error(INTERNAL_ERROR "vgid is NULL in _lvmcache_update_vgname.");
+		return 0;
+	}
+
 	if (!id_write_format((const struct id *)vgid, vgid_dashed, sizeof(vgid_dashed)))
 		stack;
 
@@ -1989,9 +1994,10 @@ set_lock_type:
 		goto set_system_id;
 
 	free(info->vginfo->lock_type);
+	info->vginfo->lock_type = NULL; /* for gcc -fanalyzer */
 
 	if (!(info->vginfo->lock_type = strdup(lock_type))) {
-		log_error("cache lock_type alloc failed for %s", lock_type);
+		log_error("cache lock_type alloc failed for %s.", lock_type);
 		return 0;
 	}
 
@@ -2007,9 +2013,10 @@ set_system_id:
 		goto out;
 
 	free(info->vginfo->system_id);
+	info->vginfo->system_id = NULL; /* for gcc -fanalyzer */
 
 	if (!(info->vginfo->system_id = strdup(system_id))) {
-		log_error("cache system_id alloc failed for %s", system_id);
+		log_error("cache system_id alloc failed for %s.", system_id);
 		return 0;
 	}
 
