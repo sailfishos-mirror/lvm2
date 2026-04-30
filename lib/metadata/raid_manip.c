@@ -768,6 +768,7 @@ enum raid0_raid10_conversion { reorder_to_raid10_near, reorder_from_raid10_near 
 static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_raid10_conversion conv)
 {
 	unsigned dc, idx1, idx1_sav, idx2, s, ss, str, xchg;
+	unsigned iter;
 	uint32_t data_copies = seg->data_copies;
 	uint32_t *idx, stripes = seg->area_count;
 
@@ -879,8 +880,8 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 		return_0;
 	}
 
-	/* Sort areas */
-	do {
+	/* Sort areas - terminates when all idx[s] == s or after area_count iterations */
+	for (iter = 0; iter < seg->area_count; iter++) {
 		xchg = seg->area_count;
 
 		for (s = 0; s < seg->area_count ; s++)
@@ -894,7 +895,10 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 				idx[idx[s]] = idx[s];
 				idx[s] = ss;
 			}
-	} while (xchg);
+
+		if (!xchg)
+			break;
+	}
 
 	return 1;
 }
