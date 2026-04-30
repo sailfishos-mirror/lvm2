@@ -128,6 +128,7 @@ myecho() {
 	echo "$@" >> "$log"
 }
 
+# shellcheck disable=SC2294 # eval is intentional to log and execute commands
 log() {
 	echo "$@" >> "$log"
 	eval "$@"

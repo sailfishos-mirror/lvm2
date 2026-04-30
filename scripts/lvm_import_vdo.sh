@@ -204,6 +204,7 @@ snapshot_merge_() {
 	local status
 	local initial_status
 
+	# shellcheck disable=SC2207 # intentional split of status fields
 	initial_status=( $("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME") )
 	"$DMSETUP" reload "$VDO_DM_SNAPSHOT_NAME" --table "$(snapshot_target_line_ "$1" "$VDO_SNAPSHOT_LOOP" -merge)"
 	"$DMSETUP" suspend "$VDO_DM_SNAPSHOT_NAME" || {
@@ -222,6 +223,7 @@ snapshot_merge_() {
 	# Should be nearly instantaneous.
 	# FIXME: Recovery when something prevents merging is hard
 	for i in {1..20}; do
+		# shellcheck disable=SC2207 # intentional split of status fields
 		status=( $("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME") )
 		# Check if merging is finished
 		[ "${status[3]%/*}" = "${status[4]}" ] && break
@@ -461,9 +463,11 @@ convert_non_lv_() {
 
 	# Parse result from VDO preparation/conversion tool
 	# New version of the tool provides output with alignment and offset
+	# shellcheck disable=SC2034 # parsed for possible future use
 	local vdo_length=0
 	local vdo_aligned=0
 	local vdo_offset=0
+	# shellcheck disable=SC2034 # parsed for possible future use
 	local vdo_non_converted=0
 	while IFS=  read -r line; do
 		# trim leading spaces
