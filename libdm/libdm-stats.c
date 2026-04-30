@@ -2284,7 +2284,7 @@ static struct dm_task *_stats_print_region(struct dm_stats *dms,
 				    unsigned num_lines, unsigned clear)
 {
 	/* @stats_print[_clear] <region_id> [<start_line> <num_lines>] */
-	char msg[STATS_MSG_BUF_LEN], lines[RANGE_LEN];
+	char msg[STATS_MSG_BUF_LEN], lines[RANGE_LEN] = "";
 	struct dm_task *dmt = NULL;
 	const char *err = NULL;
 

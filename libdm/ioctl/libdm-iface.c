@@ -825,7 +825,7 @@ struct dm_versions *dm_task_get_versions(struct dm_task *dmt)
 int dm_task_get_device_list(struct dm_task *dmt, struct dm_list **devs_list,
 			    unsigned *devs_features)
 {
-	struct dm_names *names, *names1;
+	struct dm_names *names, *names1 = NULL;
 	struct dm_active_device *dm_dev, *dm_new_dev;
 	struct dm_list *devs;
 	unsigned next = 0;
