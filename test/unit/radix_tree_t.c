@@ -1,14 +1,16 @@
-// Copyright (C) 2018-2025 Red Hat, Inc. All rights reserved.
-//
-// This file is part of LVM2.
-//
-// This copyrighted material is made available to anyone wishing to use,
-// modify, copy, or redistribute it subject to the terms and conditions
-// of the GNU Lesser General Public License v.2.1.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program; if not, write to the Free Software Foundation,
-// Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+/*
+ * Copyright (C) 2018-2025 Red Hat, Inc. All rights reserved.
+ *
+ * This file is part of LVM2.
+ *
+ * This copyrighted material is made available to anyone wishing to use,
+ * modify, copy, or redistribute it subject to the terms and conditions
+ * of the GNU Lesser General Public License v.2.1.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
 
 #include "units.h"
 #include "lib/datastruct/radix-tree.h"
@@ -17,7 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 static void *rt_init(void)
 {
@@ -166,11 +168,13 @@ static void test_prefix_keys_reversed(void *fixture)
 	T_ASSERT_EQUAL(v.n, 2345);
 }
 
-static void _gen_key(uint8_t *b, uint8_t *e)
+static void _gen_key(uint8_t *b, size_t len)
 {
-	for (; b != e; b++)
+	size_t i;
+
+	for (i = 0; i < len; i++)
 		/* coverity[dont_call] don't care */
-		*b = rand() % 256;
+		b[i] = rand() % 256;
 }
 
 static void test_sparse_keys(void *fixture)
@@ -181,11 +185,11 @@ static void test_sparse_keys(void *fixture)
 	uint8_t k[32];
 
 	for (n = 0; n < 100000; n++) {
-		_gen_key(k, k + sizeof(k));
+		_gen_key(k, sizeof(k));
 		v.n = 1234;
 		T_ASSERT(radix_tree_insert(rt, k, 32, v));
-		// FIXME: remove
-		//T_ASSERT(radix_tree_is_well_formed(rt));
+		/* FIXME: remove */
+		/* T_ASSERT(radix_tree_is_well_formed(rt)); */
 	}
 	T_ASSERT(radix_tree_is_well_formed(rt));
 }
@@ -196,7 +200,7 @@ static void test_remove_one(void *fixture)
 	uint8_t k[4];
 	union radix_value v;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 	v.n = 1234;
 	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	T_ASSERT(radix_tree_is_well_formed(rt));
@@ -207,70 +211,70 @@ static void test_remove_one(void *fixture)
 
 static void test_remove_one_byte_keys(void *fixture)
 {
-        struct radix_tree *rt = fixture;
-        unsigned i, j;
+	struct radix_tree *rt = fixture;
+	unsigned i, j;
 	uint8_t k[1];
 	union radix_value v;
 
 	for (i = 0; i < 256; i++) {
-        	k[0] = i;
-        	v.n = i + 1000;
+		k[0] = i;
+		v.n = i + 1000;
 		T_ASSERT(radix_tree_insert(rt, k, 1, v));
 	}
 
 	T_ASSERT(radix_tree_is_well_formed(rt));
 	for (i = 0; i < 256; i++) {
-        	k[0] = i;
+		k[0] = i;
 		T_ASSERT(radix_tree_remove(rt, k, 1));
 		T_ASSERT(radix_tree_is_well_formed(rt));
 
 		for (j = i + 1; j < 256; j++) {
-        		k[0] = j;
+			k[0] = j;
 			T_ASSERT(radix_tree_lookup(rt, k, 1, &v));
 			if (v.n != j + 1000)
 				test_fail("v.n (%u) != j + 1000 (%u)\n",
-                                          (unsigned) v.n,
-                                          (unsigned) j + 1000);
+					  (unsigned) v.n,
+					  (unsigned) j + 1000);
 		}
 	}
 
 	for (i = 0; i < 256; i++) {
-        	k[0] = i;
+		k[0] = i;
 		T_ASSERT(!radix_tree_lookup(rt, k, 1, &v));
 	}
 }
 
 static void test_remove_one_byte_keys_reversed(void *fixture)
 {
-        struct radix_tree *rt = fixture;
-        unsigned i, j;
+	struct radix_tree *rt = fixture;
+	unsigned i, j;
 	uint8_t k[1];
 	union radix_value v;
 
 	for (i = 0; i < 256; i++) {
-        	k[0] = i;
-        	v.n = i + 1000;
+		k[0] = i;
+		v.n = i + 1000;
 		T_ASSERT(radix_tree_insert(rt, k, 1, v));
 	}
 
 	T_ASSERT(radix_tree_is_well_formed(rt));
 	for (i = 256; i; i--) {
-        	k[0] = i - 1;
+		k[0] = i - 1;
 		T_ASSERT(radix_tree_remove(rt, k, 1));
 		T_ASSERT(radix_tree_is_well_formed(rt));
 
 		for (j = 0; j < i - 1; j++) {
-        		k[0] = j;
+			k[0] = j;
 			T_ASSERT(radix_tree_lookup(rt, k, 1, &v));
 			if (v.n != j + 1000)
 				test_fail("v.n (%u) != j + 1000 (%u)\n",
-                                          (unsigned) v.n,
-                                          (unsigned) j + 1000);
+					  (unsigned) v.n,
+					  (unsigned) j + 1000);
 		}
 	}
 
 	for (i = 0; i < 256; i++) {
-        	k[0] = i;
+		k[0] = i;
 		T_ASSERT(!radix_tree_lookup(rt, k, 1, &v));
 	}
 }
@@ -281,7 +285,7 @@ static void test_remove_prefix_keys(void *fixture)
 	uint8_t k[32];
 	union radix_value v;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 
 	for (i = 0; i < 32; i++) {
 		v.n = i;
@@ -290,16 +294,16 @@ static void test_remove_prefix_keys(void *fixture)
 
 	T_ASSERT(radix_tree_is_well_formed(rt));
 	for (i = 0; i < 32; i++) {
-        	T_ASSERT(radix_tree_remove(rt, k, i));
+		T_ASSERT(radix_tree_remove(rt, k, i));
 		T_ASSERT(radix_tree_is_well_formed(rt));
-        	for (j = i + 1; j < 32; j++) {
-                	T_ASSERT(radix_tree_lookup(rt, k, j, &v));
-                	T_ASSERT_EQUAL(v.n, j);
-        	}
+		for (j = i + 1; j < 32; j++) {
+			T_ASSERT(radix_tree_lookup(rt, k, j, &v));
+			T_ASSERT_EQUAL(v.n, j);
+		}
 	}
 
-        for (i = 0; i < 32; i++)
-                T_ASSERT(!radix_tree_lookup(rt, k, i, &v));
+	for (i = 0; i < 32; i++)
+		T_ASSERT(!radix_tree_lookup(rt, k, i, &v));
 }
 
 static void test_remove_prefix_keys_reversed(void *fixture)
@@ -309,7 +313,7 @@ static void test_remove_prefix_keys_reversed(void *fixture)
 	uint8_t k[32];
 	union radix_value v;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 
 	for (i = 0; i < 32; i++) {
 		v.n = i;
@@ -318,16 +322,16 @@ static void test_remove_prefix_keys_reversed(void *fixture)
 
 	T_ASSERT(radix_tree_is_well_formed(rt));
 	for (i = 0; i < 32; i++) {
-        	T_ASSERT(radix_tree_remove(rt, k, (31 - i)));
+		T_ASSERT(radix_tree_remove(rt, k, (31 - i)));
 		T_ASSERT(radix_tree_is_well_formed(rt));
-        	for (j = 0; j < 31 - i; j++) {
-                	T_ASSERT(radix_tree_lookup(rt, k, j, &v));
-                	T_ASSERT_EQUAL(v.n, j);
-        	}
+		for (j = 0; j < 31 - i; j++) {
+			T_ASSERT(radix_tree_lookup(rt, k, j, &v));
+			T_ASSERT_EQUAL(v.n, j);
+		}
 	}
 
-        for (i = 0; i < 32; i++)
-                T_ASSERT(!radix_tree_lookup(rt, k, i, &v));
+	for (i = 0; i < 32; i++)
+		T_ASSERT(!radix_tree_lookup(rt, k, i, &v));
 }
 
 static void test_remove_prefix(void *fixture)
@@ -337,18 +341,18 @@ static void test_remove_prefix(void *fixture)
 	uint8_t k[4];
 	union radix_value v;
 
-	// populate some random 32bit keys
+	/* populate some random 32bit keys */
 	for (i = 0; i < 100000; i++) {
-        	_gen_key(k, k + sizeof(k));
-        	if (k[0] == 21)
-                	count++;
+		_gen_key(k, sizeof(k));
+		if (k[0] == 21)
+			count++;
 		v.n = i;
 		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	}
 
 	T_ASSERT(radix_tree_is_well_formed(rt));
 
-	// remove keys in a sub range
+	/* remove keys in a sub range */
 	k[0] = 21;
 	T_ASSERT_EQUAL(radix_tree_remove_prefix(rt, k, 1), count);
 	T_ASSERT(radix_tree_is_well_formed(rt));
@@ -360,7 +364,7 @@ static void test_remove_prefix_single(void *fixture)
 	uint8_t k[4];
 	union radix_value v;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 	v.n = 1234;
 	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	T_ASSERT(radix_tree_is_well_formed(rt));
@@ -375,11 +379,11 @@ static void test_size(void *fixture)
 	uint8_t k[2];
 	union radix_value v;
 
-	// populate some random 16bit keys
+	/* populate some random 16bit keys */
 	for (i = 0; i < 10000; i++) {
-        	_gen_key(k, k + sizeof(k));
-        	if (radix_tree_lookup(rt, k, sizeof(k), &v))
-                	dup_count++;
+		_gen_key(k, sizeof(k));
+		if (radix_tree_lookup(rt, k, sizeof(k), &v))
+			dup_count++;
 		v.n = i;
 		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	}
@@ -394,7 +398,7 @@ struct visitor {
 };
 
 static bool _visit(struct radix_tree_iterator *it,
-                   const void *key, size_t keylen, union radix_value v)
+		   const void *key, size_t keylen, union radix_value v)
 {
 	struct visitor *vt = container_of(it, struct visitor, it);
 	vt->count++;
@@ -409,9 +413,9 @@ static void test_iterate_all(void *fixture)
 	union radix_value v;
 	struct visitor vt;
 
-	// populate some random 32bit keys
+	/* populate some random 32bit keys */
 	for (i = 0; i < 100000; i++) {
-        	_gen_key(k, k + sizeof(k));
+		_gen_key(k, sizeof(k));
 		v.n = i;
 		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	}
@@ -431,11 +435,11 @@ static void test_iterate_subset(void *fixture)
 	union radix_value v;
 	struct visitor vt;
 
-	// populate some random 32bit keys
+	/* populate some random 32bit keys */
 	for (i = 0; i < 100000; i++) {
-        	_gen_key(k, k + sizeof(k));
-        	if (k[0] == 21 && k[1] == 12)
-                	subset_count++;
+		_gen_key(k, sizeof(k));
+		if (k[0] == 21 && k[1] == 12)
+			subset_count++;
 		v.n = i;
 		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	}
@@ -456,7 +460,7 @@ static void test_iterate_single(void *fixture)
 	union radix_value v;
 	struct visitor vt;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 	v.n = 1234;
 	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 
@@ -475,9 +479,9 @@ static void test_iterate_vary_middle(void *fixture)
 	union radix_value v;
 	struct visitor vt;
 
-	_gen_key(k, k + sizeof(k));
+	_gen_key(k, sizeof(k));
 	for (i = 0; i < 16; i++) {
-        	k[3] = i;
+		k[3] = i;
 		v.n = i;
 		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	}
@@ -485,14 +489,14 @@ static void test_iterate_vary_middle(void *fixture)
 	T_ASSERT(radix_tree_is_well_formed(rt));
 	vt.it.visit = _visit;
 	for (i = 0; i < 16; i++) {
-        	vt.count = 0;
-        	k[3] = i;
-        	radix_tree_iterate(rt, k, 4, &vt.it);
-        	T_ASSERT_EQUAL(vt.count, 1);
+		vt.count = 0;
+		k[3] = i;
+		radix_tree_iterate(rt, k, 4, &vt.it);
+		T_ASSERT_EQUAL(vt.count, 1);
 	}
 }
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 #define DTR_COUNT 100
 
@@ -515,7 +519,7 @@ static void test_remove_calls_dtr(void *fixture)
 	struct radix_tree *rt = radix_tree_create(_counting_dtr, &c);
 	T_ASSERT(rt);
 
-	// Bug hunting, so I need the keys to be deterministic
+	/* Bug hunting, so I need the keys to be deterministic */
 	srand(0);
 
 	c.c = 0;
@@ -526,13 +530,13 @@ static void test_remove_calls_dtr(void *fixture)
 		uint8_t keys[DTR_COUNT * 3];
 		union radix_value v;
 
-		// generate and insert a lot of keys
+		/* generate and insert a lot of keys */
 		for (i = 0; i < DTR_COUNT; i++) {
 			bool found = false;
 			do {
 				uint8_t *k = keys + (i * 3);
 				v.n = i;
-				_gen_key(k, k + 3);
+				_gen_key(k, 3);
 				if (!radix_tree_lookup(rt, k, 3, &v)) {
 					T_ASSERT(radix_tree_insert(rt, k, 3, v));
 					found = true;
@@ -543,7 +547,7 @@ static void test_remove_calls_dtr(void *fixture)
 
 		T_ASSERT(radix_tree_is_well_formed(rt));
 
-		// double check
+		/* double check */
 		for (i = 0; i < DTR_COUNT; i++) {
 			uint8_t *k = keys + (i * 3);
 			T_ASSERT(radix_tree_lookup(rt, k, 3, &v));
@@ -551,7 +555,7 @@ static void test_remove_calls_dtr(void *fixture)
 
 		for (i = 0; i < DTR_COUNT; i++) {
 			uint8_t *k = keys + (i * 3);
-			// FIXME: check the values get passed to the dtr
+			/* FIXME: check the values get passed to the dtr */
 			T_ASSERT(radix_tree_remove(rt, k, 3));
 		}
 
@@ -570,7 +574,7 @@ static void test_destroy_calls_dtr(void *fixture)
 	struct radix_tree *rt = radix_tree_create(_counting_dtr, &c);
 	T_ASSERT(rt);
 
-	// Bug hunting, so I need the keys to be deterministic
+	/* Bug hunting, so I need the keys to be deterministic */
 	srand(0);
 
 	c.c = 0;
@@ -580,13 +584,13 @@ static void test_destroy_calls_dtr(void *fixture)
 		uint8_t keys[DTR_COUNT * 3];
 		union radix_value v;
 
-		// generate and insert a lot of keys
+		/* generate and insert a lot of keys */
 		for (i = 0; i < DTR_COUNT; i++) {
 			bool found = false;
 			do {
 				uint8_t *k = keys + (i * 3);
 				v.n = i;
-				_gen_key(k, k + 3);
+				_gen_key(k, 3);
 				if (!radix_tree_lookup(rt, k, 3, &v)) {
 					T_ASSERT(radix_tree_insert(rt, k, 3, v));
 					found = true;
@@ -604,38 +608,37 @@ static void test_destroy_calls_dtr(void *fixture)
 		T_ASSERT(!c.present[i]);
 }
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 static void test_bcache_scenario(void *fixture)
 {
 	struct radix_tree *rt = fixture;
 
-    	unsigned i;
-    	uint8_t k[6];
+	unsigned i;
+	uint8_t k[6];
 	union radix_value v;
 
-    	memset(k, 0, sizeof(k));
+	memset(k, 0, sizeof(k));
 
-    	for (i = 0; i < 3; i++) {
-	    	// it has to be the 4th byte that varies to
-	    	// trigger the bug.
-	    	k[4] = i;
-	    	v.n = i;
-	    	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
-    	}
+	for (i = 0; i < 3; i++) {
+		/* it has to be the 4th byte that varies to trigger the bug */
+		k[4] = i;
+		v.n = i;
+		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
+	}
 	T_ASSERT(radix_tree_is_well_formed(rt));
 
 	k[4] = 0;
-    	T_ASSERT(radix_tree_remove(rt, k, sizeof(k)));
+	T_ASSERT(radix_tree_remove(rt, k, sizeof(k)));
 	T_ASSERT(radix_tree_is_well_formed(rt));
 
-    	k[4] = i;
-    	v.n = i;
-    	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
+	k[4] = i;
+	v.n = i;
+	T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
 	T_ASSERT(radix_tree_is_well_formed(rt));
 }
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 static void _bcs2_step1(struct radix_tree *rt)
 {
@@ -676,13 +679,13 @@ static void test_bcache_scenario2(void *fixture)
 	_bcs2_step2(rt);
 
 	memset(k, 0, sizeof(k));
-        for (i = 0; i < 50; i++) {
-	        k[0] = 0x6;
-	        v.n = 0x6;
-	        T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
-	        radix_tree_remove_prefix(rt, k, 4);
-        }
-        T_ASSERT(radix_tree_is_well_formed(rt));
+	for (i = 0; i < 50; i++) {
+		k[0] = 0x6;
+		v.n = 0x6;
+		T_ASSERT(radix_tree_insert(rt, k, sizeof(k), v));
+		radix_tree_remove_prefix(rt, k, 4);
+	}
+	T_ASSERT(radix_tree_is_well_formed(rt));
 
 	_bcs2_step1(rt);
 	_bcs2_step2(rt);
@@ -690,7 +693,7 @@ static void test_bcache_scenario2(void *fixture)
 	_bcs2_step2(rt);
 
 	memset(k, 0, sizeof(k));
-	for(i = 0x6; i < 0x37; i++) {
+	for (i = 0x6; i < 0x37; i++) {
 		k[0] = i;
 		k[4] = 0xf;
 		k[5] = 0x1;
@@ -750,7 +753,7 @@ static void test_bcache_scenario2(void *fixture)
 	T_ASSERT(radix_tree_is_well_formed(rt));
 }
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
 struct key_parts {
 	uint32_t fd;
@@ -759,7 +762,7 @@ struct key_parts {
 
 union key {
 	struct key_parts parts;
-        uint8_t bytes[12];
+	uint8_t bytes[12];
 };
 
 static void __lookup_matches(struct radix_tree *rt, int fd, uint64_t b, uint64_t expected)
@@ -869,7 +872,7 @@ static bool _uniq_visit(struct radix_tree_iterator *it,
 			const void *key, size_t keylen, union radix_value v)
 {
 	struct visitor *vt = container_of(it, struct visitor, it);
-	T_ASSERT_EQUAL(v.n, 2); // always expecting value == 2
+	T_ASSERT_EQUAL(v.n, 2); /* always expecting value == 2 */
 	vt->count++;
 	return true;
 }
@@ -1055,4 +1058,4 @@ void radix_tree_tests(struct dm_list *all_tests)
 
 	dm_list_add(all_tests, &ts->list);
 }
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
