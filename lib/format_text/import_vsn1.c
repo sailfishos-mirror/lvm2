@@ -524,6 +524,11 @@ int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 			return 0;
 		}
 
+		if (!cv->v.str) {
+			log_error(INTERNAL_ERROR "Missing volume name in areas array for segment %s.", seg_name);
+			return 0;
+		}
+
 		if (!cv->next) {
 			log_error("Missing offset in areas array for segment %s.", seg_name);
 			return 0;
@@ -531,6 +536,11 @@ int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 
 		if (cv->next->type != DM_CFG_INT) {
 			log_error("Bad offset in areas array for segment %s.", seg_name);
+			return 0;
+		}
+
+		if (cv->next->v.i < 0 || cv->next->v.i > UINT32_MAX) {
+			log_error("Out-of-range offset in areas array for segment %s.", seg_name);
 			return 0;
 		}
 
@@ -546,7 +556,7 @@ int text_import_areas(struct lv_segment *seg, const struct dm_config_node *sn,
 		} else {
 			log_error("Couldn't find volume '%s' "
 				  "for segment '%s'.",
-				  cv->v.str ? : "NULL", seg_name);
+				  cv->v.str, seg_name);
 			return 0;
 		}
 

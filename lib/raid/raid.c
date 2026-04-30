@@ -105,6 +105,11 @@ static int _raid_text_import_areas(struct lv_segment *seg,
 			return 0;
 		}
 
+		if (cv->type != DM_CFG_STRING) {
+			log_error("Bad volume name in areas array for segment %s.", seg_name);
+			return 0;
+		}
+
 		/* Data device comes second */
 		if (!(lv = find_lv(seg->lv->vg, cv->v.str))) {
 			log_error("Couldn't find volume '%s' for segment '%s'.",
