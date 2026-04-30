@@ -37,7 +37,28 @@ void dm_pools_check_leaks(void);
  */
 static size_t _pagesize = 0;
 static size_t _pagesize_mask = 0;
-#define ALIGN_ON_PAGE(size) (((size) + (_pagesize_mask)) & ~(_pagesize_mask))
+
+static void _init_pagesize(void)
+{
+	if (!_pagesize) {
+		_pagesize = getpagesize();
+		_pagesize_mask = _pagesize - 1;
+	}
+}
+
+static size_t _get_pagesize(void)
+{
+	_init_pagesize();
+	return _pagesize;
+}
+
+static size_t _get_pagesize_mask(void)
+{
+	_init_pagesize();
+	return _pagesize_mask;
+}
+
+#define ALIGN_ON_PAGE(size) (((size) + (_get_pagesize_mask())) & ~(_get_pagesize_mask()))
 #endif
 
 #ifdef DEBUG_POOL
