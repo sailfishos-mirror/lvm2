@@ -349,6 +349,9 @@ void pdst_locked_destroy_all_pdlvs(const struct lvmpolld_store *pdst)
 		pdlv_destroy(dm_hash_get_data(pdst->store, n));
 }
 
+/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+GCC_SUPPRESS_FD_WARNINGS
+
 struct lvmpolld_thread_data *lvmpolld_thread_data_constructor(struct lvmpolld_lv *pdlv)
 {
 	struct lvmpolld_thread_data *data = (struct lvmpolld_thread_data *) malloc(sizeof(struct lvmpolld_thread_data));
@@ -421,3 +424,5 @@ void lvmpolld_thread_data_destroy(void *thread_private)
 
 	free(data);
 }
+
+GCC_UNSUPPRESS_WARNINGS

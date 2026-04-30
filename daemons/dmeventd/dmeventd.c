@@ -22,6 +22,7 @@
 
 #include "libdm/misc/dm-logging.h"
 #include "base/memory/zalloc.h"
+#include "lib/misc/util.h"
 
 #include "libdaemon/server/daemon-stray.h"
 
@@ -2540,6 +2541,9 @@ static void _daemonize(void)
 	if ((null_fd = open("/dev/null", O_RDWR)) < 0)
 		exit(EXIT_DESC_OPEN_FAILURE);
 
+	/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+	GCC_SUPPRESS_FD_WARNINGS
+
 	if (((null_fd != STDIN_FILENO) && (dup2(null_fd, STDIN_FILENO) == -1)) ||
 	    ((null_fd != STDOUT_FILENO) && (dup2(null_fd, STDOUT_FILENO) == -1)) ||
 	    ((null_fd != STDERR_FILENO) && (dup2(null_fd, STDERR_FILENO) == -1))) {
@@ -2551,6 +2555,8 @@ static void _daemonize(void)
 
 	if ((null_fd > STDERR_FILENO) && close(null_fd))
 		exit(EXIT_DESC_CLOSE_FAILURE);
+
+	GCC_UNSUPPRESS_WARNINGS
 
 	setsid();
 

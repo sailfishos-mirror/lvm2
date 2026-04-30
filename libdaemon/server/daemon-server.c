@@ -390,6 +390,9 @@ static void _daemonize(daemon_state s)
 		exit(1);
 	}
 
+	/* Suppress false positive FD leak warnings from gcc -fanalyzer. */
+	GCC_SUPPRESS_FD_WARNINGS
+
 	if (((fd != STDIN_FILENO) && (dup2(fd, STDIN_FILENO) == -1)) ||
 	    ((fd != STDOUT_FILENO) && (dup2(fd, STDOUT_FILENO) == -1)) ||
 	    ((fd != STDERR_FILENO) && (dup2(fd, STDERR_FILENO) == -1))) {
@@ -411,6 +414,7 @@ static void _daemonize(daemon_state s)
 
 	/* coverity[leaked_handle] 'fd' is stdin/stdout/stderr */
 }
+GCC_UNSUPPRESS_WARNINGS
 
 response daemon_reply_simple(const char *id, ...)
 {
