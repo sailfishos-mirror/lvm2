@@ -90,7 +90,7 @@ set_type() {
 key_is_on_device_nvme() {
 	FINDKEY_DEC=$(printf '%u' "$FINDKEY")
 
-	if nvme resv-report --eds -o json "$dev" 2>/dev/null | grep -q '"rkey":${FINDKEY_DEC}'; then
+	if nvme resv-report --eds -o json "$dev" 2>/dev/null | grep -q "\"rkey\":${FINDKEY_DEC}"; then
 		true
 		return
 	fi
@@ -168,6 +168,7 @@ get_key_list_scsi() {
 
 	# sort with -u eliminates repeated keys listed with multipath
 
+	# shellcheck disable=SC2207 # intentional split of key values
 	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep "    0x" | sort -u | xargs ) )
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
@@ -853,7 +854,7 @@ do_clear() {
 		# reservation.
 
 		get_key_list "$dev"
-		if [[ -n "$KEYS" ]]; then
+		if [[ -n "${KEYS[*]}" ]]; then
 			logmsg "clear $GROUP keys not cleared from $dev - ${KEYS[*]}"
 			err=1
 		fi
@@ -1376,6 +1377,7 @@ fi
 # Add a --devicesfile option that can be used for this vgs command?
 get_devices_from_vg() {
 	local IFS=:
+	# shellcheck disable=SC2207 # intentional split of device list
 	DEVICES=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") )
 }
 
@@ -1383,7 +1385,7 @@ if [[ -z "$LAST_DEVICE" && -n "$VGNAME" ]]; then
 	get_devices_from_vg
 fi
 
-FIRST_DEVICE="$DEVICES"
+FIRST_DEVICE="${DEVICES[0]}"
 
 if [[ -z "$FIRST_DEVICE" ]]; then
 	echo "Missing required --vg or --device."
