@@ -73,6 +73,14 @@ static dm_string_mangling_t _name_mangling_mode = DEFAULT_DM_NAME_MANGLING;
 
 #ifdef HAVE_SELINUX_LABEL_H
 static struct selabel_handle *_selabel_handle = NULL;
+
+static struct selabel_handle *_get_selabel_handle(void)
+{
+	if (!_selabel_handle)
+		_selabel_handle = selabel_open(SELABEL_CTX_FILE, NULL, 0);
+
+	return _selabel_handle;
+}
 #endif
 
 static int _udev_disabled = 0;
@@ -936,13 +944,12 @@ static int _selabel_lookup(const char *path, mode_t mode,
 			   char **scontext)
 {
 #ifdef HAVE_SELINUX_LABEL_H
-	if (!_selabel_handle &&
-	    !(_selabel_handle = selabel_open(SELABEL_CTX_FILE, NULL, 0))) {
+	if (!_get_selabel_handle()) {
 		log_error("selabel_open failed: %s", strerror(errno));
 		return 0;
 	}
 
-	if (selabel_lookup(_selabel_handle, scontext, path, mode)) {
+	if (selabel_lookup(_get_selabel_handle(), scontext, path, mode)) {
 		log_debug_activation("selabel_lookup failed for %s: %s",
 				     path, strerror(errno));
 		return 0;
