@@ -38,7 +38,6 @@ int exec_cmd(struct cmd_context *cmd, const char *const argv[],
 	     int *rstatus, int sync_needed);
 
 
-struct FILE;
 struct pipe_data {
 	FILE *fp;
 	pid_t pid;

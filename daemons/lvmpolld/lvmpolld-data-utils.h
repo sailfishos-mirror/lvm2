@@ -74,8 +74,6 @@ struct lvmpolld_lv {
 	unsigned error:1; /* unrecoverable error occurred in lvmpolld */
 };
 
-typedef void (*lvmpolld_parse_output_fn_t) (struct lvmpolld_lv *pdlv, const char *line);
-
 /* TODO: replace with configuration option */
 #define MIN_POLLING_TIMEOUT 60
 

@@ -35,7 +35,6 @@ void init_external_device_info_source(enum dev_ext_e src);
 void init_obtain_device_list_from_udev(int device_list_from_udev);
 void init_debug(int level);
 void init_debug_classes_logged(int classes);
-void init_cmd_name(int status);
 void init_log_command(int log_name, int log_pid);
 void init_security_level(int level);
 void init_mirror_in_sync(int in_sync);

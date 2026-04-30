@@ -49,7 +49,6 @@
 #define r10_r01  _takeover_from_raid10_to_raid01
 #define r10_r0m  _takeover_from_raid10_to_raid0_meta
 #define r10_r1   _takeover_from_raid10_to_raid1
-#define r10_r10  _takeover_from_raid10_to_raid10
 #define r10_str  _takeover_from_raid10_to_striped
 #define r1__lin  _takeover_from_raid1_to_linear
 #define r1__mir  _takeover_from_raid1_to_mirrored

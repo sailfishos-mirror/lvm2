@@ -121,9 +121,6 @@ struct logical_volume *lv_convert_lv(const struct logical_volume *lv);
 struct logical_volume *lv_origin_lv(const struct logical_volume *lv);
 struct logical_volume *lv_mirror_log_lv(const struct logical_volume *lv);
 struct logical_volume *lv_data_lv(const struct logical_volume *lv);
-struct logical_volume *lv_convert(const struct logical_volume *lv);
-struct logical_volume *lv_origin(const struct logical_volume *lv);
-struct logical_volume *lv_mirror_log(const struct logical_volume *lv);
 struct logical_volume *lv_metadata_lv(const struct logical_volume *lv);
 struct logical_volume *lv_pool_lv(const struct logical_volume *lv);
 

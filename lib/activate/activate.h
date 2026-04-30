@@ -124,7 +124,6 @@ int list_lv_modules(struct dm_pool *mem, const struct logical_volume *lv,
 void activation_release(void);
 void activation_exit(void);
 
-/* int lv_suspend(struct cmd_context *cmd, const char *lvid_s); */
 int lv_suspend_if_active(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only, unsigned exclusive,
 			 const struct logical_volume *lv, const struct logical_volume *lv_pre);
 int lv_resume(struct cmd_context *cmd, const char *lvid_s, unsigned origin_only, const struct logical_volume *lv);

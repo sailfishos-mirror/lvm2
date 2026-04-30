@@ -36,12 +36,6 @@ static inline __attribute__((warn_unused_result))
 
 #define is_power_of_2(n) ((n) && !((n) & ((n) - 1)))
 
-#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 6)
-#define uninitialized_var(x) x
-#else
-#define uninitialized_var(x) x = x
-#endif
-
 #define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
 
 /* Define some portable printing types */
@@ -80,8 +74,6 @@ static inline __attribute__((warn_unused_result))
 #define FMTx16 "%" PRIx16
 #define FMTx32 "%" PRIx32
 #define FMTx64 "%" PRIx64
-
-#define FMTVGID "%." DM_TO_STRING(ID_LEN) "s"
 
 /*
  * GCC 3.4 adds a __builtin_clz, which uses the count leading zeros (clz)

@@ -52,7 +52,6 @@ struct config_info {
 	uint64_t unit_factor;
 	mode_t umask;
 	char unit_type;
-	char _padding[1];
 };
 
 struct dm_config_tree;
