@@ -567,8 +567,6 @@ int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size)
 	}
 
 	v = dmt->dmi.v4->version;
-	_dm_version_minor = v[1];
-	_dm_version_patchlevel = v[2];
 	if (version &&
 	    (snprintf(version, size, "%u.%u.%u", v[0], v[1], v[2]) < 0)) {
 		log_error("Buffer for version is too short.");
@@ -594,9 +592,34 @@ static int _check_version(char *version, size_t size)
 	r = dm_task_run(task);
 	if (!dm_task_get_driver_version(task, version, size))
 		stack;
+
+	if (r && task->dmi.v4) {
+		unsigned *v = task->dmi.v4->version;
+		_dm_version = v[0];
+		_dm_version_minor = v[1];
+		_dm_version_patchlevel = v[2];
+	}
+
 	dm_task_destroy(task);
 
 	return r;
+}
+
+static void _init_version(void)
+{
+	char libversion[64] = "", dmversion[64] = "";
+
+	_version_checked = 1;
+
+	if (_check_version(dmversion, sizeof(dmversion)))
+		return;
+
+	dm_get_library_version(libversion, sizeof(libversion));
+
+	log_error("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
+		  *libversion ? libversion : "(unknown version)");
+
+	_version_ok = 0;
 }
 
 /*
@@ -605,23 +628,10 @@ static int _check_version(char *version, size_t size)
  */
 int dm_check_version(void)
 {
-	char libversion[64] = "", dmversion[64] = "";
+	if (!_version_checked)
+		_init_version();
 
-	if (_version_checked)
-		return _version_ok;
-
-	_version_checked = 1;
-
-	if (_check_version(dmversion, sizeof(dmversion)))
-		return 1;
-
-	dm_get_library_version(libversion, sizeof(libversion));
-
-	log_error("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
-		  *libversion ? libversion : "(unknown version)");
-
-	_version_ok = 0;
-	return 0;
+	return _version_ok;
 }
 
 int dm_cookie_supported(void)

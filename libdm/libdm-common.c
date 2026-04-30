@@ -315,7 +315,8 @@ struct dm_task *dm_task_create(int type)
 		return NULL;
 	}
 
-	if (!dm_check_version()) {
+	/* DM_DEVICE_VERSION is the task that performs the version check itself */
+	if (type != DM_DEVICE_VERSION && !dm_check_version()) {
 		dm_free(dmt);
 		return_NULL;
 	}
