@@ -1023,7 +1023,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 	if (arg_is_set(cmd, delid_ARG) ||
 	    (arg_is_set(cmd, deldev_ARG) && arg_is_set(cmd, deviceidtype_ARG))) {
 		const char *idtype_str = arg_str_value(cmd, deviceidtype_ARG, NULL);
-		const char *idname;
+		const char *idname = NULL;
 		int idtype;
 
 		if (arg_is_set(cmd, delid_ARG) && idtype_str)

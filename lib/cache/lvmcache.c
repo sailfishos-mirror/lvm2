@@ -301,7 +301,7 @@ static struct lvmcache_vginfo *_search_vginfos_list(const char *vgname, const ch
 			if (!memcmp(vgid, vginfo->vgid, ID_LEN))
 				return vginfo;
 		}
-	} else {
+	} else if (vgname) {
 		dm_list_iterate_items(vginfo, &_vginfos) {
 			if (!strcmp(vgname, vginfo->vgname))
 				return vginfo;
