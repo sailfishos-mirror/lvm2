@@ -154,32 +154,32 @@ static char *_align(char *ptr, unsigned int a)
 static unsigned _kernel_major = 0;
 static unsigned _kernel_minor = 0;
 static unsigned _kernel_release = 0;
-
-static int _uname(void)
+static void _init_uname(void)
 {
-	static int _uts_set = 0;
-	struct utsname _uts;
+	struct utsname uts;
 	int parts;
 
-	if (_uts_set)
-		return 1;
-
-	if (uname(&_uts)) {
+	if (uname(&uts)) {
 		log_error("uname failed: %s", strerror(errno));
-		return 0;
+		return;
 	}
 
-	parts = sscanf(_uts.release, "%u.%u.%u",
+	parts = sscanf(uts.release, "%u.%u.%u",
 		       &_kernel_major, &_kernel_minor, &_kernel_release);
 
 	/* Kernels with a major number of 2 always had 3 parts. */
 	if (parts < 1 || (_kernel_major < 3 && parts < 3)) {
 		log_error("Could not determine kernel version used.");
-		return 0;
+		return;
 	}
+}
 
-	_uts_set = 1;
-	return 1;
+static int _uname(void)
+{
+	if (!_kernel_major)
+		_init_uname();
+
+	return _kernel_major ? 1 : 0;
 }
 
 int get_uname_version(unsigned *major, unsigned *minor, unsigned *release)
