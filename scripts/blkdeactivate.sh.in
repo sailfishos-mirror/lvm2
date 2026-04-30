@@ -147,6 +147,7 @@ usage() {
 	exit
 }
 
+# shellcheck disable=SC2154 # kname set by $LSBLK_READ
 add_device_to_skip_list() {
 	SKIP_DEVICE_LIST+=(["$kname"]=1)
 	return 1
@@ -164,6 +165,7 @@ is_top_level_device() {
 	test -z "$files"
 }
 
+# shellcheck disable=SC2154 # mnt,name,kname set by $LSBLK_READ
 device_umount_one() {
 	test -z "$mnt" && return 0
 
@@ -183,6 +185,7 @@ device_umount_one() {
 	fi
 }
 
+# shellcheck disable=SC2154 # devtype,kname set by $LSBLK_READ
 device_umount() {
 	test "$devtype" != "lvm" && test "${kname:0:3}" != "dm-" \
           && test "${kname:0:2}" != "md" && return 0
