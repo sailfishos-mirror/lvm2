@@ -7193,8 +7193,7 @@ static int send_helper_request(struct action *act, char *ls_name, uint32_t new_m
 	}
 
 	if (act->op == LD_OP_FENCE) {
-		strncpy(msg.ls_name, ls_name, sizeof(msg.ls_name) - 1);
-		msg.ls_name[sizeof(msg.ls_name) - 1] = 0;
+		dm_strncpy(msg.ls_name, ls_name, sizeof(msg.ls_name));
 		msg.type = HELPER_COMMAND;
 		msg.act = LD_OP_FENCE;
 		msg.msg_id = new_msg_id;
