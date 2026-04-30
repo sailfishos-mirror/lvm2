@@ -103,11 +103,6 @@ int dev_manager_transient(struct dev_manager *dm, const struct logical_volume *l
 
 int dev_manager_mknodes(const struct logical_volume *lv);
 
-/*
- * Put the desired changes into effect.
- */
-int dev_manager_execute(struct dev_manager *dm);
-
 int dev_manager_device_uses_vg(struct device *dev,
 			       struct volume_group *vg);
 

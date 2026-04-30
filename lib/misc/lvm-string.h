@@ -22,7 +22,6 @@
 #include <sys/types.h>
 
 struct dm_pool;
-struct pool;
 struct logical_volume;
 
 typedef enum name_error {

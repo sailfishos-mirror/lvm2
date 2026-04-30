@@ -48,8 +48,6 @@ struct label {
 	void *info;
 };
 
-struct labeller;
-
 struct label_ops {
 	/*
 	 * Is the device labelled with this format ?

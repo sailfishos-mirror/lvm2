@@ -18,7 +18,6 @@
 
 #include <inttypes.h>
 
-struct dm_hash_table;
 struct lv_segment;
 struct dm_config_node;
 struct dm_config_value;

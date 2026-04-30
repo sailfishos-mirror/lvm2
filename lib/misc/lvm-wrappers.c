@@ -154,12 +154,3 @@ unsigned lvm_even_rand(unsigned *seed, unsigned max)
 
 	return ret;
 }
-
-int cmirrord_is_running(void)
-{
-#ifdef CMIRRORD_PIDFILE
-	return dm_daemon_is_running(CMIRRORD_PIDFILE);
-#else
-	return 0;
-#endif
-}

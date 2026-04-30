@@ -20,7 +20,6 @@
 typedef struct {
 	int socket_fd; /* the fd we use to talk to the client */
 	pthread_t thread_id;
-	char *read_buf;
 	void *private; /* this holds per-client state */
 } client_handle;
 

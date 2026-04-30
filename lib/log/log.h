@@ -78,7 +78,6 @@
 #define LOG_CLASS_DEVS		0x0002	/* "devices" */
 #define LOG_CLASS_ACTIVATION	0x0004	/* "activation" */
 #define LOG_CLASS_ALLOC		0x0008	/* "allocation" */
-#define LOG_CLASS_LVMETAD	0x0010	/* "lvmetad" */
 #define LOG_CLASS_METADATA	0x0020	/* "metadata" */
 #define LOG_CLASS_CACHE		0x0040	/* "cache" */
 #define LOG_CLASS_LOCKING	0x0080	/* "locking" */

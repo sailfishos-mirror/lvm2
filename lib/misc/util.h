@@ -29,12 +29,6 @@
 
 #define is_power_of_2(n) ((n) && !((n) & ((n) - 1)))
 
-#if defined(__clang__) || (defined(__GNUC__) && __GNUC__ >= 4 && __GNUC_MINOR__ >= 6)
-#define uninitialized_var(x) x
-#else
-#define uninitialized_var(x) x = x
-#endif
-
 /* Use wrapper for checked results */
 static inline __attribute__((warn_unused_result))
 	int _dm_strncpy(char *dest, const char *src, size_t n)
