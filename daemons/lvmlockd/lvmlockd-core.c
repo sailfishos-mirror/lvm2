@@ -7511,8 +7511,8 @@ static int main_loop(daemon_state *ds_arg)
 		return rv;
 	}
 
-	strcpy(gl_lsname_dlm, S_NAME_GL_DLM);
-	strcpy(gl_lsname_idm, S_NAME_GL_IDM);
+	dm_strncpy(gl_lsname_dlm, S_NAME_GL_DLM, sizeof(gl_lsname_dlm));
+	dm_strncpy(gl_lsname_idm, S_NAME_GL_IDM, sizeof(gl_lsname_idm));
 
 	INIT_LIST_HEAD(&lockspaces);
 	pthread_mutex_init(&lockspaces_mutex, NULL);
