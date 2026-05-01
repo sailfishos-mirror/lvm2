@@ -1677,6 +1677,9 @@ struct logical_volume *find_lv(const struct volume_group *vg,
 	struct lv_list *lvl;
 	const char *ptr;
 
+	if (!lv_name)
+		return NULL;
+
 	/* Use last component */
 	if ((ptr = strrchr(lv_name, '/')))
 		ptr++;
