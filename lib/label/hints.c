@@ -1032,7 +1032,7 @@ int write_hint_file(struct cmd_context *cmd, int newhints)
 	fprintf(fp, "filter:%s\n", filter_str ?: "-");
 	free(filter_str);
 
-	fprintf(fp, "scan_lvs:%d\n", cmd->scan_lvs);
+	fprintf(fp, "scan_lvs:%u\n", (unsigned)cmd->scan_lvs);
 
 	/*
 	 * Only associate hints with the default/system devices file.

@@ -1202,7 +1202,7 @@ static bool _check_nodes(struct value *v, unsigned *count)
 		return true;
 
 	default:
-		fprintf(stderr, "unknown value type: %u\n", v->type);
+		fprintf(stderr, "unknown value type: %u\n", (unsigned)v->type);
 	}
 
 	fprintf(stderr, "shouldn't get here\n");
