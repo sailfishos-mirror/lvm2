@@ -443,7 +443,7 @@ lvmdevices --update
 lvmdevices 2>&1|tee out
 grep $dev1 out
 grep $dev2 out
-not grep badpvid
+not grep badpvid out
 grep $pvid1 out
 grep $did1 out
 grep $pvid1 $DF
