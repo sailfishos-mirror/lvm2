@@ -2532,36 +2532,20 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg, 
 
 static int _idtype_compatible_with_major_number(struct cmd_context *cmd, int idtype, unsigned major)
 {
-	/* devname can be used with any kind of device */
-	if (idtype == DEV_ID_TYPE_DEVNAME)
+	switch (idtype) {
+	case DEV_ID_TYPE_DEVNAME:
 		return 1;
-
-	if (idtype == DEV_ID_TYPE_MPATH_UUID ||
-	    idtype == DEV_ID_TYPE_CRYPT_UUID ||
-	    idtype == DEV_ID_TYPE_LVMLV_UUID)
+	case DEV_ID_TYPE_MPATH_UUID:
+	case DEV_ID_TYPE_CRYPT_UUID:
+	case DEV_ID_TYPE_LVMLV_UUID:
 		return (major == cmd->dev_types->device_mapper_major);
-
-	if (idtype == DEV_ID_TYPE_MD_UUID)
+	case DEV_ID_TYPE_MD_UUID:
 		return (major == cmd->dev_types->md_major);
-
-	if (idtype == DEV_ID_TYPE_LOOP_FILE)
+	case DEV_ID_TYPE_LOOP_FILE:
 		return (major == cmd->dev_types->loop_major);
-
-	if (major == cmd->dev_types->device_mapper_major)
-		return (idtype == DEV_ID_TYPE_MPATH_UUID ||
-			idtype == DEV_ID_TYPE_CRYPT_UUID ||
-			idtype == DEV_ID_TYPE_LVMLV_UUID ||
-			idtype == DEV_ID_TYPE_DEVNAME);
-
-	if (major == cmd->dev_types->md_major)
-		return (idtype == DEV_ID_TYPE_MD_UUID ||
-			idtype == DEV_ID_TYPE_DEVNAME);
-
-	if (major == cmd->dev_types->loop_major)
-		return (idtype == DEV_ID_TYPE_LOOP_FILE ||
-			idtype == DEV_ID_TYPE_DEVNAME);
-
-	return 1;
+	default:
+		return 1;
+	}
 }
 
 static int _match_dm_names(struct cmd_context *cmd, char *idname, struct device *dev)
