@@ -633,7 +633,7 @@ static void _vprint_log(int level, const char *file, int line, int dm_errno_or_c
 			if (dm_hash_lookup(_duplicated, message))
 				level = _LOG_NOTICE;
 			else
-				(void) dm_hash_insert(_duplicated, message, (void*)1);
+				(void) dm_hash_insert(_duplicated, message, (void *)(uintptr_t)1);
 		}
 	}
 
