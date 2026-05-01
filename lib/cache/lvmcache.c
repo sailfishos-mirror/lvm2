@@ -315,11 +315,9 @@ static struct lvmcache_vginfo *_vginfo_lookup(const char *vgname, const char *vg
 	char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
 	struct lvmcache_vginfo *vginfo;
 
-	/* In case vgid is not null terminated */
-	if (vgid_arg)
-		memcpy(vgid, vgid_arg, ID_LEN);
-
 	if (vgid_arg) {
+		/* In case vgid is not null terminated */
+		memcpy(vgid, vgid_arg, ID_LEN);
 		if ((vginfo = dm_hash_lookup(_vgid_hash, vgid))) {
 			if (vgname && strcmp(vginfo->vgname, vgname)) {
 				log_warn("WARNING: Lookup found duplicate VGID %s for VGs %s and %s.", vgid, vginfo->vgname, vgname);
