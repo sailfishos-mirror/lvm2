@@ -5345,7 +5345,7 @@ static int _pvcreate_check_used(struct cmd_context *cmd,
 		log_debug("Check pvcreate arg %s found vg %s.", dev_name(pd->dev), vgname);
 		pd->is_vg_pv = 1;
 		pd->vg_name = dm_pool_strdup(cmd->mem, vgname);
-	} else if (!vgname || (vgname && is_orphan_vg(vgname))) {
+	} else if (!vgname || is_orphan_vg(vgname)) {
 		uint32_t ext_flags = lvmcache_ext_flags(info);
 		if (ext_flags & PV_EXT_USED) {
 			/* Device is used in an unknown VG. */
@@ -5461,7 +5461,7 @@ static int _pvremove_check_used(struct cmd_context *cmd,
 		pd->is_vg_pv = 1;
 		pd->vg_name = dm_pool_strdup(cmd->mem, vgname);
 
-	} else if (info && (!vgname || (vgname && is_orphan_vg(vgname)))) {
+	} else if (info && (!vgname || is_orphan_vg(vgname))) {
 		uint32_t ext_flags = lvmcache_ext_flags(info);
 		if (ext_flags & PV_EXT_USED) {
 			/* Device is used in an unknown VG. */

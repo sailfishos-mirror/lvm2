@@ -1187,7 +1187,7 @@ static int _parse_fields(struct dm_report *rh, const char *format,
 
 	while (*we) {
 		/* Allow consecutive commas */
-		while (*we && *we == ',')
+		while (*we == ',')
 			we++;
 
 		/* start of the field name */
@@ -1217,7 +1217,7 @@ static int _parse_keys(struct dm_report *rh, const char *keys,
 
 	while (*we) {
 		/* Allow consecutive commas */
-		while (*we && *we == ',')
+		while (*we == ',')
 			we++;
 		ws = we;
 		while (*we && *we != ',')
@@ -2396,7 +2396,7 @@ static int _parse_fields_to_compact(struct dm_report *rh, const char *fields)
 		return 1;
 
 	while (*we) {
-		while (*we && *we == ',')
+		while (*we == ',')
 			we++;
 		ws = we;
 		while (*we && *we != ',')
