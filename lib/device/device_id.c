@@ -728,6 +728,8 @@ int dev_read_vpd_wwids(struct cmd_context *cmd, struct device *dev)
 		return 0;
 	if (!vpd_datalen)
 		return 0;
+	if (vpd_datalen > VPD_SIZE)
+		vpd_datalen = VPD_SIZE; /* sanitize data size */
 
 	/* adds dev_wwid entry to dev->wwids for each id in vpd data */
 	parse_vpd_ids((const unsigned char *)vpd_data, vpd_datalen, &dev->wwids);
