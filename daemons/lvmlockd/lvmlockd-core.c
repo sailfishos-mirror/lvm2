@@ -5571,9 +5571,9 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
 			"thread_work=%d "
 			"thread_stop=%d "
 			"thread_done=%d "
-			"kill_vg=%d "
-			"fence_pr=%d "
-			"no_timeout=%d "
+			"kill_vg=%u "
+			"fence_pr=%u "
+			"no_timeout=%u "
 			"sanlock_gl_enabled=%d\n",
 			prefix,
 			ls->name,
@@ -5588,9 +5588,9 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
 			ls->thread_work ? 1 : 0,
 			ls->thread_stop ? 1 : 0,
 			ls->thread_done ? 1 : 0,
-			ls->kill_vg,
-			ls->fence_pr,
-			ls->no_timeout,
+			(unsigned)ls->kill_vg,
+			(unsigned)ls->fence_pr,
+			(unsigned)ls->no_timeout,
 			ls->sanlock_gl_enabled ? 1 : 0);
 }
 
