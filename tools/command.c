@@ -312,7 +312,7 @@ unsigned command_id_to_enum(const char *str)
 	const char *name;
 
 	/* Skip 1st. element for bsearch() */
-	if ((name = bsearch(str, cmd_names[1].name, CMD_COUNT - 1,
+	if ((name = bsearch(str, &cmd_names[1].name[0], CMD_COUNT - 1,
 			    sizeof(cmd_names[0]),
 			    (int (*)(const void*, const void*))strcmp)))
 		return ((const struct cmd_name *)(const void *)name)->cmd_enum;
@@ -463,10 +463,10 @@ static unsigned _find_lvm_command_enum(const char *name)
 			return 0;
 	}
 #endif
-	if ((name = bsearch(name, command_names[0].name, LVM_COMMAND_COUNT,
+	if ((name = bsearch(name, &command_names[0].name[0], LVM_COMMAND_COUNT,
 			    sizeof(command_names[0]),
 			    (int (*)(const void*, const void*))strcmp)))
-		return (name - command_names[0].name) / sizeof(command_names[0]);
+		return (name - &command_names[0].name[0]) / sizeof(command_names[0]);
 
 	return LVM_COMMAND_COUNT;
 }
