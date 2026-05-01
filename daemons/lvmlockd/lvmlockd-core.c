@@ -7302,8 +7302,8 @@ static int setup_helper(void)
 	pw_fd = pfd[1];
 
 	if (pipe2(pfd, O_NONBLOCK | O_CLOEXEC)) {
-		close(cr_fd);
-		close(pw_fd);
+		(void) close(cr_fd);
+		(void) close(pw_fd);
 		return -errno;
 	}
 
@@ -7312,23 +7312,23 @@ static int setup_helper(void)
 
 	pid = fork();
 	if (pid < 0) {
-		close(cr_fd);
-		close(pw_fd);
-		close(pr_fd);
-		close(cw_fd);
+		(void) close(cr_fd);
+		(void) close(pw_fd);
+		(void) close(pr_fd);
+		(void) close(cw_fd);
 		return -errno;
 	}
 
 	if (pid) {
-		close(cr_fd);
-		close(cw_fd);
+		(void) close(cr_fd);
+		(void) close(cw_fd);
 		helper_send_fd = pw_fd;
 		helper_recv_fd = pr_fd;
 		helper_pid = pid;
 		return 0;
 	} else {
-		close(pr_fd);
-		close(pw_fd);
+		(void) close(pr_fd);
+		(void) close(pw_fd);
 		helper_main(cr_fd, cw_fd, daemon_debug);
 		exit(0);
 	}
@@ -7336,8 +7336,8 @@ static int setup_helper(void)
 
 static void close_helper(void)
 {
-	close(helper_send_fd);
-	close(helper_recv_fd);
+	(void) close(helper_send_fd);
+	(void) close(helper_recv_fd);
 	helper_send_fd = -1;
 	helper_recv_fd = -1;
 	rem_pollfd(helper_pi);
