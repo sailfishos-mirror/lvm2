@@ -5478,7 +5478,8 @@ static int setup_dump_socket(void)
 
 	memset(&dump_addr, 0, sizeof(dump_addr));
 	dump_addr.sun_family = AF_LOCAL;
-	strcpy(&dump_addr.sun_path[1], DUMP_SOCKET_NAME);
+	strncpy(&dump_addr.sun_path[1], DUMP_SOCKET_NAME,
+		sizeof(dump_addr.sun_path) - 2);
 	dump_addrlen = sizeof(sa_family_t) + strlen(dump_addr.sun_path+1) + 1;
 
 	return s;

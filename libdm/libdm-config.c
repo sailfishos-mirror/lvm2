@@ -385,10 +385,13 @@ static int _write_config(const struct dm_config_node *n, int only_one,
 		if (!_line_start(out))
 			return_0;
 		if (strchr(n->key, '#') || strchr(n->key, '"') || strchr(n->key, '!')) {
+			size_t elen;
 			escaped_key = alloca(dm_escaped_len(n->key) + 2);
 			*escaped_key = '"';
 			dm_escape_double_quotes(escaped_key + 1, n->key);
-			strcat(escaped_key, "\"");
+			elen = strlen(escaped_key);
+			escaped_key[elen] = '"';
+			escaped_key[elen + 1] = '\0';
 		}
 		line_append("%s%s", space, escaped_key ? escaped_key : n->key);
 		escaped_key = NULL;

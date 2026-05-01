@@ -2069,7 +2069,6 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
 {
 	char *name, *sysfs_path, *temp_buf = NULL;
 	ssize_t size;
-	size_t len;
 	int r = 0;
 
 	if (!(sysfs_path = malloc(PATH_MAX)) ||
@@ -2101,14 +2100,10 @@ static int _sysfs_get_kernel_name(uint32_t major, uint32_t minor, char *buf, siz
 		goto bad;
 	}
 	name += 1;
-	len = size - (name - temp_buf) + 1;
-
-	if (len > buf_size) {
+	if (!_dm_strncpy(buf, name, buf_size)) {
 		log_error("_sysfs_get_kernel_name: output buffer too small");
 		goto bad;
 	}
-
-	strcpy(buf, name);
 	r = 1;
 bad:
 out:
