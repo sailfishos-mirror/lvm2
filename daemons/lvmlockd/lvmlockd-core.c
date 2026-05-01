@@ -4285,13 +4285,13 @@ static int work_init_lv(struct action *act)
 	ls = find_lockspace_name(ls_name);
 	if (ls) {
 		lm_type = ls->lm_type;
-		memcpy(vg_args, ls->vg_args, MAX_ARGS);
+		dm_strncpy(vg_args, ls->vg_args, sizeof(vg_args));
 	}
 	pthread_mutex_unlock(&lockspaces_mutex);
 
 	if (!ls) {
 		lm_type = act->lm_type;
-		memcpy(vg_args, act->vg_args, MAX_ARGS);
+		dm_strncpy(vg_args, act->vg_args, sizeof(vg_args));
 	}
 
 	if (act->lm_type != lm_type) {
@@ -7475,6 +7475,8 @@ static void process_helper(int fd)
 		log_error("process_helper recv size %d", rv);
 		goto fail;
 	}
+
+	msg.ls_name[MAX_NAME] = '\0';
 
 	if ((msg.type == HELPER_COMMAND_RESULT) && (msg.act == LD_OP_FENCE))
 		process_fence_result(&msg);
