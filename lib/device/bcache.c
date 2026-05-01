@@ -1015,19 +1015,17 @@ static struct block *_new_block(struct bcache *cache, int di, block_address i, b
 		}
 	}
 
-	if (b) {
-		dm_list_init(&b->list);
-		b->flags = 0;
-		b->di = di;
-		b->index = i;
-		b->ref_count = 0;
-		b->error = 0;
+	dm_list_init(&b->list);
+	b->flags = 0;
+	b->di = di;
+	b->index = i;
+	b->ref_count = 0;
+	b->error = 0;
 
-		if (!_block_insert(b)) {
-        		log_error("bcache unable to insert block in radix tree (OOM?)");
-			_free_block(b);
-			return NULL;
-		}
+	if (!_block_insert(b)) {
+		log_error("bcache unable to insert block in radix tree (OOM?)");
+		_free_block(b);
+		return NULL;
 	}
 
 	return b;
