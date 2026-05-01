@@ -469,7 +469,7 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
 	unsigned s;
 	int precision;
 	double d;
-	uint64_t byte = UINT64_C(0);
+	uint64_t byte;
 	uint64_t units = UINT64_C(1024);
 	char *size_buf;
 	char new_unit_type = '\0', unit_type_buf[2];
