@@ -1520,9 +1520,9 @@ static int _rename(CMD_ARGS)
 static int _message(CMD_ARGS)
 {
 	int r = 0, i;
-	size_t sz = 1;
+	size_t sz = 1, len;
 	struct dm_task *dmt;
-	char *str;
+	char *str, *pos;
 	const char *response;
 	uint64_t sector;
 	char *endptr;
@@ -1565,10 +1565,13 @@ static int _message(CMD_ARGS)
 		goto out;
 	}
 
+	pos = str;
 	for (i = 0; i < argc; i++) {
 		if (i)
-			strcat(str, " ");
-		strcat(str, argv[i]);
+			*pos++ = ' ';
+		len = strlen(argv[i]);
+		memcpy(pos, argv[i], len);
+		pos += len;
 	}
 
 	i = dm_task_set_message(dmt, str);
