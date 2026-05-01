@@ -25,7 +25,7 @@ static void _log_syslog(log_state *s, void **state, int type, const char *messag
 	int prio;
 
 	if (!*state) { /* initialize */
-		*state = (void *)1;
+		*state = (void *)(uintptr_t)1;
 		openlog(s->name, LOG_PID, LOG_DAEMON);
 	}
 
