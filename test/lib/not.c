@@ -32,7 +32,7 @@ static int _finished(const char *cmd, int status) {
 			ret = system("ls debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null");
 			if (WIFEXITED(ret) && WEXITSTATUS(ret) == 0) {
 				printf("## timing off\n<======== Debug log ========>\n"); /* timing off */
-				fflush(stdout);
+				(void) fflush(stdout);
 				if (system("sed -e 's,^,## DEBUG: ,' debug.log*${LVM_LOG_FILE_EPOCH}* 2>/dev/null")) {
 				    /* Ignore result code */;
 				}
@@ -40,7 +40,7 @@ static int _finished(const char *cmd, int status) {
 				if (system("rm -f debug.log*${LVM_LOG_FILE_EPOCH}*")) {
 				    /* Ignore result code */;
 				}
-				fflush(stdout);
+				(void) fflush(stdout);
 			}
 		}
 		return 0;
