@@ -1352,7 +1352,7 @@ static int _print_man(char *name, char *des_file, int secondary)
 			}
 
 			/* listing them all when there's only 1 or 2 is just repetitive */
-			if (cname && cna->variants > 2) {
+			if (cna->variants > 2) {
 				printf(".P\n"
 				       ".na\n");
 				_print_man_all_options_list(cname);

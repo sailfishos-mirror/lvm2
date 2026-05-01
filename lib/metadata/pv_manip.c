@@ -538,7 +538,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
  */
 static int _pv_resize(struct physical_volume *pv, struct volume_group *vg, uint64_t size)
 {
-	uint32_t old_pe_count, new_pe_count = 0;
+	uint32_t old_pe_count, new_pe_count;
 
 	if (size < pv_min_size()) {
 		log_error("Size must exceed minimum of %" PRIu64 " sectors on PV %s.",

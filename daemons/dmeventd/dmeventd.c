@@ -2033,7 +2033,7 @@ static int _client_read(struct dm_event_fifos *fifos,
 			struct dm_event_daemon_message *msg)
 {
 	unsigned bytes = 0;
-	int ret = 0;
+	int ret;
 	struct pollfd pfd = { .fd = fifos->client, .events = POLLIN };
 	size_t size = 2 * sizeof(uint32_t);	/* status + size */
 	uint32_t *header = alloca(size);
@@ -2095,7 +2095,7 @@ static int _client_write(struct dm_event_fifos *fifos,
 {
 	uint32_t temp[2];
 	unsigned bytes = 0;
-	int ret = 0;
+	int ret;
 	struct pollfd pfd = { .fd = fifos->server, .events = POLLOUT };
 
 	size_t size = 2 * sizeof(uint32_t) + ((msg->data) ? msg->size : 0);

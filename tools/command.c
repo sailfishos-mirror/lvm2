@@ -871,7 +871,7 @@ skip:
 			return;
 		}
 		cmd->optional_opt_args[cmd->oo_count++].opt = opt;
-	} else if (required < 0) {
+	} else { /* required < 0 */
 		if (cmd->io_count >= CMD_IO_ARGS) {
 			log_error("Too many args, increase CMD_IO_ARGS.");
 			cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
@@ -911,7 +911,7 @@ static void _update_prev_opt_arg(struct cmd_context *cmdtool, struct command *cm
 		cmd->required_opt_args[cmd->ro_count-1].def = def;
 	else if (!required)
 		cmd->optional_opt_args[cmd->oo_count-1].def = def;
-	else if (required < 0)
+	else /* required < 0 */
 		cmd->ignore_opt_args[cmd->io_count-1].def = def;
 }
 
@@ -1100,7 +1100,7 @@ static void _add_required_line(struct cmd_context *cmdtool, struct command *cmd,
 	int i;
 	int takes_arg = 0;
 	int prev_was_opt = 0, prev_was_pos = 0;
-	int orig_ro_count = 0;
+	int orig_ro_count;
 
 	/* argv[0] is command name */
 

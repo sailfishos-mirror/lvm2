@@ -36,7 +36,7 @@ static int lvmdbusd_running(void)
 {
 	int fd = -1;
 	int rc = 0;
-	int errno_cpy = 0;
+	int errno_cpy;
 	int running = 0;
 	const char *lockfile = NULL;
 

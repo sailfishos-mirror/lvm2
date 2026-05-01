@@ -29,7 +29,7 @@ static int _max_len;
 
 static int _get_max_dev_name_len(struct cmd_context *cmd, struct dev_filter *filter)
 {
-	int len = 0;
+	int len;
 	int maxlen = 0;
 	struct dev_iter *iter;
 	struct device *dev;

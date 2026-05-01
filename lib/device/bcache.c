@@ -557,7 +557,6 @@ static bool _sync_issue(struct io_engine *ioe, enum dir d, int di,
 			}
 		}
 
-		where = offset;
 		len = nbytes;
 	}
 

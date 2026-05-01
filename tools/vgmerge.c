@@ -243,7 +243,7 @@ int vgmerge(struct cmd_context *cmd, int argc, char **argv)
 {
 	const char *vg_name_to, *vg_name_from;
 	int opt = 0;
-	int ret = 0, ret_max = 0;
+	int ret, ret_max = 0;
 
 	if (argc < 2) {
 		log_error("Please enter 2 or more volume groups to merge");

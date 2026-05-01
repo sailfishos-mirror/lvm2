@@ -1798,7 +1798,7 @@ static int _dm_tree_deactivate_children(struct dm_tree_node *dnode,
 {
 	int r = 1;
 	void *handle = NULL;
-	struct dm_tree_node *child = dnode;
+	struct dm_tree_node *child;
 	struct dm_info info;
 	const struct dm_info *dinfo;
 	const char *name;
@@ -1919,7 +1919,7 @@ int dm_tree_suspend_children(struct dm_tree_node *dnode,
 {
 	int r = 1;
 	void *handle = NULL;
-	struct dm_tree_node *child = dnode;
+	struct dm_tree_node *child;
 	struct dm_info info, newinfo;
 	const struct dm_info *dinfo;
 	const char *name;
@@ -2130,7 +2130,7 @@ int dm_tree_activate_children(struct dm_tree_node *dnode,
 	int r = 1;
 	int resolvable_name_conflict, awaiting_peer_rename = 0;
 	void *handle = NULL;
-	struct dm_tree_node *child = dnode;
+	struct dm_tree_node *child;
 	const char *name;
 	const char *uuid;
 	int priority, next_priority;
@@ -3513,7 +3513,7 @@ int dm_tree_children_use_uuid(struct dm_tree_node *dnode,
 				 size_t uuid_prefix_len)
 {
 	void *handle = NULL;
-	struct dm_tree_node *child = dnode;
+	struct dm_tree_node *child;
 	const char *uuid;
 
 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
