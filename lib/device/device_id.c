@@ -4338,7 +4338,8 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 		if (cmd->device_ids_refresh_trigger || all_ids) {
 			if (!device_id_system_read_preferred(cmd, dev, &new_idtype, &new_idname))
 				continue;
-			new_idname2 = strdup(new_idname);
+			if (new_idname)
+				new_idname2 = strdup(new_idname);
 			new_devname = strdup(devname);
 			log_print_unless_silent("Devices file PVID %s has new device ID %s %s from %s.",
 				  du->pvid ?: "", idtype_to_str(new_idtype), new_idname ?: "", devname);
