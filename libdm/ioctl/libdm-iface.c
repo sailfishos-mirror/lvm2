@@ -628,21 +628,19 @@ int dm_check_version(void)
 int dm_cookie_supported(void)
 {
 	return (dm_check_version() &&
-		((_dm_version == 4) ? _dm_version_minor >= 15 : _dm_version > 4));
+		((_dm_version == 4 && _dm_version_minor >= 15) || _dm_version > 4));
 }
 
 static int _dm_inactive_supported(void)
 {
 	int inactive_supported = 0;
 
-	if (dm_check_version() && _dm_version >= 4) {
-		if (_dm_version_minor >= 16)
+	if (dm_check_version()) {
+		if ((_dm_version == 4 && _dm_version_minor >= 16) || _dm_version > 4)
 			inactive_supported = 1; /* upstream */
-		else if (_dm_version_minor == 11 &&
-			 (_dm_version_patchlevel >= 6 &&
-			  _dm_version_patchlevel <= 40)) {
+		else if (_dm_version == 4 && _dm_version_minor == 11 &&
+			 _dm_version_patchlevel >= 6 && _dm_version_patchlevel <= 40)
 			inactive_supported = 1; /* RHEL 5.7 */
-		}
 	}
 
 	return inactive_supported;
@@ -656,9 +654,9 @@ int dm_message_supports_precise_timestamps(void)
 	 * these properties via a subsequent @stats_list: require at
 	 * least 4.33.0 in order to use these features.
 	 */
-	if (dm_check_version() && _dm_version >= 4)
-		if (_dm_version_minor >= 33)
-			return 1;
+	if (dm_check_version() &&
+	    ((_dm_version == 4 && _dm_version_minor >= 33) || _dm_version > 4))
+		return 1;
 	return 0;
 }
 
@@ -805,7 +803,7 @@ static int _check_has_event_nr(void) {
 
 	if (_has_event_nr < 0)
 		_has_event_nr = dm_check_version() &&
-			((_dm_version == 4) ?  _dm_version_minor >= 38 : _dm_version > 4);
+			((_dm_version == 4 && _dm_version_minor >= 38) || _dm_version > 4);
 
 	return _has_event_nr;
 }
@@ -1617,7 +1615,7 @@ static int _udev_complete(struct dm_task *dmt)
 static int _check_uevent_generated(struct dm_ioctl *dmi)
 {
 	if (!dm_check_version() ||
-	    ((_dm_version == 4) ? _dm_version_minor < 17 : _dm_version < 4))
+	    ((_dm_version == 4 && _dm_version_minor < 17) || _dm_version < 4))
 		/* can't check, assume uevent is generated */
 		return 1;
 
