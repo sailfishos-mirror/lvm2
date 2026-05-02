@@ -1752,7 +1752,7 @@ static void _print_usage_description(struct command *cmd)
 	}
 }
 
-/* Function remappas existing command definitions val_enums for printing
+/* Function remaps existing command definitions val_enums for printing
  * within man pages or command's help lines */
 static int _update_relative_opt(const char *name, int opt_enum, int val_enum)
 {

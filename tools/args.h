@@ -1423,7 +1423,7 @@ arg(cache_ARG, 'H', "cache", 0, 0, 0,
 arg(history_ARG, 'H', "history", 0, 0, 0,
     "Include historical LVs in the output.\n"
     "(This has no effect unless LVs were removed while\n"
-    "\\fBlvm.conf\\fP(5) \\fBmetadata/record_lvs_history\\fP was enabled.\n")
+    "\\fBlvm.conf\\fP(5) \\fBmetadata/record_lvs_history\\fP was enabled.)\n")
 
 arg(import_ARG, 'i', "import", 0, 0, 0,
     "Import exported VGs. Otherwise VGs that have been exported\n"
@@ -1582,7 +1582,7 @@ arg(mirrors_ARG, 'm', "mirrors", number_VAL, 0, 0,
     "There are two mirroring implementations: \"raid1\" and \"mirror\".\n"
     "These are the names of the corresponding LV types, or \"segment types\".\n"
     "Use the --type option to specify which to use (raid1 is default,\n"
-    "and mirror is legacy)\n"
+    "and mirror is legacy).\n"
     "Use \\fBlvm.conf\\fP(5) \\fBglobal/mirror_segtype_default\\fP and\n"
     "\\fBglobal/raid10_segtype_default\\fP to configure the default types.\n"
     "See the --nosync option for avoiding initial image synchronization.\n"
@@ -1596,7 +1596,7 @@ arg(mirrors_ARG, 'm', "mirrors", number_VAL, 0, 0,
     "There are two mirroring implementations: \"raid1\" and \"mirror\".\n"
     "These are the names of the corresponding LV types, or \"segment types\".\n"
     "Use the --type option to specify which to use (raid1 is default,\n"
-    "and mirror is legacy)\n"
+    "and mirror is legacy).\n"
     "Use \\fBlvm.conf\\fP(5) \\fBglobal/mirror_segtype_default\\fP and\n"
     "\\fBglobal/raid10_segtype_default\\fP to configure the default types.\n"
     "The plus prefix \\fB+\\fP can be used, in which case\n"

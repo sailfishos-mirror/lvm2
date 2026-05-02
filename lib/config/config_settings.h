@@ -770,7 +770,7 @@ cfg(allocation_vdo_block_map_cache_size_mb_CFG, "vdo_block_map_cache_size_mb", a
 /* vdo format --blockMapPeriod */
 cfg(allocation_vdo_block_map_era_length_CFG, "vdo_block_map_period", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_BLOCK_MAP_ERA_LENGTH, VDO_1ST_VSN, NULL, 0, NULL,
 	"The speed with which the block map cache writes out modified block map pages.\n"
-	"A smaller era length is likely to reduce the amount time spent rebuilding,\n"
+	"A smaller era length is likely to reduce the amount of time spent rebuilding,\n"
 	"at the cost of increased block map writes during normal operation.\n"
 	"The maximum and recommended value is " DM_TO_STRING(DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM)
 	"; the minimum value is " DM_TO_STRING(DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM) ".\n")
@@ -795,7 +795,7 @@ cfg(allocation_vdo_slab_size_mb_CFG, "vdo_slab_size_mb", allocation_CFG_SECTION,
 cfg(allocation_vdo_ack_threads_CFG, "vdo_ack_threads", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_ACK_THREADS, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the number of threads to use for acknowledging\n"
 	"completion of requested VDO I/O operations.\n"
-	"The value must be at in range [" DM_TO_STRING(DM_VDO_ACK_THREADS_MINIMUM) ".."
+	"The value must be in range [" DM_TO_STRING(DM_VDO_ACK_THREADS_MINIMUM) ".."
 	DM_TO_STRING(DM_VDO_ACK_THREADS_MAXIMUM) "].\n")
 
 cfg(allocation_vdo_bio_threads_CFG, "vdo_bio_threads", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_BIO_THREADS, VDO_1ST_VSN, NULL, 0, NULL,
@@ -821,7 +821,7 @@ cfg(allocation_vdo_cpu_threads_CFG, "vdo_cpu_threads", allocation_CFG_SECTION, C
 cfg(allocation_vdo_hash_zone_threads_CFG, "vdo_hash_zone_threads", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_HASH_ZONE_THREADS, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the number of threads across which to subdivide parts of the VDO\n"
 	"processing based on the hash value computed from the block data.\n"
-	"The value must be at in range [" DM_TO_STRING(DM_VDO_HASH_ZONE_THREADS_MINIMUM) ".."
+	"The value must be in range [" DM_TO_STRING(DM_VDO_HASH_ZONE_THREADS_MINIMUM) ".."
 	DM_TO_STRING(DM_VDO_HASH_ZONE_THREADS_MAXIMUM) "].\n"
 	"vdo_hash_zone_threads, vdo_logical_threads and vdo_physical_threads must be\n"
 	"either all zero or all non-zero.\n")

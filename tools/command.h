@@ -100,7 +100,7 @@ static inline uint64_t lvt_enum_to_bit(int lvt_enum)
 	return (1ULL << lvt_enum);
 }
 
-/* Description a value that follows an option or exists in a position. */
+/* Description of a value that follows an option or exists in a position. */
 
 struct arg_def {
 	uint64_t val_bits;   /* bits of x_VAL, can be multiple for pos_arg */
