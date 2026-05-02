@@ -1451,9 +1451,9 @@ struct dm_config_node *dm_config_clone_node_with_mem(struct dm_pool *mem, const 
 	return new_cn;
 }
 
-struct dm_config_node *dm_config_clone_node(struct dm_config_tree *cft, const struct dm_config_node *cn, int sib)
+struct dm_config_node *dm_config_clone_node(struct dm_config_tree *cft, const struct dm_config_node *cn, int siblings)
 {
-	return dm_config_clone_node_with_mem(cft->mem, cn, sib);
+	return dm_config_clone_node_with_mem(cft->mem, cn, siblings);
 }
 
 struct dm_config_node *dm_config_create_node(struct dm_config_tree *cft, const char *key)
