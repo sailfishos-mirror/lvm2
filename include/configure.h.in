@@ -567,7 +567,7 @@
 /* Define to 1 to include built-in support for integrity. */
 #undef INTEGRITY_INTERNAL
 
-/* Internalization package */
+/* Internationalization package */
 #undef INTL_PACKAGE
 
 /* Locale-dependent data */
