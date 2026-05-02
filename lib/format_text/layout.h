@@ -51,7 +51,7 @@ struct pv_header {
 
 /*
  * Ignore this raw location.  This allows us to
- * ignored metadata areas easily, and thus balance
+ * ignore metadata areas easily, and thus balance
  * metadata across VGs with many PVs.
  */
 #define RAW_LOCN_IGNORED 0x00000001

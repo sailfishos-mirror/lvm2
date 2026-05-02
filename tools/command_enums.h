@@ -59,7 +59,7 @@ enum {
 #define xx(a, b...) a ## _COMMAND,
 #include "commands.h"
 #undef xx
-        LVM_COMMAND_COUNT
+	LVM_COMMAND_COUNT
 };
 
 #define PERMITTED_READ_ONLY 	0x00000002
@@ -91,7 +91,7 @@ enum {
 #define CHECK_DEVS_USED		 0x00010000
 /* Command prints devices file entries that were not found. */
 #define DEVICE_ID_NOT_FOUND      0x00020000
-/* Command prints devices file entries that were not found. */
+/* Command accepts --extents as alternative to --size. */
 #define ALTERNATIVE_EXTENTS	 0x00040000
 
 #include "command-count.h" /* defines COMMAND_COUNT */

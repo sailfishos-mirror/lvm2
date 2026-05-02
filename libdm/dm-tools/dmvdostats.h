@@ -21,6 +21,7 @@ uint64_t get_disp_factor(void);
 char get_disp_units(void);
 int show_units(void);
 
+/* Caller must dm_free() the returned string. Returns NULL on failure. */
 char *vdo_get_stats(const char *name);
 
 int vdostats_print_verbose(const char *name, const char *stats_str);

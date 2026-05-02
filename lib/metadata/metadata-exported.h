@@ -511,7 +511,7 @@ struct lv_segment {
 	struct logical_volume *cow;
 	struct dm_list origin_list;
 	uint32_t region_size;	/* For raids/mirrors - in sectors */
-	uint32_t data_copies;	/* For RAID: number of data copies (e.g. 3 for RAID 6 */
+	uint32_t data_copies;	/* For RAID: number of data copies (e.g. 3 for RAID 6) */
 	uint32_t extents_copied;/* Number of extents synced for raids/mirrors */
 	struct logical_volume *log_lv;
 	struct lv_segment *pvmove_source_seg;

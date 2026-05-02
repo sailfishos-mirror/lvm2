@@ -65,7 +65,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
 	    struct metadata_area **mda_new);
 void del_mdas(struct dm_list *mdas);
 
-/* On disk */
+/* On disk, packed to prevent future padding if fields change */
 struct disk_locn {
 	uint64_t offset;	/* Offset in bytes to start sector */
 	uint64_t size;		/* Bytes */

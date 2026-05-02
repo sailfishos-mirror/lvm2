@@ -28,6 +28,10 @@ static void _insert_area(struct dm_list *head, struct pv_area *a, unsigned reduc
 	struct pv_area *pva;
 	uint32_t count = reduced ? a->unreserved : a->count;
 
+	/* FIXME: when reduced=1, count is a->unreserved but comparison
+	 * uses pva->count (total size) - mixing two different scales.
+	 * This may break the "largest first" sort for partially-reserved
+	 * areas. Needs a test to verify intended behavior. */
 	dm_list_iterate_items(pva, head)
 		if (count > pva->count)
 			break;
@@ -135,6 +139,7 @@ static int _create_maps(struct dm_pool *mem, struct dm_list *pvs, struct dm_list
 	dm_list_iterate_items(pvl, pvs) {
 		if (!(pvl->pv->status & ALLOCATABLE_PV) ||
 		    (pvl->pv->status & PV_ALLOCATION_PROHIBITED)) {
+			/* Clear per-pass flag before skipping; next allocation attempt starts fresh. */
 			pvl->pv->status &= ~PV_ALLOCATION_PROHIBITED;
 			continue;
 		}
