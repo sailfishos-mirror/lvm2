@@ -1295,7 +1295,7 @@ int dm_stats_create_group(struct dm_stats *dms, const char *members,
  * If remove is non-zero then all regions that belong to the group will
  * also be removed.
  */
-int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove);
+int dm_stats_delete_group(struct dm_stats *dms, uint64_t group_id, int remove_regions);
 
 /*
  * Set an alias for this group or region. The alias will be returned
@@ -1499,7 +1499,7 @@ typedef enum dm_string_mangling_e {
 /*
  * Set/get mangling mode used for device-mapper names and uuids.
  */
-int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling);
+int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling_mode);
 dm_string_mangling_t dm_get_name_mangling_mode(void);
 
 /*
@@ -1515,13 +1515,13 @@ char *dm_task_get_uuid_unmangled(const struct dm_task *dmt);
 /*
  * Configure the device-mapper directory
  */
-int dm_set_dev_dir(const char *dir);
+int dm_set_dev_dir(const char *dev_dir);
 const char *dm_dir(void);
 
 /*
  * Configure sysfs directory, /sys by default
  */
-int dm_set_sysfs_dir(const char *dir);
+int dm_set_sysfs_dir(const char *sysfs_dir);
 const char *dm_sysfs_dir(void);
 
 /*
@@ -1619,7 +1619,7 @@ struct dm_tree_node;
  * parents/children.
  */
 struct dm_tree *dm_tree_create(void);
-void dm_tree_free(struct dm_tree *tree);
+void dm_tree_free(struct dm_tree *dtree);
 
 /*
  * List of suffixes to be ignored when matching uuids against existing devices.
@@ -1629,21 +1629,21 @@ void dm_tree_set_optional_uuid_suffixes(struct dm_tree *dtree, const char **opti
 /*
  * Add nodes to the tree for a given device and all the devices it uses.
  */
-int dm_tree_add_dev(struct dm_tree *tree, uint32_t major, uint32_t minor);
-int dm_tree_add_dev_with_udev_flags(struct dm_tree *tree, uint32_t major,
+int dm_tree_add_dev(struct dm_tree *dtree, uint32_t major, uint32_t minor);
+int dm_tree_add_dev_with_udev_flags(struct dm_tree *dtree, uint32_t major,
 				    uint32_t minor, uint16_t udev_flags);
 
 /*
  * Add a new node to the tree if it doesn't already exist.
  */
-struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *tree,
+struct dm_tree_node *dm_tree_add_new_dev(struct dm_tree *dtree,
 					 const char *name,
 					 const char *uuid,
 					 uint32_t major, uint32_t minor,
 					 int read_only,
 					 int clear_inactive,
 					 void *context);
-struct dm_tree_node *dm_tree_add_new_dev_with_udev_flags(struct dm_tree *tree,
+struct dm_tree_node *dm_tree_add_new_dev_with_udev_flags(struct dm_tree *dtree,
 							 const char *name,
 							 const char *uuid,
 							 uint32_t major,
@@ -1657,10 +1657,10 @@ struct dm_tree_node *dm_tree_add_new_dev_with_udev_flags(struct dm_tree *tree,
  * Search for a node in the tree.
  * Set major and minor to 0 or uuid to NULL to get the root node.
  */
-struct dm_tree_node *dm_tree_find_node(struct dm_tree *tree,
+struct dm_tree_node *dm_tree_find_node(struct dm_tree *dtree,
 				       uint32_t major,
 				       uint32_t minor);
-struct dm_tree_node *dm_tree_find_node_by_uuid(struct dm_tree *tree,
+struct dm_tree_node *dm_tree_find_node_by_uuid(struct dm_tree *dtree,
 					       const char *uuid);
 
 /*
@@ -2338,7 +2338,7 @@ int dm_tree_node_add_thin_target(struct dm_tree_node *node,
 int dm_tree_node_set_thin_external_origin(struct dm_tree_node *node,
 					  const char *external_uuid);
 
-void dm_tree_node_set_udev_flags(struct dm_tree_node *node, uint16_t udev_flags);
+void dm_tree_node_set_udev_flags(struct dm_tree_node *dnode, uint16_t udev_flags);
 
 void dm_tree_node_set_presuspend_node(struct dm_tree_node *node,
 				      struct dm_tree_node *presuspend_node);
@@ -2371,7 +2371,7 @@ typedef enum dm_node_callback_e {
 } dm_node_callback_t;
 typedef int (*dm_node_callback_fn) (struct dm_tree_node *node,
 				    dm_node_callback_t type, void *cb_data);
-void dm_tree_node_set_callback(struct dm_tree_node *node,
+void dm_tree_node_set_callback(struct dm_tree_node *dnode,
 			       dm_node_callback_fn cb, void *cb_data);
 
 void dm_tree_set_cookie(struct dm_tree_node *node, uint32_t cookie);
@@ -2397,7 +2397,7 @@ void *dm_zalloc_wrapper(size_t s, const char *file, int line)
 void *dm_realloc_wrapper(void *p, unsigned int s, const char *file, int line)
 	__attribute__((__warn_unused_result__));
 void dm_free_wrapper(void *ptr);
-char *dm_strdup_wrapper(const char *s, const char *file, int line)
+char *dm_strdup_wrapper(const char *str, const char *file, int line)
 	__attribute__((__warn_unused_result__));
 int dm_dump_memory_wrapper(void);
 void dm_bounds_check_wrapper(void);
@@ -2983,7 +2983,7 @@ size_t dm_escaped_len(const char *str);
  */
 char *dm_build_dm_name(struct dm_pool *mem, const char *vgname,
 		       const char *lvname, const char *layer);
-char *dm_build_dm_uuid(struct dm_pool *mem, const char *prefix, const char *lvid, const char *layer);
+char *dm_build_dm_uuid(struct dm_pool *mem, const char *uuid_prefix, const char *lvid, const char *layer);
 
 /*
  * Copies a string, quoting double quotes with backslashes.

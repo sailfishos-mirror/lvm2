@@ -4583,10 +4583,10 @@ int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset)
 }
 
 void dm_tree_node_set_callback(struct dm_tree_node *dnode,
-			       dm_node_callback_fn cb, void *data)
+			       dm_node_callback_fn cb, void *cb_data)
 {
 	dnode->callback = cb;
-	dnode->callback_data = data;
+	dnode->callback_data = cb_data;
 }
 
 int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
