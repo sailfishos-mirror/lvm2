@@ -120,7 +120,7 @@ static void _daemon_close_descriptor(int fd, unsigned suppress_warnings,
  *
  * command:		print command name with warning message
  * suppress_warnings:	whether to print warning messages
- * above_fd:		close all descriptors above this descriptor
+ * from_fd:		close all descriptors above this descriptor
  * custom_fds:		preserve descriptors from this set of descriptors
  */
 static int daemon_close_stray_fds(const char *command, int suppress_warnings,

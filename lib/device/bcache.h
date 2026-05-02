@@ -145,13 +145,16 @@ bool bcache_invalidate_di(struct bcache *cache, int di);
  */
 void bcache_abort_di(struct bcache *cache, int di);
 
-//----------------------------------------------------------------
-// The next four functions are utilities written in terms of the above api.
- 
-// Prefetches the blocks necessary to satisfy a byte range.
+/*----------------------------------------------------------------*/
+
+/*
+ * The next six functions are utilities written in terms of the above api.
+ *
+ * Prefetches the blocks necessary to satisfy a byte range.
+ */
 void bcache_prefetch_bytes(struct bcache *cache, int di, uint64_t start, size_t len);
 
-// Reads, writes and zeroes bytes.  Returns false if errors occur.
+/* Reads, writes, zeroes, sets and invalidates byte ranges.  Returns false on error. */
 bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len, void *data);
 bool bcache_write_bytes(struct bcache *cache, int di, uint64_t start, size_t len, void *data);
 bool bcache_zero_bytes(struct bcache *cache, int di, uint64_t start, size_t len);
@@ -161,9 +164,9 @@ bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_
 void bcache_set_last_byte(struct bcache *cache, int di, uint64_t offset, int sector_size);
 void bcache_unset_last_byte(struct bcache *cache, int di);
 
-//----------------------------------------------------------------
+/*----------------------------------------------------------------*/
 
-int bcache_set_fd(int fd); /* returns di */
+int bcache_set_fd(int fd); /* returns di, or -1 on failure */
 void bcache_clear_fd(int di);
 int bcache_change_fd(int di, int fd);
 

@@ -39,7 +39,7 @@ int lvconvert_mirror_finish(struct cmd_context *cmd,
 	return 1;
 }
 
-/* Swap lvid and LV names */
+/* Swap LV identifiers, names and properties */
 int swap_lv_identifiers(struct cmd_context *cmd,
 			struct logical_volume *a, struct logical_volume *b)
 {

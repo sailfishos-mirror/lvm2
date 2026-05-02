@@ -100,7 +100,7 @@ struct parse_sp {		/* scratch pad for the parsing process */
 	int type;		/* token type, 0 indicates a charset */
 	dm_bitset_t charset;	/* The current charset */
 	const char *cursor;	/* where we are in the regex */
-	const char *rx_end;	/* 1pte for the expression being parsed */
+	const char *rx_end;	/* one past the end of the expression being parsed */
 };
 
 static struct rx_node *_or_term(struct parse_sp *ps);

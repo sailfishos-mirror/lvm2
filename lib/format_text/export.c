@@ -266,7 +266,7 @@ int out_newline(struct formatter *f)
 
 /*
  * Appends a comment giving a size in more easily
- * readable form (eg, 4M instead of 8096).
+ * readable form (eg, 4M instead of 8192).
  */
 int out_size(struct formatter *f, uint64_t size, const char *fmt, ...)
 {

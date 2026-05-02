@@ -33,7 +33,7 @@ struct dev_filter *signature_filter_create(struct dev_types *dt);
 struct dev_filter *deviceid_filter_create(struct cmd_context *cmd);
 
 /*
- * patterns must be an array of strings of the form:
+ * patterns is a linked list of dm_config_value nodes, each holding a string of the form:
  * [ra]<sep><regex><sep>, eg,
  * r/cdrom/          - reject cdroms
  * a|loop/[0-4]|     - accept loops 0 to 4

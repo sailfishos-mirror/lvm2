@@ -105,9 +105,9 @@ static inline uint64_t lvt_enum_to_bit(int lvt_enum)
 struct arg_def {
 	uint64_t val_bits;   /* bits of x_VAL, can be multiple for pos_arg */
 	uint64_t lvt_bits;   /* lvt_enum_to_bit(x_LVT) for lv_VAL, can be multiple */
-	const char *str;     /* a literal string for constnum_VAL */
+	const char *str;     /* a literal string for conststr_VAL */
 	uint32_t flags;      /* ARG_DEF_FLAG_ */
-	uint16_t num;        /* a literal number for conststr_VAL */
+	uint16_t num;        /* a literal number for constnum_VAL */
 };
 
 /* Description of an option and the value that follows it. */

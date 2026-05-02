@@ -398,7 +398,6 @@ void lvmpolld_thread_data_destroy(void *thread_private)
 		pdst_unlock(data->pdlv->pdst);
 	}
 
-	/* may get reallocated in getline(). free must not be used */
 	free(data->line);
 
 	if (data->fout && !fclose(data->fout))

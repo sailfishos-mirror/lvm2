@@ -2188,7 +2188,8 @@ static struct dm_ioctl *_dm_task_build_dmi(struct dm_task *dmt,
 	return dmi;
 }
 
-/* Execute a single DM ioctl.  Sets dmt->ioctl_errno on failure. */
+/* Execute a single DM ioctl.  Sets dmt->ioctl_errno on failure.
+ * Caller must validate dmt->type via _validate_task_type(). */
 int dm_ioctl_exec(int fd, struct dm_task *dmt, struct dm_ioctl *dmi)
 {
 	int r;

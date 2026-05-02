@@ -1,15 +1,17 @@
-// Copyright (C) 2018 Red Hat, Inc. All rights reserved.
-// 
-// This file is part of LVM2.
-//
-// This copyrighted material is made available to anyone wishing to use,
-// modify, copy, or redistribute it subject to the terms and conditions
-// of the GNU Lesser General Public License v.2.1.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program; if not, write to the Free Software Foundation,
-// Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- 
+/*
+ * Copyright (C) 2018-2026 Red Hat, Inc. All rights reserved.
+ *
+ * This file is part of LVM2.
+ *
+ * This copyrighted material is made available to anyone wishing to use,
+ * modify, copy, or redistribute it subject to the terms and conditions
+ * of the GNU Lesser General Public License v.2.1.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
 #ifndef BASE_DATA_STRUCT_RADIX_TREE_H
 #define BASE_DATA_STRUCT_RADIX_TREE_H
 
@@ -59,7 +61,7 @@ void radix_tree_iterate(struct radix_tree *rt, const void *key, size_t keylen,
 			struct radix_tree_iterator *it);
 
 // Alternative traversing radix_tree.
-// Builds whole set all radix_tree  nr_values values.
+// Builds set of all matching radix_tree values into nr_values.
 // After use, free(values).
 bool radix_tree_values(struct radix_tree *rt, const void *key, size_t keylen,
 		       union radix_value **values, unsigned *nr_values);

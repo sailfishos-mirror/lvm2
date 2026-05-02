@@ -39,8 +39,8 @@
 
 /*
  * TYPE_RESERVED_VALUE(type, flags, reserved_value_id, description, value, reserved_name, ...)
- * FIELD_RESERVED_VALUE(field_id, flags, reserved_value_id, description, value, reserved_name, ...)
- * FIELD_BINARY_RESERVED_VALUE(field_id, reserved_value_id, description, reserved_name for 1, ...)
+ * FIELD_RESERVED_VALUE(flags, field_id, reserved_value_id, description, value, reserved_name, ...)
+ * FIELD_RESERVED_BINARY_VALUE(field_id, reserved_value_id, description, reserved_name for 1, ...)
  */
 
 /* *INDENT-OFF* */

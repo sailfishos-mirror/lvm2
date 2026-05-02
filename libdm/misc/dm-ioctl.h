@@ -184,7 +184,7 @@ struct dm_target_spec {
  */
 struct dm_target_deps {
 	uint32_t count;	/* Array size */
-	uint32_t padding;	/* unused */
+	uint32_t padding;	/* alignment padding */
 	uint64_t dev[0];	/* out */
 };
 
@@ -209,6 +209,10 @@ struct dm_name_list {
 	 */
 };
 
+/*
+ * These flags encode three states: 0 = old kernel (UUID presence unknown),
+ * HAS_UUID = device has a UUID, DOES_NOT_HAVE_UUID = device has no UUID.
+ */
 #define DM_NAME_LIST_FLAG_HAS_UUID		1
 #define DM_NAME_LIST_FLAG_DOES_NOT_HAVE_UUID	2
 

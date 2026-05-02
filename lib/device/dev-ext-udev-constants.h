@@ -55,7 +55,7 @@
  * Sysfs attributes accessible via libudev and used by LVM *
  ***********************************************************/
 
-/* the value of size sysfs attribute is size in bytes */
+/* the value of size sysfs attribute is in 512-byte sectors */
 #define DEV_EXT_UDEV_SYSFS_ATTR_SIZE            "size"
 
 #endif

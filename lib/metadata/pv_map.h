@@ -53,8 +53,8 @@ struct pv_area_used {
 
 struct pv_map {
 	struct physical_volume *pv;
-	struct dm_list areas;		/* struct pv_areas */
-	uint32_t pe_count;		/* Total number of PEs */
+	struct dm_list areas;		/* struct pv_area */
+	uint32_t pe_count;		/* Total free PEs across active areas */
 
 	struct dm_list list;
 };

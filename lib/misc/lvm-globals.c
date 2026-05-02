@@ -125,6 +125,8 @@ void init_background_polling(int polling)
 
 void init_ignore_suspended_devices(int ignore)
 {
+	/* Frozen when dmeventd monitoring is disabled to prevent toolcontext
+	 * re-init from overriding this setting during a dmeventd callback. */
 	if (!_disable_dmeventd_monitoring)
 		_ignore_suspended_devices = ignore;
 }

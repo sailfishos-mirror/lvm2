@@ -152,6 +152,8 @@ int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, c
 
 /*
  * Do both lists contain the same set of items?
+ * Assumes no duplicates in either list; callers using
+ * str_list_add_no_dup_check() must enforce this themselves.
  */
 int str_list_lists_equal(const struct dm_list *sll, const struct dm_list *sll2)
 {

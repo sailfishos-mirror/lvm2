@@ -103,6 +103,7 @@
 #define log_warn_suppress(s, x...) LOG_LINE(s ? _LOG_NOTICE : _LOG_WARN | _LOG_STDERR, x)
 #define log_err(x...) LOG_LINE_WITH_ERRNO(_LOG_ERR, EUNCLASSIFIED, x)
 #define log_err_suppress(s, x...) LOG_LINE_WITH_ERRNO(s ? _LOG_NOTICE : _LOG_ERR, EUNCLASSIFIED, x)
+/* First occurrence: error; subsequent occurrences: downgraded to NOTICE (invisible without -v) */
 #define log_err_once(x...) LOG_LINE_WITH_ERRNO(_LOG_ERR | _LOG_ONCE, EUNCLASSIFIED, x)
 #define log_fatal(x...) LOG_LINE_WITH_ERRNO(_LOG_FATAL, EUNCLASSIFIED, x)
 

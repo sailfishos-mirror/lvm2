@@ -18,7 +18,7 @@
  *   { key : value, key : { nested_key : value, }, ... }
  *
  * Exports:
- *   dm_vdo_stats_parse() — fill dm_vdo_stats, optionally with label/value fields
+ *   dm_vdo_stats_parse() - fill dm_vdo_stats, optionally with label/value fields
  */
 
 #include "libdm/misc/dmlib.h"

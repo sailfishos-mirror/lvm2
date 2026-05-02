@@ -2671,7 +2671,7 @@ static int _pool_register_callback(struct dev_manager *dm,
 		data->exec = global_thin_check_executable_CFG;
 		data->opts = global_thin_check_options_CFG;
 		data->global = "thin";
-	} else if (lv_is_cache(lv)) { /* cache pool */
+	} else if (lv_is_cache(lv)) { /* cached LV */
 		data->pool_lv = first_seg(lv)->pool_lv;
 		data->skip_zero = 1; /* cheap read-error detection */
 		data->exec = global_cache_check_executable_CFG;
@@ -3134,7 +3134,7 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
 				return_0;
 		} else if (seg_is_raid(seg)) {
 			/*
-			 * RAID can handle unassigned areas.  It simple puts
+			 * RAID can handle unassigned areas.  It simply puts
 			 * '- -' in for the metadata/data device pair.  This
 			 * is a valid way to indicate to the RAID target that
 			 * the device is missing.

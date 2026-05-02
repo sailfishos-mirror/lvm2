@@ -20,6 +20,7 @@
 
 /* Wrappers to open/close connection */
 
+/* always_inline suppresses -Winline for cold call sites */
 static inline __attribute__((always_inline))
 	daemon_handle lvmlockd_open(const char *sock)
 {

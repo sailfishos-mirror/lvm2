@@ -37,8 +37,9 @@
  * macro DM_EXPORT_SYMBOL to export the function and bind it to the
  * specified version string.
  *
- * Since versioning is only available when compiling with GCC the entire
- * compatibility version should be enclosed in '#if defined(GNU_SYMVER)',
+ * Since versioning is only available with compilers supporting GNU symbol
+ * versioning (GCC and Clang) the entire compatibility version should be
+ * enclosed in '#if defined(GNU_SYMVER)',
  * for example:
  *
  *   DM_EXPORT_NEW_SYMBOL(int, dm_foo, 1_02_107)(int bar)
