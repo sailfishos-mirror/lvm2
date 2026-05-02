@@ -528,7 +528,8 @@ static int _report_field_string_list(struct dm_report *rh,
 
 	/* one item */
 	if (list_size == 1) {
-		sl = (struct dm_str_list *) dm_list_first(data);
+		if (!(sl = (struct dm_str_list *) dm_list_first(data)))
+			goto out;
 
 		repstr_str_len = strlen(sl->str);
 		repstr_size = repstr_str_len + 1 + (2 * sizeof(struct pos_len));
@@ -1835,7 +1836,7 @@ static int _cmp_field_string_list_strict_all(const struct dm_report *rh,
 		if (sel_list_size == 1) {
 			/* match blank string list with selection defined as blank string only */
 			sel_item = dm_list_item(dm_list_first(&sel->str_list.list), struct dm_str_list);
-			return !strcmp(sel_item->str, "");
+			return sel_item && !strcmp(sel_item->str, "");
 		}
 		return 0;
 	}
@@ -1897,7 +1898,7 @@ static int _cmp_field_string_list_subset_all(const struct dm_report *rh __attrib
 		if (sel_list_size == 1) {
 			/* match blank string list with selection defined as blank string only */
 			sel_item = dm_list_item(dm_list_first(&sel->str_list.list), struct dm_str_list);
-			return !strcmp(sel_item->str, "");
+			return sel_item && !strcmp(sel_item->str, "");
 		}
 		return 0;
 	}
