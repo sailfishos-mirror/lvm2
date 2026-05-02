@@ -3324,6 +3324,7 @@ static void *lockspace_thread_main(void *arg_in)
 		}
 
 		if (retry) {
+			/* coverity[lock_evasion] thread_work set by own lockspace thread for retry loop */
 			ls->thread_work = 1;
 			usleep(LOCK_RETRY_MS * 1000);
 		}
@@ -7626,6 +7627,7 @@ static int main_loop(daemon_state *ds_arg)
 					cl->poll_ignore = 0;
 					if (close(pollfd[i].fd))
 						log_error("close fd %d failed", pollfd[i].fd);
+					/* coverity[lock_evasion] pollfd owned by main_loop thread */
 					pollfd[i].fd = POLL_FD_UNUSED;
 					pollfd[i].events = 0;
 					pollfd[i].revents = 0;
@@ -7633,6 +7635,7 @@ static int main_loop(daemon_state *ds_arg)
 				} else if (is_recv) {
 					cl->recv = 1;
 					cl->poll_ignore = 1;
+					/* coverity[lock_evasion] pollfd owned by main_loop thread */
 					pollfd[i].fd = POLL_FD_IGNORE;
 					pollfd[i].events = 0;
 					pollfd[i].revents = 0;
@@ -7652,6 +7655,7 @@ static int main_loop(daemon_state *ds_arg)
 					  i, pollfd[i].fd);
 				if (close(pollfd[i].fd))
 					log_error("close fd %d failed", pollfd[i].fd);
+				/* coverity[lock_evasion] pollfd owned by main_loop thread */
 				pollfd[i].fd = POLL_FD_UNUSED;
 				pollfd[i].events = 0;
 				pollfd[i].revents = 0;
