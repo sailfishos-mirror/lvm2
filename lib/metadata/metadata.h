@@ -384,8 +384,8 @@ struct format_handler {
  */
 
 int get_default_pvmetadatasize_sectors(void);
-void set_pe_align(struct physical_volume *pv, uint64_t data_alignment);
-void set_pe_align_offset(struct physical_volume *pv, uint64_t data_alignment_offset);
+void set_pe_align(struct physical_volume *pv, uint64_t data_alignment_sectors);
+void set_pe_align_offset(struct physical_volume *pv, uint64_t data_alignment_offset_sectors);
 
 int check_dev_block_size_for_vg(struct device *dev, const struct volume_group *vg,
 				unsigned int *max_logical_block_size_found);

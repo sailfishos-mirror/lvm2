@@ -44,13 +44,13 @@ const char *cache_mode_num_to_str(cache_mode_t mode)
 	}
 }
 
-const char *get_cache_mode_name(const struct lv_segment *pool_seg)
+const char *get_cache_mode_name(const struct lv_segment *seg)
 {
 	const char *str;
 
-	if (!(str = cache_mode_num_to_str(pool_seg->cache_mode))) {
+	if (!(str = cache_mode_num_to_str(seg->cache_mode))) {
 		log_error(INTERNAL_ERROR "Cache pool %s has undefined cache mode, using writethrough instead.",
-			  display_lvname(pool_seg->lv));
+			  display_lvname(seg->lv));
 		str = "writethrough";
 	}
 	return str;
@@ -812,75 +812,75 @@ restart:
 	}
 }
 
-int cache_set_policy(struct lv_segment *lvseg, const char *name,
+int cache_set_policy(struct lv_segment *seg, const char *name,
 		     const struct dm_config_tree *settings)
 {
-	struct lv_segment *seg;
+	struct lv_segment *pool_seg;
 	struct dm_config_node *cn;
 	struct dm_config_tree *old = NULL, *new = NULL, *tmp = NULL;
 	int r = 0;
-	struct profile *profile = lvseg->lv->profile;
+	struct profile *profile = seg->lv->profile;
 
-	if (seg_is_cache_pool(lvseg)) {
+	if (seg_is_cache_pool(seg)) {
 		if (!name && !settings)
 			return 1; /* Policy and settings can be selected later when caching LV */
 	}
 
-	if (seg_is_cache(lvseg) && lv_is_cache_vol(lvseg->pool_lv))
-		seg = lvseg;
+	if (seg_is_cache(seg) && lv_is_cache_vol(seg->pool_lv))
+		pool_seg = seg;
 
-	else if (seg_is_cache_pool(lvseg))
-		seg = lvseg;
+	else if (seg_is_cache_pool(seg))
+		pool_seg = seg;
 
-	else if (seg_is_cache(lvseg))
-		seg = first_seg(lvseg->pool_lv);
+	else if (seg_is_cache(seg))
+		pool_seg = first_seg(seg->pool_lv);
 
 	else {
 		log_error(INTERNAL_ERROR "Cannot set cache policy for non cache volume %s.",
-			  display_lvname(lvseg->lv));
+			  display_lvname(seg->lv));
 		return 0;
 	}
 
 	if (name) {
-		if (!(seg->policy_name = dm_pool_strdup(seg->lv->vg->vgmem, name))) {
+		if (!(pool_seg->policy_name = dm_pool_strdup(pool_seg->lv->vg->vgmem, name))) {
 			log_error("Failed to duplicate policy name.");
 			return 0;
 		}
-	} else if (!seg->policy_name) {
-		if (!(seg->policy_name = find_config_tree_str(seg->lv->vg->cmd, allocation_cache_policy_CFG,
-							      profile)) &&
-		    !(seg->policy_name = _get_default_cache_policy(seg->lv->vg->cmd)))
+	} else if (!pool_seg->policy_name) {
+		if (!(pool_seg->policy_name = find_config_tree_str(pool_seg->lv->vg->cmd, allocation_cache_policy_CFG,
+								   profile)) &&
+		    !(pool_seg->policy_name = _get_default_cache_policy(pool_seg->lv->vg->cmd)))
 			return_0;
-		if (!seg->policy_name) {
+		if (!pool_seg->policy_name) {
 			log_error(INTERNAL_ERROR "Can't set policy settings without policy name.");
 			return 0;
 		}
 	}
 
 	if (settings) {
-		if (seg->policy_settings) {
+		if (pool_seg->policy_settings) {
 			if (!(old = dm_config_create()))
 				goto_out;
 			if (!(new = dm_config_create()))
 				goto_out;
 			new->root = settings->root;
-			old->root = seg->policy_settings;
+			old->root = pool_seg->policy_settings;
 			new->cascade = old;
 			if (!(tmp = dm_config_flatten(new)))
 				goto_out;
 		}
 
 		if ((cn = dm_config_find_node((tmp) ? tmp->root : settings->root, "policy_settings")) &&
-		    !(seg->policy_settings = dm_config_clone_node_with_mem(seg->lv->vg->vgmem, cn, 0)))
+		    !(pool_seg->policy_settings = dm_config_clone_node_with_mem(pool_seg->lv->vg->vgmem, cn, 0)))
 			goto_out;
-	} else if (!seg->policy_settings) {
-		if (!_policy_settings_from_config(seg->lv->vg->cmd, seg->lv->vg->vgmem,
-						  profile, seg->policy_name,
-						  &seg->policy_settings))
+	} else if (!pool_seg->policy_settings) {
+		if (!_policy_settings_from_config(pool_seg->lv->vg->cmd, pool_seg->lv->vg->vgmem,
+						  profile, pool_seg->policy_name,
+						  &pool_seg->policy_settings))
 			return_0;
 	}
 
-	_remove_default_settings(seg->policy_settings);
+	_remove_default_settings(pool_seg->policy_settings);
 
 	r = 1;
 

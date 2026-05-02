@@ -448,14 +448,14 @@ struct lvmcache_info *lvmcache_info_from_pvid(const char *pvid_arg, struct devic
 	return info;
 }
 
-struct lvmcache_info *lvmcache_info_from_pv_id(const struct id *pv_id_arg, struct device *dev, int valid_only)
+struct lvmcache_info *lvmcache_info_from_pv_id(const struct id *pv_id, struct device *dev, int valid_only)
 {
 	/*
 	 * Since we know that lvmcache_info_from_pvid directly above
 	 * does not assume pvid_arg is null-terminated, we make an
 	 * exception here and cast a struct id to char *.
 	 */
-	return lvmcache_info_from_pvid((const char *)pv_id_arg, dev, valid_only);
+	return lvmcache_info_from_pvid((const char *)pv_id, dev, valid_only);
 }
 
 const struct format_type *lvmcache_fmt_from_info(struct lvmcache_info *info)
@@ -2438,12 +2438,10 @@ static struct lvmcache_info * _create_info(struct labeller *labeller, struct dev
 }
 
 struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *labeller,
-				   const char *pvid_arg, struct device *dev, uint64_t label_sector,
-				   const char *vgname, const char *vgid_arg, uint32_t vgstatus,
+				   const char *pvid, struct device *dev, uint64_t label_sector,
+				   const char *vgname, const char *vgid, uint32_t vgstatus,
 				   int *is_duplicate)
 {
-	const char *pvid = pvid_arg;
-	const char *vgid = vgid_arg;
 	struct lvmcache_vgsummary vgsummary = { 0 };
 	struct lvmcache_info *info;
 	struct lvmcache_info *info_lookup;

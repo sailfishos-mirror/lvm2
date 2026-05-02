@@ -752,10 +752,10 @@ int lv_extend_policy_calculate_percent(struct logical_volume *lv,
                                        uint32_t *amount, uint32_t *meta_amount);
 
 struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const char *vgid,
-			     uint32_t read_flags, struct lockd_state *lks,
+			     uint32_t vg_read_flags, struct lockd_state *lks,
 			     uint32_t *error_flags, struct volume_group **error_vg);
 struct volume_group *vg_read_for_update(struct cmd_context *cmd, const char *vg_name,
-			 const char *vgid, uint32_t read_flags);
+			 const char *vgid, uint32_t vg_read_flags);
 struct volume_group *vg_read_orphans(struct cmd_context *cmd, const char *orphan_vgname);
 
 /* pe_start and pe_end relate to any existing data so that new metadata
@@ -858,7 +858,7 @@ int lv_extend(struct logical_volume *lv,
 int lv_remove(struct logical_volume *lv);
 
 /* historical_glv must be part of lv->vg->historical_lvs */
-int historical_glv_remove(struct generic_logical_volume *historical_glv);
+int historical_glv_remove(struct generic_logical_volume *glv);
 
 int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 		     force_t force, int suppress_remove_message);
@@ -1366,7 +1366,7 @@ struct logical_volume *lv_cache_create(struct logical_volume *pool_lv,
 				       struct logical_volume *origin_lv);
 int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean);
 int lv_cache_remove(struct logical_volume *cache_lv);
-int lv_detach_writecache_cachevol(struct logical_volume *cache_lv, int noflush);
+int lv_detach_writecache_cachevol(struct logical_volume *lv, int noflush);
 int wipe_cache_pool(struct logical_volume *cache_pool_lv);
 /* --  metadata/cache_manip.c */
 
