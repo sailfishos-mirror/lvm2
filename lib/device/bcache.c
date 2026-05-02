@@ -1255,18 +1255,18 @@ unsigned bcache_max_prefetches(struct bcache *cache)
 	return cache->max_io;
 }
 
-void bcache_prefetch(struct bcache *cache, int di, block_address i)
+void bcache_prefetch(struct bcache *cache, int di, block_address index)
 {
 	struct block *b;
 
 	if (!_di_valid(di))
 		return;
 
-	b = _block_lookup(cache, di, i);
+	b = _block_lookup(cache, di, index);
 
 	if (!b) {
 		if (cache->nr_io_pending < cache->max_io) {
-			b = _new_block(cache, di, i, false);
+			b = _new_block(cache, di, index, false);
 			if (b) {
 				cache->prefetches++;
 				_issue_read(b);
@@ -1284,7 +1284,7 @@ static void _recycle_block(struct bcache *cache, struct block *b)
 	_free_block(b);
 }
 
-bool bcache_get(struct bcache *cache, int di, block_address i,
+bool bcache_get(struct bcache *cache, int di, block_address index,
 	        unsigned flags, struct block **result)
 {
 	struct block *b;
@@ -1292,7 +1292,7 @@ bool bcache_get(struct bcache *cache, int di, block_address i,
 	if (!_di_valid(di))
 		goto bad;
 
-	b = _lookup_or_read_block(cache, di, i, flags);
+	b = _lookup_or_read_block(cache, di, index, flags);
 	if (b) {
 		if (b->error) {
 			if (b->io_dir == DIR_READ) {
@@ -1314,7 +1314,7 @@ bool bcache_get(struct bcache *cache, int di, block_address i,
 bad:
 	*result = NULL;
 
-	log_error("bcache failed to get block %llu di %d", (unsigned long long) i, di);
+	log_error("bcache failed to get block %llu di %d", (unsigned long long) index, di);
 	return false;
 }
 
@@ -1396,12 +1396,12 @@ static bool _invalidate_block(struct bcache *cache, struct block *b)
 	return true;
 }
 
-bool bcache_invalidate(struct bcache *cache, int di, block_address i)
+bool bcache_invalidate(struct bcache *cache, int di, block_address index)
 {
 	if (!_di_valid(di))
 		return false;
 
-	return _invalidate_block(cache, _block_lookup(cache, di, i));
+	return _invalidate_block(cache, _block_lookup(cache, di, index));
 }
 
 //----------------------------------------------------------------
