@@ -119,6 +119,7 @@ void dm_event_log(const char *subsys, int level, const char *file,
 		  const char *format, va_list ap);
 /* Macro to route print_log to dm_event_log() */
 #define DM_EVENT_LOG_FN(subsys) \
+__attribute__ ((format(printf, 5, 6))) \
 void print_log(int level, const char *file, int line, int dm_errno_or_class,\
 	       const char *format, ...)\
 {\
