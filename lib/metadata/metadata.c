@@ -509,9 +509,9 @@ static int _move_pvs_used_by_lv_cb(struct logical_volume *lv, void *data)
 int move_pvs_used_by_lv(struct volume_group *vg_from,
 			struct volume_group *vg_to,
 			const char *lv_name,
-			struct dm_list *dev_list)
+			struct dm_list *dev_list_moved)
 {
-	struct vg_from_to data = { .from = vg_from, .to = vg_to, .dev_list = dev_list };
+	struct vg_from_to data = { .from = vg_from, .to = vg_to, .dev_list = dev_list_moved };
 	struct logical_volume *lv;
 
 	/* FIXME: handle tags */
