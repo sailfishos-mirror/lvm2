@@ -43,7 +43,7 @@
 #define DEV_MATCHED_USE_ID	0x00080000	/* matched an entry from cmd->use_devices */
 #define DEV_SCAN_FOUND_NOLABEL	0x00100000	/* label_scan read, passed filters, but no lvm label */
 #define DEV_SCAN_NOT_READ	0x00200000	/* label_scan not able to read dev */
-#define DEV_ADDED_NVME_WWIDS	0x00400000	/* wwids have been ready from libnvme */
+#define DEV_ADDED_NVME_WWIDS	0x00400000	/* wwids have been read from libnvme */
 #define DEV_UPDATE_USE_ID	0x00800000	/* update system.devices entry to use preferred wwid */
 
 /*

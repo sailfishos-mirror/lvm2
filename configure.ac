@@ -1630,7 +1630,7 @@ AS_IF([test "$INTL" = "yes"], [
 		    AS_HELP_STRING([--with-localedir=DIR],
 				   [locale-dependent data [DATAROOTDIR/locale]]),
 		    localedir=$withval, localedir=${localedir-'${datarootdir}/locale'})
-	AC_DEFINE_UNQUOTED([INTL_PACKAGE], ["$INTL_PACKAGE"], [Internalization package])
+	AC_DEFINE_UNQUOTED([INTL_PACKAGE], ["$INTL_PACKAGE"], [Internationalization package])
 	# double eval needed ${datarootdir} -> ${prefix}/share -> real path
 	AC_DEFINE_UNQUOTED([LOCALEDIR], ["$(eval echo $(eval echo $localedir))"], [Locale-dependent data])
 ])

@@ -583,7 +583,7 @@ RULE: --poolmetadata not --readahead --stripesize --stripes_long
 # This is an alternate form of the primary command:
 # lvconvert --type thin-pool LV
 #
-# 2. When the LV is is already a pool and a meta LV is specified,
+# 2. When the LV is already a pool and a meta LV is specified,
 # the meta LV is swapped.  Swapping a meta LV is a very specialized
 # operation that users should never use.
 # This is an alternate form of the primary command:
@@ -628,7 +628,7 @@ RULE: all not lv_is_raid_with_integrity
 # This is an alternate form of the primary command:
 # lvconvert --type cache-pool LV
 #
-# 2. When the LV is is already a pool and a meta LV is specified,
+# 2. When the LV is already a pool and a meta LV is specified,
 # the meta LV is swapped.  Swapping a meta LV is a very specialized
 # operation that users should never use.
 # This is an alternate form of the primary command:
