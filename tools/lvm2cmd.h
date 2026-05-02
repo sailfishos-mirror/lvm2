@@ -20,7 +20,9 @@
 extern "C" {
 #endif
 
-#ifndef _LVM_LOG_H
+#ifndef LVM2_LOG_FN_T_DEFINED
+#define LVM2_LOG_FN_T_DEFINED
+
 typedef void (*lvm2_log_fn_t) (int level, const char *file, int line,
                                int dm_errno_or_class, const char *message);
 
