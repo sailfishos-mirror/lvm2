@@ -146,7 +146,7 @@ void process_event(struct dm_task *dmt,
 	} while (next);
 }
 
-int register_device(const char *device,
+int register_device(const char *device_name,
 		    const char *uuid __attribute__((unused)),
 		    int major __attribute__((unused)),
 		    int minor __attribute__((unused)),
@@ -158,16 +158,16 @@ int register_device(const char *device,
 		goto_bad;
 
 	if (!dmeventd_lvm2_command(state->mem, state->cmd_lvconvert, sizeof(state->cmd_lvconvert),
-				   "lvconvert --repair --use-policies", device))
+				   "lvconvert --repair --use-policies", device_name))
 		goto_bad;
 
 	*user = state;
 
-	log_info("Monitoring RAID device %s for events.", device);
+	log_info("Monitoring RAID device %s for events.", device_name);
 
 	return 1;
 bad:
-	log_error("Failed to monitor RAID %s.", device);
+	log_error("Failed to monitor RAID %s.", device_name);
 
 	if (state)
 		dmeventd_lvm2_exit_with_pool(state);
@@ -175,7 +175,7 @@ bad:
 	return 0;
 }
 
-int unregister_device(const char *device,
+int unregister_device(const char *device_name,
 		      const char *uuid __attribute__((unused)),
 		      int major __attribute__((unused)),
 		      int minor __attribute__((unused)),
@@ -185,7 +185,7 @@ int unregister_device(const char *device,
 
 	dmeventd_lvm2_exit_with_pool(state);
 	log_info("No longer monitoring RAID device %s for events.",
-		 device);
+		 device_name);
 
 	return 1;
 }

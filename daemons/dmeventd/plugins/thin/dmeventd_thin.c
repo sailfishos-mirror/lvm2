@@ -341,7 +341,7 @@ static void _restore_thread_signals(struct dso_state *state)
 		log_warn("WARNING: Failed to block SIGCHLD.");
 }
 
-int register_device(const char *device,
+int register_device(const char *device_name,
 		    const char *uuid __attribute__((unused)),
 		    int major __attribute__((unused)),
 		    int minor __attribute__((unused)),
@@ -355,7 +355,7 @@ int register_device(const char *device,
 		goto_bad;
 
 	if (!dmeventd_lvm2_command(state->mem, cmd_str, sizeof(cmd_str),
-				   "_dmeventd_thin_command", device))
+				   "_dmeventd_thin_command", device_name))
 		goto_bad;
 
 	if (strncmp(cmd_str, "lvm ", 4) == 0) {
@@ -392,7 +392,7 @@ int register_device(const char *device,
 inval:
 	log_error("Invalid command for monitoring: %s.", cmd_str);
 bad:
-	log_error("Failed to monitor thin pool %s.", device);
+	log_error("Failed to monitor thin pool %s.", device_name);
 
 	if (state)
 		dmeventd_lvm2_exit_with_pool(state);
@@ -400,7 +400,7 @@ bad:
 	return 0;
 }
 
-int unregister_device(const char *device,
+int unregister_device(const char *device_name,
 		      const char *uuid __attribute__((unused)),
 		      int major __attribute__((unused)),
 		      int minor __attribute__((unused)),
