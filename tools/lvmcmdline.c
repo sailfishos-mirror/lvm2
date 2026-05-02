@@ -1069,7 +1069,7 @@ int metadatacopies_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int polloperation_arg(struct cmd_context *cmd, struct arg_values *av)
+int polloperation_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "pvmove") ||
 	    !strcmp(av->value, "convert") ||
@@ -1079,13 +1079,13 @@ int polloperation_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int writemostly_arg(struct cmd_context *cmd, struct arg_values *av)
+int writemostly_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	/* Could we verify that a PV arg looks like /dev/foo ? */
 	return 1;
 }
 
-int syncaction_arg(struct cmd_context *cmd, struct arg_values *av)
+int syncaction_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "check") ||
 	    !strcmp(av->value, "repair"))
@@ -1093,7 +1093,7 @@ int syncaction_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int reportformat_arg(struct cmd_context *cmd, struct arg_values *av)
+int reportformat_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "basic") ||
 	    !strcmp(av->value, "json") ||
@@ -1102,7 +1102,7 @@ int reportformat_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int configreport_arg(struct cmd_context *cmd, struct arg_values *av)
+int configreport_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "log") ||
 	    !strcmp(av->value, "vg") ||
@@ -1114,7 +1114,7 @@ int configreport_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int configtype_arg(struct cmd_context *cmd, struct arg_values *av)
+int configtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "current") ||
 	    !strcmp(av->value, "default") ||
@@ -1130,7 +1130,7 @@ int configtype_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int repairtype_arg(struct cmd_context *cmd, struct arg_values *av)
+int repairtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "pv_header") ||
 	    !strcmp(av->value, "metadata") ||
@@ -1139,7 +1139,7 @@ int repairtype_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int dumptype_arg(struct cmd_context *cmd, struct arg_values *av)
+int dumptype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	if (!strcmp(av->value, "headers") ||
 	    !strcmp(av->value, "metadata") ||
@@ -1151,7 +1151,7 @@ int dumptype_arg(struct cmd_context *cmd, struct arg_values *av)
 	return 0;
 }
 
-int headings_arg(struct cmd_context *cmd, struct arg_values *av)
+int headings_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av)
 {
 	return report_headings_str_to_type(av->value) != REPORT_HEADINGS_UNKNOWN;
 }
