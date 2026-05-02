@@ -1271,12 +1271,8 @@ void get_single_vgname_cmd_arg(struct cmd_context *cmd,
 			       struct dm_list *hints, char **vgname)
 {
 	struct hint *hint;
-	char namebuf[NAME_LEN];
 	char *name = NULL;
-	char *arg, *st, *p;
-	int i = 0;
-	
-	memset(namebuf, 0, sizeof(namebuf));
+	char *arg, *st;
 
 	if (cmd->position_argc != 1)
 		return;
@@ -1310,10 +1306,7 @@ void get_single_vgname_cmd_arg(struct cmd_context *cmd,
 	}
 
 	/* take vgname from vgname/lvname */
-	for (p = arg; p < st; p++)
-		namebuf[i++] = *p;
-
-	if (!(name = strdup(namebuf)))
+	if (!(name = strndup(arg, min((int)(st - arg), NAME_LEN - 1))))
 		return;
 
 check:
