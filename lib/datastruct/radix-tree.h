@@ -35,14 +35,14 @@ struct radix_tree *radix_tree_create(radix_value_dtr dtr, void *dtr_context);
 void radix_tree_destroy(struct radix_tree *rt);
 
 unsigned radix_tree_size(const struct radix_tree *rt);
-bool radix_tree_insert(struct radix_tree *rt, const void *key, size_t keylen, union radix_value v);
+bool radix_tree_insert(struct radix_tree *rt, const void *key, size_t keylen, union radix_value rv);
 bool radix_tree_remove(struct radix_tree *rt, const void *key, size_t keylen);
 /*
  * Returns: 1 success
  *	    0 failure during insert
  *	   -1 key had already existing value (that was updated)
  */
-int radix_tree_uniq_insert(struct radix_tree *rt, const void *key, size_t keylen, union radix_value v);
+int radix_tree_uniq_insert(struct radix_tree *rt, const void *key, size_t keylen, union radix_value rv);
 
 /* Returns the number of values removed */
 unsigned radix_tree_remove_prefix(struct radix_tree *rt, const void *prefix, size_t prefix_len);

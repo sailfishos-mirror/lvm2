@@ -34,7 +34,7 @@ void clear_hint_file(struct cmd_context *cmd);
 
 void invalidate_hints(struct cmd_context *cmd);
 
-int get_hints(struct cmd_context *cmd, struct dm_list *hints, int *newhints,
+int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
               struct dm_list *devs_in, struct dm_list *devs_out);
 
 int validate_hints(struct cmd_context *cmd, struct dm_list *hints);

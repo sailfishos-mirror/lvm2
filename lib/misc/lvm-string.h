@@ -36,11 +36,11 @@ typedef enum name_error {
 int emit_to_buffer(char **buffer, size_t *size, const char *fmt, ...)
   __attribute__ ((format(printf, 3, 4)));
 
-char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lvid,
+char *build_dm_uuid(struct dm_pool *mem, const struct logical_volume *lv,
 		    const char *layer);
 
 int validate_name(const char *n);
-name_error_t validate_name_detailed(const char *n);
+name_error_t validate_name_detailed(const char *name);
 int validate_tag(const char *n);
 
 void copy_systemid_chars(const char *src, char *dst);
