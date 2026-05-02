@@ -31,7 +31,7 @@ int device_ids_use_devname(struct cmd_context *cmd);
 int device_ids_use_lvmlv(struct cmd_context *cmd);
 int device_ids_read(struct cmd_context *cmd);
 int device_ids_write(struct cmd_context *cmd);
-int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid,
+int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_arg,
                   const char *idtype_arg, const char *id_arg, int use_idtype_only);
 void device_id_pvremove(struct cmd_context *cmd, struct device *dev);
 void device_id_lvremove(struct cmd_context *cmd, struct dm_list *removed_uuids);
@@ -86,7 +86,7 @@ struct dev_wwid *dev_add_nvme_wwid(const char *id, int dw_type, struct dm_list *
 int dev_read_vpd_wwids(struct cmd_context *cmd, struct device *dev);
 void dev_read_nvme_wwids(struct device *dev);
 int dev_read_sys_wwid(struct cmd_context *cmd, struct device *dev,
-		      char *buf, int bufsize, struct dev_wwid **dw_out);
+		      char *outbuf, int outbufsize, struct dev_wwid **dw_out);
 
 int pv_device_id_is_stale(const struct physical_volume *pv);
 
