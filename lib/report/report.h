@@ -100,7 +100,7 @@ void *report_init(struct cmd_context *cmd, const char *format, const char *keys,
 		  const char *selection, int multiple_output);
 int report_get_single_selection(struct cmd_context *cmd, unsigned report_type, const char **selection);
 void *report_init_for_selection(struct cmd_context *cmd, unsigned *report_type,
-				const char *selection);
+				const char *selection_criteria);
 int report_get_prefix_and_desc(unsigned report_type_id,
 			       const char **report_prefix,
 			       const char **report_desc);

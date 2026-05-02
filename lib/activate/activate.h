@@ -92,7 +92,7 @@ struct lv_activate_opts {
 	const struct logical_volume *component_lv;
 };
 
-void set_activation(int activation, int silent);
+void set_activation(int act, int silent);
 int activation(void);
 
 int driver_version(char *version, size_t size);
@@ -207,11 +207,11 @@ int lv_cache_status(const struct logical_volume *cache_lv,
 		    struct lv_status_cache **status);
 int lv_thin_device_id(const struct logical_volume *lv, uint32_t *device_id);
 int lv_thin_status(const struct logical_volume *lv, int flush,
-		   struct lv_status_thin **status);
+		   struct lv_status_thin **thin_status);
 int lv_thin_pool_status(const struct logical_volume *lv, int flush,
-			struct lv_status_thin_pool **status);
+			struct lv_status_thin_pool **thin_pool_status);
 int lv_vdo_pool_status(const struct logical_volume *lv, int flush,
-		       struct lv_status_vdo **status);
+		       struct lv_status_vdo **vdo_status);
 int lv_vdo_pool_percent(const struct logical_volume *lv, dm_percent_t *percent);
 int lv_vdo_pool_size_config(const struct logical_volume *lv,
 			    struct vdo_pool_size_config *cfg);

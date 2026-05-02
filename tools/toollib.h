@@ -114,7 +114,7 @@ int process_each_vg(struct cmd_context *cmd,
 		    int argc, char **argv,
 		    const char *one_vgname,
 		    struct dm_list *use_vgnames,
-		    uint32_t flags,
+		    uint32_t read_flags,
 		    int include_internal,
 		    struct processing_handle *handle,
 		    process_single_vg_fn_t process_single_vg);
@@ -137,7 +137,7 @@ int process_each_segment_in_pv(struct cmd_context *cmd,
 
 int process_each_lv(struct cmd_context *cmd, int argc, char **argv,
 		    const char *one_vgname, const char *one_lvname,
-		    uint32_t flags, struct processing_handle *handle,
+		    uint32_t read_flags, struct processing_handle *handle,
 		    check_single_lv_fn_t check_single_lv,
 		    process_single_lv_fn_t process_single_lv);
 
@@ -215,7 +215,7 @@ int get_stripe_params(struct cmd_context *cmd, const struct segment_type *segtyp
 
 int get_cache_params(struct cmd_context *cmd,
 		     uint32_t *chunk_size,
-		     cache_metadata_format_t *format,
+		     cache_metadata_format_t *cache_metadata_format,
 		     cache_mode_t *cache_mode,
 		     const char **name,
 		     struct dm_config_tree **settings);
