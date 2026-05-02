@@ -828,12 +828,12 @@ static int do_stop_lockspaces(void)
 	int result;
 	int rv;
 
-	memset(opts, 0, sizeof(opts));
+	opts[0] = '\0';
 
 	if (wait_opt)
-		strcat(opts, "wait ");
+		(void) strncat(opts, "wait ", sizeof(opts) - strlen(opts) - 1);
 	if (force_opt)
-		strcat(opts, "force ");
+		(void) strncat(opts, "force ", sizeof(opts) - strlen(opts) - 1);
 
 	reply = _lvmlockd_send("stop_all",
 				"cmd = %s", "lvmlockctl",
