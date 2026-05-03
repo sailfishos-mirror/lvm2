@@ -2536,6 +2536,10 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
 
 	if (!dm_hash_insert(_pvid_hash, pvid, info)) {
 		log_error("Adding pvid to hash failed %s", pvid);
+		if (created) {
+			label_destroy(info->label);
+			free(info);
+		}
 		return NULL;
 	}
 
