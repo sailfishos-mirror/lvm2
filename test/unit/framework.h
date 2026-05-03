@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <setjmp.h>
+#include <unistd.h>
 
 //-----------------------------------------------------------------
 
@@ -38,13 +39,32 @@ void test_fail(const char *fmt, ...)
 	__attribute__((noreturn, format (printf, 1, 2)));
 
 #define T_ASSERT(e) do {if (!(e)) {test_fail("assertion failed: '%s'", # e);} } while(0)
-#define T_ASSERT_EQUAL(x, y) T_ASSERT((x) == (y))
+#define T_ASSERT_EQUAL(x, y) \
+	do { long long _x = (x), _y = (y); \
+	     if (_x != _y) { \
+		     char _buf[256]; \
+		     snprintf(_buf, sizeof(_buf), \
+			      "'%s' != '%s': 0x%llx != 0x%llx", \
+			      #x, #y, (unsigned long long)_x, (unsigned long long)_y); \
+		     test_fail("assertion failed: %s", _buf); \
+	     } \
+	} while(0)
 #define T_ASSERT_NOT_EQUAL(x, y) T_ASSERT((x) != (y))
 
 extern jmp_buf test_k;
 #define TEST_FAILED 1
 
-#define PAGE_SIZE ({ long ps = sysconf(_SC_PAGESIZE); ((ps > 0) && (ps < (1 << 20))) ? ps : 4096 ; })
+static inline long test_page_size(void)
+{
+	long ps = sysconf(_SC_PAGESIZE);
+
+	if (ps <= 0 || ps >= (1 << 20))
+		ps = 4096;
+
+	return ps;
+}
+
+#define TEST_PAGE_SIZE test_page_size()
 
 //-----------------------------------------------------------------
 

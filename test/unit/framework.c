@@ -5,7 +5,6 @@
  *--------------------------------------------------------------*/
 
 jmp_buf test_k;
-#define TEST_FAILED 1
 
 void test_fail(const char *fmt, ...)
 {
