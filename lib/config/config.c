@@ -434,14 +434,14 @@ static int _override_config_tree_from_metadata_profile(struct cmd_context *cmd,
 	if (cs->type == CONFIG_STRING) {
 		cft_previous = cft;
 		cft = cft->cascade;
+		cs = dm_config_get_custom(cft);
 	}
 
 	if (cs->type == CONFIG_PROFILE_COMMAND) {
 		cft_previous = cft;
 		cft = cft->cascade;
+		cs = dm_config_get_custom(cft);
 	}
-
-	cs = dm_config_get_custom(cft);
 
 	if (cs->type == CONFIG_PROFILE_METADATA) {
 		log_error(INTERNAL_ERROR "_override_config_tree_from_metadata_profile: "
