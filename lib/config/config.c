@@ -1912,8 +1912,11 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 			}
 
 			line = dm_pool_end_object(out->mem);
+		} else if (!(line = strchr(line, '='))) {
+			log_error("Missing '=' in config line.");
+			return 0;
 		} else
-			line = strchr(line, '=') + 1;
+			line++;
 	}
 
 	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
