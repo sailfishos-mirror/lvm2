@@ -333,6 +333,10 @@ int compare_value(struct dm_config_value *a, struct dm_config_value *b)
 
 	if (r == 0 && a->next && b->next)
 		r = compare_value(a->next, b->next);
+	if (r == 0 && a->next && !b->next)
+		r = 1;
+	if (r == 0 && !a->next && b->next)
+		r = -1;
 	return r;
 }
 
