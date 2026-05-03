@@ -115,7 +115,7 @@ int dev_dm_uuid(struct cmd_context *cmd, struct device *dev,
                 char *uuid_buf, size_t uuid_buf_size);
 
 int raid4_is_supported(struct cmd_context *cmd, const struct segment_type *segtype);
-int lvm_dm_prefix_check(int major, int minor, const char *prefix);
+int lvm_dm_prefix_check(uint32_t major, uint32_t minor, const char *prefix);
 int list_segment_modules(struct dm_pool *mem, const struct lv_segment *seg,
 			 struct dm_list *modules);
 int list_lv_modules(struct dm_pool *mem, const struct logical_volume *lv,
