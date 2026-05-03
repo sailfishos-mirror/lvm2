@@ -74,6 +74,8 @@ daemons.cflow: tools.cflow
 cflow: include.cflow
 endif
 
+lib.cppcheck tools.cppcheck daemons.cppcheck: include.cppcheck
+
 CSCOPE_DIRS = daemons include lib libdaemon scripts tools libdm test
 ifneq ("@CSCOPE_CMD@", "")
 cscope.out:
@@ -156,6 +158,7 @@ help:
 	@echo "  all			Default target."
 	@echo "  all_man		Build all man pages with generators."
 	@echo "  clean			Remove all compile files."
+	@echo "  cppcheck		Run cppcheck static analysis."
 	@echo "  device-mapper		Device mapper part of lvm2."
 	@echo "  dist			Generate distributable file."
 	@echo "  distclean		Remove all build files."
