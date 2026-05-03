@@ -720,8 +720,8 @@ static void _get_type_name(char *buf, size_t buf_size, unsigned type)
 static void _log_type_error(const char *path, unsigned actual, unsigned expected,
 			    int suppress_messages)
 {
-	static char actual_type_name[128];
-	static char expected_type_name[128];
+	char actual_type_name[128];
+	char expected_type_name[128];
 
 	_get_type_name(actual_type_name, sizeof(actual_type_name), actual);
 	_get_type_name(expected_type_name, sizeof(expected_type_name), expected);
@@ -2375,7 +2375,7 @@ struct profile *add_profile(struct cmd_context *cmd, const char *profile_name, c
 }
 
 int load_profile(struct cmd_context *cmd, struct profile *profile) {
-	static char profile_path[PATH_MAX];
+	char profile_path[PATH_MAX];
 
 	if (critical_section()) {
 		log_error(INTERNAL_ERROR "Trying to load profile %s "
