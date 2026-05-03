@@ -2285,11 +2285,11 @@ static void _cleanup_unused_threads(void)
 
 			/* Signal possibly sleeping thread */
 			ret = _thread_wakeup_signal(thread);
-			if (!ret || (ret != ESRCH)) {
+			if (ret != ESRCH) {
 				_unlock_thread(thread);
-				break; /* check again on the next round */
+				break; /* signal delivered or error, retry next round */
 			}
-			/* thread is likely gone */
+			/* ESRCH - thread is gone, join below */
 		}
 
 		_unlock_thread(thread);
