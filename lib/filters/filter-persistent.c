@@ -71,7 +71,7 @@ static void _persistent_filter_wipe(struct cmd_context *cmd, struct dev_filter *
 
 	if (!dev) {
 		_init_hash(pf);
-	} else {
+	} else if (pf->devices) {
 		dm_list_iterate_items(sl, &dev->aliases)
 			(void) radix_tree_remove(pf->devices, sl->str, strlen(sl->str));
 	}
@@ -85,7 +85,8 @@ static int _lookup_p(struct cmd_context *cmd, struct dev_filter *f, struct devic
 	int pass = 1;
 	const char *devname = dev_name(dev);
 
-	if (use_filter_name && strcmp(f->name, use_filter_name))
+	if ((use_filter_name && strcmp(f->name, use_filter_name)) ||
+	    !pf->devices) /* radix_tree_create failed */
 		return pf->real->passes_filter(cmd, pf->real, dev, use_filter_name);
 
 	if (dm_list_empty(&dev->aliases)) {
@@ -148,7 +149,8 @@ static void _persistent_destroy(struct dev_filter *f)
 	if (f->use_count)
 		log_error(INTERNAL_ERROR "Destroying persistent filter while in use %u times.", f->use_count);
 
-	radix_tree_destroy(pf->devices);
+	if (pf->devices)
+		radix_tree_destroy(pf->devices);
 	pf->real->destroy(pf->real);
 	free(pf);
 	free(f);
