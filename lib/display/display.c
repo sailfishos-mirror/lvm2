@@ -758,7 +758,7 @@ int lvdisplay_segments(const struct logical_volume *lv)
 
 void vgdisplay_full(const struct volume_group *vg)
 {
-	uint32_t access_str;
+	uint32_t access_mode;
 	uint32_t active_pvs;
 	char uuid[64] __attribute__((aligned(8)));
 
@@ -770,12 +770,12 @@ void vgdisplay_full(const struct volume_group *vg)
 	log_print("Format                %s", vg->fid->fmt->name);
 	log_print("Metadata Areas        %u", vg_mda_count(vg));
 	log_print("Metadata Sequence No  %u", vg->seqno);
-	access_str = vg->status & (LVM_READ | LVM_WRITE);
+	access_mode = vg->status & (LVM_READ | LVM_WRITE);
 	log_print("VG Access             %s%s%s%s",
-		  access_str == (LVM_READ | LVM_WRITE) ? "read/write" : "",
-		  access_str == LVM_READ ? "read" : "",
-		  access_str == LVM_WRITE ? "write" : "",
-		  access_str == 0 ? "error" : "");
+		  access_mode == (LVM_READ | LVM_WRITE) ? "read/write" : "",
+		  access_mode == LVM_READ ? "read" : "",
+		  access_mode == LVM_WRITE ? "write" : "",
+		  access_mode == 0 ? "error" : "");
 	log_print("VG Status             %s%sresizable",
 		  vg_is_exported(vg) ? "exported/" : "",
 		  vg_is_resizeable(vg) ? "" : "NOT ");
