@@ -93,7 +93,7 @@ static int _set_custom_log_stream(struct log_stream_item *stream_item, int custo
 		goto out;
 
 	if (is_valid_fd(custom_fd)) {
-		if ((flags = fcntl(custom_fd, F_GETFL)) > 0) {
+		if ((flags = fcntl(custom_fd, F_GETFL)) >= 0) {
 			if ((flags & O_ACCMODE) == O_RDONLY) {
 				log_error("File descriptor %d already open in read-only "
 					  "mode, expected write-only or read-write mode.",
