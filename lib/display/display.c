@@ -317,7 +317,7 @@ void pvdisplay_full(const struct cmd_context *cmd,
 	pe_free = pv->pe_count - pv->pe_alloc_count;
 	if (pv->pe_count && (pv->status & ALLOCATABLE_PV))
 		log_print("Allocatable           yes %s",
-			  (!pe_free && pv->pe_count) ? "(but full)" : "");
+			  !pe_free ? "(but full)" : "");
 	else
 		log_print("Allocatable           NO");
 
