@@ -313,8 +313,10 @@ static int _pthread_cond_init(pthread_cond_t *cond)
 	pthread_condattr_t cattr;
 	int r;
 
-	r = (pthread_condattr_init(&cattr) ||
-	     pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC) ||
+	if (pthread_condattr_init(&cattr))
+		return 1;
+
+	r = (pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC) ||
 	     pthread_cond_init(cond, &cattr));
 	pthread_condattr_destroy(&cattr);
 
