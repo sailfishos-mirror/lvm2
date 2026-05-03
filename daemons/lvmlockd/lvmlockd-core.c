@@ -2181,6 +2181,16 @@ static void res_process(struct lockspace *ls, struct resource *r,
 	 * transient requests on existing transient locks
 	 */
 
+	/*
+	 * Suppress scan-build false positive (unix.Malloc use-after-free).
+	 * The analyzer cannot track that list_for_each_entry_safe
+	 * re-initializes act/safe via its for-initializer after
+	 * add_client_result() may free the previous entry.
+	 * Only affects static analysis (scan-build), not regular
+	 * compilation with gcc or clang.
+	 */
+	#ifndef __clang_analyzer__
+
 	list_for_each_entry_safe(act, safe, &r->actions, list) {
 		if (act->flags & LD_AF_PERSISTENT)
 			continue;
@@ -2539,6 +2549,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
 		list_add(&r->list, &ls->dispose);
 	}
 
+	#endif /* __clang_analyzer__ */
 	return;
 
 r_free:
