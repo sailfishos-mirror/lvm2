@@ -106,7 +106,7 @@ static unsigned _count(struct node *n)
 
 unsigned radix_tree_size(const struct radix_tree *rt)
 {
-	return _count(rt->root);
+	return rt->nr_entries;
 }
 
 static struct node **_lookup(struct node **pn, const uint8_t *kb, const uint8_t *ke)
