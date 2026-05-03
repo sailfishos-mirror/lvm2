@@ -101,11 +101,19 @@ int lvmcache_init(struct cmd_context *cmd)
 	if (!(_vgname_hash = dm_hash_create(127)))
 		return 0;
 
-	if (!(_vgid_hash = dm_hash_create(126)))
+	if (!(_vgid_hash = dm_hash_create(126))) {
+		dm_hash_destroy(_vgname_hash);
+		_vgname_hash = NULL;
 		return 0;
+	}
 
-	if (!(_pvid_hash = dm_hash_create(125)))
+	if (!(_pvid_hash = dm_hash_create(125))) {
+		dm_hash_destroy(_vgid_hash);
+		dm_hash_destroy(_vgname_hash);
+		_vgid_hash = NULL;
+		_vgname_hash = NULL;
 		return 0;
+	}
 
 	return 1;
 }
