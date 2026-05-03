@@ -2506,13 +2506,16 @@ struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *lab
 		}
 
 		if (info->label->labeller != labeller) {
+			struct label *new_label;
+
 			log_verbose("Changing labeller on dev %s from %s to %s",
 				    dev_name(info->dev),
 				    info->label->labeller->fmt->name,
 				    labeller->fmt->name);
-			label_destroy(info->label);
-			if (!(info->label = label_create(labeller)))
+			if (!(new_label = label_create(labeller)))
 				return_NULL;
+			label_destroy(info->label);
+			info->label = new_label;
 			info->label->info = info;
 		}
 	}
