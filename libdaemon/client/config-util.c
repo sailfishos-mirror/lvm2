@@ -349,8 +349,14 @@ int compare_config(struct dm_config_node *a, struct dm_config_node *b)
 		result = 1;
 	if (!a->v && b->v)
 		result = -1;
-	if (a->child && b->child)
-		result = compare_config(a->child, b->child);
+	if (!result) {
+		if (a->child && b->child)
+			result = compare_config(a->child, b->child);
+		else if (a->child)
+			result = 1;
+		else if (b->child)
+			result = -1;
+	}
 
 	if (result) {
 		// DEBUGLOG("config inequality at %s / %s", a->key, b->key);
