@@ -48,18 +48,23 @@ bool radix_tree_values(const struct radix_tree *rt, const void *key, size_t keyl
 	struct visitor vt = {
 		.it.visit = _visitor,
 		.nr_entries = rt->nr_entries,
-		.values = calloc(rt->nr_entries + 1, sizeof(union radix_value)),
 	};
 
-	if (vt.values) {
-		/* build set of all values in current radix tree */
-		radix_tree_iterate(rt, key, keylen, &vt.it);
-		*nr_values = vt.pos;
-		*values = vt.values;
-		return true;
-	}
+	*values = NULL;
+	*nr_values = 0;
 
-	return false;
+	if (!rt->nr_entries)
+		return true;
+
+	vt.values = calloc(rt->nr_entries, sizeof(union radix_value));
+	if (!vt.values)
+		return false;
+
+	/* build set of all values in current radix tree */
+	radix_tree_iterate(rt, key, keylen, &vt.it);
+	*nr_values = vt.pos;
+	*values = vt.values;
+	return true;
 }
 
 /*----------------------------------------------------------------*/
