@@ -24,7 +24,7 @@ int str_list_add(struct dm_pool *mem, struct dm_list *sll, const char *str);
 int str_list_add_list(struct dm_pool *mem, struct dm_list *sll, const struct dm_list *sll2);
 int str_list_add_no_dup_check(struct dm_pool *mem, struct dm_list *sll, const char *str);
 int str_list_add_h_no_dup_check(struct dm_pool *mem, struct dm_list *sll, const char *str);
-void str_list_del(struct dm_list *sll, const char *str);
+int str_list_del(struct dm_list *sll, const char *str);
 void str_list_wipe(struct dm_list *sll);
 int str_list_match_item(const struct dm_list *sll, const char *str);
 int str_list_match_list(const struct dm_list *sll, const struct dm_list *sll2, const char **tag_matched);
