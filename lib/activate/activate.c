@@ -631,8 +631,14 @@ int module_present(struct cmd_context *cmd, const char *target_name)
 			return 1;
 		}
 
-		if (path[i] == '/' && _check_modules_builtin(cmd, path + i + 1))
-			return 1;
+		if (path[i] == '/') {
+			char builtin[128];
+
+			if (dm_snprintf(builtin, sizeof(builtin),
+					"dm-%s", target_name) > 0 &&
+			    _check_modules_builtin(cmd, builtin))
+				return 1;
+		}
 	}
 
 #ifdef MODPROBE_CMD
