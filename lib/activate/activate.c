@@ -593,12 +593,16 @@ static int _check_modules_builtin(struct cmd_context *cmd, const char *target)
 		return 0;
 	}
 
-	while (getline(&line, &len, fp) > 0)
-		if (strstr(line, target)) {
+	while (getline(&line, &len, fp) > 0) {
+		const char *basename = strrchr(line, '/');
+		basename = basename ? basename + 1 : line;
+		if (!strncmp(basename, target, strlen(target)) &&
+		    !strncmp(basename + strlen(target), ".ko", 3)) {
 			log_debug_activation("Found %s as built-in kernel module.", target);
 			r = 1;
 			break;
 		}
+	}
 
 	free(line);
 
@@ -631,8 +635,14 @@ int module_present(struct cmd_context *cmd, const char *target_name)
 			return 1;
 		}
 
-		if (path[i] == '/' && _check_modules_builtin(cmd, path + i + 1))
-			return 1;
+		if (path[i] == '/') {
+			char builtin[128];
+
+			if (dm_snprintf(builtin, sizeof(builtin),
+					"dm-%s", target_name) > 0 &&
+			    _check_modules_builtin(cmd, builtin))
+				return 1;
+		}
 	}
 
 #ifdef MODPROBE_CMD
