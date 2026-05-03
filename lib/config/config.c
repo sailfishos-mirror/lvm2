@@ -1199,6 +1199,8 @@ int config_def_check(struct cft_check_handle *handle)
 			}
 			if (!dm_hash_insert(handle->cmd->cft_def_hash, vp, (void*)def)) {
 				log_error("Failed to insert configuration to hash.");
+				dm_hash_destroy(handle->cmd->cft_def_hash);
+				handle->cmd->cft_def_hash = NULL;
 				r = 0;
 				goto out;
 			}
