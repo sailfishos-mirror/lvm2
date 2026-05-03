@@ -874,7 +874,7 @@ static int _get_status(struct message_data *message_data)
 	int count, current;
 	size_t size = 0;
 	size_t len;
-	char **buffers;
+	char **buffers = NULL;
 	char *message;
 
 	if (!message_data->id)
@@ -887,7 +887,10 @@ static int _get_status(struct message_data *message_data)
 		goto out;
 	}
 
-	buffers = alloca(sizeof(char*) * count);
+	if (!(buffers = malloc(sizeof(char*) * count))) {
+		_unlock_mutex();
+		goto out;
+	}
 	dm_list_iterate_items(thread, &_thread_registry) {
 		_lock_thread(thread);
 		/* coverity[overflow_sink] - only positive 'current' is used */
@@ -926,6 +929,7 @@ static int _get_status(struct message_data *message_data)
  out:
 	for (j = 0; j < i; ++j)
 		free(buffers[j]);
+	free(buffers);
 
 	return ret;
 }
