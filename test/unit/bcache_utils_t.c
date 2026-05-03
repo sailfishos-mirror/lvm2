@@ -26,7 +26,7 @@
 
 //----------------------------------------------------------------
 
-#define T_BLOCK_SIZE ((uint64_t)PAGE_SIZE)
+#define T_BLOCK_SIZE ((uint64_t)TEST_PAGE_SIZE)
 #define NR_BLOCKS 64
 #define INIT_PATTERN 123
 
@@ -122,9 +122,9 @@ static void _fix_exit(void *fixture)
 	struct fixture *f = fixture;
 
 	if (f) {
+		bcache_clear_fd(f->di);
 		bcache_destroy(f->cache);
 		(void) close(f->fd);
-		bcache_clear_fd(f->di);
 		(void) unlink(f->fname);
 		free(f);
 	}

@@ -30,7 +30,7 @@
 #define SECTOR_SHIFT 9
 #define SECTOR_SIZE 512
 #define BLOCK_SIZE_SECTORS 8
-#define PAGE_SIZE_SECTORS ((PAGE_SIZE) >> SECTOR_SHIFT)
+#define PAGE_SIZE_SECTORS ((TEST_PAGE_SIZE) >> SECTOR_SHIFT)
 #define NR_BLOCKS 64
 
 struct fixture {
@@ -87,7 +87,7 @@ static void *_fix_init(void)
 	T_ASSERT(f);
 	f->e = create_async_io_engine();
 	T_ASSERT(f->e);
-	if (posix_memalign((void **) &f->data, PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
+	if (posix_memalign((void **) &f->data, TEST_PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
 		test_fail("posix_memalign failed");
 
 	snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");

@@ -195,22 +195,22 @@ static void _run_test(struct test_details *t, bool use_colour, unsigned *passed,
 	fprintf(stderr, "[RUN    ] %s\n", t->path);
 
 	(*total)++;
+
+	if (ts->fixture_init)
+		fixture = ts->fixture_init();
+	else
+		fixture = NULL;
+
 	if (setjmp(test_k))
 		fprintf(stderr, "%s[   FAIL]%s %s\n", red(use_colour), normal(use_colour), t->path);
 	else {
-		if (ts->fixture_init && ts->fixture_exit)
-			fixture = ts->fixture_init();
-		else
-			fixture = NULL;
-
 		t->fn(fixture);
-
-		if (ts->fixture_exit)
-			ts->fixture_exit(fixture);
-
 		(*passed)++;
 		fprintf(stderr, "%s[     OK]%s\n", green(use_colour), normal(use_colour));
 	}
+
+	if (ts->fixture_exit)
+		ts->fixture_exit(fixture);
 }
 
 static bool _run_tests(struct test_details **tests, unsigned nr)
