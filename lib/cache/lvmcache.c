@@ -598,6 +598,7 @@ static int _all_multipath_components(struct cmd_context *cmd, struct lvmcache_in
 	dm_list_iterate_items(devl, altdevs) {
 		dev = devl->dev;
 		dev_is_mp = (cmd->dev_types->device_mapper_major == MAJOR(dev->dev)) && dev_has_mpath_uuid(cmd, dev, NULL);
+		wwid_buf[0] = '\0';
 
 		if (dev_is_mp) {
 			if ((wwid = dev_mpath_component_wwid(cmd, dev)))
