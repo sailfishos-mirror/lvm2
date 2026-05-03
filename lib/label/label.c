@@ -1128,7 +1128,8 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 
 	log_debug("label_scan_vg_online: read and filter devs");
 
-	label_scan_setup_bcache();
+	if (!label_scan_setup_bcache())
+		goto_bad;
 
 	dm_list_iterate_items_safe(devl, devl2, &devs) {
 		struct dev_use *du;
@@ -1608,6 +1609,9 @@ int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct d
 {
 	struct device_list *devl;
 	int failed = 0;
+
+	if (!label_scan_setup_bcache())
+		return_0;
 
 	dm_list_iterate_items(devl, devs) {
 		label_scan_invalidate(devl->dev);
