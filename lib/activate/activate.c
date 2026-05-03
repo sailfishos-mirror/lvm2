@@ -229,7 +229,7 @@ int target_present(struct cmd_context *cmd, const char *target_name,
 {
 	return 0;
 }
-int lvm_dm_prefix_check(int major, int minor, const char *prefix)
+int lvm_dm_prefix_check(uint32_t major, uint32_t minor, const char *prefix)
 {
 	return 0;
 }
@@ -566,7 +566,7 @@ out:
 	return r;
 }
 
-int lvm_dm_prefix_check(int major, int minor, const char *prefix)
+int lvm_dm_prefix_check(uint32_t major, uint32_t minor, const char *prefix)
 {
 	return dev_manager_check_prefix_dm_major_minor(major, minor, prefix);
 }
