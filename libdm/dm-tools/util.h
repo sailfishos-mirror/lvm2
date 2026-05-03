@@ -43,13 +43,6 @@
 # define GCC_UNSUPPRESS_WARNINGS
 #endif
 
-/* Use wrapper for checked results */
-static inline __attribute__((warn_unused_result))
-	int _dm_strncpy(char *dest, const char *src, size_t n)
-{
-	return dm_strncpy(dest, src, n);
-}
-
 #define min(a, b) ({ __typeof__(a) _a = (a); \
 		     __typeof__(b) _b = (b); \
 		     (void) (&_a == &_b); \
@@ -62,44 +55,12 @@ static inline __attribute__((warn_unused_result))
 
 #define is_power_of_2(n) ((n) && !((n) & ((n) - 1)))
 
-#define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
-
-/* Define some portable printing types */
-#define PRIsize_t "zu"
-#define PRIssize_t "zd"
-#define PRIptrdiff_t "td"
-#define PRIpid_t PRId32
-
-/* For convenience */
-#define FMTsize_t "%" PRIsize_t
-#define FMTssize_t "%" PRIssize_t
-#define FMTptrdiff_t "%" PRIptrdiff_t
-#define FMTpid_t "%" PRIpid_t
-
-#define FMTd8  "%" PRId8
-#define FMTd16 "%" PRId16
-#define FMTd32 "%" PRId32
-#define FMTd64 "%" PRId64
-
-#define FMTi8  "%" PRIi8
-#define FMTi16 "%" PRIi16
-#define FMTi32 "%" PRIi32
-#define FMTi64 "%" PRIi64
-
-#define FMTo8  "%" PRIo8
-#define FMTo16 "%" PRIo16
-#define FMTo32 "%" PRIo32
-#define FMTo64 "%" PRIo64
-
-#define FMTu8  "%" PRIu8
-#define FMTu16 "%" PRIu16
-#define FMTu32 "%" PRIu32
-#define FMTu64 "%" PRIu64
-
-#define FMTx8  "%" PRIx8
-#define FMTx16 "%" PRIx16
-#define FMTx32 "%" PRIx32
-#define FMTx64 "%" PRIx64
+/* Use wrapper for checked results */
+static inline __attribute__((warn_unused_result))
+	int _dm_strncpy(char *dest, const char *src, size_t n)
+{
+	return dm_strncpy(dest, src, n);
+}
 
 /*
  * GCC 3.4 adds a __builtin_clz, which uses the count leading zeros (clz)
@@ -142,5 +103,67 @@ static inline unsigned _dm_clz(unsigned x)
 }
 #define clz(x) _dm_clz((x))
 #endif /* ifdef HAVE___BUILTIN_CLZ */
+
+#ifdef HAVE___BUILTIN_CLZLL
+#define clzll(x) ((x) ? __builtin_clzll((x)) : 64)
+#else /* ifdef HAVE___BUILTIN_CLZLL */
+static inline unsigned _dm_clzll(unsigned long long x)
+{
+	if (x <= 0xffffffff)
+		return 32 + clz((unsigned) (x & 0xffffffff));
+
+	return clz((unsigned)(x >> 32));
+}
+#define clzll(x) _dm_clzll((x))
+#endif /* ifdef HAVE___BUILTIN_CLZLL */
+
+#ifndef HAVE_FFS
+#ifdef HAVE___BUILTIN_FFS
+#define ffs(x) __builtin_ffs((x))
+#else
+#error ffs() not implemented!
+#endif /* ifdef HAVE___BUILTIN_FFS */
+#endif /* ifndef HAVE_FFS */
+
+#define KERNEL_VERSION(major, minor, release) (((major) << 16) + ((minor) << 8) + (release))
+
+/* Define some portable printing types */
+#define PRIsize_t "zu"
+#define PRIssize_t "zd"
+#define PRIptrdiff_t "td"
+#define PRIpid_t PRId32
+
+/* For convenience */
+#define FMTsize_t "%" PRIsize_t
+#define FMTssize_t "%" PRIssize_t
+#define FMTptrdiff_t "%" PRIptrdiff_t
+#define FMTpid_t "%" PRIpid_t
+
+#define FMTd8  "%" PRId8
+#define FMTd16 "%" PRId16
+#define FMTd32 "%" PRId32
+#define FMTd64 "%" PRId64
+
+#define FMTi8  "%" PRIi8
+#define FMTi16 "%" PRIi16
+#define FMTi32 "%" PRIi32
+#define FMTi64 "%" PRIi64
+
+#define FMTo8  "%" PRIo8
+#define FMTo16 "%" PRIo16
+#define FMTo32 "%" PRIo32
+#define FMTo64 "%" PRIo64
+
+#define FMTu8  "%" PRIu8
+#define FMTu16 "%" PRIu16
+#define FMTu32 "%" PRIu32
+#define FMTu64 "%" PRIu64
+
+#define FMTx8  "%" PRIx8
+#define FMTx16 "%" PRIx16
+#define FMTx32 "%" PRIx32
+#define FMTx64 "%" PRIx64
+
+#define FMTVGID "%." DM_TO_STRING(ID_LEN) "s"
 
 #endif
