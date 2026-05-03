@@ -2083,7 +2083,7 @@ static int _client_write(struct dm_event_fifos *fifos,
 
 	size_t size = 2 * sizeof(uint32_t) + ((msg->data) ? msg->size : 0);
 	uint32_t *header = malloc(size);
-	char *buf = (char *)header;
+	char *buf;
 
 	if (!header) {
 		/* Reply with ENOMEM message */
@@ -2095,8 +2095,10 @@ static int _client_write(struct dm_event_fifos *fifos,
 		header[0] = htonl(msg->cmd);
 		header[1] = htonl((msg->data) ? msg->size : 0);
 		if (msg->data)
-			memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
+			memcpy(header + 2, msg->data, msg->size);
 	}
+
+	buf = (char *)header;
 
 	while (bytes < size) {
 		/* Watch client write FIFO to be ready for output. */
