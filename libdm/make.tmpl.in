@@ -43,6 +43,7 @@ GENHTML = @GENHTML@
 LN_S = @LN_S@
 SED = @SED@
 CFLOW_CMD = @CFLOW_CMD@
+CPPCHECK_CMD = @CPPCHECK_CMD@
 AWK = @AWK@
 CHMOD = @CHMOD@
 EGREP = @EGREP@
@@ -331,6 +332,7 @@ SUBDIRS.device-mapper := $(SUBDIRS:=.device-mapper)
 # Simple recursive SUBDIRS targets - just add name to extend
 SIMPLE_RECURSIVE_TARGETS = \
 	cflow \
+	cppcheck \
 	generate \
 	install \
 	install_device-mapper \
@@ -420,6 +422,24 @@ $(CFLOW_TARGET).xref: $(CFLOW_SOURCES)
 #	$(CFLOW_CMD) -o$@ $(CFLOW_FLAGS) -r --omit-arguments -T -b $(CFLOW_SOURCES)
 cflow: $(CFLOW_TARGET).cflow $(CFLOW_TARGET).tree $(CFLOW_TARGET).rxref $(CFLOW_TARGET).xref
 #$(CFLOW_TARGET).rtree
+endif
+endif
+
+ifneq ("$(CPPCHECK_CMD)", "")
+CPPCHECK_SOURCES = $(SOURCES) $(SOURCES2)
+CPPCHECK_INCLUDES = $(subst -include ,--include=,$(INCLUDES))
+CPPCHECK_ENABLE ?= warning,style,performance,portability
+CPPCHECK_FLAGS ?= --inconclusive --check-level=exhaustive -q
+CPPCHECK_SUPPRESS ?= missingIncludeSystem unusedFunction \
+	clarifyCalculation constParameterPointer variableScope \
+	constVariablePointer constParameterCallback allocaCalled \
+	varFuncNullUB
+ifneq ("$(CPPCHECK_SOURCES)", " ")
+cppcheck:
+	$(CPPCHECK_CMD) --enable=$(CPPCHECK_ENABLE) \
+	 $(CPPCHECK_FLAGS) \
+	 $(addprefix --suppress=,$(CPPCHECK_SUPPRESS)) \
+	 $(CPPCHECK_INCLUDES) $(DEFS) $(CPPCHECK_SOURCES)
 endif
 endif
 
