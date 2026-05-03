@@ -30,7 +30,8 @@ struct rfilter {
 static int _extract_pattern(struct dm_pool *mem, const char *pat,
 			    char **regex, dm_bitset_t accept, int ix)
 {
-	char sep, *r, *ptr;
+	char sep, *r;
+	size_t len;
 
 	/*
 	 * is this an accept or reject pattern
@@ -80,12 +81,13 @@ static int _extract_pattern(struct dm_pool *mem, const char *pat,
 	/*
 	 * trim the trailing character, having checked it's sep.
 	 */
-	ptr = r + strlen(r) - 1;
-	if (*ptr != sep) {
+	len = strlen(r);
+
+	if (!len || r[len - 1] != sep) {
 		log_error("Invalid separator at end of regex.");
 		return 0;
 	}
-	*ptr = '\0';
+	r[len - 1] = '\0';
 
 	regex[ix] = r;
 	return 1;
