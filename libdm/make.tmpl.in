@@ -318,24 +318,27 @@ DEPS = $(top_builddir)/libdm/make.tmpl $(top_srcdir)/VERSION \
 OBJECTS = $(SOURCES:%.c=%.o) $(CXXSOURCES:%.cpp=%.o)
 POTFILES = $(SOURCES:%.c=%.pot) $(SOURCES2:%.c=%.pot)
 
-.PHONY: all pofile distclean clean cleandir cflow device-mapper
-.PHONY: install install_device-mapper install_lvm2
+.PHONY: all cleandir device-mapper
 .PHONY: install_dbus_service
 .PHONY: install_lib_shared install_dm_plugin install_lvm2_plugin
 .PHONY: install_ocf install_systemd_generators install_all_man all_man man help
 .PHONY: python_bindings install_python_bindings
-.PHONY: $(SUBDIRS) $(SUBDIRS.install) $(SUBDIRS.clean) $(SUBDIRS.distclean)
-.PHONY: $(SUBDIRS.pofile) $(SUBDIRS.cflow)
-.PHONY: $(SUBDIRS.device-mapper) $(SUBDIRS.install-device-mapper)
-.PHONY: $(SUBDIRS.generate) generate
+.PHONY: $(SUBDIRS)
+.PHONY: $(SUBDIRS.device-mapper)
 
 SUBDIRS.device-mapper := $(SUBDIRS:=.device-mapper)
-SUBDIRS.install := $(SUBDIRS:=.install)
-SUBDIRS.install_device-mapper := $(SUBDIRS:=.install_device-mapper)
-SUBDIRS.pofile := $(SUBDIRS:=.pofile)
-SUBDIRS.cflow := $(SUBDIRS:=.cflow)
-SUBDIRS.clean := $(SUBDIRS:=.clean)
-SUBDIRS.distclean := $(SUBDIRS:=.distclean)
+
+# Simple recursive SUBDIRS targets - just add name to extend
+SIMPLE_RECURSIVE_TARGETS = \
+	cflow \
+	generate \
+	install \
+	install_device-mapper \
+	pofile
+
+SIMPLE_RECURSIVE_TARGETS_IGNORE = \
+	clean \
+	distclean
 
 TARGETS += $(LIB_STATIC)
 ifeq ("@SHARED_LINK@", "yes")
@@ -344,10 +347,19 @@ endif
 
 all: $(SUBDIRS) $(TARGETS)
 
-install: all $(SUBDIRS.install)
-install_device-mapper: $(SUBDIRS.install_device-mapper)
+define SIMPLE_RECURSIVE_RULE
+.PHONY: $(1) $$(SUBDIRS.$(1))
+SUBDIRS.$(1) := $$(SUBDIRS:=.$(1))
+$(1): $$(SUBDIRS.$(1))
+$$(SUBDIRS.$(1)):
+	$(2)$$(MAKE) -C $$(@:.$(1)=) $(1)
+endef
+
+$(foreach t,$(SIMPLE_RECURSIVE_TARGETS),$(eval $(call SIMPLE_RECURSIVE_RULE,$(t),)))
+$(foreach t,$(SIMPLE_RECURSIVE_TARGETS_IGNORE),$(eval $(call SIMPLE_RECURSIVE_RULE,$(t),-)))
+
+install: all
 install_device_mapper: install_device-mapper
-cflow: $(SUBDIRS.cflow)
 
 $(SUBDIRS): $(SUBDIRS.device-mapper)
 	$(MAKE) -C $@
@@ -356,29 +368,11 @@ $(SUBDIRS.device-mapper):
 	$(MAKE) -C $(@:.device-mapper=) device-mapper
 
 $(SUBDIRS.install): $(SUBDIRS)
-	$(MAKE) -C $(@:.install=) install
-
 $(SUBDIRS.install_device-mapper): device-mapper
-	$(MAKE) -C $(@:.install_device-mapper=) install_device-mapper
-
-$(SUBDIRS.clean):
-	-$(MAKE) -C $(@:.clean=) clean
-
-$(SUBDIRS.distclean):
-	-$(MAKE) -C $(@:.distclean=) distclean
-
-$(SUBDIRS.cflow):
-	$(MAKE) -C $(@:.cflow=) cflow
 
 ifeq ("@INTL@", "yes")
-pofile: $(SUBDIRS.pofile) $(POTFILES)
-
-$(SUBDIRS.pofile):
-	$(MAKE) -C $(@:.pofile=) pofile
+pofile: $(POTFILES)
 endif
-
-$(SUBDIRS.generate):
-	$(MAKE) -C $(@:.generate=) generate
 
 ifneq ("$(CFLOW_LIST_TARGET)", "")
 CLEAN_CFLOW += $(CFLOW_LIST_TARGET)
@@ -522,9 +516,9 @@ ifneq (,$(firstword $(CLEAN_DIRS)))
 endif
 	$(Q) $(RM) $(OBJECTS) $(TARGETS) $(CLEAN_TARGETS) core
 
-clean: $(SUBDIRS.clean) cleandir
+clean: cleandir
 
-distclean: cleandir $(SUBDIRS.distclean)
+distclean: cleandir
 	$(SHOW) "    [DISTCLEAN]"
 ifneq (,$(firstword $(DISTCLEAN_DIRS)))
 	$(Q) $(RM) -r $(DISTCLEAN_DIRS)
