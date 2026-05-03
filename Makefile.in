@@ -75,6 +75,7 @@ cflow: include.cflow
 endif
 
 lib.cppcheck tools.cppcheck daemons.cppcheck: include.cppcheck
+lib.gccanalyze tools.gccanalyze daemons.gccanalyze: include.gccanalyze
 
 CSCOPE_DIRS = daemons include lib libdaemon scripts tools libdm test
 ifneq ("@CSCOPE_CMD@", "")
@@ -162,6 +163,7 @@ help:
 	@echo "  device-mapper		Device mapper part of lvm2."
 	@echo "  dist			Generate distributable file."
 	@echo "  distclean		Remove all build files."
+	@echo "  gccanalyze		Run GCC -fanalyzer static analysis."
 	@echo "  generate		Generate man pages for sources."
 	@echo "  help			Display callable targets."
 	@echo "  install		Install all files."
