@@ -86,13 +86,21 @@ int str_list_add_list(struct dm_pool *mem, struct dm_list *sll, const struct dm_
 	return 1;
 }
 
-void str_list_del(struct dm_list *sll, const char *str)
+int str_list_del(struct dm_list *sll, const char *str)
 {
 	struct dm_list *slh, *slht;
+	int found = 0;
+
+	if (!str)
+		return 0;
 
 	dm_list_iterate_safe(slh, slht, sll)
-		if (!strcmp(str, dm_list_item(slh, struct dm_str_list)->str))
+		if (!strcmp(str, dm_list_item(slh, struct dm_str_list)->str)) {
 			dm_list_del(slh);
+			found = 1;
+		}
+
+	return found;
 }
 
 void str_list_wipe(struct dm_list *sll)
@@ -111,7 +119,11 @@ int str_list_dup(struct dm_pool *mem, struct dm_list *sllnew,
 	dm_list_init(sllnew);
 
 	dm_list_iterate_items(sl, sllold) {
-		if (!str_list_add(mem, sllnew, dm_pool_strdup(mem, sl->str)))
+		const char *dup;
+
+		if (!(dup = dm_pool_strdup(mem, sl->str)))
+			return_0;
+		if (!str_list_add_no_dup_check(mem, sllnew, dup))
 			return_0;
 	}
 
@@ -124,6 +136,9 @@ int str_list_dup(struct dm_pool *mem, struct dm_list *sllnew,
 int str_list_match_item(const struct dm_list *sll, const char *str)
 {
 	struct dm_str_list *sl;
+
+	if (!str)
+		return 0;
 
 	dm_list_iterate_items(sl, sll)
 		if (!strcmp(str, sl->str))
@@ -172,12 +187,18 @@ int str_list_lists_equal(const struct dm_list *sll, const struct dm_list *sll2)
 char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list,
 		      const char *delim)
 {
-	size_t delim_len = strlen(delim);
+	size_t delim_len;
 	unsigned list_size = dm_list_size(list);
 	struct dm_str_list *sl;
 	char *str, *p;
 	size_t len = 0;
+	size_t slen;
 	unsigned i = 0;
+
+	if (!delim)
+		return_NULL;
+
+	delim_len = strlen(delim);
 
 	dm_list_iterate_items(sl, list)
 		len += strlen(sl->str);
@@ -193,9 +214,9 @@ char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list,
 	p = str;
 
 	dm_list_iterate_items(sl, list) {
-		len = strlen(sl->str);
-		memcpy(p, sl->str, len);
-		p += len;
+		slen = strlen(sl->str);
+		memcpy(p, sl->str, slen);
+		p += slen;
 
 		if (++i != list_size) {
 			memcpy(p, delim, delim_len);
@@ -209,11 +230,18 @@ char *str_list_to_str(struct dm_pool *mem, const struct dm_list *list,
 struct dm_list *str_to_str_list(struct dm_pool *mem, const char *str,
 				const char *delim, int ignore_multiple_delim)
 {
-	size_t delim_len = strlen(delim);
+	size_t delim_len;
+	size_t len;
 	struct dm_list *list;
 	const char *p1, *p2, *next;
 	char *str_item;
-	size_t len;
+
+	if (!delim || !str)
+		return_NULL;
+
+	delim_len = strlen(delim);
+	if (!delim_len)
+		return_NULL;
 
 	if (!(list = str_list_create(mem))) {
 		log_error("str_to_str_list: string list allocation failed.");
