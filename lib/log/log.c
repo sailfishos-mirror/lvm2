@@ -608,8 +608,8 @@ static void _vprint_log(int level, const char *file, int line, int dm_errno_or_c
 	if (_store_errmsg && (level <= _LOG_ERR) &&
 	    _lvm_errmsg_len < MAX_ERRMSG_LEN) {
 		msglen = strlen(message);
-		if ((_lvm_errmsg_len + msglen + 1) >= _lvm_errmsg_size) {
-			_lvm_errmsg_size = 2 * (_lvm_errmsg_len + msglen + 1);
+		if ((_lvm_errmsg_len + msglen + 2) >= _lvm_errmsg_size) {
+			_lvm_errmsg_size = 2 * (_lvm_errmsg_len + msglen + 2);
 			if ((newbuf = realloc(_lvm_errmsg,
 						 _lvm_errmsg_size)))
 				_lvm_errmsg = newbuf;
