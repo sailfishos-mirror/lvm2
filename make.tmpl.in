@@ -386,6 +386,7 @@ POTFILES = $(SOURCES:%.c=%.pot) $(SOURCES2:%.c=%.pot)
 SIMPLE_RECURSIVE_TARGETS = \
 	cflow \
 	cppcheck \
+	gccanalyze \
 	generate \
 	install \
 	install_cluster \
@@ -507,6 +508,12 @@ cppcheck:
 	 $(addprefix --suppress=,$(CPPCHECK_SUPPRESS)) \
 	 $(CPPCHECK_INCLUDES) $(DEFS) $(CPPCHECK_SOURCES)
 endif
+endif
+
+GCCANALYZE_SOURCES = $(SOURCES) $(SOURCES2)
+ifneq ("$(GCCANALYZE_SOURCES)", " ")
+gccanalyze: $(GCCANALYZE_SOURCES)
+	$(CC) -fanalyzer -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CPPFLAGS) $(GCCANALYZE_SOURCES)
 endif
 
 .LIBPATTERNS = lib%.so lib%.a

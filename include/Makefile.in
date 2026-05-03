@@ -33,6 +33,7 @@ cmds.h: $(top_srcdir)/tools/command-lines.in $(top_srcdir)/tools/license.inc Mak
 
 all: cmds.h
 cppcheck: cmds.h
+gccanalyze: cmds.h
 
 DISTCLEAN_TARGETS += configure.h lvm-version.h
 CLEAN_TARGETS += cmds.h cmds.h-t \
