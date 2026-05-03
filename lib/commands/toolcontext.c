@@ -692,7 +692,8 @@ static int _process_config(struct cmd_context *cmd)
 		return 0;
 	}
 #ifdef DEVMAPPER_SUPPORT
-	dm_set_dev_dir(cmd->dev_dir);
+	if (!dm_set_dev_dir(cmd->dev_dir))
+		return_0;
 
 	if (!dm_set_uuid_prefix(UUID_PREFIX))
 		return_0;
@@ -1451,24 +1452,24 @@ static int _init_segtypes(struct cmd_context *cmd)
 
 	for (i = 0; init_segtype_array[i]; i++) {
 		if (!(segtype = init_segtype_array[i](cmd)))
-			return 0;
+			return_0;
 		segtype->library = NULL;
 		dm_list_add(&cmd->segtypes, &segtype->list);
 	}
 
 #ifdef RAID_INTERNAL
 	if (!init_raid_segtypes(cmd, &seglib))
-		return 0;
+		return_0;
 #endif
 
 #ifdef THIN_INTERNAL
 	if (!init_thin_segtypes(cmd, &seglib))
-		return 0;
+		return_0;
 #endif
 
 #ifdef CACHE_INTERNAL
 	if (!init_cache_segtypes(cmd, &seglib))
-		return 0;
+		return_0;
 #endif
 
 #ifdef VDO_INTERNAL
@@ -1478,12 +1479,12 @@ static int _init_segtypes(struct cmd_context *cmd)
 
 #ifdef WRITECACHE_INTERNAL
 	if (!init_writecache_segtypes(cmd, &seglib))
-		return 0;
+		return_0;
 #endif
 
 #ifdef INTEGRITY_INTERNAL
 	if (!init_integrity_segtypes(cmd, &seglib))
-		return 0;
+		return_0;
 #endif
 
 	return 1;
