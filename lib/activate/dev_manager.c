@@ -485,8 +485,10 @@ static int _ignore_blocked_mirror_devices(struct cmd_context *cmd,
 					         .check_blocked = 1,
 					         .check_suspended = ignore_suspended_devices(),
 					         .check_error_target = 1,
-					         .check_reserved = 0 }, NULL))
+					         .check_reserved = 0 }, NULL)) {
+				r = 1;
 				goto out; /* safe to use */
+			}
 			stack;
 		}
 	}
