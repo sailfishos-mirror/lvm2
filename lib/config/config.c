@@ -1912,8 +1912,10 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 			}
 
 			line = dm_pool_end_object(out->mem);
-		} else
-			line = strchr(line, '=') + 1;
+		} else if (!(line = strchr(line, '=')))
+			return_0;
+		else
+			line++;
 	}
 
 	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
