@@ -1076,7 +1076,7 @@ static void _print_sigset(const char *prefix, const sigset_t *sigset)
 	int sig, cnt = 0;
 
 	for (sig = 1; sig < NSIG; sig++)
-		if (!sigismember(sigset, sig)) {
+		if (sigismember(sigset, sig)) {
 			cnt++;
 			log_debug("%s%d (%s)", prefix, sig, strsignal(sig));
 		}
