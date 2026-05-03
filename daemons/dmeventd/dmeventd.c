@@ -467,10 +467,9 @@ static void _free_thread_status(struct thread_status *thread)
 	if (thread->wait_task)
 		dm_task_destroy(thread->wait_task);
 
-	/* Clean up grace period condition variable */
+	/* Safe on zalloc'd struct: zero-filled mutex/cond match
+	 * PTHREAD_MUTEX_INITIALIZER/PTHREAD_COND_INITIALIZER (glibc) */
 	pthread_cond_destroy(&thread->grace_cond);
-
-	/* Clean up per-thread mutex */
 	pthread_mutex_destroy(&thread->mutex);
 
 	free(thread->device.uuid);
