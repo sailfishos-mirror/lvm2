@@ -365,7 +365,7 @@ static int _pv_mda_set_ignored_one(struct metadata_area *mda, void *baton)
 	return 1;
 }
 
-unsigned pv_mda_set_ignored(const struct physical_volume *pv, unsigned mda_ignored)
+unsigned pv_mda_set_ignored(struct physical_volume *pv, unsigned mda_ignored)
 {
 	struct lvmcache_info *info;
 	struct _pv_mda_set_ignored_baton baton;
