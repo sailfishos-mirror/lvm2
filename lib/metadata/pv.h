@@ -60,12 +60,12 @@ struct physical_volume {
 	uint64_t pe_align;
 	uint64_t pe_align_offset;
 
-        /* This is true whenever the represented PV has a label associated. */
-        uint64_t is_labelled:1;
-        uint64_t unused_missing_cleared:1;
-	uint64_t wrong_vg:1; /* vg metadata includes this PVID but the PV is actually in a different vg */
+	/* This is true whenever the represented PV has a label associated. */
+	unsigned int is_labelled:1;
+	unsigned int unused_missing_cleared:1;
+	unsigned int wrong_vg:1; /* vg metadata includes this PVID but the PV is actually in a different vg */
 
-        /* NB. label_sector is valid whenever is_labelled is true */
+	/* NB. label_sector is valid whenever is_labelled is true */
 	uint64_t label_sector;
 
 	struct dm_list segments;	/* Ordered pv_segments covering complete PV */
