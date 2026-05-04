@@ -4971,7 +4971,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
 				    const char *program_id,
 				    const char *user_data)
 {
-	uint64_t this_start = 0, this_len = len, region_id = UINT64_C(0);
+	uint64_t this_start = 0, this_len = len, region_id[1] = { 0 };
 	const char *devname = NULL, *histogram = _string_args[BOUNDS_ARG];
 	int r = 0, count = 0, precise = _switches[PRECISE_ARG];
 	struct dm_histogram *bounds = NULL; /* histogram bounds */
@@ -5015,7 +5015,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
 		goto_out;
 
 	if (!segments || (info.target_count == 1))
-		region_ids = &region_id;
+		region_ids = region_id;
 	else
 		if (!(region_ids = malloc(info.target_count * sizeof(*region_ids)))) {
 			log_error("Failed to allocated region IDs.");
@@ -5064,7 +5064,7 @@ static int _do_stats_create_regions(struct dm_stats *dms,
 					  _string_args[ALIAS_ARG]);
 
 out:
-	if (region_ids != &region_id)
+	if (region_ids != region_id)
 		free(region_ids);
 
 	dm_task_destroy(dmt);
