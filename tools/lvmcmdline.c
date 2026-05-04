@@ -1332,7 +1332,7 @@ static void _set_valid_args_for_command_name(int ci)
 	command_names_args[ci].num_args = num_args;
 }
 
-static command_fn _find_command_id_function(int command_enum)
+static command_fn _find_command_id_function(unsigned command_enum)
 {
 	unsigned i;
 
@@ -3382,11 +3382,11 @@ int lvm_split(char *str, int *argc, char **argv, unsigned max)
 		*e++ = '\0';
 		quote = 0;
 		b = e;
-		if (*argc == max)
+		if ((unsigned)*argc == max)
 			break;
 	}
 
-	if (*argc < max)
+	if ((unsigned)*argc < max)
 		argv[*argc] = NULL;
 
 	return *argc;
