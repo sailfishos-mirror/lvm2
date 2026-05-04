@@ -791,7 +791,7 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 
 	if (daemon_test) {
 		if (!gl_lsname_sanlock[0])
-			strncpy(gl_lsname_sanlock, ls_name, MAX_NAME);
+			dm_strncpy(gl_lsname_sanlock, ls_name, sizeof(gl_lsname_sanlock));
 		rv = snprintf(vg_args, MAX_ARGS, "%s:%s", VG_LOCK_ARGS_V1, lock_lv_name);
 		if (rv >= MAX_ARGS)
 			log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
@@ -1825,7 +1825,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 
 	if (daemon_test) {
 		if (!gl_lsname_sanlock[0]) {
-			strncpy(gl_lsname_sanlock, lsname, MAX_NAME);
+			dm_strncpy(gl_lsname_sanlock, lsname, sizeof(gl_lsname_sanlock));
 			log_debug("S %s prepare_lockspace_san use global lock", lsname);
 		}
 		lms->align_size = ONE_MB;
@@ -1987,7 +1987,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 			log_error("S %s prepare_lockspace_san multiple sanlock global locks current %s",
 				  lsname, gl_lsname_sanlock);
 		} else {
-			strncpy(gl_lsname_sanlock, lsname, MAX_NAME);
+			dm_strncpy(gl_lsname_sanlock, lsname, sizeof(gl_lsname_sanlock));
 			log_debug("S %s prepare_lockspace_san use global lock %s",
 				  lsname, gl_lsname_sanlock);
 		}
