@@ -399,7 +399,7 @@ static int _info_run(const char *dlid, struct dm_info *dminfo,
 
 	r = 1;
 
-      out:
+out:
 	dm_task_destroy(dmt);
 
 	return r;
@@ -735,7 +735,7 @@ static int _is_usable_uuid(const struct device *dev, const char *name, const cha
 		return 0;
 	}
 
-        return 1;
+	return 1;
 }
 
 /*
@@ -883,7 +883,7 @@ int dm_device_is_usable(struct cmd_context *cmd, struct device *dev, struct dev_
 
 	r = 1;
 
-      out:
+out:
 	dm_task_destroy(dmt);
 	return r;
 }
@@ -1043,7 +1043,7 @@ int dev_manager_get_dm_active_devices(const char *prefix, struct dm_list **devs,
 		goto_out;
 	}
 
-    out:
+out:
 	dm_task_destroy(dmt);
 
 	return r;
@@ -1385,10 +1385,10 @@ static int _percent_run(struct dev_manager *dm, const char *name,
 			     display_percent(dm->cmd, *overall_percent));
 	r = 1;
 
-    out:
+out:
 	dm_task_destroy(dmt);
 
-    bad:
+bad:
 	if (wait) {
 		sigint_restore();
 
@@ -1486,7 +1486,7 @@ int dev_manager_transient(struct dev_manager *dm, const struct logical_volume *l
 
 	r = 1;
 
-      out:
+out:
 	dm_task_destroy(dmt);
 	return r;
 }
@@ -3180,7 +3180,7 @@ int add_areas_line(struct dev_manager *dm, struct lv_segment *seg,
 		}
 	}
 
-        if (num_error_areas) {
+	if (num_error_areas) {
 		/* Thins currently do not support partial activation */
 		if (lv_is_thin_type(seg->lv)) {
 			log_error("Cannot activate %s: pool incomplete.",

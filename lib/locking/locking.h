@@ -69,7 +69,7 @@ int lock_vol(struct cmd_context *cmd, const char *vol, uint32_t flags, const str
 		release_vg(vg); \
 	} while (0)
 
-void sync_local_dev_names(struct cmd_context* cmd);
+void sync_local_dev_names(struct cmd_context *cmd);
 
 /* Process list of LVs */
 struct volume_group;

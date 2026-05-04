@@ -64,7 +64,7 @@ daemon_handle daemon_open(daemon_info i)
 
 	if (i.protocol && (!h.protocol || strcmp(h.protocol, i.protocol))) {
 		log_error("Daemon %s: requested protocol %s != %s",
-			i.path, i.protocol, h.protocol ? : "");
+			  i.path, i.protocol, h.protocol ? : "");
 		goto error;
 	}
 	if (i.protocol_version && h.protocol_version != i.protocol_version) {
@@ -179,7 +179,7 @@ void daemon_close(daemon_handle h)
 {
 	if (h.socket_fd >= 0) {
 		log_debug("Closing daemon socket (fd %d).", h.socket_fd);
- 		if (close(h.socket_fd))
+		if (close(h.socket_fd))
 			log_sys_error("close", "daemon_close");
 	}
 

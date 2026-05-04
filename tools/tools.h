@@ -75,7 +75,7 @@ struct arg_values {
 };
 
 struct arg_value_group_list {
-        struct dm_list list;
+	struct dm_list list;
 	uint16_t prio;
 	struct arg_values arg_values[];
 };
@@ -221,11 +221,11 @@ int lvconvert_to_pool_or_swap_metadata_cmd(struct cmd_context *cmd, int argc, ch
 int lvconvert_merge_thin_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_split_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
 
-int lvconvert_raid_types_cmd(struct cmd_context * cmd, int argc, char **argv);
-int lvconvert_split_mirror_images_cmd(struct cmd_context * cmd, int argc, char **argv);
+int lvconvert_raid_types_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_split_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvconvert_merge_mirror_images_cmd(struct cmd_context *cmd, int argc, char **argv);
-int lvconvert_change_mirrorlog_cmd(struct cmd_context * cmd, int argc, char **argv);
-int lvconvert_change_region_size_cmd(struct cmd_context * cmd, int argc, char **argv);
+int lvconvert_change_mirrorlog_cmd(struct cmd_context *cmd, int argc, char **argv);
+int lvconvert_change_region_size_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 int lvconvert_merge_cmd(struct cmd_context *cmd, int argc, char **argv);
 
@@ -242,11 +242,11 @@ int pvscan_cache_cmd(struct cmd_context *cmd, int argc, char **argv);
 
 
 int lvconvert_writecache_attach_single(struct cmd_context *cmd,
-                                        struct logical_volume *lv,
-                                        struct processing_handle *handle);
+				       struct logical_volume *lv,
+				       struct processing_handle *handle);
 int lvconvert_cachevol_attach_single(struct cmd_context *cmd,
-                                     struct logical_volume *lv,
-                                     struct processing_handle *handle);
+				     struct logical_volume *lv,
+				     struct processing_handle *handle);
 
 int lvresize_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvextend_policy_cmd(struct cmd_context *cmd, int argc, char **argv);

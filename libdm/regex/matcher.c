@@ -407,7 +407,7 @@ static struct dfa_state *_step_matcher(struct dm_regex *m, int c, struct dfa_sta
 			return NULL;
 	}
 
-        // yuck, we have to special case the target trans
+        /* yuck, we have to special case the target trans */
 	if ((ns->final == -1) &&
 	    !_calc_state(m, ns, TARGET_TRANS))
                 return_NULL;

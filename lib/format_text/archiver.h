@@ -53,7 +53,7 @@ struct volume_group *backup_read_vg(struct cmd_context *cmd,
 				    const char *vg_name, const char *file);
 
 int backup_restore_vg(struct cmd_context *cmd, struct volume_group *vg,
-                      int do_pvcreate, struct pv_create_args *pva);
+		      int do_pvcreate, struct pv_create_args *pva);
 
 int backup_restore_from_file(struct cmd_context *cmd, const char *vg_name,
 			     const char *file, int force);

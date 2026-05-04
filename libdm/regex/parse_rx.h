@@ -43,7 +43,7 @@ struct rx_node {
 	struct rx_node *left, *right;
 
 	/* used to build the dfa for the token */
-        unsigned charset_index;
+	unsigned charset_index;
 	int nullable, final;
 	dm_bitset_t firstpos;
 	dm_bitset_t lastpos;
