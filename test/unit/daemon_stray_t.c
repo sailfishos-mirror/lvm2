@@ -91,6 +91,7 @@ static void test_close_stray_fds(void *fixture)
 
 	(void) close(fd_keep);
 #endif
+	/* coverity[leaked_handle] fd_close closed by daemon_close_stray_fds */
 }
 
 #define T(path, desc, fn) register_test(ts, "/daemon/stray-fds/" path, desc, fn)
