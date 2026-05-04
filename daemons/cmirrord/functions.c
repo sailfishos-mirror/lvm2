@@ -591,10 +591,14 @@ static int clog_ctr(struct dm_ulog_request *rq)
 	if (!argv)
 		return -ENOMEM;
 
+	/* argc >= 1 guaranteed by check at line 584 */
 	p = dev_size_str = rq->data;
 	p += strlen(p) + 1;
-	for (i = 0; i < argc; i++, p = p + strlen(p) + 1)
+	argv[0] = p;
+	for (i = 1; i < argc; i++) {
+		p = p + strlen(p) + 1;
 		argv[i] = p;
+	}
 
 	if (strcmp(argv[0], "clustered-disk") &&
 	    strcmp(argv[0], "clustered-core")) {
