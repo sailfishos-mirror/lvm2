@@ -256,6 +256,7 @@ static void _test_destroy_after_fork(void *fixture)
 	 * the shared aio_context.
 	 */
 	e->destroy(e);
+	/* coverity[leaked_storage] e freed by e->destroy */
 }
 
 /*
@@ -332,6 +333,7 @@ static void _test_wait_eintr(void *fixture)
 	sigint_clear();
 
 	e->destroy(e);
+	/* coverity[leaked_storage] freed by destroy */
 }
 
 //----------------------------------------------------------------

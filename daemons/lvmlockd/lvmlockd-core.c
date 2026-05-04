@@ -7054,6 +7054,7 @@ fail:
 
 	(void) unlink(adopt_file);
 	log_error("adopt_locks failed, reset host");
+	/* coverity[leaked_storage] vg_lockd cleaned up by list_for_each_entry_safe above */
 }
 
 static int get_peer_pid(int fd)

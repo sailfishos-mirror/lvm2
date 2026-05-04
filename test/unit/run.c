@@ -211,6 +211,7 @@ static void _run_test(struct test_details *t, bool use_colour, unsigned *passed,
 
 	if (ts->fixture_exit)
 		ts->fixture_exit(fixture);
+	/* coverity[leaked_storage] fixture_init and fixture_exit are always paired */
 }
 
 static bool _run_tests(struct test_details **tests, unsigned nr)

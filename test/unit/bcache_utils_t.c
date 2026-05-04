@@ -107,6 +107,7 @@ static void *_async_init(void)
 {
 	struct io_engine *e = create_async_io_engine();
 	T_ASSERT(e);
+	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
 }
 
@@ -114,6 +115,7 @@ static void *_sync_init(void)
 {
 	struct io_engine *e = create_sync_io_engine();
 	T_ASSERT(e);
+	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
 }
 
