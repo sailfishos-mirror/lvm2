@@ -329,7 +329,7 @@ int vg_write_lock_held(void)
 	return _vg_write_lock_held;
 }
 
-void sync_local_dev_names(struct cmd_context* cmd)
+void sync_local_dev_names(struct cmd_context *cmd)
 {
 	memlock_unlock(cmd);
 	fs_unlock();

@@ -72,8 +72,8 @@ int dev_manager_raid_message(struct dev_manager *dm,
 			     const struct logical_volume *lv,
 			     const char *msg);
 int dev_manager_writecache_message(struct dev_manager *dm,
-                                   const struct logical_volume *lv,
-                                   const char *msg);
+				   const struct logical_volume *lv,
+				   const char *msg);
 int dev_manager_cache_status(struct dev_manager *dm,
 			     const struct logical_volume *lv,
 			     struct lv_status_cache **status, int *exists);
@@ -82,7 +82,7 @@ int dev_manager_thin_status(struct dev_manager *dm,
 			    struct lv_status_thin **status, int *exists);
 int dev_manager_thin_device_id(struct dev_manager *dm,
 			       const struct logical_volume *lv,
-			       uint32_t *device_id, int *exist);
+			       uint32_t *device_id, int *exists);
 int dev_manager_thin_pool_status(struct dev_manager *dm,
 				 const struct logical_volume *lv, int flush,
 				 struct lv_status_thin_pool **status, int *exists);

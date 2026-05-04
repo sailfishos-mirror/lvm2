@@ -76,27 +76,27 @@ struct processing_handle {
 	void *custom_handle;
 };
 
-typedef int (*process_single_vg_fn_t) (struct cmd_context * cmd,
-				       const char *vg_name,
-				       struct volume_group * vg,
+typedef int (*process_single_vg_fn_t)(struct cmd_context *cmd,
+				      const char *vg_name,
+				      struct volume_group *vg,
+				      struct processing_handle *handle);
+typedef int (*process_single_pv_fn_t)(struct cmd_context *cmd,
+				      struct volume_group *vg,
+				      struct physical_volume *pv,
+				      struct processing_handle *handle);
+typedef int (*process_single_label_fn_t)(struct cmd_context *cmd,
+					 struct label *label,
+					 struct processing_handle *handle);
+typedef int (*process_single_lv_fn_t)(struct cmd_context *cmd,
+				      struct logical_volume *lv,
+				      struct processing_handle *handle);
+typedef int (*process_single_seg_fn_t)(struct cmd_context *cmd,
+				       struct lv_segment *seg,
 				       struct processing_handle *handle);
-typedef int (*process_single_pv_fn_t) (struct cmd_context *cmd,
-				  struct volume_group *vg,
-				  struct physical_volume *pv,
-				  struct processing_handle *handle);
-typedef int (*process_single_label_fn_t) (struct cmd_context *cmd,
-					  struct label *label,
-					  struct processing_handle *handle);
-typedef int (*process_single_lv_fn_t) (struct cmd_context *cmd,
-				  struct logical_volume *lv,
-				  struct processing_handle *handle);
-typedef int (*process_single_seg_fn_t) (struct cmd_context * cmd,
-					struct lv_segment * seg,
-					struct processing_handle *handle);
-typedef int (*process_single_pvseg_fn_t) (struct cmd_context * cmd,
-					  struct volume_group * vg,
-					  struct pv_segment * pvseg,
-					  struct processing_handle *handle);
+typedef int (*process_single_pvseg_fn_t)(struct cmd_context *cmd,
+					 struct volume_group *vg,
+					 struct pv_segment *pvseg,
+					 struct processing_handle *handle);
 
 /*
  * Called prior to process_single_lv() to decide if the LV should be
@@ -105,13 +105,13 @@ typedef int (*process_single_pvseg_fn_t) (struct cmd_context * cmd,
  * This can evaluate the combination of command definition and
  * the LV object to decide if the combination is allowed.
  */
-typedef int (*check_single_lv_fn_t) (struct cmd_context *cmd,
-				     struct logical_volume *lv,
-				     struct processing_handle *handle,
-				     int lv_is_named_arg);
+typedef int (*check_single_lv_fn_t)(struct cmd_context *cmd,
+				    struct logical_volume *lv,
+				    struct processing_handle *handle,
+				    int lv_is_named_arg);
 
 int process_each_vg(struct cmd_context *cmd,
-	            int argc, char **argv,
+		    int argc, char **argv,
 		    const char *one_vgname,
 		    struct dm_list *use_vgnames,
 		    uint32_t flags,
@@ -227,7 +227,7 @@ int get_vdo_settings(struct cmd_context *cmd,
 		     int *updated);
 
 int get_writecache_settings(struct cmd_context *cmd, struct dm_writecache_settings *settings,
-                            uint32_t *block_size_sectors);
+			    uint32_t *block_size_sectors);
 
 int get_integrity_settings(struct cmd_context *cmd, struct dm_integrity_settings *settings);
 
@@ -251,6 +251,6 @@ int get_lvt_enum(struct logical_volume *lv);
 int get_rootvg_dev_uuid(struct cmd_context *cmd, char **dm_uuid_out);
 
 int persist_start_include(struct cmd_context *cmd, struct volume_group *vg,
-                          int autoactivate, int autolockstart, const char *remkey);
+			  int autoactivate, int autolockstart, const char *remkey);
 
 #endif

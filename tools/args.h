@@ -486,11 +486,11 @@ arg(metadatasize_ARG, '\0', "metadatasize", sizemb_VAL, 0, 0,
     "The size may be rounded.\n")
 
 arg(minor_ARG, '\0', "minor", number_VAL, ARG_GROUPABLE, 0,
-   "#lvcreate\n"
-   "#lvchange\n"
-   "Sets the minor number of an LV block device.\n"
-   "#pvscan\n"
-   "The minor number of a device.\n")
+    "#lvcreate\n"
+    "#lvchange\n"
+    "Sets the minor number of an LV block device.\n"
+    "#pvscan\n"
+    "The minor number of a device.\n")
 
 arg(minrecoveryrate_ARG, '\0', "minrecoveryrate", sizekb_VAL, 0, 0,
     "Sets the minimum recovery rate for a RAID LV.  The rate value\n"
@@ -1457,11 +1457,11 @@ arg(stripesize_ARG, 'I', "stripesize", sizekb_VAL, 0, 0,
     "moving to the next in a striped LV.\n")
 
 arg(major_ARG, 'j', "major", number_VAL, ARG_GROUPABLE, 0,
-   "#lvcreate\n"
-   "#lvchange\n"
-   "Sets the major number of an LV block device.\n"
-   "#pvscan\n"
-   "The major number of a device.\n")
+    "#lvcreate\n"
+    "#lvchange\n"
+    "Sets the major number of an LV block device.\n"
+    "#pvscan\n"
+    "The major number of a device.\n")
 
 arg(setactivationskip_ARG, 'k', "setactivationskip", bool_VAL, 0, 0,
     "Persistently sets (yes) or clears (no) the \"activation skip\" flag on an LV.\n"

@@ -94,7 +94,7 @@ int lvm2_run(void *handle, const char *cmdline)
 	} else
 		ret = lvm_run_command(cmd, argc, argv);
 
-      out:
+out:
 	free(cmdcopy);
 
 	if (oneoff)

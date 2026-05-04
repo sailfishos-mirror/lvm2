@@ -767,7 +767,7 @@ cfg(allocation_vdo_block_map_cache_size_mb_CFG, "vdo_block_map_cache_size_mb", a
 	"at least 128MiB and less than 16TiB. The cache must be at least 16MiB\n"
 	"per logical thread. Note that there is a memory overhead of 15%.\n")
 
-// vdo format --blockMapPeriod
+/* vdo format --blockMapPeriod */
 cfg(allocation_vdo_block_map_era_length_CFG, "vdo_block_map_period", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_BLOCK_MAP_ERA_LENGTH, VDO_1ST_VSN, NULL, 0, NULL,
 	"The speed with which the block map cache writes out modified block map pages.\n"
 	"A smaller era length is likely to reduce the amount time spent rebuilding,\n"
@@ -778,11 +778,11 @@ cfg(allocation_vdo_block_map_era_length_CFG, "vdo_block_map_period", allocation_
 cfg(allocation_vdo_check_point_frequency_CFG, "vdo_check_point_frequency", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_CHECK_POINT_FREQUENCY, VDO_1ST_VSN, NULL, vsn(2, 3, 22), NULL,
 	"Deprecated option to set default check point frequency for VDO volume.\n")
 
-// vdo format
+/* vdo format */
 cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_USE_SPARSE_INDEX, VDO_1ST_VSN, NULL, 0, NULL,
 	"Enables sparse indexing for VDO volume.\n")
 
-// vdo format
+/* vdo format */
 cfg(allocation_vdo_index_memory_size_mb_CFG, "vdo_index_memory_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_INDEX_MEMORY_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the amount of index memory in MiB for VDO volume.\n"
 	"The value must be at least 256MiB and at most 1TiB.\n")

@@ -270,7 +270,7 @@ typedef enum {
 } config_merge_t;
 
 int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
-		      struct dm_config_tree *newdata, config_merge_t);
+		      struct dm_config_tree *newdata, config_merge_t merge_type);
 
 /*
  * The next two do not check config overrides and must only be used for the tags section.

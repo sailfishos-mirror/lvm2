@@ -33,11 +33,11 @@
 #define DEV_EXT_UDEV_BLKID_TYPE_SW_RAID         "linux_raid_member"
 #define DEV_EXT_UDEV_BLKID_PART_TABLE_TYPE      "ID_PART_TABLE_TYPE"
 
-#define DEV_EXT_UDEV_DEVTYPE			"DEVTYPE"
-#define DEV_EXT_UDEV_DEVTYPE_DISK		"disk"
+#define DEV_EXT_UDEV_DEVTYPE                    "DEVTYPE"
+#define DEV_EXT_UDEV_DEVTYPE_DISK               "disk"
 
 /* the list of symlinks associated with device node */
-#define DEV_EXT_UDEV_DEVLINKS			"DEVLINKS"
+#define DEV_EXT_UDEV_DEVLINKS                   "DEVLINKS"
 
 /*
  * DEV_EXT_UDEV_MPATH_DEVICE_PATH is set by multipath in udev db
