@@ -21,6 +21,17 @@ which mkfs.btrfs || skip
 which btrfs	 || skip
 grep btrfs /proc/filesystems || skip
 
+# Detect stale multi-device btrfs registrations leaked in kernel (not freed on umount)
+# These cause spurious "cannot read chunk root" / "device missing" from btrfsck
+stale_btrfs_count=0
+for fsid in $(ls /sys/fs/btrfs/ 2>/dev/null | grep -E '^[0-9a-f-]{36}$' || true); do
+	findmnt -t btrfs -n -o UUID | grep -q "$fsid" && continue
+	nd=$(cat "/sys/fs/btrfs/$fsid/num_devices" 2>/dev/null)
+	test "${nd:-0}" -gt 1 && stale_btrfs_count=$((stale_btrfs_count + 1))
+done
+test "$stale_btrfs_count" -eq 0 || \
+	skip "Found $stale_btrfs_count stale multi-device btrfs registration(s) in kernel (reboot to clear)"
+
 dev_vg_lv1="$DM_DEV_DIR/$vg/$lv1"
 dev_vg_lv2="$DM_DEV_DIR/$vg/$lv2"
 dev_vg_lv3="$DM_DEV_DIR/$vg/$lv3"
