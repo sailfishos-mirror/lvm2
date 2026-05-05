@@ -2452,7 +2452,7 @@ static int _systemd_handover(struct dm_event_fifos *fifos)
 
 	errno = 0;
 	env_pid = strtoul(e, &p, 10);
-	if (errno || !p || *p || env_pid <= 0 ||
+	if (errno || !p || *p || !env_pid ||
 	    getpid() != (pid_t) env_pid)
 		goto out;
 
