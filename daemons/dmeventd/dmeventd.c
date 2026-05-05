@@ -376,7 +376,7 @@ static void _lib_put(struct dso_data *data)
 }
 
 /* Find DSO data. */
-static struct dso_data *_lookup_dso(struct message_data *data)
+static struct dso_data *_lookup_dso(const struct message_data *data)
 {
 	struct dso_data *dso_data, *ret = NULL;
 
@@ -901,7 +901,7 @@ static int _get_status(struct message_data *message_data)
 	dm_list_iterate_items(thread, &_thread_registry) {
 		_lock_thread(thread);
 		/* coverity[overflow_sink] - only positive 'current' is used */
-		if ((current = dm_asprintf(buffers + i, "0:%d %s %s %d %" PRIu32 ";",
+		if ((current = dm_asprintf(buffers + i, "0:%d %s %s %d %u;",
 					   i, thread->dso_data->dso_name,
 					   thread->device.uuid, thread->events,
 					   thread->timeout)) < 1) {
@@ -1646,7 +1646,7 @@ static void _unregister_all_grace_threads(void)
 
 static void _wait_for_new_pid(void)
 {
-	unsigned long st_ino = 0;
+	ino_t st_ino = 0;
 	struct stat st;
 	int i;
 
@@ -2235,7 +2235,7 @@ static void _process_request(struct dm_event_fifos *fifos)
 	if (!_client_write(fifos, &msg))
 		stack;
 
-	DEBUGLOG("<<< CMD:%s (0x%x) completed (result %u).", decode_cmd(cmd), (unsigned) cmd, msg.cmd);
+	DEBUGLOG("<<< CMD:%s (0x%x) completed (result %d).", decode_cmd(cmd), (unsigned) cmd, (int) msg.cmd);
 
 	free(msg.data);
 
