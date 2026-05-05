@@ -863,12 +863,12 @@ static void _print_man_option_desc(const struct command_name *cname, int opt_enu
 	unsigned bi = 0;
 
 	while (*desc) {
-		buf[bi++] = *desc;
-
-		if (bi == DESC_LINE) {
+		if (bi >= (sizeof(buf) - 1)) {
 			log_error("Parsing command defs: print_man_option_desc line too long.");
 			exit(EXIT_FAILURE);
 		}
+
+		buf[bi++] = *desc;
 
 		if (*desc++ != '\n' && *desc)
 			continue;  /* read until '\n' or end of description */
@@ -2227,12 +2227,12 @@ static void _print_man_option_desc_generic(int opt_enum)
 	unsigned bi = 0;
 
 	while (*desc) {
-		buf[bi++] = *desc;
-
-		if (bi == DESC_LINE) {
+		if (bi >= (sizeof(buf) - 1)) {
 			log_error("Parsing command defs: print_man_option_desc line too long.");
 			exit(EXIT_FAILURE);
 		}
+
+		buf[bi++] = *desc;
 
 		if (*desc++ != '\n' && *desc)
 			continue;
