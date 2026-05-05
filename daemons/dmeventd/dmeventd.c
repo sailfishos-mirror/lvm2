@@ -526,6 +526,7 @@ static struct thread_status *_alloc_thread_status(const struct message_data *dat
 
 	thread->events = data->events_field;
 	thread->pending = DM_EVENT_REGISTRATION_PENDING;
+	dm_list_init(&thread->list);
 	dm_list_init(&thread->timeout_list);
 
 	return thread;
