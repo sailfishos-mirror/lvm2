@@ -170,7 +170,6 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 	int ret = 1;
 	int fd = -1;
 	ssize_t r;
-	bool found = false;
 
 	/* For a mounted btrfs, there will be a sys dir like /sys/fs/btrfs/$uuid/devices */
 	if (dm_snprintf(devices_path, sizeof(devices_path), "%sfs/btrfs/%s/devices",
@@ -237,7 +236,7 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 
 		devt = MKDEV(major, minor);
 		if (devt == lv_devt)
-			found = true;
+			fsi->mounted = 1;
 
 		if (fsi->mount_dir[0] == 0)
 			_fs_get_mnt(fsi, devt);
@@ -248,8 +247,6 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
 
 	if (closedir(dr))
 		log_sys_debug("closedir", devices_path);
-
-	fsi->mounted = !!found;
 
 	if (fsi->mounted && fsi->mount_dir[0] == 0) {
 		log_error("Couldn't get mount point for %s.", fsi->fs_dev_path);
