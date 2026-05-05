@@ -1,5 +1,12 @@
 Version 1.02.215 - 
 ===================
+  Fix ttree insert/lookup depth mismatch in libdm.
+  Fix broken dm_struct_field macro precedence and paren balance.
+  Fix regex parser error handling and NULL-state fingerprint.
+  Validate task type in dm_ioctl_exec.
+  Check errno for ERANGE in dmvdostats _parse_uint64.
+  Add missing NULL check for stats_str in dmvdostats report path.
+  Use _register_mutex for env_registry in dmeventd.
 
 Version 1.02.214 - 28th April 2026
 ==================================

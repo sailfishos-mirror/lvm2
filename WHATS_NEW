@@ -1,5 +1,21 @@
 Version 2.03.41 - 
 ==================
+  Fix gcd division-by-zero and lcm overflow in lvm-maths.
+  Fix dual AUTOTYPE matching logic in lvmcmdline.
+  Fix nr_dirty tracking, underflows and error-path leak in bcache.
+  Fix child comparison in compare_config.
+  Fix cross-endian raw_locn flags interpretation in format_text.
+  Fix inverted strstr check in remove_layer_from_lv layer rename.
+  Improve radix-tree functions.
+  Unlink temp file on lock failure in create_temp_name.
+  Verify /dev/urandom is device before reading.
+  Add asymmetric length check in compare_value.
+  Add thinpooldata to get_lvt_enum in toollib.
+  Clear DEV_FILTERED_IS_LV before re-evaluating usable filter.
+  Add missing FWRAID case to dev_filtered_reason in lvmcache.
+  Reset wwid_buf between duplicate device iterations in lvmcache.
+  Read cache_pool_max_chunks as 64bit number.
+  Add cppcheck and gccanalyze make targets.
 
 Version 2.03.40 - 28th April 2026
 =================================
