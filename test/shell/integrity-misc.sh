@@ -40,7 +40,7 @@ _prepare_vg() {
 }
 
 _add_new_data_to_mnt() {
-        mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+        mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
 
         mount "$DM_DEV_DIR/$vg/$lv1" $mnt
 
