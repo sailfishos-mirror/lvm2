@@ -890,7 +890,7 @@ static int _get_status(struct message_data *message_data)
 
 	if (!(buffers = malloc(sizeof(char*) * count))) {
 		_unlock_mutex();
-		goto out;
+		goto_out;
 	}
 	dm_list_iterate_items(thread, &_thread_registry) {
 		_lock_thread(thread);
@@ -914,7 +914,7 @@ static int _get_status(struct message_data *message_data)
 	msg->size = size + len + 1 + 1;
 	free(msg->data);
 	if (!(msg->data = malloc(msg->size)))
-		goto out;
+		goto_out;
 
 	memcpy(msg->data, message_data->id, len);
 	message = msg->data + len;
