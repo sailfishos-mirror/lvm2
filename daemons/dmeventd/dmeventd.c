@@ -105,6 +105,7 @@ static int _grace_period = DMEVENTD_DEFAULT_GRACE_PERIOD;
 static int _systemd_activation = 0;
 static int _foreground = 0;
 static time_t _idle_since = 0;
+static int _kernel_major = 0;
 static const char *_exit_on = DEFAULT_DMEVENTD_EXIT_ON_PATH;
 
 /* FIXME Make configurable at runtime */
@@ -764,21 +765,20 @@ static struct dm_task *_get_device_status(const struct thread_status *ts)
 	return dmt;
 }
 
+static void _init_kernel_major(void)
+{
+	struct utsname uts;
+
+	if (uname(&uts))
+		log_sys_debug("uname", "");
+	else if (sscanf(uts.release, "%d", &_kernel_major) != 1)
+		log_debug("Cannot parse kernel version from %s.", uts.release);
+}
+
 static uint64_t _get_device_inode(struct thread_status *ts)
 {
-	static int _kernel_major = -1;
-	struct utsname uts;
 	struct stat buf;
 	char path[PATH_MAX];
-
-	/* Get kernel version to determine path format */
-	if (_kernel_major < 0) {
-		_kernel_major = 0;
-		if (uname(&uts))
-			log_sys_debug("uname", "");
-		else if (sscanf(uts.release, "%d", &_kernel_major) != 1)
-			log_debug("Cannot parse kernel version from %s.", uts.release);
-	}
 
 	if (_kernel_major >= 3) {
 		/* Use sysfs path with major:minor format for modern kernels */
@@ -2970,6 +2970,8 @@ int main(int argc, char *argv[])
 	if (!_systemd_activation && !_protect_against_oom_killer())
 		log_warn("WARNING: Failed to protect against OOM killer.");
 #endif
+
+	_init_kernel_major();
 
 	_init_thread_signals();
 
