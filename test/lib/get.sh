@@ -87,7 +87,9 @@ lv_tree_devices_() {
 		local log
 		log=$(lv_field_lv_ "$lv" mirror_log)
 		test -z "$log" || lv_tree_devices_ "$1" "$log"
-		for i in $(lv_devices "$lv"); do
+		local sub_devs
+		sub_devs=( $(lv_devices "$lv") )
+		for i in "${sub_devs[@]}"; do
 			lv_tree_devices_ "$1" "$i"
 		done
 		;;

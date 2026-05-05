@@ -41,7 +41,9 @@ lvdevices() {
 mirror_images_redundant() {
 	local vg=$1
 	local lv="$vg/$2"
-	for i in $(lvdevices "$lv"); do
+	local img_devs
+	img_devs=( $(lvdevices "$lv") )
+	for i in "${img_devs[@]}"; do
 		echo "# $i:"
 		lvdevices "$vg/$i" | sort -u
 	done > check.tmp.all
@@ -135,13 +137,17 @@ lv_is_clung() {
 }
 
 mirror_images_contiguous() {
-	for i in $(lvdevices "$1/$2"); do
+	local img_devs
+	img_devs=( $(lvdevices "$1/$2") )
+	for i in "${img_devs[@]}"; do
 		lv_is_contiguous "$1" "$i"
 	done
 }
 
 mirror_images_clung() {
-	for i in $(lvdevices "$1/$2"); do
+	local img_devs
+	img_devs=( $(lvdevices "$1/$2") )
+	for i in "${img_devs[@]}"; do
 		lv_is_clung "$1" "$i"
 	done
 }
