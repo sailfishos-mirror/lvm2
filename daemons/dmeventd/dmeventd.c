@@ -1054,11 +1054,12 @@ static int _register_for_timeout(struct thread_status *thread)
 
 	pthread_mutex_lock(&_timeout_mutex);
 
-	if (dm_list_empty(&thread->timeout_list)) {
+	if (dm_list_empty(&thread->timeout_list))
 		dm_list_add(&_timeout_registry, &thread->timeout_list);
-		if (_timeout_thread_id)
-			pthread_cond_signal(&_timeout_cond);
-	}
+
+	/* Signal even if already registered -- timeout value may have changed */
+	if (_timeout_thread_id)
+		pthread_cond_signal(&_timeout_cond);
 
 	if (!_timeout_thread_id)
 		ret = _pthread_create_smallstack(&_timeout_thread_id, _timeout_thread, NULL);
@@ -1893,8 +1894,8 @@ static int _set_timeout(const struct message_data *message_data)
 	_set_timeout_to_thread(thread, timeout);
 	if (timeout)
 		_add_events_to_thread(thread, DM_EVENT_TIMEOUT);
-	else
-		_remove_events_from_thread(thread, DM_EVENT_TIMEOUT);
+	else if (_remove_events_from_thread(thread, DM_EVENT_TIMEOUT))
+		_update_events(thread);
 
 	/* Unlock in reverse order: thread mutex, then global mutex */
 	_unlock_thread(thread);
