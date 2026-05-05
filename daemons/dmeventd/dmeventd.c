@@ -552,7 +552,7 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
 	 */
 	if ((r = pthread_attr_init(&attr)) != 0) {
 		log_sys_error("pthread_attr_init", "");
-		return r;
+		return -r;
 	}
 
 	/*
@@ -573,7 +573,7 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
 
 	pthread_attr_destroy(&attr);
 
-	return r;
+	return -r;
 }
 
 /*
@@ -973,7 +973,7 @@ static void _exit_timeout(void *unused __attribute__((unused)))
 
 /*
  * Send SIGALRM to wake up a monitor thread.
- * Returns: 0 on success, ESRCH if thread gone, other errno on error.
+ * Returns: 0 on success, -ESRCH if thread gone, other negative errno on error.
  */
 static int _thread_wakeup_signal(struct thread_status *thread)
 {
@@ -983,7 +983,7 @@ static int _thread_wakeup_signal(struct thread_status *thread)
 		log_error("Unable to wakeup Thr %x: %s.",
 			  (unsigned) thread->thread, strerror(ret));
 
-	return ret;
+	return -ret;
 }
 
 /* Wake up monitor threads every so often. */
@@ -1548,13 +1548,13 @@ static int _update_events(struct thread_status *thread)
 			 (unsigned) thread->thread);
 
 		/* Notify thread waiting in ioctl (to speed-up) */
-		if ((ret = _thread_wakeup_signal(thread)) == ESRCH)
+		if ((ret = _thread_wakeup_signal(thread)) == -ESRCH)
 			thread->events = 0;  /* thread is gone */
 	}
 
 	/* Threads with no events will enter grace period in their main loop */
 
-	return -ret;
+	return ret;
 }
 
 /* Return success on daemon active check. */
@@ -1668,11 +1668,10 @@ static int _register_for_event(struct message_data *message_data)
 	    !(dso_data = _load_dso(message_data))) {
 		stack;
 #ifdef ELIBACC
-		ret = ELIBACC;
+		return -ELIBACC;
 #else
-		ret = ENODEV;
+		return -ENODEV;
 #endif
-		return -ret;
 	}
 
 	_lock_mutex();
@@ -1707,7 +1706,7 @@ static int _register_for_event(struct message_data *message_data)
 		if ((ret = _create_thread(thread))) {
 			stack;
 			_free_thread_status(thread);
-			return -ret;
+			return ret;
 		}
 
 		_lock_mutex();
@@ -1729,7 +1728,7 @@ static int _register_for_event(struct message_data *message_data)
 		_unregister_for_event(message_data);
 	}
 
-	return -ret;
+	return ret;
 }
 
 /*
@@ -2291,11 +2290,11 @@ static void _cleanup_unused_threads(void)
 
 			/* Signal possibly sleeping thread */
 			ret = _thread_wakeup_signal(thread);
-			if (ret != ESRCH) {
+			if (ret != -ESRCH) {
 				_unlock_thread(thread);
 				break; /* signal delivered or error, retry next round */
 			}
-			/* ESRCH - thread is gone, join below */
+			/* -ESRCH - thread is gone, join below */
 		}
 
 		_unlock_thread(thread);
