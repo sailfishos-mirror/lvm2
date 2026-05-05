@@ -2267,8 +2267,10 @@ static void _process_initial_registrations(char **regs)
 	for (i = 0; (reg = regs[i]); ++i) {
 		msg.cmd = DM_EVENT_CMD_REGISTER_FOR_EVENT;
 		if ((msg.size = strlen(reg))) {
-			if (!(msg.data = strdup(reg)))
+			if (!(msg.data = strdup(reg))) {
+				log_error("Failed to duplicate registration.");
 				continue;
+			}
 			_do_process_request(&msg);
 			free(msg.data);
 			msg.data = NULL;
