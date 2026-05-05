@@ -1867,7 +1867,7 @@ static int _text_pv_initialise(const struct format_type *fmt,
 		  (unsigned long long)data_alignment_sectors, (unsigned long long)data_alignment_offset_sectors);
 
 	if (!data_alignment_sectors) {
-		data_alignment_sectors = find_config_tree_int(pv->fmt->cmd, devices_data_alignment_CFG, NULL) * 2;
+		data_alignment_sectors = (uint64_t) find_config_tree_int64(pv->fmt->cmd, devices_data_alignment_CFG, NULL) * 2ULL;
 		if (data_alignment_sectors)
 			log_debug("PV init config data_alignment_sectors %llu",
 				  (unsigned long long)data_alignment_sectors);
