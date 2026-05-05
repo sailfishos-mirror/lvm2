@@ -945,7 +945,7 @@ static int _get_parameters(struct message_data *message_data) {
 
 	free(msg->data);
 	if ((size = dm_asprintf(&msg->data, "%s pid=%d daemon=%s exec_method=%s exit_on=\"%s\"%s",
-				message_data->id, getpid(),
+				message_data->id ? : "-", getpid(),
 				_foreground ? "no" : "yes",
 				_systemd_activation ? "systemd" : "direct",
 				_exit_on,
