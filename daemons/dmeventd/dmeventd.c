@@ -1917,7 +1917,7 @@ static int _get_timeout(struct message_data *message_data)
 
 	free(msg->data);
 	msg->size = dm_asprintf(&(msg->data), "%s %u",
-				message_data->id, timeout);
+				message_data->id ? : "-", timeout);
 
 	return (msg->data && msg->size) ? 0 : -ENOMEM;
 }
