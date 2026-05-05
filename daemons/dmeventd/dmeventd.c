@@ -1109,6 +1109,7 @@ static int _reset_pending_signal(int signal)
 {
 	sigset_t prev_mask, mask;
 	struct sigaction prev_act, act = { .sa_handler = SIG_IGN };
+	int r = 1;
 
 	sigemptyset(&act.sa_mask);
 	sigemptyset(&prev_mask);
@@ -1122,21 +1123,23 @@ static int _reset_pending_signal(int signal)
 
 	if (sigaction(signal, &act, &prev_act) < 0) {
 		log_sys_error("sigaction", "ignore signal");
-		return 0;
+		r = 0;
+		goto restore_mask;
 	}
 
 	if (sigaction(signal, &prev_act, NULL) < 0) {
 		log_sys_error("sigaction", "restore signal");
-		return 0;
+		r = 0;
 	}
 
-	/* And also restore the process's original sigmask */
+restore_mask:
+	/* Restore the process's original sigmask */
 	if (pthread_sigmask(SIG_SETMASK, &prev_mask, NULL) < 0) {
 		log_sys_error("pthread_sigmask", "restore signal");
 		return 0;
 	}
 
-	return 1;
+	return r;
 }
 
 /* Wait on a device until an event occurs. */
