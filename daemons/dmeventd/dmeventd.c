@@ -862,8 +862,8 @@ static struct thread_status *_lookup_grace_thread_status(const struct message_da
 		    !strcmp(data->device_uuid, thread->device.uuid) &&
 		    !strcmp(data->dso_name, thread->dso_data->dso_name) &&
 		    (thread->inode == _get_device_inode(thread))) {
-			DEBUGLOG("Found reusable thread %x in grace period.",
-				 (unsigned) thread->thread);
+			DEBUGLOG("Found reusable thread %lx in grace period.",
+				 (unsigned long) thread->thread);
 			return thread; /* Return with both mutexes held */
 		}
 		_unlock_thread(thread);
@@ -987,8 +987,8 @@ static int _thread_wakeup_signal(struct thread_status *thread)
 	int ret = pthread_kill(thread->thread, SIGALRM);
 
 	if (ret && (ret != ESRCH))
-		log_error("Unable to wakeup Thr %x: %s.",
-			  (unsigned) thread->thread, strerror(ret));
+		log_error("Unable to wakeup Thr %lx: %s.",
+			  (unsigned long) thread->thread, strerror(ret));
 
 	return -ret;
 }
@@ -1016,13 +1016,13 @@ static void *_timeout_thread(void *unused __attribute__((unused)))
 				thread->next_time = curr_time + thread->timeout;
 				if (thread->processing) {
 					/* Cannot signal processing monitoring thread */
-					DEBUGLOG("Skipping SIGALRM to processing Thr %x for timeout, "
+					DEBUGLOG("Skipping SIGALRM to processing Thr %lx for timeout, "
 						 "extending next_time to %ld.",
-						 (unsigned) thread->thread,
+						 (unsigned long) thread->thread,
 						 (long)thread->next_time);
 				} else {
-					DEBUGLOG("Sending SIGALRM to Thr %x for timeout.",
-						 (unsigned) thread->thread);
+					DEBUGLOG("Sending SIGALRM to Thr %lx for timeout.",
+						 (unsigned long) thread->thread);
 					(void) _thread_wakeup_signal(thread);
 				}
 			}
@@ -1244,7 +1244,7 @@ static void _do_process_event(struct thread_status *thread)
 		? _get_device_status(thread) : thread->wait_task;
 
 	if (!task)
-		log_error("Lost event in Thr %x.", (unsigned) thread->thread);
+		log_error("Lost event in Thr %lx.", (unsigned long) thread->thread);
 	else {
 		_unlock_thread(thread);
 		thread->dso_data->process_event(task, (enum dm_event_mask) current_events,
@@ -1292,8 +1292,8 @@ static void _monitor_unregister(void *arg)
 		log_error("%s: %s unregister failed.", __func__,
 			  thread->device.name);
 
-	DEBUGLOG("Marking Thr %x as DONE.",
-		 (unsigned) thread->thread);
+	DEBUGLOG("Marking Thr %lx as DONE.",
+		 (unsigned long) thread->thread);
 
 	_lock_thread(thread);
 	thread->status = DM_THREAD_DONE; /* Last access to thread memory! */
@@ -1362,8 +1362,8 @@ static void _monitor_grace_period_wait(struct thread_status *thread)
 {
 	struct timespec grace_timeout = { .tv_sec = _get_curr_time() + _grace_period };
 
-	DEBUGLOG("Thread %x entering grace period for %d seconds.",
-		 (unsigned) thread->thread, _grace_period);
+	DEBUGLOG("Thread %lx entering grace period for %d seconds.",
+		 (unsigned long) thread->thread, _grace_period);
 
 	/* Wait on per-thread condition variable with thread mutex
 	 * pthread_cond_timedwait atomically releases and reacquires the mutex */
@@ -1372,7 +1372,7 @@ static void _monitor_grace_period_wait(struct thread_status *thread)
 						    &thread->mutex, &grace_timeout)))
 		/* Waiting */;
 
-	DEBUGLOG("Thread %x wakeup grace period.", (unsigned) thread->thread);
+	DEBUGLOG("Thread %lx wakeup grace period.", (unsigned long) thread->thread);
 }
 
 /*
@@ -1415,8 +1415,8 @@ static void *_monitor_thread(void *arg)
 
 	/* Main monitoring loop with grace period support */
 	while (thread->events) {
-		DEBUGLOG("Monitoring %s with Thr %x  (events: %x, used: %u).",
-			 thread->device.name, (unsigned) thread->thread,
+		DEBUGLOG("Monitoring %s with Thr %lx  (events: %x, used: %u).",
+			 thread->device.name, (unsigned long) thread->thread,
 			 (unsigned) thread->events, thread->used);
 
 		thread->status = DM_THREAD_RUNNING;
@@ -1443,8 +1443,8 @@ static void *_monitor_thread(void *arg)
 		thread->current_events = 0;
 		thread->status = DM_THREAD_GRACE_PERIOD;	/* No events - enter grace period */
 
-		DEBUGLOG("Gracing %s with Thr %x  (events: %x, used: %u).",
-			 thread->device.name, (unsigned) thread->thread,
+		DEBUGLOG("Gracing %s with Thr %lx  (events: %x, used: %u).",
+			 thread->device.name, (unsigned long) thread->thread,
 			 (unsigned) thread->events, thread->used);
 
 		/* Thread stays in active registry during grace period */
@@ -1532,8 +1532,8 @@ static int _update_events(struct thread_status *thread)
 
 	/* Wake up thread waiting in grace period for new registration or exit */
 	if ((thread->events || _exit_now) && (thread->status == DM_THREAD_GRACE_PERIOD)) {
-		DEBUGLOG("Waking up thread %x waiting in grace period (events=%x).",
-			 (unsigned) thread->thread, (unsigned) thread->events);
+		DEBUGLOG("Waking up thread %lx waiting in grace period (events=%x).",
+			 (unsigned long) thread->thread, (unsigned) thread->events);
 
 		/* Set status to RUNNING and processing to 1. */
 		thread->status = DM_THREAD_RUNNING;
@@ -1554,8 +1554,8 @@ static int _update_events(struct thread_status *thread)
 
 	/* Only non-processing threads can be notified */
 	if (!thread->processing) {
-		DEBUGLOG("Sending SIGALRM to wakeup Thr %x.",
-			 (unsigned) thread->thread);
+		DEBUGLOG("Sending SIGALRM to wakeup Thr %lx.",
+			 (unsigned long) thread->thread);
 
 		/* Notify thread waiting in ioctl (to speed-up) */
 		if ((ret = _thread_wakeup_signal(thread)) == -ESRCH)
@@ -2315,7 +2315,7 @@ static void _cleanup_unused_threads(void)
 		dm_list_del(l);
 		_unlock_mutex();
 
-		DEBUGLOG("Destroying Thr %x.", (unsigned) thread->thread);
+		DEBUGLOG("Destroying Thr %lx.", (unsigned long) thread->thread);
 
 		if (pthread_join(thread->thread, NULL))
 			log_sys_debug("pthread_join", "");
