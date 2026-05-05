@@ -1751,7 +1751,7 @@ static int _registered_device(struct message_data *message_data,
 	free(msg->data);
 
 	if ((r = dm_asprintf(&(msg->data), "%s %s %s %d",
-			     message_data->id,
+			     message_data->id ? : "-",
 			     thread->dso_data->dso_name,
 			     thread->device.uuid,
 			     thread->events | thread->pending)) < 0)
