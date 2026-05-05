@@ -941,7 +941,8 @@ static int _get_status(struct message_data *message_data)
 	return ret;
 }
 
-static int _get_parameters(struct message_data *message_data) {
+static int _get_parameters(struct message_data *message_data)
+{
 	struct dm_event_daemon_message *msg = message_data->msg;
 	int size;
 	char idle_buf[32] = "";
@@ -1288,7 +1289,7 @@ static void _monitor_unregister(void *arg)
 		log_error("%s: %s unregister failed.", __func__,
 			  thread->device.name);
 
-	DEBUGLOG("Marking Thr %x as DONE and moving to unused.",
+	DEBUGLOG("Marking Thr %x as DONE.",
 		 (unsigned) thread->thread);
 
 	_lock_thread(thread);
@@ -1716,7 +1717,13 @@ static int _register_for_event(struct message_data *message_data)
 		}
 
 		_lock_mutex();
-		/* Note: same uuid can't be added in parallel */
+		/*
+		 * Thread must NOT be linked before _create_thread():
+		 * an early UNREGISTER would clear events while the
+		 * thread is still in REGISTERING state, leaving the
+		 * device registered with the DSO but never unregistered
+		 * (_monitor_unregister skips REGISTERING threads).
+		 */
 		LINK_THREAD(thread);
 	}
 
@@ -2770,7 +2777,7 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 	if (version < 2) {
 		/* This check is copied from sd-daemon.c. */
 		struct stat st;
-		if (!lstat(SD_RUNTIME_UNIT_FILE_DIR, &st) && !!S_ISDIR(st.st_mode))
+		if (!lstat(SD_RUNTIME_UNIT_FILE_DIR, &st) && S_ISDIR(st.st_mode))
 			_systemd_activation = 1;
 	}
 #endif
@@ -2821,7 +2828,7 @@ bad:
 static void _usage(char *prog, FILE *file)
 {
 	fprintf(file, "Usage:\n"
-		"%s [-d [-d [-d]]] [-e path] [-f] [-g seconds] [-h] [i] [-l] [-R] [-V] [-?]\n\n"
+		"%s [-d [-d [-d]]] [-e path] [-f] [-g seconds] [-h] [-i] [-l] [-R] [-V] [-?]\n\n"
 		"   -d       Log debug messages to syslog (-d, -dd, -ddd)\n"
 		"   -e       Select a file path checked on exit\n"
 		"   -f       Don't fork, run in the foreground\n"
