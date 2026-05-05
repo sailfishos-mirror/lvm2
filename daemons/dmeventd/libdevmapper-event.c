@@ -28,6 +28,7 @@
 #include <pthread.h>
 #include <poll.h>
 #include <syslog.h>
+#include <time.h>
 #include <unistd.h>
 
 static int _debug_level = 0;
@@ -548,6 +549,8 @@ static int _start_daemon(char *dmeventd_path, struct dm_event_fifos *fifos)
 
 int init_fifos(struct dm_event_fifos *fifos)
 {
+	struct timespec _ts0, _ts1;
+
 	/* FIXME? Is fifo the most suitable method? Why not share
 	   comms/daemon code with something else e.g. multipath? */
 
@@ -558,10 +561,15 @@ int init_fifos(struct dm_event_fifos *fifos)
 	}
 
 	/* Lock out anyone else trying to do communication with the daemon. */
+	clock_gettime(CLOCK_MONOTONIC, &_ts0);
 	if (flock(fifos->server, LOCK_EX) < 0) {
 		log_sys_error("flock", fifos->server_path);
 		goto bad_no_unlock;
 	}
+	clock_gettime(CLOCK_MONOTONIC, &_ts1);
+	log_warn("DEBUG FIFO: flock acquired in %ld ms.",
+		 (long)((_ts1.tv_sec - _ts0.tv_sec) * 1000 +
+			(_ts1.tv_nsec - _ts0.tv_nsec) / 1000000));
 
 /*	if ((fifos->client = open(fifos->client_path, O_WRONLY | O_NONBLOCK)) < 0) {*/
 	if ((fifos->client = open(fifos->client_path, O_RDWR | O_NONBLOCK)) < 0) {
@@ -666,6 +674,7 @@ static int _do_event(int cmd, char *dmeventd_path, struct dm_event_daemon_messag
 		     enum dm_event_mask evmask, uint32_t timeout)
 {
 	int ret;
+	struct timespec _ts0, _ts1;
 	struct dm_event_fifos fifos = {
 		.client = -1,
 		.server = -1,
@@ -679,13 +688,27 @@ static int _do_event(int cmd, char *dmeventd_path, struct dm_event_daemon_messag
 		goto_out;
 	}
 
+	clock_gettime(CLOCK_MONOTONIC, &_ts0);
 	ret = daemon_talk(&fifos, msg, DM_EVENT_CMD_HELLO, NULL, NULL, 0, 0);
+	clock_gettime(CLOCK_MONOTONIC, &_ts1);
+	log_warn("DEBUG FIFO: HELLO took %ld ms (ret=%d dev=%s).",
+		 (long)((_ts1.tv_sec - _ts0.tv_sec) * 1000 +
+			(_ts1.tv_nsec - _ts0.tv_nsec) / 1000000),
+		 ret, dev_name ? : "-");
 
 	free(msg->data);
 	msg->data = 0;
 
-	if (!ret)
+	if (!ret) {
+		clock_gettime(CLOCK_MONOTONIC, &_ts0);
 		ret = daemon_talk(&fifos, msg, cmd, dso_name, dev_name, evmask, timeout);
+		clock_gettime(CLOCK_MONOTONIC, &_ts1);
+		log_warn("DEBUG FIFO: CMD 0x%x took %ld ms (ret=%d dev=%s).",
+			 cmd,
+			 (long)((_ts1.tv_sec - _ts0.tv_sec) * 1000 +
+				(_ts1.tv_nsec - _ts0.tv_nsec) / 1000000),
+			 ret, dev_name ? : "-");
+	}
 out:
 	/* what is the opposite of init? */
 	fini_fifos(&fifos);

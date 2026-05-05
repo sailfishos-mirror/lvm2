@@ -33,6 +33,7 @@
 
 #include <limits.h>
 #include <fcntl.h>
+#include <time.h>
 #include <unistd.h>
 
 #define _skip(fmt, args...) log_very_verbose("Skipping: " fmt , ## args)
@@ -1900,6 +1901,15 @@ int monitor_dev_for_events(struct cmd_context *cmd, const struct logical_volume 
 		laopts = &zlaopts;
 	else
 		mirr_laopts.read_only = laopts->read_only;
+
+	{
+		struct timespec _ts;
+		clock_gettime(CLOCK_MONOTONIC, &_ts);
+		log_warn("DEBUG MONITOR: %smonitor %s at %ld.%03ld (mode=%d).",
+			 monitor ? "" : "un", display_lvname(lv),
+			 (long)_ts.tv_sec, _ts.tv_nsec / 1000000,
+			 dmeventd_monitor_mode());
+	}
 
 	/* skip dmeventd code altogether */
 	if (dmeventd_monitor_mode() == DMEVENTD_MONITOR_IGNORE)

@@ -37,6 +37,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <syslog.h>
+#include <time.h>
 #include <sys/utsname.h>
 
 #ifdef __linux__
@@ -2202,6 +2203,7 @@ static int _do_process_request(struct dm_event_daemon_message *msg)
 static void _process_request(struct dm_event_fifos *fifos)
 {
 	struct dm_event_daemon_message msg = { 0 };
+	struct timespec _ts0, _ts1;
 	int cmd;
 	/*
 	 * Read the request from the client (client_read, client_write
@@ -2212,6 +2214,7 @@ static void _process_request(struct dm_event_fifos *fifos)
 
 	cmd = msg.cmd;
 
+	clock_gettime(CLOCK_MONOTONIC, &_ts0);
 	DEBUGLOG(">>> CMD:%s (0x%x) processing...", decode_cmd(cmd), (unsigned) cmd);
 
 	/* _do_process_request fills in msg (if memory allows for
@@ -2221,6 +2224,12 @@ static void _process_request(struct dm_event_fifos *fifos)
 	if (!_client_write(fifos, &msg))
 		stack;
 
+	clock_gettime(CLOCK_MONOTONIC, &_ts1);
+	log_warn("DEBUG DMEVENTD: CMD:%s (0x%x) processed in %ld ms (result %d).",
+		 decode_cmd(cmd), (unsigned) cmd,
+		 (long)((_ts1.tv_sec - _ts0.tv_sec) * 1000 +
+			(_ts1.tv_nsec - _ts0.tv_nsec) / 1000000),
+		 (int32_t) msg.cmd);
 	DEBUGLOG("<<< CMD:%s (0x%x) completed (result %u).", decode_cmd(cmd), (unsigned) cmd, msg.cmd);
 
 	free(msg.data);
