@@ -70,7 +70,9 @@ btrfs_devid() {
 
 	# It could be a multi-devices btrfs, filter the output.
 	# Device in `btrfs filesystem show $devpath` could be /dev/mapper/* so call `readlink -e`
-	for devinfo in $(LC_ALL=C btrfs filesystem show "$devpath"); do
+	local btrfs_info
+	btrfs_info=( $(LC_ALL=C btrfs filesystem show "$devpath") )
+	for devinfo in "${btrfs_info[@]}"; do
 		case "$devinfo" in
 		*devid*)
 			path_major_minor=$(btrfs_path_major_minor "${devinfo#* path }")

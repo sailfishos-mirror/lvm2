@@ -36,7 +36,8 @@ lvcreate --type raid10 -m 1 -i 3 -l 3 -n $lv1 $vg
 aux wait_for_sync $vg $lv1
 
 # Can replace any single device
-for i in $(get_image_pvs $vg $lv1); do
+img_pvs=( $(get_image_pvs $vg $lv1) )
+for i in "${img_pvs[@]}"; do
 	lvconvert --replace $i $vg/$lv1
 	aux wait_for_sync $vg $lv1
 done

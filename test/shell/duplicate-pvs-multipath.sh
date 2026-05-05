@@ -56,7 +56,8 @@ vgchange -an $vg1
 
 pvs |tee out
 grep $MP out
-for i in $(grep -H scsi_debug /sys/block/sd*/device/model | cut -f4 -d /); do
+scsi_devs=( $(grep -H scsi_debug /sys/block/sd*/device/model | cut -f4 -d /) )
+for i in "${scsi_devs[@]}"; do
 	not grep /dev/$i out;
 done
 
