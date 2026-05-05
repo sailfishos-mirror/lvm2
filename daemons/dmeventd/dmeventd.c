@@ -380,6 +380,9 @@ static struct dso_data *_lookup_dso(struct message_data *data)
 {
 	struct dso_data *dso_data, *ret = NULL;
 
+	if (!data->dso_name)
+		return NULL;
+
 	dm_list_iterate_items(dso_data, &_dso_registry)
 		if (!strcmp(data->dso_name, dso_data->dso_name)) {
 			ret = dso_data;
@@ -451,7 +454,7 @@ static struct dso_data *_load_dso(struct message_data *data)
 bad:
 	log_error("dmeventd %s dlopen failed: %s.", data->dso_name, dlerr);
 	data->msg->size = dm_asprintf(&(data->msg->data), "%s %s dlopen failed: %s",
-				      data->id, data->dso_name, dlerr);
+				      data->id ? : "-", data->dso_name, dlerr);
 	return NULL;
 }
 
@@ -826,6 +829,9 @@ static struct thread_status *_lookup_thread_status(const struct message_data *da
 {
 	struct thread_status *thread;
 
+	if (!data->device_uuid)
+		return NULL;
+
 	/* Find active threads (not in grace period) */
 	dm_list_iterate_items(thread, &_thread_registry) {
 		_lock_thread(thread);
@@ -944,7 +950,7 @@ static int _get_parameters(struct message_data *message_data) {
 
 	free(msg->data);
 	if ((size = dm_asprintf(&msg->data, "%s pid=%d daemon=%s exec_method=%s exit_on=\"%s\"%s",
-				message_data->id, getpid(),
+				message_data->id ? : "-", getpid(),
 				_foreground ? "no" : "yes",
 				_systemd_activation ? "systemd" : "direct",
 				_exit_on,
@@ -1750,7 +1756,7 @@ static int _registered_device(struct message_data *message_data,
 	free(msg->data);
 
 	if ((r = dm_asprintf(&(msg->data), "%s %s %s %d",
-			     message_data->id,
+			     message_data->id ? : "-",
 			     thread->dso_data->dso_name,
 			     thread->device.uuid,
 			     thread->events | thread->pending)) < 0)
@@ -1801,8 +1807,8 @@ static int _get_registered_dev(struct message_data *message_data, int next)
 	int ret = -ENOENT;
 
 	DEBUGLOG("Get%s dso:%s  uuid:%s.", next ? "Next" : "",
-		 message_data->dso_name,
-		 message_data->device_uuid);
+		 message_data->dso_name ?: "",
+		 message_data->device_uuid ?: "");
 
 	_lock_mutex();
 
@@ -1916,7 +1922,7 @@ static int _get_timeout(struct message_data *message_data)
 
 	free(msg->data);
 	msg->size = dm_asprintf(&(msg->data), "%s %u",
-				message_data->id, timeout);
+				message_data->id ? : "-", timeout);
 
 	return (msg->data && msg->size) ? 0 : -ENOMEM;
 }
