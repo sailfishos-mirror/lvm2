@@ -137,64 +137,55 @@ help:
 	@echo "  T			Run given test(s) (regex)."
 	@echo "  VERBOSE		Verbose output (1), timing (2)."
 
-check: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
+COMMA := ,
+
+# Chown test scripts to root before the runner, restore on exit.
+# $(1) = flavour string, $(2) = optional --only override (default: $(T))
+define run_check
+	( trap 'chown $${SUDO_UID:-0}:$${SUDO_GID:-0} \
+		$(addprefix lib/, $(LIB_ROOT_OWNED))' EXIT ; \
+	  chown root:root $(addprefix lib/, $(LIB_ROOT_OWNED)) && \
+	  VERBOSE=$(VERBOSE) ./lib/runner \
 		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-vanilla$(LVMPOLLD_NDEV_FLAVOUR) --only $(T) --skip $(S)
+		--flavours $(1) --only $(or $(2),$(T)) --skip $(S) )
+endef
+
+check: .tests-stamp
+	$(call run_check,ndev-vanilla$(LVMPOLLD_NDEV_FLAVOUR))
 
 check_system: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-vanilla$(LVMPOLLD_UDEV_FLAVOUR)$(LVMLOCKD_UDEV_FLAVOUR) --only $(T) --skip $(S)
+	$(call run_check,udev-vanilla$(LVMPOLLD_UDEV_FLAVOUR)$(LVMLOCKD_UDEV_FLAVOUR))
 
 check_local: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-vanilla --only $(T) --skip $(S)
+	$(call run_check,ndev-vanilla)
 
 check_local_extended: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-vanilla-extended --only $(T) --skip $(S)
+	$(call run_check,ndev-vanilla-extended)
 
 ifeq ("@BUILD_LVMPOLLD@", "yes")
 check_lvmpolld: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-lvmpolld --only $(T) --skip $(S)
+	$(call run_check,ndev-lvmpolld)
 
 check_all_lvmpolld: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-lvmpolld --only $(T) --skip $(S)
+	$(call run_check,ndev-lvmpolld)
 endif
 
 check_devicesfile: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours ndev-devicesfile --only $(T) --skip $(S)
+	$(call run_check,ndev-devicesfile)
 
 ifeq ("@BUILD_LVMLOCKD@", "yes")
 check_lvmlockd_sanlock: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-sanlock --only $(T) --skip $(S)
+	$(call run_check,udev-lvmlockd-sanlock)
 
 check_lvmlockd_dlm: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-dlm --only shell/aa-lvmlockd-dlm-prepare.sh,$(T),shell/zz-lvmlockd-dlm-remove.sh --skip $(S)
+	$(call run_check,udev-lvmlockd-dlm,shell/aa-lvmlockd-dlm-prepare.sh$(COMMA)$(T)$(COMMA)shell/zz-lvmlockd-dlm-remove.sh)
 
 check_lvmlockd_idm: .tests-stamp lib/idm_inject_failure
 	$(INSTALL_PROGRAM) lib/idm_inject_failure $(EXECDIR)
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-idm --only shell/aa-lvmlockd-idm-prepare.sh,$(T),shell/zz-lvmlockd-idm-remove.sh --skip $(S)
+	$(call run_check,udev-lvmlockd-idm,shell/aa-lvmlockd-idm-prepare.sh$(COMMA)$(T)$(COMMA)shell/zz-lvmlockd-idm-remove.sh)
 
 check_lvmlockd_test: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-test --only $(T) --skip $(S)
+	$(call run_check,udev-lvmlockd-test)
 endif
 
 run-unit-test unit-test unit/unit-test:
@@ -226,8 +217,7 @@ LIB_MKE2FS_CONF := mke2fs.conf
 LVM_TOOLS := \
  $(LVMPOLLD_TOOLS)\
  $(LVMLOCKD_TOOLS)\
- $(DMEVENTD_TOOLS)\
- libdm/dm-tools/dmsetup
+ $(DMEVENTD_TOOLS)
 
 LVM_PROFILES := $(addsuffix .profile,\
  cache-mq\
@@ -238,11 +228,13 @@ LVM_PROFILES := $(addsuffix .profile,\
 LIB_LINK_NOT := invalid fail should
 LIB_LOCAL := paths runner
 LIB_NOT := not
-LIB_SHARED := check aux inittest utils get lvm-wrapper lvm_vdo_wrapper
+LIB_WRAPPERS := lvm-wrapper dm-wrapper lvm_vdo_wrapper
+LIB_SHARED := check aux inittest utils get $(LIB_WRAPPERS)
 LIB_CONF := $(LIB_LVMLOCKD_CONF) $(LIB_MKE2FS_CONF)
 LIB_DATA := $(LIB_FLAVOURS) dm-version-expected version-expected
 LIB_EXEC := $(LIB_NOT) dmsecuretest gen_data_blocks
 LVM_SCRIPTS := fsadm lvresize_fs_helper lvm_import_vdo
+LIB_ROOT_OWNED := $(LIB_WRAPPERS) $(LVM_SCRIPTS)
 
 install: .tests-stamp lib/paths-installed
 	$(SHOW) "    [INSTALL] tests"
@@ -368,8 +360,9 @@ endif
 	$(SHOW) "    [LIB-DIR-STAMP]"
 	$(Q) $(MKDIR_P) api lib unit
 	$(Q) $(RM) lib/clvmd
-	$(Q) $(LN_S) -f dmsetup lib/dmstats
-	$(Q) $(LN_S) -f dmsetup lib/dmvdostats
+	$(Q) $(LN_S) -f dm-wrapper lib/dmsetup
+	$(Q) $(LN_S) -f dm-wrapper lib/dmstats
+	$(Q) $(LN_S) -f dm-wrapper lib/dmvdostats
 	$(Q) $(foreach FILE, $(CMDS), $(LN_S) -f lvm-wrapper lib/$(FILE) $(newline))
 	$(Q) $(foreach FILE, $(LVM_TOOLS), $(LN_S) -f $(abs_top_builddir)/$(FILE) lib/ $(newline))
 	$(Q) $(LN_S) -f $(addprefix $(abs_top_srcdir)/conf/, $(LVM_PROFILES)) lib/
