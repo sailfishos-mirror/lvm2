@@ -314,9 +314,11 @@ if [[ -z "${installed_testsuite+varset}" ]]; then
     *"$abs_top_builddir/test/lib"*) ;;
     *)
 	PATH="$abs_top_builddir/test/lib:$abs_top_builddir/test/api:$PATH"
-	LVM_BINARY=$(which lvm)
+	DMSETUP_BINARY=$(command -v dmsetup)
+	LVM_BINARY=$(command -v lvm)
 	LD_LIBRARY_PATH="$abs_top_builddir/daemons/dmeventd:$abs_top_builddir/tools:$abs_top_builddir/libdm:$LD_LIBRARY_PATH"
-	export PATH LD_LIBRARY_PATH LVM_BINARY ;;
+	export PATH LD_LIBRARY_PATH DMSETUP_BINARY LVM_BINARY
+	;;
     esac
 fi
 
