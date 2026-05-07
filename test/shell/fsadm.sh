@@ -100,7 +100,7 @@ not fsadm check
 
 # check needs arg
 not fsadm resize "$dev_vg_lv" 30M |& tee out
-grep "Cannot get FSTYPE" out
+grep "Cannot get filesystem type" out
 
 if check_missing ext2; then
 	mkfs.ext2 -b4096 -j "$dev_vg_lv"
