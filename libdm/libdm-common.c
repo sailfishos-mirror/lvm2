@@ -2039,8 +2039,8 @@ static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, si
 			name_dev = dirent_dev->d_name;
 
 			/* skip known ignorable paths using binary search */
-			if (bsearch(&name_dev, _ignore_sysfs, DM_ARRAY_SIZE(_ignore_sysfs),
-				    sizeof(char *), (int (*)(const void *, const void *))strcmp))
+			if (bsearch(name_dev, _ignore_sysfs, DM_ARRAY_SIZE(_ignore_sysfs),
+				    sizeof(_ignore_sysfs[0]), (int (*)(const void *, const void *))strcmp))
 				continue;
 
 			if (dm_snprintf(path, sizeof(path), "%sblock/%s/%s/dev",
