@@ -2381,7 +2381,8 @@ static int _set_oom_adj(const char *oom_adj_path, int val)
 		return 0;
 	}
 
-	fprintf(fp, "%i", val);
+	if (fprintf(fp, "%i", val) < 0)
+		log_sys_debug("fprintf", oom_adj_path);
 
 	if (dm_fclose(fp))
 		log_sys_debug("fclose", oom_adj_path);

@@ -310,7 +310,7 @@ struct dm_task *dm_task_create(int type)
 	struct dm_task *dmt = dm_zalloc(sizeof(*dmt));
 
 	if (!dmt) {
-		log_error("dm_task_create: malloc(%" PRIsize_t ") failed",
+		log_error("dm_task_create: dm_zalloc(%" PRIsize_t ") failed",
 			  sizeof(*dmt));
 		return NULL;
 	}
@@ -596,7 +596,7 @@ static int _dm_task_set_name(struct dm_task *dmt, const char *name,
 	}
 
 	if (!(dmt->dev_name = dm_strdup(name))) {
-		log_error("_dm_task_set_name: strdup(%s) failed", name);
+		log_error("_dm_task_set_name: dm_strdup(%s) failed", name);
 		return 0;
 	}
 
@@ -811,7 +811,7 @@ int dm_task_set_newname(struct dm_task *dmt, const char *newname)
 
 	dm_free(dmt->newname);
 	if (!(dmt->newname = dm_strdup(newname))) {
-		log_error("dm_task_set_newname: strdup(%s) failed", newname);
+		log_error("dm_task_set_newname: dm_strdup(%s) failed", newname);
 		return 0;
 	}
 
@@ -853,7 +853,7 @@ int dm_task_set_uuid(struct dm_task *dmt, const char *uuid)
 	}
 
 	if (!(dmt->uuid = dm_strdup(uuid))) {
-		log_error("dm_task_set_uuid: strdup(%s) failed", uuid);
+		log_error("dm_task_set_uuid: dm_strdup(%s) failed", uuid);
 		return 0;
 	}
 
@@ -1998,7 +1998,7 @@ static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, si
 	int r = 0, sz;
 
 	if (!*_sysfs_dir ||
-	    dm_snprintf(path, sizeof(path), "%s/block/", _sysfs_dir) < 0) {
+	    dm_snprintf(path, sizeof(path), "%sblock/", _sysfs_dir) < 0) {
 		log_error("Failed to build sysfs_path.");
 		return 0;
 	}
@@ -2287,8 +2287,10 @@ int dm_driver_version(char *version, size_t size)
 	if (!(dmt = dm_task_create(DM_DEVICE_VERSION)))
 		return_0;
 
-	if (!dm_task_run(dmt))
-		log_error("Failed to get driver version");
+	if (!dm_task_run(dmt)) {
+		log_error("Failed to get driver version.");
+		goto out;
+	}
 
 	if (!dm_task_get_driver_version(dmt, version, size))
 		goto out;
@@ -2514,7 +2516,7 @@ static int _udev_notify_sem_inc(uint32_t cookie, int semid)
 	}
 
  	if ((val = semctl(semid, 0, GETVAL)) < 0) {
-		log_warn("cookie inc: semid %d: sem_ctl GETVAL failed for "
+		log_warn("cookie inc: semid %d: semctl GETVAL failed for "
 			  "cookie 0x%" PRIx32 ": %s",
 			  semid, cookie, strerror(errno));
 		log_debug_activation("Udev cookie 0x%" PRIx32 " (semid %d) incremented.",
@@ -2532,7 +2534,7 @@ static int _udev_notify_sem_dec(uint32_t cookie, int semid)
 	int val;
 
  	if ((val = semctl(semid, 0, GETVAL)) < 0)
-		log_warn("cookie dec: semid %d: sem_ctl GETVAL failed for "
+		log_warn("cookie dec: semid %d: semctl GETVAL failed for "
 			 "cookie 0x%" PRIx32 ": %s",
 			 semid, cookie, strerror(errno));
 
@@ -2643,7 +2645,7 @@ static int _udev_notify_sem_create(uint32_t *cookie, int *semid)
 	}
 
  	if ((val = semctl(gen_semid, 0, GETVAL)) < 0) {
-		log_error("cookie create: semid %d: sem_ctl GETVAL failed for "
+		log_error("cookie create: semid %d: semctl GETVAL failed for "
 			  "cookie 0x%" PRIx32 ": %s",
 			  gen_semid, gen_cookie, strerror(errno));
 		(void) _udev_notify_sem_destroy(gen_cookie, gen_semid);
@@ -2765,14 +2767,14 @@ int dm_task_set_cookie(struct dm_task *dmt, uint32_t *cookie, uint16_t flags)
 			     (flags & DM_UDEV_LOW_PRIORITY_FLAG) ? " LOW_PRIORITY" : "",
 			     (flags & DM_UDEV_DISABLE_LIBRARY_FALLBACK) ? " DISABLE_LIBRARY_FALLBACK" : "",
 			     (flags & DM_UDEV_PRIMARY_SOURCE_FLAG) ? " PRIMARY_SOURCE" : "",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG0) ? " SUBSYSTEM_0" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG1) ? " SUBSYSTEM_1" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG2) ? " SUBSYSTEM_2" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG3) ? " SUBSYSTEM_3" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG4) ? " SUBSYSTEM_4" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG5) ? " SUBSYSTEM_5" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG6) ? " SUBSYSTEM_6" : " ",
-			     (flags & DM_SUBSYSTEM_UDEV_FLAG7) ? " SUBSYSTEM_7" : " ",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG0) ? " SUBSYSTEM_0" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG1) ? " SUBSYSTEM_1" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG2) ? " SUBSYSTEM_2" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG3) ? " SUBSYSTEM_3" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG4) ? " SUBSYSTEM_4" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG5) ? " SUBSYSTEM_5" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG6) ? " SUBSYSTEM_6" : "",
+			     (flags & DM_SUBSYSTEM_UDEV_FLAG7) ? " SUBSYSTEM_7" : "",
 			     flags);
 
 	return 1;
@@ -2822,7 +2824,7 @@ static int _udev_wait(uint32_t cookie, int *nowait)
 	/* Return immediately if the semaphore value exceeds 1? */
 	if (*nowait) {
 		if ((val = semctl(semid, 0, GETVAL)) < 0) {
-			log_error("semid %d: sem_ctl GETVAL failed for "
+			log_error("semid %d: semctl GETVAL failed for "
 				  "cookie 0x%" PRIx32 ": %s",
 				  semid, cookie, strerror(errno));
 			return 0;

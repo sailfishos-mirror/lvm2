@@ -205,6 +205,7 @@ static int _rx_get_token(struct parse_sp *ps)
 		}
 
 		if (ptr >= ps->rx_end) {
+			log_error("Unterminated character class in regex.");
 			ps->type = -1;
 			return 0;
 		}
@@ -390,7 +391,7 @@ static struct rx_node *_cat_term(struct parse_sp *ps)
 		return l;
 
 	if (!(n = _node(ps->mem, CAT, l, r)))
-		stack;
+		return_NULL;
 
 	return n;
 }
@@ -414,7 +415,7 @@ static struct rx_node *_or_term(struct parse_sp *ps)
 	}
 
 	if (!(n = _node(ps->mem, OR, l, r)))
-		stack;
+		return_NULL;
 
 	return n;
 }
