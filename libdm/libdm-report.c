@@ -2884,8 +2884,8 @@ static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
 					  struct selection_str_list **sel_str_list,
 					  uint32_t *flags)
 {
-	static const char _str_list_item_parsing_failed[] = "Failed to parse string list value "
-							    "for selection field %s.";
+#define _STR_LIST_ITEM_PARSING_FAILED \
+	"Failed to parse string list value for selection field %s."
 	struct selection_str_list *ssl = NULL;
 	struct dm_str_list *item;
 	const char *begin_item = NULL, *end_item = NULL, *tmp;
@@ -2907,7 +2907,7 @@ static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
 		/* Only one item - SEL_LIST_{SUBSET_}LS and SEL_LIST_{SUBSET_}LE not used */
 		c = _get_and_skip_quote_char(&s);
 		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, SEL_AND | SEL_OR | SEL_PRECEDENCE_PE, NULL))) {
-			log_error(_str_list_item_parsing_failed, ft->id);
+			log_error(_STR_LIST_ITEM_PARSING_FAILED, ft->id);
 			goto bad;
 		}
 		if (!_add_item_to_string_list(mem, begin_item, end_item, &ssl->str_list.list))
@@ -2932,7 +2932,7 @@ static const char *_tok_value_string_list(const struct dm_report_field_type *ft,
 		s = _skip_space(s);
 		c = _get_and_skip_quote_char(&s);
 		if (!(s = _tok_value_string(s, &begin_item, &end_item, c, op_flags, NULL))) {
-			log_error(_str_list_item_parsing_failed, ft->id);
+			log_error(_STR_LIST_ITEM_PARSING_FAILED, ft->id);
 			goto bad;
 		}
 		s = _skip_space(s);
@@ -3033,7 +3033,7 @@ struct time_value {
 	time_t t2;
 };
 
-static const char _out_of_range_msg[] = "Field selection value %s out of supported range for field %s.";
+#define _OUT_OF_RANGE_MSG "Field selection value %s out of supported range for field %s."
 
 /*
  * Standard formatted date and time - ISO8601.
@@ -3460,7 +3460,7 @@ static const char *_tok_value_time(const struct dm_report_field_type *ft,
 
 		errno = 0;
 		if (((t = strtoull(time_str, NULL, 10)) == ULLONG_MAX) && errno == ERANGE) {
-			log_error(_out_of_range_msg, time_str, ft->id);
+			log_error(_OUT_OF_RANGE_MSG, time_str, ft->id);
 			goto out;
 		}
 
@@ -3894,7 +3894,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
 					errno = 0;
 					if (((fs->value->v.i = strtoull(s, NULL, 10)) == ULLONG_MAX) &&
 						 (errno == ERANGE)) {
-						log_error(_out_of_range_msg, s, field_id);
+						log_error(_OUT_OF_RANGE_MSG, s, field_id);
 						goto error;
 					}
 					if (_check_value_is_strictly_reserved(rh, field_num, DM_REPORT_FIELD_TYPE_NUMBER, &fs->value->v.i, NULL)) {
@@ -3913,7 +3913,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
 					errno = 0;
 					fs->value->v.d = strtod(s, NULL);
 					if (errno == ERANGE) {
-						log_error(_out_of_range_msg, s, field_id);
+						log_error(_OUT_OF_RANGE_MSG, s, field_id);
 						goto error;
 					}
 					if (custom && (factor = *((const uint64_t *)custom)))
@@ -3935,7 +3935,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
 					errno = 0;
 					fs->value->v.d = strtod(s, NULL);
 					if ((errno == ERANGE) || (fs->value->v.d < 0) || (fs->value->v.d > 100)) {
-						log_error(_out_of_range_msg, s, field_id);
+						log_error(_OUT_OF_RANGE_MSG, s, field_id);
 						goto error;
 					}
 
@@ -4012,7 +4012,7 @@ static struct selection_node *_alloc_selection_node(struct dm_pool *mem, uint32_
 
 static void _display_selection_help(struct dm_report *rh)
 {
-	static const char _grow_object_failed_msg[] = "_display_selection_help: dm_pool_grow_object failed";
+#define _GROW_OBJECT_FAILED_MSG "_display_selection_help: dm_pool_grow_object failed."
 	const struct op_def *t;
 	const struct dm_report_reserved_value *rv;
 	size_t len_all, len_final = 0;
@@ -4049,12 +4049,12 @@ static void _display_selection_help(struct dm_report *rh)
 			for (rvs = rv->names; *rvs; rvs++) {
 				if (((rvs != rv->names) && !dm_pool_grow_object(rh->mem, ", ", 2)) ||
 				    !dm_pool_grow_object(rh->mem, *rvs, strlen(*rvs))) {
-					log_error(_grow_object_failed_msg);
+					log_error(_GROW_OBJECT_FAILED_MSG);
 					goto out_reserved_values;
 				}
 			}
 			if (!dm_pool_grow_object(rh->mem, "\0", 1)) {
-				log_error(_grow_object_failed_msg);
+				log_error(_GROW_OBJECT_FAILED_MSG);
 				goto out_reserved_values;
 			}
 			rvs_all = dm_pool_end_object(rh->mem);
@@ -4242,8 +4242,8 @@ static struct selection_node *_parse_ex(struct dm_report *rh,
 					const char *s,
 					const char **next)
 {
-	static const char _ps_expected_msg[] = "Syntax error: left parenthesis expected at \'%s\'";
-	static const char _pe_expected_msg[] = "Syntax error: right parenthesis expected at \'%s\'";
+#define _PS_EXPECTED_MSG "Syntax error: left parenthesis expected at \'%s\'."
+#define _PE_EXPECTED_MSG "Syntax error: right parenthesis expected at \'%s\'."
 	struct selection_node *sn = NULL;
 	uint32_t t;
 	const char *tmp = NULL;
@@ -4252,14 +4252,14 @@ static struct selection_node *_parse_ex(struct dm_report *rh,
 	if (t == SEL_MODIFIER_NOT) {
 		/* '!' '(' EXPRESSION ')' */
 		if (!_tok_op_log(*next, &tmp, SEL_PRECEDENCE_PS)) {
-			log_error(_ps_expected_msg, *next);
+			log_error(_PS_EXPECTED_MSG, *next);
 			goto error;
 		}
 		if (!(sn = _parse_or_ex(rh, tmp, next, NULL)))
 			goto error;
 		sn->type |= SEL_MODIFIER_NOT;
 		if (!_tok_op_log(*next, &tmp, SEL_PRECEDENCE_PE)) {
-			log_error(_pe_expected_msg, *next);
+			log_error(_PE_EXPECTED_MSG, *next);
 			goto error;
 		}
 		*next = tmp;
@@ -4268,7 +4268,7 @@ static struct selection_node *_parse_ex(struct dm_report *rh,
 		if (!(sn = _parse_or_ex(rh, *next, &tmp, NULL)))
 			goto error;
 		if (!_tok_op_log(tmp, next, SEL_PRECEDENCE_PE)) {
-			log_error(_pe_expected_msg, *next);
+			log_error(_PE_EXPECTED_MSG, *next);
 			goto error;
 		}
 	} else if ((s = _skip_space(s))) {

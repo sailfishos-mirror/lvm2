@@ -1161,7 +1161,7 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
 		       uint32_t types_to_exclude, uint32_t types_no_prompt,
 		       int yes, force_t force)
 {
-	static const char _msg_wiping[] = "Wiping %s signature on %s.";
+#define _MSG_WIPING "Wiping %s signature on %s."
 	const char *offset = NULL, *type = NULL, *magic = NULL,
 		   *usage = NULL, *label = NULL, *uuid = NULL;
 	loff_t offset_value;
@@ -1230,9 +1230,9 @@ static int _blkid_wipe(blkid_probe probe, struct device *dev, const char *name,
 			log_error("Aborted wiping of %s.", type);
 			return 0;
 		}
-		log_print_unless_silent(_msg_wiping, type, name);
+		log_print_unless_silent(_MSG_WIPING, type, name);
 	} else
-		log_verbose(_msg_wiping, type, name);
+		log_verbose(_MSG_WIPING, type, name);
 
 	if (!dev_write_zeros(dev, offset_value, len)) {
 		log_error("Failed to wipe %s signature on %s.", type, name);

@@ -2776,14 +2776,14 @@ static const char *_copy_command_line(struct cmd_context *cmd, int argc, char **
 static int _prepare_profiles(struct cmd_context *cmd)
 {
 	static const char COMMAND_PROFILE_ENV_VAR_NAME[] = "LVM_COMMAND_PROFILE";
-	static const char _cmd_profile_arg_preferred_over_env_var_msg[] = "Giving "
-				"preference to command profile specified on command "
-				"line over the one specified via environment variable.";
-	static const char _failed_to_add_profile_msg[] = "Failed to add %s %s.";
-	static const char _failed_to_apply_profile_msg[] = "Failed to apply %s %s.";
-	static const char _command_profile_source_name[] = "command profile";
-	static const char _metadata_profile_source_name[] = "metadata profile";
-	static const char _setting_global_profile_msg[] = "Setting global %s \"%s\".";
+#define _CMD_PROFILE_ARG_PREFERRED_OVER_ENV_VAR_MSG "Giving " \
+				"preference to command profile specified on command " \
+				"line over the one specified via environment variable."
+#define _FAILED_TO_ADD_PROFILE_MSG "Failed to add %s %s."
+#define _FAILED_TO_APPLY_PROFILE_MSG "Failed to apply %s %s."
+#define _COMMAND_PROFILE_SOURCE_NAME "command profile"
+#define _METADATA_PROFILE_SOURCE_NAME "metadata profile"
+#define _SETTING_GLOBAL_PROFILE_MSG "Setting global %s \"%s\"."
 
 	const char *env_cmd_profile_name = NULL;
 	const char *name;
@@ -2830,7 +2830,7 @@ static int _prepare_profiles(struct cmd_context *cmd)
 				return 0;
 			}
 			source = CONFIG_PROFILE_METADATA;
-			source_name = _metadata_profile_source_name;
+			source_name = _METADATA_PROFILE_SOURCE_NAME;
 		}
 		else {
 			if (arg_is_set(cmd, commandprofile_ARG)) {
@@ -2844,32 +2844,32 @@ static int _prepare_profiles(struct cmd_context *cmd)
 			 * COMMAND_PROFILE_ENV_VAR_NAME env. var.
 			 */
 			if (env_cmd_profile_name) {
-				log_debug(_cmd_profile_arg_preferred_over_env_var_msg);
+				log_debug(_CMD_PROFILE_ARG_PREFERRED_OVER_ENV_VAR_MSG);
 				env_cmd_profile_name = NULL;
 			}
 			source = CONFIG_PROFILE_COMMAND;
-			source_name = _command_profile_source_name;
+			source_name = _COMMAND_PROFILE_SOURCE_NAME;
 		}
 
 		name = arg_str_value(cmd, profile_ARG, NULL);
 
 		if (!(profile = add_profile(cmd, name, source))) {
-			log_error(_failed_to_add_profile_msg, source_name, name);
+			log_error(_FAILED_TO_ADD_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 
 		if (source == CONFIG_PROFILE_COMMAND) {
-			log_debug(_setting_global_profile_msg, _command_profile_source_name, profile->name);
+			log_debug(_SETTING_GLOBAL_PROFILE_MSG, _COMMAND_PROFILE_SOURCE_NAME, profile->name);
 			cmd->profile_params->global_command_profile = profile;
 		} else if (source == CONFIG_PROFILE_METADATA) {
-			log_debug(_setting_global_profile_msg, _metadata_profile_source_name, profile->name);
+			log_debug(_SETTING_GLOBAL_PROFILE_MSG, _METADATA_PROFILE_SOURCE_NAME, profile->name);
 			/* This profile will override any VG/LV-based profile if present */
 			cmd->profile_params->global_metadata_profile = profile;
 		}
 
 		remove_config_tree_by_source(cmd, source);
 		if (!override_config_tree_from_profile(cmd, profile)) {
-			log_error(_failed_to_apply_profile_msg, source_name, name);
+			log_error(_FAILED_TO_APPLY_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 
@@ -2883,24 +2883,24 @@ static int _prepare_profiles(struct cmd_context *cmd)
 			 * COMMAND_PROFILE_ENV_VAR_NAME env. var.
 			 */
 			if (env_cmd_profile_name)
-				log_debug(_cmd_profile_arg_preferred_over_env_var_msg);
+				log_debug(_CMD_PROFILE_ARG_PREFERRED_OVER_ENV_VAR_MSG);
 			name = arg_str_value(cmd, commandprofile_ARG, NULL);
 		} else
 			name = env_cmd_profile_name;
-		source_name = _command_profile_source_name;
+		source_name = _COMMAND_PROFILE_SOURCE_NAME;
 
 		if (!(profile = add_profile(cmd, name, CONFIG_PROFILE_COMMAND))) {
-			log_error(_failed_to_add_profile_msg, source_name, name);
+			log_error(_FAILED_TO_ADD_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 
 		remove_config_tree_by_source(cmd, CONFIG_PROFILE_COMMAND);
 		if (!override_config_tree_from_profile(cmd, profile)) {
-			log_error(_failed_to_apply_profile_msg, source_name, name);
+			log_error(_FAILED_TO_APPLY_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 
-		log_debug(_setting_global_profile_msg, _command_profile_source_name, profile->name);
+		log_debug(_SETTING_GLOBAL_PROFILE_MSG, _COMMAND_PROFILE_SOURCE_NAME, profile->name);
 		cmd->profile_params->global_command_profile = profile;
 
 		if (!cmd->opt_arg_values)
@@ -2910,19 +2910,19 @@ static int _prepare_profiles(struct cmd_context *cmd)
 
 	if (arg_is_set(cmd, metadataprofile_ARG)) {
 		name = arg_str_value(cmd, metadataprofile_ARG, NULL);
-		source_name = _metadata_profile_source_name;
+		source_name = _METADATA_PROFILE_SOURCE_NAME;
 
 		if (!(profile = add_profile(cmd, name, CONFIG_PROFILE_METADATA))) {
-			log_error(_failed_to_add_profile_msg, source_name, name);
+			log_error(_FAILED_TO_ADD_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 		remove_config_tree_by_source(cmd, CONFIG_PROFILE_METADATA);
 		if (!override_config_tree_from_profile(cmd, profile)) {
-			log_error(_failed_to_apply_profile_msg, source_name, name);
+			log_error(_FAILED_TO_APPLY_PROFILE_MSG, source_name, name);
 			return 0;
 		}
 
-		log_debug(_setting_global_profile_msg, _metadata_profile_source_name, profile->name);
+		log_debug(_SETTING_GLOBAL_PROFILE_MSG, _METADATA_PROFILE_SOURCE_NAME, profile->name);
 		cmd->profile_params->global_metadata_profile = profile;
 	}
 
