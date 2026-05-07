@@ -131,7 +131,7 @@ static int _rx_get_token(struct parse_sp *ps)
 		/* charsets and ncharsets */
 	case '[':
 		ptr++;
-		if (*ptr == '^') {
+		if (ptr < ps->rx_end && *ptr == '^') {
 			dm_bit_set_all(ps->charset);
 
 			/* never transition on zero */
@@ -146,6 +146,12 @@ static int _rx_get_token(struct parse_sp *ps)
 			if (*ptr == '\\') {
 				/* an escaped character */
 				ptr++;
+				if (ptr >= ps->rx_end) {
+					log_error("Badly quoted character in "
+						  "character class.");
+					ps->type = -1;
+					return 0;
+				}
 				switch (*ptr) {
 				case 'n':
 					c = '\n';
