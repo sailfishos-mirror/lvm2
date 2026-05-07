@@ -602,11 +602,13 @@ static struct rx_node *_pass(struct dm_pool *mem,
 		 */
 		if (_find_leftmost_common(r, &left, &right, 1)) {
 			if (!_rotate_ors(r, 1))
-				r = _exchange_nodes(mem, r, left, right, 1);
+				if (!(r = _exchange_nodes(mem, r, left, right, 1)))
+					return_NULL;
 			*changed = 1;
 		} else if (_find_leftmost_common(r, &left, &right, 0)) {
 			if (!_rotate_ors(r, 0))
-				r = _exchange_nodes(mem, r, left, right, 0);
+				if (!(r = _exchange_nodes(mem, r, left, right, 0)))
+					return_NULL;
 			*changed = 1;
 		}
 		break;
