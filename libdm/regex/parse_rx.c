@@ -373,8 +373,6 @@ static struct rx_node *_closure_term(struct parse_sp *ps)
 			return_NULL;
 		l = n;
 	}
-
-	return n;
 }
 
 static struct rx_node *_cat_term(struct parse_sp *ps)
