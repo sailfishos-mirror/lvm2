@@ -392,13 +392,13 @@ static int _is_whitelisted_char(char c)
 	 * Actually, DM supports any character in a device name.
 	 * This whitelist is just for proper integration with udev.
 	 */
-        if ((c >= '0' && c <= '9') ||
-            (c >= 'A' && c <= 'Z') ||
-            (c >= 'a' && c <= 'z') ||
-            strchr("#+-.:=@_", c) != NULL)
-                return 1;
+	if ((c >= '0' && c <= '9') ||
+	    (c >= 'A' && c <= 'Z') ||
+	    (c >= 'a' && c <= 'z') ||
+	    strchr("#+-.:=@_", c) != NULL)
+		return 1;
 
-        return 0;
+	return 0;
 }
 
 int check_multiple_mangled_string_allowed(const char *str, const char *str_name,
@@ -1035,7 +1035,7 @@ void selinux_release(void)
 
 static int _warn_if_op_needed(int warn_if_udev_failed)
 {
-    return warn_if_udev_failed && dm_udev_get_sync_support() && dm_udev_get_checking();
+	return warn_if_udev_failed && dm_udev_get_sync_support() && dm_udev_get_checking();
 }
 
 static int _add_dev_node(const char *dev_name, uint32_t major, uint32_t minor,
@@ -1533,7 +1533,6 @@ static void _del_node_op(struct node_op_parms *nop)
 	_count_node_ops[nop->type]--;
 	dm_list_del(&nop->list);
 	dm_free(nop);
-
 }
 
 /* Check if there is other the type of node operation stacked */
@@ -1918,7 +1917,7 @@ static int _sysfs_get_dm_name(uint32_t major, uint32_t minor, char *buf, size_t 
 	if (!(fp = fopen(sysfs_path, "r"))) {
 		if (errno == ENOENT)
 			log_sys_debug("fopen", sysfs_path);
-                else
+		else
 			log_sys_error("fopen", sysfs_path);
 		goto bad;
 	}
@@ -2451,7 +2450,7 @@ int dm_udev_get_sync_support(void)
 	_check_udev_sync_requirements_once();
 
 	return !_udev_disabled && _semaphore_supported &&
-		dm_cookie_supported() &&_udev_running && _sync_with_udev;
+		dm_cookie_supported() && _udev_running && _sync_with_udev;
 }
 
 void dm_udev_set_checking(int checking)
@@ -2515,7 +2514,7 @@ static int _udev_notify_sem_inc(uint32_t cookie, int semid)
 		return 0;
 	}
 
- 	if ((val = semctl(semid, 0, GETVAL)) < 0) {
+	if ((val = semctl(semid, 0, GETVAL)) < 0) {
 		log_warn("cookie inc: semid %d: semctl GETVAL failed for "
 			  "cookie 0x%" PRIx32 ": %s",
 			  semid, cookie, strerror(errno));
@@ -2533,7 +2532,7 @@ static int _udev_notify_sem_dec(uint32_t cookie, int semid)
 	struct sembuf sb = {0, -1, IPC_NOWAIT};
 	int val;
 
- 	if ((val = semctl(semid, 0, GETVAL)) < 0)
+	if ((val = semctl(semid, 0, GETVAL)) < 0)
 		log_warn("cookie dec: semid %d: semctl GETVAL failed for "
 			 "cookie 0x%" PRIx32 ": %s",
 			 semid, cookie, strerror(errno));
@@ -2644,7 +2643,7 @@ static int _udev_notify_sem_create(uint32_t *cookie, int *semid)
 		goto bad;
 	}
 
- 	if ((val = semctl(gen_semid, 0, GETVAL)) < 0) {
+	if ((val = semctl(gen_semid, 0, GETVAL)) < 0) {
 		log_error("cookie create: semid %d: semctl GETVAL failed for "
 			  "cookie 0x%" PRIx32 ": %s",
 			  gen_semid, gen_cookie, strerror(errno));
@@ -2689,41 +2688,41 @@ static const char *_task_type_disp(int type)
 	switch(type) {
 	case DM_DEVICE_CREATE:
 		return "CREATE";
-        case DM_DEVICE_RELOAD:
+	case DM_DEVICE_RELOAD:
 		return "RELOAD";
-        case DM_DEVICE_REMOVE:
+	case DM_DEVICE_REMOVE:
 		return "REMOVE";
-        case DM_DEVICE_REMOVE_ALL:
+	case DM_DEVICE_REMOVE_ALL:
 		return "REMOVE_ALL";
-        case DM_DEVICE_SUSPEND:
+	case DM_DEVICE_SUSPEND:
 		return "SUSPEND";
-        case DM_DEVICE_RESUME:
+	case DM_DEVICE_RESUME:
 		return "RESUME";
-        case DM_DEVICE_INFO:
+	case DM_DEVICE_INFO:
 		return "INFO";
-        case DM_DEVICE_DEPS:
+	case DM_DEVICE_DEPS:
 		return "DEPS";
-        case DM_DEVICE_RENAME:
+	case DM_DEVICE_RENAME:
 		return "RENAME";
-        case DM_DEVICE_VERSION:
+	case DM_DEVICE_VERSION:
 		return "VERSION";
-        case DM_DEVICE_STATUS:
+	case DM_DEVICE_STATUS:
 		return "STATUS";
-        case DM_DEVICE_TABLE:
+	case DM_DEVICE_TABLE:
 		return "TABLE";
-        case DM_DEVICE_WAITEVENT:
+	case DM_DEVICE_WAITEVENT:
 		return "WAITEVENT";
-        case DM_DEVICE_LIST:
+	case DM_DEVICE_LIST:
 		return "LIST";
-        case DM_DEVICE_CLEAR:
+	case DM_DEVICE_CLEAR:
 		return "CLEAR";
-        case DM_DEVICE_MKNODES:
+	case DM_DEVICE_MKNODES:
 		return "MKNODES";
-        case DM_DEVICE_LIST_VERSIONS:
+	case DM_DEVICE_LIST_VERSIONS:
 		return "LIST_VERSIONS";
-        case DM_DEVICE_TARGET_MSG:
+	case DM_DEVICE_TARGET_MSG:
 		return "TARGET_MSG";
-        case DM_DEVICE_SET_GEOMETRY:
+	case DM_DEVICE_SET_GEOMETRY:
 		return "SET_GEOMETRY";
 	}
 	return "unknown";
