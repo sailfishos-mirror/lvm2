@@ -251,11 +251,6 @@ mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
 not lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg2/$lv1
 lvremove -y $vg2/$lv1
 
-# TODO: need to use scsi_debug to create devs with LBS 512 PBS 4k
-# TODO: lvconvert, fsunknown, LBS 512, PBS 4k: result 512
-# TODO: lvconvert --bs 512, fsunknown, LBS 512, PBS 4k: result 512
-# TODO: lvconvert --bs 4k, fsunknown, LBS 512, PBS 4k: result 4k
-
 # lvconvert on dev512, ext4 1024, result 1024, (detect fs with LV inactive)
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
 aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
