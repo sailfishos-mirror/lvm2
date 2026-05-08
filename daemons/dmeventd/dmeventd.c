@@ -948,6 +948,7 @@ static int _get_parameters(struct message_data *message_data)
 	int size;
 	char idle_buf[32] = "";
 
+	/* No backward-clock guard needed: _get_curr_time() uses CLOCK_MONOTONIC */
 	if (_idle_since)
 		(void)dm_snprintf(idle_buf, sizeof(idle_buf), " idle=%lu", (long unsigned) (_get_curr_time() - _idle_since));
 
@@ -2521,6 +2522,8 @@ static void _daemonize(void)
 		fprintf(stderr, "Unable to restore signals.\n");
 		exit(EXIT_FAILURE);
 	}
+	/* signal() is fine here: glibc provides BSD semantics on Linux,
+	 * and this handler is short-lived (replaced after exec) */
 	signal(SIGTERM, &_exit_handler);
 
 	switch (pid = fork()) {
@@ -2971,7 +2974,9 @@ int main(int argc, char *argv[])
 	atexit(_remove_files_on_exit);
 	(void) dm_prepare_selinux_context(NULL, 0);
 
-	/* Set the rest of the signals to cause '_exit_now' to be set */
+	/* Set the rest of the signals to cause '_exit_now' to be set.
+	 * signal() is fine: glibc uses BSD semantics (SA_RESTART, no reset)
+	 * on Linux, and handler just sets a flag -- no portability concern */
 	signal(SIGTERM, &_exit_handler);
 	signal(SIGINT, &_exit_handler);
 	signal(SIGHUP, &_exit_handler);
