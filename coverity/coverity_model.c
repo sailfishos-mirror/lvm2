@@ -111,7 +111,6 @@ void *memccpy(void *dest, const void *src, int c, unsigned long n)
 	int success;
 
 	__coverity_negative_sink__(n);
-	__coverity_negative_sink__(c);
 	__coverity_tainted_data_transitive__(dest, src);
 	__coverity_write_buffer_bytes__(dest, n);
 
@@ -433,9 +432,8 @@ int dm_stats_create_region(struct dm_stats *dms, unsigned long long *region_id,
 }
 
 /*
- * lv_info - get logical volume information
+ * _info - get device-mapper device information
  * Returns 1 if info structure has been populated, else 0 on failure.
- * When lvinfo* is NULL, it returns 1 if the device is locally active, 0 otherwise.
  */
 int _info(struct cmd_context *cmd,
 	  const char *name, const char *dlid,
@@ -462,7 +460,7 @@ int _info(struct cmd_context *cmd,
 		return 0;
 	}
 
-	/* On success, info structure is fully populated (if info is not NULL) */
+	/* On success, dminfo is fully populated (if not NULL) */
 	if (dminfo) {
 		__coverity_writeall__(dminfo);
 	}
