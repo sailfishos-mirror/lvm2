@@ -109,6 +109,26 @@ static void test_kabi_query(void *fixture)
 	}
 }
 
+static void test_invalid_patterns(void *fixture)
+{
+	struct dm_pool *mem = fixture;
+	struct dm_regex *scanner;
+	unsigned i;
+
+	static const char * const _bad_patterns[] = {
+		"[abc",		/* unterminated character class */
+		"[^abc",	/* unterminated negated character class */
+		"[a-",		/* incomplete range specification */
+		"[\\",		/* badly quoted character in class */
+		"abc\\",	/* badly quoted character at end */
+	};
+
+	for (i = 0; i < DM_ARRAY_SIZE(_bad_patterns); i++) {
+		scanner = dm_regex_create(mem, &_bad_patterns[i], 1);
+		T_ASSERT(scanner == NULL);
+	}
+}
+
 #define T(path, desc, fn) register_test(ts, "/base/regex/" path, desc, fn)
 
 void regex_tests(struct dm_list *all_tests)
@@ -120,6 +140,7 @@ void regex_tests(struct dm_list *all_tests)
 	}
 
 	T("fingerprints", "not sure", test_fingerprints);
+	T("invalid-patterns", "test that invalid regexes are rejected", test_invalid_patterns);
 	T("matching", "test the matcher with a variety of regexes", test_matching);
 	T("kabi-query", "test the matcher with some specific patterns", test_kabi_query);
 
