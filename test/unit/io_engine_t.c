@@ -72,7 +72,6 @@ static void _print_buffer(const char *name, uint8_t *buffer, size_t count)
 	while (count) {
 		for (col = 0; count && col < 20; col++) {
 			fprintf(stderr, "%x, ", (unsigned) *buffer);
-			col++;
 			buffer++;
 			count--;
 		}
@@ -97,7 +96,7 @@ static void *_fix_init(void)
 
 	_fill_buffer(f->data, 123, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
 
-	T_ASSERT(write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS) > 0);
+	T_ASSERT(write(f->fd, f->data, SECTOR_SIZE * BLOCK_SIZE_SECTORS) == SECTOR_SIZE * BLOCK_SIZE_SECTORS);
 	T_ASSERT(lseek(f->fd, 0, SEEK_SET) != -1);
 
 	return f;
