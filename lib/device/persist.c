@@ -1327,7 +1327,7 @@ int persist_read(struct cmd_context *cmd, struct volume_group *vg)
 	if (!pv_count)
 		return_0;
 
-	if (!(argv = dm_pool_alloc(cmd->mem, (4 + pv_count*2) * sizeof(char *))))
+	if (!(argv = dm_pool_alloc(cmd->mem, (5 + pv_count*2) * sizeof(char *))))
 		return_0;
 
 	argv[0] = LVMPERSIST_PATH;
