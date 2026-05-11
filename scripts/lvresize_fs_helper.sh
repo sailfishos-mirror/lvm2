@@ -14,7 +14,7 @@
 
 set -euE -o pipefail
 
-PATH="/sbin:/usr/sbin:/bin:/usr/bin:$PATH"
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
 GETOPT="getopt"
 SCRIPTNAME=$(basename "$0")
 DM_DEV_DIR="${DM_DEV_DIR:-/dev}"
