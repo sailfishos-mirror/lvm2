@@ -13,6 +13,9 @@
 
 . lib/inittest --skip-with-lvmpolld --skip-with-lvmlockd
 
+# Creating 500 LVs via lvm shell generates ~800K-1M metadata debug lines
+LVM_LOG_FILE_MAX_LINES=2000000
+
 SIZE_MB=80
 # 4 devs each $SIZE_MB
 aux prepare_devs 4 $SIZE_MB
