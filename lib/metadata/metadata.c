@@ -4543,6 +4543,17 @@ bool scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char 
 		area = &mdac->area;
 
 		/*
+		 * Reopen device if it was closed, e.g. by label_scan_invalidate_lvs
+		 * closing a PV stacked on an LV after processing the LV's VG.
+		 */
+		if (dev->bcache_di < 0) {
+			if (!label_scan_open(dev)) {
+				log_debug("Rescan for text mismatch - cannot reopen %s.", dev_name(dev));
+				goto out;
+			}
+		}
+
+		/*
 		 * Invalidate mda_header in bcache so it will be reread from disk.
 		 */
 		if (!dev_invalidate_bytes(dev, 4096, 512)) {
