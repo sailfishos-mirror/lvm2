@@ -20,7 +20,7 @@
 /*
  * GCC -fanalyzer has limitations in certain code patterns.
  */
-#if defined(__GNUC__) && !defined(__clang__)
+#if defined(__GNUC__) && (__GNUC__ >= 10) && !defined(__clang__)
 # define GCC_SUPPRESS_FD_WARNINGS \
 	_Pragma("GCC diagnostic push") \
 	_Pragma("GCC diagnostic ignored \"-Wanalyzer-fd-leak\"") \
