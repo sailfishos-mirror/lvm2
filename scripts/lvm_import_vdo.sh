@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2021-2025 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2021-2026 Red Hat, Inc. All rights reserved.
 #
 # This file is part of LVM2.
 #
@@ -19,7 +19,7 @@
 # Needed utilities:
 #  lvm, dmsetup,
 #  vdo,
-#  grep, awk, sed, blockdev, readlink, stat, mkdir, truncate
+#  grep, awk, sed, blockdev, readlink, stat, truncate
 #
 # Conversion is using  'vdo convert' support from VDO manager to move
 # existing VDO header by 2M which makes space to place in PV header
@@ -30,15 +30,11 @@ set -euE -o pipefail
 
 TOOL=lvm_import_vdo
 IMPORT_NAME="VDO_${TOOL}_${RANDOM}$$"
-TEMPDIR="${TMPDIR:-/tmp}/$IMPORT_NAME"
+TEMPDIR=
 
-_SAVEPATH=$PATH
-PATH="/sbin:/usr/sbin:/bin:/usr/bin:$PATH"
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
 
-# Set of trapped signals
-declare -a SIGNALS=("HUP" "INT" "QUIT" "ABRT" "TERM" "EXIT")
-
-# user may override lvm location by setting LVM_BINARY
+DMSETUP=${DMSETUP_BINARY:-dmsetup}
 LVM=${LVM_BINARY:-lvm}
 VDO=${VDO_BINARY:-vdo}
 BLOCKDEV="blockdev"
@@ -46,19 +42,15 @@ LOSETUP="losetup"
 READLINK="readlink"
 READLINK_E="-e"
 STAT="stat"
-MKDIR="mkdir"
 TRUNCATE="truncate"
-DMSETUP="dmsetup"
 
 DM_DEV_DIR="${DM_DEV_DIR:-/dev}"
-DM_UUID_PREFIX="${DM_UUID_PREFIX:-}"
+DM_UUID_PREFIX="${DM_UUID_PREFIX-}"
 DM_VG_NAME=
 DM_LV_NAME=
 DEFAULT_VDO_CONFIG="/etc/vdoconf.yml" # Default location of vdo's manager config file
-VDO_CONFIG=${VDO_CONFIG:-}   # can be overridden with --vdo-config
+VDO_CONFIG=${VDO_CONFIG-}   # can be overridden with --vdo-config
 VDO_CONFIG_RESTORE=
-VDOCONF=
-test -n "$VDO_CONFIG" && VDOCONF="-f $VDO_CONFIG"
 
 DEVICE=
 VGNAME=
@@ -81,7 +73,7 @@ VDO_ALLOCATION_PARAMS=
 
 # default name for converted VG and its VDO LV
 DEFAULT_NAME="vdovg/vdolvol"
-NAME=""
+NAME=
 
 # predefine empty
 vdo_ackThreads=
@@ -126,18 +118,20 @@ tool_usage() {
 }
 
 verbose() {
-	test -z "$VERB" || echo "$TOOL:" "$@"
+	test -z "$VERB" || echo "$TOOL: $*" >&2
 }
 
 # Support multi-line error messages
 error() {
+	local i
 	for i in "$@"; do
 		echo "$TOOL: $i" >&2
 	done
-	return 1
+	exit 1
 }
 
 warn() {
+	local i
 	for i in "$@"; do
 		echo "$TOOL: WARNING: $i" >&2
 	done
@@ -145,17 +139,17 @@ warn() {
 
 dry() {
 	if [ "$DRY" -ne 0 ]; then
-		verbose "Dry execution" "$@"
+		verbose "Dry execution $*"
 		return 0
 	fi
-	verbose "Executing" "$@"
+	verbose "Executing $*"
 	"$@"
 }
 
 cleanup() {
-	RC=$?	# Return code + 128  of the last command eg INT=2 + 128 -> 130
+	local i
 
-	trap '' "${SIGNALS[@]}" # mute trap for all signals to not interrupt cleanup() on any next signal
+	trap '' EXIT HUP INT QUIT ABRT TERM # mute trap for all signals to not interrupt cleanup() on any next signal
 
 	[ -z "$PROMPTING" ] || echo "No"
 
@@ -164,12 +158,14 @@ cleanup() {
 	fi
 
 	if [ -n "$VDO_DM_SNAPSHOT_NAME" ]; then
-		dry "$LVM" vgchange -an --devices "$VDO_DM_SNAPSHOT_DEVICE" "$VGNAME" &>/dev/null || true
-		for i in {1..20}; do
+		dry "$LVM" vgchange -an --devices "$VDO_DM_SNAPSHOT_DEVICE" "$VGNAME" >/dev/null 2>&1 || true
+		i=0
+		while [ "$i" -lt 20 ]; do
 			[ "$(dry "$DMSETUP" info --noheading -co open "$VDO_DM_SNAPSHOT_NAME")" = "0" ] && break
 			sleep .1
+			i=$(( i + 1 ))
 		done
-		dry "$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" &>/dev/null || true
+		dry "$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" >/dev/null 2>&1 || true
 	fi
 
 	if [ -n "$VDO_SNAPSHOT_LOOP" ]; then
@@ -178,9 +174,13 @@ cleanup() {
 
 	[ -z "$VDO_INCONSISTENT" ] || echo "$TOOL: VDO volume import process exited unexpectedly!" >&2
 
-	rm -rf "$TEMPDIR" || true
+	if [ -n "$TEMPDIR" ]; then
+		rm -f "$TEMPDIR/vdoconf.yml" "$TEMPDIR/vdo_snap.yml" \
+			"$TEMPDIR/${IMPORT_NAME}_snap" 2>/dev/null
+		rmdir "$TEMPDIR" 2>/dev/null || true
+	fi
 
-	exit "$RC"
+	exit "${1:-1}"
 }
 
 # Create snapshot target like for persistent snapshot with 16KiB chunksize
@@ -201,15 +201,14 @@ snapshot_create_() {
 }
 
 snapshot_merge_() {
-	local status
-	local initial_status
+	local INITIAL_STATUS
+	local STATUS
+	local i=0
 
-	# shellcheck disable=SC2207 # intentional split of status fields
-	initial_status=( $("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME") )
+	INITIAL_STATUS=$("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME")
 	"$DMSETUP" reload "$VDO_DM_SNAPSHOT_NAME" --table "$(snapshot_target_line_ "$1" "$VDO_SNAPSHOT_LOOP" -merge)"
-	"$DMSETUP" suspend "$VDO_DM_SNAPSHOT_NAME" || {
+	"$DMSETUP" suspend "$VDO_DM_SNAPSHOT_NAME" ||
 		error "ABORTING: Failed to initialize snapshot merge! Origin volume is unchanged."
-	}
 
 	verbose "Merging converted VDO volume \"$VDO_DM_SNAPSHOT_NAME\"."
 	VDO_INCONSISTENT=1
@@ -219,27 +218,20 @@ snapshot_merge_() {
 
 	#du -h "$TEMPDIR/$VDO_DM_SNAPSHOT_NAME"
 
-	# Loop for a while, till the snapshot is merged.
-	# Should be nearly instantaneous.
-	# FIXME: Recovery when something prevents merging is hard
-	for i in {1..20}; do
-		# shellcheck disable=SC2207 # intentional split of status fields
-		status=( $("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME") )
-		# Check if merging is finished
-		[ "${status[3]%/*}" = "${status[4]}" ] && break
-		# Wait a bit and retry
+	# Loop till the snapshot is merged - should be nearly instantaneous
+	while true; do
+		STATUS=$("$DMSETUP" status "$VDO_DM_SNAPSHOT_NAME")
+		# shellcheck disable=SC2086 # intentional word splitting
+		set -- $STATUS
+		[ "${4%/*}" = "$5" ] && break
+		i=$(( i + 1 ))
+		if [ "$i" -gt 20 ]; then
+			error "Initial snapshot status $INITIAL_STATUS." \
+			      "Failing merge snapshot status $STATUS." \
+			      "ABORTING: Snapshot failed to merge! (Administrator required...)"
+		fi
 		sleep .2
 	done
-
-	if [ "${status[3]%/*}" != "${status[4]}" ]; then
-		# FIXME: Now what shall we do ??? Help....
-		# Keep snapshot in DM table for possible analysis...
-		VDO_DM_SNAPSHOT_NAME=
-		VDO_SNAPSHOT_LOOP=
-		echo "$TOOL: Initial snapshot status ${initial_status[*]}."
-		echo "$TOOL: Failing merge snapshot status ${status[*]}."
-		error "ABORTING: Snapshot failed to merge! (Administrator required...)"
-	fi
 
 	VDO_INCONSISTENT=
 	VDO_CONFIG_RESTORE=
@@ -248,9 +240,8 @@ snapshot_merge_() {
 
 	"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" || {
 		sleep 1 # sleep and retry once more
-		"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" || {
+		"$DMSETUP" remove "$VDO_DM_SNAPSHOT_NAME" ||
 			error "ABORTING: Cannot remove snapshot $VDO_DM_SNAPSHOT_NAME! (check volume autoactivation...)"
-		}
 	}
 
 	VDO_DM_SNAPSHOT_NAME=
@@ -266,12 +257,19 @@ get_enabled_value_() {
 }
 
 get_kb_size_with_unit_() {
+	local NUM=${1%[kKmMgGtTpP]}
+
+	case "$NUM" in
+	  *[!0-9]*|"") error "Invalid size value \"$1\"." ;;
+	esac
+
 	case "$1" in
-	*[kK]) echo "$(( ${1%[kK]} ))" ;;
-	*[mM]) echo "$(( ${1%[mM]} * 1024 ))" ;;
-	*[gG]) echo "$(( ${1%[gG]} * 1024 * 1024 ))" ;;
-	*[tT]) echo "$(( ${1%[tT]} * 1024 * 1024 * 1024 ))" ;;
-	*[pP]) echo "$(( ${1%[pP]} * 1024 * 1024 * 1024 * 1024 ))" ;;
+	  *[kK]) echo "$(( NUM ))" ;;
+	  *[mM]) echo "$(( NUM << 10 ))" ;;
+	  *[gG]) echo "$(( NUM << 20 ))" ;;
+	  *[tT]) echo "$(( NUM << 30 ))" ;;
+	  *[pP]) echo "$(( NUM << 40 ))" ;;
+	  *) error "Unknown size unit in \"$1\"." ;;
 	esac
 }
 
@@ -300,22 +298,27 @@ detect_lv_() {
 	local SYSVOLUME
 	local MAJORMINOR
 
+	local DEV
+
 	DEVICE=${1/#"${DM_DEV_DIR}/"/}
-	DEVICE=$("$READLINK" $READLINK_E "$DM_DEV_DIR/$DEVICE" || true)
+	DEVICE=$("$READLINK" "$READLINK_E" "$DM_DEV_DIR/$DEVICE" || true)
 	[ -n "$DEVICE" ] || error "Readlink cannot access device \"$1\"."
 	RDEVICE=$DEVICE
 	case "$RDEVICE" in
 	  # hardcoded /dev  since udev does not create these entries elsewhere
 	  /dev/dm-[0-9]*)
-		read -r <"/sys/block/${RDEVICE#/dev/}/dm/name" SYSVOLUME 2>&1 && DEVICE="$DM_DEV_DIR/mapper/$SYSVOLUME"
-		read -r <"/sys/block/${RDEVICE#/dev/}/dev" MAJORMINOR 2>&1 || error "Cannot get major:minor for \"$DEVICE\"."
+		read -r SYSVOLUME <"/sys/block/${RDEVICE#/dev/}/dm/name" 2>/dev/null &&
+			DEVICE="$DM_DEV_DIR/mapper/$SYSVOLUME"
+		read -r MAJORMINOR <"/sys/block/${RDEVICE#/dev/}/dev" 2>/dev/null ||
+			error "Cannot get major:minor for \"$DEVICE\"."
 		DEVMAJOR=${MAJORMINOR%%:*}
 		DEVMINOR=${MAJORMINOR##*:}
 		;;
 	  *)
-		RSTAT=$("$STAT" --format "DEVMAJOR=\$((0x%t)) DEVMINOR=\$((0x%T))" "$RDEVICE" || true)
-		[ -n "$RSTAT" ] || error "Cannot get major:minor for \"$DEVICE\"."
-		eval "$RSTAT"
+		MAJORMINOR=$("$STAT" --format '0x%t:0x%T' "$RDEVICE") ||
+			error "Cannot get major:minor for \"$DEVICE\"."
+		DEVMAJOR=$(( ${MAJORMINOR%%:*} ))
+		DEVMINOR=$(( ${MAJORMINOR#*:} ))
 		;;
 	esac
 
@@ -341,8 +344,9 @@ parse_yaml_() {
 	fs=$(printf '\034')
 
 	(
+	    # shellcheck disable=SC2016 # literal backtick replacement in sed
 	    sed -ne '/^--/s|--||g; s|\"|\\\"|g; s/[[:space:]]*$//g;' \
-		-e 's/\$/\\\$/g' \
+		-e 's/\$/\\\$/g' -e 's/`/\\`/g' \
 		-e "/#.*[\"\']/!s| #.*||g; /^#/s|#.*||g;" \
 		-e "s|^\($s\)\($w\)$s:$s\"\(.*\)\"$s\$|\1$fs\2$fs\3|p" \
 		-e "s|^\($s\)\($w\)${s}[:-]$s\(.*\)$s\$|\1$fs\2$fs\3|p" |
@@ -354,7 +358,7 @@ parse_yaml_() {
 		for (i in vname) {if (i > indent) {delete vname[i]}}
 		    if (length($3) > 0) {
 			vn=""; for (i=0; i<indent; i++) {vn=(vn)(vname[i])("_")}
-			printf("%s%s%s%s=(\"%s\")\n", "'"$prefix"'",vn, $2, conj[indent-1], $3);
+			printf("%s%s%s%s=\"%s\"\n", "'"$prefix"'",vn, $2, conj[indent-1], $3);
 		    }
 		}' |
 
@@ -383,6 +387,7 @@ parse_yaml_() {
 #
 convert_lv_() {
 	local vdo_logicalSize=$1
+	local vg_extent_size
 	local extent_size
 	local pvfree
 
@@ -400,15 +405,15 @@ convert_lv_() {
 	}
 
 	verbose "Renaming existing LV to be used as _vdata volume for VDO pool LV."
-	dry "$LVM" lvrename $YES $VERB "$VGNAME/$DM_LV_NAME" "$VGNAME/${LVNAME}_vpool" || {
+	dry "$LVM" lvrename ${YES:+"$YES"} ${VERB:+"$VERB"} "$VGNAME/$DM_LV_NAME" "$VGNAME/${LVNAME}_vpool" || {
 		error "Rename of LV \"$VGNAME/$DM_LV_NAME\" failed, while VDO header has been already moved!"
 	}
 
 	verbose "Converting to VDO pool."
-	dry "$LVM" lvconvert $YES $VERB $FORCE --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSize}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
+	dry "$LVM" lvconvert ${YES:+"$YES"} ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSize}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
 
 	verbose "Removing now unused VDO entry from VDO configuration."
-	dry "$VDO" remove $VDOCONF $VERB --force --name "$VDONAME"
+	dry "$VDO" remove ${VDO_CONFIG:+-f} ${VDO_CONFIG:+"$VDO_CONFIG"} ${VERB:+"$VERB"} --force --name "$VDONAME"
 }
 
 #
@@ -428,7 +433,12 @@ convert_non_lv_() {
 
 	if [ -n "$USE_VDO_DM_SNAPSHOT" ]; then
 		dry snapshot_create_ "$DEVICE"
-		sed "s|$DEVICE|$VDO_DM_SNAPSHOT_DEVICE|" "$TEMPDIR/vdoconf.yml" > "$TEMPDIR/vdo_snap.yml"
+		awk -v old="$DEVICE" -v new="$VDO_DM_SNAPSHOT_DEVICE" \
+			'{
+				while ((i = index($0, old)) > 0)
+					$0 = substr($0, 1, i - 1) new substr($0, i + length(old))
+				print
+			}' "$TEMPDIR/vdoconf.yml" > "$TEMPDIR/vdo_snap.yml"
 		# In case of error in the middle of conversion restore original config file
 		VDO_CONFIG_RESTORE="$TEMPDIR/vdoconf.yml"
 		# Let VDO manager operate on snapshot volume
@@ -448,7 +458,7 @@ convert_non_lv_() {
 
 	verbose "Moving VDO header on \"$device\"."
 
-	output=$(dry "$VDO" convert $VDOCONF $VERB --force --name "$VDONAME" 2>&1) || {
+	output=$(dry "$VDO" convert ${VDO_CONFIG:+-f} ${VDO_CONFIG:+"$VDO_CONFIG"} ${VERB:+"$VERB"} --force --name "$VDONAME" 2>&1) || {
 		local rc=$?
 		echo "$output"
 		error "Failed to convert VDO volume \"$DEVICE\" (exit code $rc)."
@@ -464,16 +474,16 @@ convert_non_lv_() {
 	# Parse result from VDO preparation/conversion tool
 	# New version of the tool provides output with alignment and offset
 	# shellcheck disable=SC2034 # parsed for possible future use
-	local vdo_length=0
+	#local vdo_length=0
+	#local vdo_non_converted=0
 	local vdo_aligned=0
 	local vdo_offset=0
-	# shellcheck disable=SC2034 # parsed for possible future use
-	local vdo_non_converted=0
+	local line
 	while IFS=  read -r line; do
 		# trim leading spaces
-		case "$(echo $line)" in
-		"Non converted"*) vdo_non_converted=1 ;;
-		"Length"*) vdo_length=${line##* = } ;;
+		case "${line#"${line%%[! ]*}"}" in
+		#"Non converted"*) vdo_non_converted=1 ;;
+		#"Length"*) vdo_length=${line##* = } ;;
 		"Conversion completed"*)
 			   vdo_aligned=${line##*aligned on }
 			   vdo_aligned=${vdo_aligned%%[!0-9]*}
@@ -483,9 +493,11 @@ convert_non_lv_() {
 			   vdo_offset=${vdo_offset%%[!0-9]*}
 			   ;;
 		esac
-	done <<< "$output"
+	done <<-EOF
+		$output
+	EOF
 
-	dry "$LVM" pvcreate $YES $VERB $FORCE --devices "$device" --dataalignment "$vdo_offset"b "$device"
+	dry "$LVM" pvcreate ${YES:+"$YES"} ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$device" --dataalignment "$vdo_offset"b "$device"
 
 	# Obtain free space in this new PV
 	# after 'vdo convert' call there is ~(1-2)M free space at the front of the device
@@ -503,28 +515,28 @@ convert_non_lv_() {
 	vdo_logicalSizeRounded=$(( ( vdo_logicalSize / extent_size ) * extent_size ))
 
 	verbose "Creating volume group \"$VGNAME\" with the extent size $extent_size KiB."
-	dry "$LVM" vgcreate $YES $VERB --devices "$device" -s "${extent_size}k" "$VGNAME" "$device"
+	dry "$LVM" vgcreate ${YES:+"$YES"} ${VERB:+"$VERB"} --devices "$device" -s "${extent_size}k" "$VGNAME" "$device"
 
 	verbose "Creating VDO pool data LV from all extents in the volume group \"$VGNAME\"."
-	dry "$LVM" lvcreate -Zn -Wn -an $YES $VERB --devices "$device" -l100%VG -n "${LVNAME}_vpool" "$VGNAME" "$device"
+	dry "$LVM" lvcreate -Zn -Wn -an ${YES:+"$YES"} ${VERB:+"$VERB"} --devices "$device" -l100%VG -n "${LVNAME}_vpool" "$VGNAME" "$device"
 
 	verbose "Converting to VDO pool."
-	dry "$LVM" lvconvert ${USE_VDO_DM_SNAPSHOT:-"$YES"} $VERB $FORCE --devices "$device" --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSizeRounded}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
+	dry "$LVM" lvconvert ${USE_VDO_DM_SNAPSHOT:-"$YES"} ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$device" --config "$VDO_ALLOCATION_PARAMS" -Zn -V "${vdo_logicalSizeRounded}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
 
 	if [ "$vdo_logicalSizeRounded" -lt "$vdo_logicalSize" ]; then
 		# need to extend virtual size to be covering all the converted area
 		# let lvm2 to round to the proper virtual size of VDO LV
-		dry "$LVM" lvextend $YES $VERB --devices "$device" -L "$vdo_logicalSize"k "$VGNAME/$LVNAME"
+		dry "$LVM" lvextend ${YES:+"$YES"} ${VERB:+"$VERB"} --devices "$device" -L "$vdo_logicalSize"k "$VGNAME/$LVNAME"
 	fi
 
 	VDO_INCONSISTENT=
 
 	[ -z "$USE_VDO_DM_SNAPSHOT" ] && return # no-snapshot case finished
 
-	dry "$LVM" vgchange -an $VERB $FORCE --devices "$device" "$VGNAME"
+	dry "$LVM" vgchange -an ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$device" "$VGNAME"
 
 	# Prevent unwanted auto activation when VG is merged
-	dry "$LVM" vgchange --setautoactivation n $VERB $FORCE --devices "$device" "$VGNAME"
+	dry "$LVM" vgchange --setautoactivation n ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$device" "$VGNAME"
 
 	if [ -z "$YES" ]; then
 		PROMPTING=yes
@@ -536,7 +548,7 @@ convert_non_lv_() {
 		    * )  echo "No" ; PROMPTING=""; return 1 ;;
 		esac
 		PROMPTING=""
-		YES="-y" # From now, now prompting
+		YES="-y" # From now, no prompting
 	fi
 
 	dry snapshot_merge_ "$DEVICE"
@@ -548,22 +560,26 @@ convert_non_lv_() {
 	[ "${usedev#*=}" = "1" ] && dry "$LVM" lvmdevices --adddev "$DEVICE"
 
 	# Restore auto activation for a VG
-	dry "$LVM" vgchange --setautoactivation y $VERB $FORCE "$VGNAME"
+	dry "$LVM" vgchange --setautoactivation y ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} "$VGNAME"
 
-	dry "$LVM" lvchange -ay $VERB $FORCE "$VGNAME/$LVNAME"
+	dry "$LVM" lvchange -ay ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} "$VGNAME/$LVNAME"
 }
 
 # Convert existing VDO volume into lvm2 volume
 convert2lvm_() {
 	local VDONAME
 	local TRVDONAME
-	local FOUND=""
+	local FOUND=
 	local MAJOR=0
 	local MINOR=0
 
+	local LASTVGNAME
+	local DM_OPEN
+	local ANSWER
+
 	VGNAME=${NAME%/*}
 	LVNAME=${NAME#*/}
-	DM_UUID=""
+	DM_UUID=
 	detect_lv_ "$DEVICE"
 	case "$DM_UUID" in
 		LVM-*)	eval "$("$DMSETUP" splitname --nameprefixes --noheadings --separator ' ' "$DM_NAME")"
@@ -598,25 +614,32 @@ convert2lvm_() {
 
 	verbose "Checked whether device \"$DEVICE\" is already logical volume."
 
-	"$MKDIR" -p -m 0000 "$TEMPDIR" || error "Failed to create \"$TEMPDIR\"."
+	if test -n "${TMPDIR-}" && test "${TMPDIR#/}" = "$TMPDIR"; then
+		error "TMPDIR must be an absolute path."
+	fi
+	TEMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/${TOOL}_XXXXXXXXXX") ||
+		error "Failed to create temporary directory."
 
 	# TODO: might use directly  /etc/vdoconf.yml (avoiding need of 'vdo' manager)
 	verbose "Getting YAML VDO configuration."
-	"$VDO" printConfigFile $VDOCONF >"$TEMPDIR/vdoconf.yml"
+	"$VDO" printConfigFile ${VDO_CONFIG:+-f} ${VDO_CONFIG:+"$VDO_CONFIG"} >"$TEMPDIR/vdoconf.yml"
 	[ -s "$TEMPDIR/vdoconf.yml" ] || error "Cannot work without VDO configuration."
 
 	# Check list of devices in VDO configure file for their major:minor
 	# and match with given $DEVICE devmajor:devminor
-	for i in $(awk '/.*device:/ {print $2}' "$TEMPDIR/vdoconf.yml"); do
+	while read -r i; do
 		local DEV
-		DEV=$("$READLINK" $READLINK_E "$i") || continue
-		RSTAT=$("$STAT" --format "MAJOR=\$((0x%t)) MINOR=\$((0x%T))" "$DEV" 2>/dev/null) || continue
-		eval "$RSTAT"
+		DEV=$("$READLINK" "$READLINK_E" "$i") || continue
+		MAJORMINOR=$("$STAT" --format '0x%t:0x%T' "$DEV" 2>/dev/null) || continue
+		MAJOR=$(( ${MAJORMINOR%%:*} ))
+		MINOR=$(( ${MAJORMINOR#*:} ))
 		if [ "$MAJOR" = "$DEVMAJOR" ] && [ "$MINOR" = "$DEVMINOR" ]; then
 			[ -z "$FOUND" ] || error "VDO configuration contains duplicate entries $FOUND and $i."
 			FOUND=$i
 		fi
-	done
+	done <<-EOF
+		$(awk '/.*device:/ {print $2}' "$TEMPDIR/vdoconf.yml")
+	EOF
 
 	[ -n "$FOUND" ] || error "Can't find matching device in VDO configuration file."
 	verbose "Found matching device $FOUND  $MAJOR:$MINOR."
@@ -634,7 +657,7 @@ convert2lvm_() {
 	esac
 
 	#parse_yaml_ "$TEMPDIR/vdoconf.yml" _
-	eval "$(parse_yaml_ "$TEMPDIR/vdoconf.yml" _ | sed -ne "/$TRVDONAME/s/_config_vdos_$TRVDONAME/vdo/gp")"
+	eval "$(parse_yaml_ "$TEMPDIR/vdoconf.yml" _ | awk -v pat="_config_vdos_$TRVDONAME" -v rep="vdo" 'index($0, pat) { gsub(pat, rep); print }')"
 
 	vdo_logicalSize=$(get_kb_size_with_unit_ "$vdo_logicalSize")
 	vdo_physicalSize=$(get_kb_size_with_unit_ "$vdo_physicalSize")
@@ -650,7 +673,7 @@ convert2lvm_() {
 		vdo_block_map_cache_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
 		vdo_block_map_period = $vdo_blockMapPeriod
 		vdo_use_sparse_index = $(get_enabled_value_ "$vdo_indexSparse")
-		vdo_index_memory_size_mb = $(awk "BEGIN {print $vdo_indexMemory * 1024}")
+		vdo_index_memory_size_mb = $(awk -v val="$vdo_indexMemory" 'BEGIN {print val * 1024}')
 		vdo_slab_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_slabSize") / 1024 ))
 		vdo_ack_threads = $vdo_ackThreads
 		vdo_bio_threads = $vdo_bioThreads
@@ -668,7 +691,7 @@ convert2lvm_() {
 	verbose "VDO conversion parameters: $VDO_ALLOCATION_PARAMS"
 
 	verbose "Stopping VDO volume."
-	dry "$VDO" stop $VDOCONF --name "$VDONAME" $VERB
+	dry "$VDO" stop ${VDO_CONFIG:+-f} ${VDO_CONFIG:+"$VDO_CONFIG"} --name "$VDONAME" ${VERB:+"$VERB"}
 
 	# If user has not provided '--yes', prompt before conversion
 	if [ -z "$YES" ] && [ -z "$USE_VDO_DM_SNAPSHOT" ]; then
@@ -693,36 +716,84 @@ convert2lvm_() {
 	esac
 }
 
+validate_override() {
+	local MODE
+	local OPATH
+	local VAL
+
+	eval "VAL=\${$1-}" # bash: VAL="${!1-}"
+	test -z "$VAL" && return 0
+	test "${VAL#/}" != "$VAL" ||
+		error "$1 must be an absolute path."
+
+	# -f is sufficient here, stat below catches non-existent paths
+	if ! OPATH=$("$READLINK" -f "$VAL") ||
+	   ! MODE=$("$STAT" -c '%u %a' "$OPATH") ||
+	   test "${MODE%% *}" != "0"; then
+		error "$1 \"$VAL\" must be accessible and owned by root."
+	fi
+
+	MODE=${MODE##* }
+	test $(( (MODE / 10 % 10 & 2) | (MODE % 10 & 2) )) -eq 0 ||
+		error "$1 \"$OPATH\" must not be group or world writable."
+}
+
 #############################
 # start point of this script
 # - parsing parameters
 #############################
-trap "cleanup" "${SIGNALS[@]}"
+trap 'cleanup $?' EXIT
+trap 'cleanup 2' HUP INT QUIT ABRT TERM
 
 [ "$#" -eq 0 ] && tool_usage
 
 while [ "$#" -ne 0 ]
 do
-	 case "$1" in
+	# Normalize: strip all '-' after leading '--' so e.g. --dry-run matches --dryrun
+	case "$1" in
+	  --*) ARG="--$(printf '%s' "${1#--}" | tr -d '-')" ;;
+	  *) ARG=$1 ;;
+	esac
+	case "$ARG" in
 	  "") ;;
-	  "-f"|"--force"  ) FORCE="-f" ;;
-	  "-h"|"--help"   ) tool_usage ;;
-	  "-n"|"--name"   ) shift; NAME=$1 ;;
-	  "-v"|"--verbose") VERB="--verbose" ;;
-	  "-y"|"--yes"    ) YES="-y" ;;
-	  "--abort-after-vdo-convert"|"--abortaftervdoconvert" ) ABORT_AFTER_VDO_CONVERT=1; USE_VDO_DM_SNAPSHOT= ;; # For testing only
-	  "--dry-run"|"--dryrun" ) DRY="1" ; VERB="-v" ;;
-	  "--no-snapshot"|"--nosnapshot" ) USE_VDO_DM_SNAPSHOT= ;;
-	  "--uuid-prefix"|"--uuidprefix" ) shift; DM_UUID_PREFIX=$1 ;; # For testing only
-	  "--vdo-config"|"--vdoconfig" ) shift; VDO_CONFIG=$1 ; VDOCONF="-f $VDO_CONFIG" ;;
+	  -h|--help   ) tool_usage ;;
+	  -n|--name   ) shift; NAME=$1 ;;
+	  -f|--force  ) FORCE="-f" ;;
+	  -v|--verbose) VERB="--verbose" ;;
+	  -y|--yes    ) YES="-y" ;;
+	  --dryrun    ) DRY=1 ; VERB="-v" ;;
+	  --nosnapshot) USE_VDO_DM_SNAPSHOT= ;;
+	  --uuidprefix) shift; DM_UUID_PREFIX=$1 ;; # For testing only
+	  --vdoconfig ) shift; VDO_CONFIG=$1 ;;
+	  --abortaftervdoconvert) ABORT_AFTER_VDO_CONVERT=1; USE_VDO_DM_SNAPSHOT= ;; # For testing only
 	  -* ) error "Wrong argument \"$1\". (see: $TOOL --help)" ;;
 	  *) DEVICE=$1 ;;  # device name does not start with '-'
 	esac
 	shift
 done
 
-test ${#IMPORT_NAME} -lt 100 || error "Random name \"$IMPORT_NAME\" is too long!"
+[ "${#IMPORT_NAME}" -lt 100 ] ||
+	error "Random name \"$IMPORT_NAME\" is too long!"
 
-[ -n "$DEVICE" ] || error "Device name is not specified. (see: $TOOL --help)"
+[ -n "$DEVICE" ] ||
+	error "Device name is not specified. (see: $TOOL --help)"
+
+# Validate DM_DEV_DIR by checking its control device is root-owned
+if test ! -c "$DM_DEV_DIR/mapper/control" ||
+   test "$("$STAT" -c '%u' "$DM_DEV_DIR/mapper/control")" != "0" ; then
+	DM_DEV_DIR="/dev" # fallback to /dev
+fi
+
+# user override by setting DMSETUP_BINARY,LVM_BINARY and VDO_BINARY
+# overridden binaries must be absolute paths and owned by root for security
+validate_override DMSETUP_BINARY
+validate_override LVM_BINARY
+validate_override VDO_BINARY
+
+"$DMSETUP" version >/dev/null 2>&1 ||
+	error "Could not run dmsetup binary \"$DMSETUP\"."
+
+"$LVM" version >/dev/null 2>&1 ||
+	error "Could not run lvm binary \"$LVM\"."
 
 convert2lvm_
