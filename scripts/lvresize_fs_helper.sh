@@ -552,6 +552,13 @@ if [[ "$DO_FSCK" -eq 1 && "$FSTYPE" == "xfs" ]]; then
 	errorexit "Cannot use --fsck with xfs."
 fi
 
+if [[ "$DO_CRYPTRESIZE" -eq 1 ]] || [[ "$DO_FSREDUCE" -eq 1 && "$FSTYPE" == "ext"* ]]; then
+	case "${NEWSIZEBYTES-}" in
+	"") errorexit "Missing required --newsizebytes." ;;
+	*[!0-9]*) errorexit "--newsizebytes must be a number." ;;
+	esac
+fi
+
 if [ "$DO_MOUNT" -eq 1 ]; then
 	if test -n "${TMPDIR-}" && test "${TMPDIR#/}" = "$TMPDIR"; then
 		errorexit "TMPDIR must be an absolute path."
