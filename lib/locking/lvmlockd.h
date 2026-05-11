@@ -11,7 +11,7 @@
 #ifndef LVMLOCKD_H
 #define LVMLOCKD_H
 
-#include "lib/log/log.h"
+#include "lib/log/lvm-logging.h"
 #include "libdaemon/client/config-util.h"
 #include "libdaemon/client/daemon-client.h"
 #include "daemons/lvmlockd/lvmlockd-client.h"
