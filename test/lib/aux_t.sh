@@ -380,9 +380,9 @@ teardown_devs_prefixed() {
 	done
 
 	# Resume suspended devices first
-	local suspended_dms
+	local suspended_dms=()
 	suspended_dms=( $(dm_info name -S "name=~$PREFIX&&suspended=Suspended" || true) )
-	for dm in "${suspended_dms[@]}"; do
+	for dm in ${suspended_dms[@]+"${suspended_dms[@]}"}; do
 		[[ "$dm" != "No devices found" ]] || break
 		echo "## resuming: dmsetup resume \"$dm\""
 		dmsetup clear "$dm" &
@@ -912,9 +912,9 @@ cleanup_md_dev() {
 	# try to find and remove any DM device on top of cleaned MD
 	# assume  /dev/mdXXX is  9:MINOR
 	local minor=${mddev##/dev/md}
-	local dm_on_md
+	local dm_on_md=()
 	dm_on_md=( $(dmsetup table | grep "9:$minor" | cut -d: -f1 || true) )
-	for i in "${dm_on_md[@]}"; do
+	for i in ${dm_on_md[@]+"${dm_on_md[@]}"}; do
 		dmsetup remove "$i" || {
 			dmsetup --force remove "$i" || true
 		}
