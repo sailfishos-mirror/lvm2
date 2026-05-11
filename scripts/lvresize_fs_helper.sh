@@ -152,7 +152,7 @@ btrfs_devid() {
 	return 1
 }
 
-# Set to 1 while the fs is temporarily mounted on $TMPDIR
+# Set to 1 while the fs is temporarily mounted on $TEMPDIR
 TMP_MOUNT_DONE=0
 # Set to 1 if the fs resize command fails
 RESIZEFS_FAILED=0
@@ -247,12 +247,12 @@ fsextend() {
 			detect_xfs_mount_options "$DEVPATH" || logmsg "not using XFS mount options"
 		fi
 
-		logmsg "mount ${DEVPATH} ${TMPDIR}"
-		if mount -t "$FSTYPE" ${MOUNT_OPTIONS:+-o "$MOUNT_OPTIONS"} "$DEVPATH" "$TMPDIR"; then
+		logmsg "mount ${DEVPATH} ${TEMPDIR}"
+		if mount -t "$FSTYPE" ${MOUNT_OPTIONS:+-o "$MOUNT_OPTIONS"} "$DEVPATH" "$TEMPDIR"; then
 			logmsg "mount done"
 			TMP_MOUNT_DONE=1
 		else
-			logerror "mount failed for \"$DEVPATH\" on \"$TMPDIR\""
+			logerror "mount failed for \"$DEVPATH\" on \"$TEMPDIR\""
 			exit 1
 		fi
 	fi
@@ -279,7 +279,7 @@ fsextend() {
 		REAL_MOUNTPOINT="$MOUNTDIR"
 
 		if [ $TMP_MOUNT_DONE -eq 1 ]; then
-			REAL_MOUNTPOINT="$TMPDIR"
+			REAL_MOUNTPOINT="$TEMPDIR"
 		fi
 
 		logmsg "btrfs filesystem resize ${BTRFS_DEVID}:${NEWSIZEBYTES} ${REAL_MOUNTPOINT}"
@@ -293,13 +293,14 @@ fsextend() {
 
 	# If the fs was temporarily mounted, now unmount it.
 	if [ $TMP_MOUNT_DONE -eq 1 ]; then
-		logmsg "cleanup unmount ${TMPDIR}"
-		if umount "$TMPDIR"; then
+		logmsg "cleanup unmount ${TEMPDIR}"
+		if umount "$TEMPDIR"; then
 			logmsg "cleanup unmount done"
 			TMP_MOUNT_DONE=0
-			rmdir "$TMPDIR"
+			rmdir "$TEMPDIR" 2>/dev/null || true
+			rmdir "${TEMPDIR%/*}" 2>/dev/null || true
 		else
-			logerror "cleanup unmount failed for \"$TMPDIR\""
+			logerror "cleanup unmount failed for \"$TEMPDIR\""
 			exit 1
 		fi
 	fi
@@ -354,12 +355,12 @@ fsreduce() {
 	fi
 
 	if [ "$DO_MOUNT" -eq 1 ]; then
-		logmsg "mount ${DEVPATH} ${TMPDIR}"
-		if mount -t "$FSTYPE" "$DEVPATH" "$TMPDIR"; then
+		logmsg "mount ${DEVPATH} ${TEMPDIR}"
+		if mount -t "$FSTYPE" "$DEVPATH" "$TEMPDIR"; then
 			logmsg "mount done"
 			TMP_MOUNT_DONE=1
 		else
-			logerror "mount failed for \"$DEVPATH\" on \"$TMPDIR\""
+			logerror "mount failed for \"$DEVPATH\" on \"$TEMPDIR\""
 			exit 1
 		fi
 	fi
@@ -379,7 +380,7 @@ fsreduce() {
 		REAL_MOUNTPOINT="$MOUNTDIR"
 
 		if [ $TMP_MOUNT_DONE -eq 1 ]; then
-			REAL_MOUNTPOINT="$TMPDIR"
+			REAL_MOUNTPOINT="$TEMPDIR"
 		fi
 
 		logmsg "btrfs filesystem resize ${BTRFS_DEVID}:${NEWSIZEBYTES} ${REAL_MOUNTPOINT}"
@@ -393,13 +394,14 @@ fsreduce() {
 
 	# If the fs was temporarily mounted, now unmount it.
 	if [ $TMP_MOUNT_DONE -eq 1 ]; then
-		logmsg "cleanup unmount ${TMPDIR}"
-		if umount "$TMPDIR"; then
+		logmsg "cleanup unmount ${TEMPDIR}"
+		if umount "$TEMPDIR"; then
 			logmsg "cleanup unmount done"
 			TMP_MOUNT_DONE=0
-			rmdir "$TMPDIR"
+			rmdir "$TEMPDIR" 2>/dev/null || true
+			rmdir "${TEMPDIR%/*}" 2>/dev/null || true
 		else
-			logerror "cleanup unmount failed for \"$TMPDIR\""
+			logerror "cleanup unmount failed for \"$TEMPDIR\""
 			exit 1
 		fi
 	fi
@@ -551,22 +553,27 @@ if [[ "$DO_FSCK" -eq 1 && "$FSTYPE" == "xfs" ]]; then
 fi
 
 if [ "$DO_MOUNT" -eq 1 ]; then
-	TMPDIR=$(mktemp --suffix _lvresize_$$ -d -p /tmp)
-	if [ ! -e "$TMPDIR" ]; then
-		errorexit "Failed to create temp dir."
+	if test -n "${TMPDIR-}" && test "${TMPDIR#/}" = "$TMPDIR"; then
+		errorexit "TMPDIR must be an absolute path."
 	fi
-	# In case the script terminates without doing cleanup
+	TEMPDIR=$(mktemp -d "${TMPDIR:-/tmp}/${SCRIPTNAME}_XXXXXXXXXX") || errorexit "Failed to create temp dir."
+	TEMPDIR="${TEMPDIR}/m"
+	mkdir -m 0000 "$TEMPDIR" || errorexit "Failed to create temp mount point \"$TEMPDIR\"."
 	finish() {
+		trap '' 1 2 15
 		if [ "$TMP_MOUNT_DONE" -eq 1 ]; then
-			logmsg "exit unmount ${TMPDIR}"
-			if umount "$TMPDIR"; then
-				rmdir "$TMPDIR"
+			logmsg "exit unmount ${TEMPDIR}"
+			if umount "$TEMPDIR"; then
+				TMP_MOUNT_DONE=0
 			else
-				logerror "exit unmount failed for \"$TMPDIR\""
+				logerror "exit unmount failed for \"$TEMPDIR\""
 			fi
 		fi
+		rmdir "$TEMPDIR" 2>/dev/null || true
+		rmdir "${TEMPDIR%/*}" 2>/dev/null || true
+		trap - 1 2 15
 	}
-	trap finish EXIT
+	trap finish 1 2 15 EXIT
 fi
 
 #
