@@ -560,8 +560,11 @@ if [ "$DO_MOUNT" -eq 1 ]; then
 	function finish {
 		if [ "$TMP_MOUNT_DONE" -eq 1 ]; then
 			logmsg "exit unmount ${TMPDIR}"
-			umount "$TMPDIR"
-			rmdir "$TMPDIR"
+			if umount "$TMPDIR"; then
+				rmdir "$TMPDIR"
+			else
+				logerror "exit unmount failed for \"$TMPDIR\""
+			fi
 		fi
 	}
 	trap finish EXIT
