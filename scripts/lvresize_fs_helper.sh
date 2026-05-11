@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2022-2025 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2022-2026 Red Hat, Inc. All rights reserved.
 #
 # This file is part of LVM2.
 #
@@ -16,8 +16,7 @@ set -euE -o pipefail
 
 PATH="/sbin:/usr/sbin:/bin:/usr/bin"
 GETOPT="getopt"
-SCRIPTNAME=$(basename "$0")
-DM_DEV_DIR="${DM_DEV_DIR:-/dev}"
+SCRIPTNAME=${0##*/}
 
 usage() {
 	cat <<-EOF
@@ -149,7 +148,7 @@ btrfs_devid() {
 		esac
 	done
 
-	# fail, devid not found
+	logerror "btrfs devid not found for \"$devpath\""
 	return 1
 }
 
@@ -416,7 +415,7 @@ fsreduce() {
 		if cryptsetup resize --size "$NEWSIZESECTORS" "$DEVPATH"; then
 			logmsg "cryptsetup done"
 		else
-			logmsg "cryptsetup failed"
+			logerror "cryptsetup resize failed on \"$DEVPATH\" to $NEWSIZESECTORS sectors"
 			exit 1
 		fi
 	fi
@@ -557,7 +556,7 @@ if [ "$DO_MOUNT" -eq 1 ]; then
 		errorexit "Failed to create temp dir."
 	fi
 	# In case the script terminates without doing cleanup
-	function finish {
+	finish() {
 		if [ "$TMP_MOUNT_DONE" -eq 1 ]; then
 			logmsg "exit unmount ${TMPDIR}"
 			if umount "$TMPDIR"; then
