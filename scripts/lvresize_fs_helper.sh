@@ -118,9 +118,9 @@ accept_e2fsck() {
 btrfs_path_major_minor() {
 	local STAT
 
-	STAT=$(stat --format "echo \$((0x%t)):\$((0x%T))" "$(readlink -e "$1")") || \
-		errorexit "Cannot get major:minor for \"$1\"."
-	eval "$STAT"
+	STAT=$(stat --format '0x%t:0x%T' "$(readlink -e "$1")") ||
+		{ logerror "Cannot get major:minor for \"$1\"." ; exit 1 ; }
+	echo "$(( ${STAT%%:*} )):$(( ${STAT#*:} ))"
 }
 
 btrfs_devid() {
