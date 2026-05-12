@@ -74,11 +74,16 @@ static dm_string_mangling_t _name_mangling_mode = DEFAULT_DM_NAME_MANGLING;
 
 #ifdef HAVE_SELINUX_LABEL_H
 static struct selabel_handle *_selabel_handle = NULL;
+static pthread_once_t _selabel_once = PTHREAD_ONCE_INIT;
+
+static void _init_selabel_handle(void)
+{
+	_selabel_handle = selabel_open(SELABEL_CTX_FILE, NULL, 0);
+}
 
 static struct selabel_handle *_get_selabel_handle(void)
 {
-	if (!_selabel_handle)
-		_selabel_handle = selabel_open(SELABEL_CTX_FILE, NULL, 0);
+	pthread_once(&_selabel_once, _init_selabel_handle);
 
 	return _selabel_handle;
 }
