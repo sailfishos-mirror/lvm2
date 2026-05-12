@@ -9106,6 +9106,8 @@ int activate_and_wipe_lvlist(struct dm_list *lv_list, int wipe_mode, int yes, fo
 	if (test_mode())
 		return 1;
 
+	sync_local_dev_names(vg->cmd);
+
 	dm_list_iterate_items(lvl, lv_list) {
 		lvl->lv->status |= LV_TEMPORARY;
 		if (!activate_lv(vg->cmd, lvl->lv)) {

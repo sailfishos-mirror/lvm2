@@ -3037,6 +3037,8 @@ int activate_lv_temporary(struct cmd_context *cmd, struct logical_volume *lv)
 {
 	int r;
 
+	sync_local_dev_names(cmd);
+
 	lv->status |= LV_TEMPORARY;
 	r = activate_lv(cmd, lv);
 	lv->status &= ~LV_TEMPORARY;

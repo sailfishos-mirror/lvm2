@@ -3413,9 +3413,6 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 			goto bad;
 		}
 
-		/* Wait for synchronization before wiping activation */
-		sync_local_dev_names(cmd);
-
 		if (zero_metadata || to_thin) {
 			if (!activate_and_wipe_lv(metadata_lv, WIPE_MODE_METADATA,
 						  arg_count(cmd, yes_ARG),
