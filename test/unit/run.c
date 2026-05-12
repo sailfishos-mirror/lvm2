@@ -190,7 +190,7 @@ static const char *normal(bool c)
 
 static void _run_test(struct test_details *t, bool use_colour, unsigned *passed, unsigned *total)
 {
-	void *fixture;
+	void * volatile fixture;
 	struct test_suite *ts = t->parent;
 	fprintf(stderr, "[RUN    ] %s\n", t->path);
 
