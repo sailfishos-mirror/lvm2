@@ -814,12 +814,17 @@ static void *_align_ptr(void *ptr)
 	return (void *)(uintptr_t)_align_val((size_t)ptr);
 }
 
-static int _check_has_event_nr(void) {
-	static int _has_event_nr = -1;
+static int _has_event_nr = 0;
+static pthread_once_t _has_event_nr_once = PTHREAD_ONCE_INIT;
 
-	if (_has_event_nr < 0)
-		_has_event_nr = dm_check_version() &&
-			((_dm_version == 4 && _dm_version_minor >= 38) || _dm_version > 4);
+static void _init_has_event_nr(void)
+{
+	_has_event_nr = dm_check_version() &&
+		((_dm_version == 4 && _dm_version_minor >= 38) || _dm_version > 4);
+}
+
+static int _check_has_event_nr(void) {
+	pthread_once(&_has_event_nr_once, _init_has_event_nr);
 
 	return _has_event_nr;
 }
@@ -2805,13 +2810,11 @@ void dm_lib_release(void)
 
 void dm_pools_check_leaks(void);
 
-void dm_lib_exit(void)
+static pthread_once_t _exit_once = PTHREAD_ONCE_INIT;
+
+static void _do_lib_exit(void)
 {
 	int suspended_counter;
-	static unsigned _exited = 0;
-
-	if (_exited++)
-		return;
 
 	if ((suspended_counter = dm_get_suspended_counter()))
 		log_error("libdevmapper exiting with %d device(s) still suspended.", suspended_counter);
@@ -2823,6 +2826,11 @@ void dm_lib_exit(void)
 	_dm_bitset = NULL;
 	dm_pools_check_leaks();
 	dm_dump_memory();
+}
+
+void dm_lib_exit(void)
+{
+	pthread_once(&_exit_once, _do_lib_exit);
 }
 
 #if defined(GNU_SYMVER)

@@ -20,6 +20,7 @@
 #include "libdm/misc/dm-ioctl.h"
 
 #include <stdarg.h>
+#include <pthread.h>
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -966,17 +967,19 @@ static int _selabel_lookup(const char *path, mode_t mode,
 #endif
 
 #ifdef HAVE_SELINUX
+static int _selinux_enabled;
+static pthread_once_t _selinux_enabled_once = PTHREAD_ONCE_INIT;
+
+static void _init_selinux_enabled(void)
+{
+	_selinux_enabled = is_selinux_enabled();
+}
+
 static int _is_selinux_enabled(void)
 {
-	static int _tested = 0;
-	static int _enabled;
+	pthread_once(&_selinux_enabled_once, _init_selinux_enabled);
 
-	if (!_tested) {
-		_tested = 1;
-		_enabled = is_selinux_enabled();
-	}
-
-	return _enabled;
+	return _selinux_enabled;
 }
 #endif
 
