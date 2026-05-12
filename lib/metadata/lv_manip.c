@@ -7650,6 +7650,7 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 	uint32_t current_le = 0;
 	uint32_t raid_multiple;
 	struct lv_segment *seg = first_seg(lv);
+	struct lv_segment *src_seg;
 
 	if (!(parallel_areas = dm_pool_alloc(lv->vg->vgmem, sizeof(*parallel_areas)))) {
 		log_error("parallel_areas allocation failed");
@@ -7678,20 +7679,21 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 			return NULL;
 		}
 
+		src_seg = use_pvmove_parent_lv ? seg->pvmove_source_seg : NULL;
+
 		/* Find next segment end */
 		/* FIXME Unnecessary nesting! */
-		if (!_for_each_pv(cmd, use_pvmove_parent_lv ? seg->pvmove_source_seg->lv : lv,
-				  use_pvmove_parent_lv ? seg->pvmove_source_seg->le : current_le,
-				  use_pvmove_parent_lv ? spvs->len * _calc_area_multiple(seg->pvmove_source_seg->segtype, seg->pvmove_source_seg->area_count, 0) : spvs->len,
-				  use_pvmove_parent_lv ? seg->pvmove_source_seg : NULL,
+		if (!_for_each_pv(cmd, src_seg ? src_seg->lv : lv,
+				  src_seg ? src_seg->le : current_le,
+				  src_seg ? spvs->len * _calc_area_multiple(src_seg->segtype, src_seg->area_count, 0) : spvs->len,
+				  src_seg,
 				  &spvs->len,
 				  0, 0, -1, 0, _add_pvs, (void *) spvs))
 			return_NULL;
 
 		/* For RAID/mirror pvmove, also exclude PVs of sibling sub-LVs */
-		if (use_pvmove_parent_lv &&
-		    !_add_raid_exclusion_pvs(cmd,
-					     seg->pvmove_source_seg->lv, spvs))
+		if (src_seg &&
+		    !_add_raid_exclusion_pvs(cmd, src_seg->lv, spvs))
 			return_NULL;
 
 		current_le = spvs->le + spvs->len;
