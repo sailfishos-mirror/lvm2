@@ -3941,6 +3941,7 @@ int lockd_lv(struct cmd_context *cmd, struct logical_volume *lv,
 		return 1;
 	}
 
+	/* thin/vdo have own LOCKED guards in _lockd_lv_thin/_lockd_lv_vdo */
 	if (lv_is_thin_type(lv))
 		return _lockd_lv_thin(cmd, lv, def_mode, flags);
 
