@@ -413,8 +413,12 @@ static int _create_dm_bitset(int require_module_loaded)
 
 int dm_is_dm_major(uint32_t major)
 {
-	if (!_create_dm_bitset(0))
+	pthread_mutex_lock(&_control_fd_mutex);
+	if (!_create_dm_bitset(0)) {
+		pthread_mutex_unlock(&_control_fd_mutex);
 		return 0;
+	}
+	pthread_mutex_unlock(&_control_fd_mutex);
 
 	if (_dm_multiple_major_support) {
 		if (!_dm_bitset)
