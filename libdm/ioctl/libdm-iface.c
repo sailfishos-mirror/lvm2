@@ -83,8 +83,8 @@ static uint32_t _dm_device_major = 0;
 
 static int _control_fd = -1;
 static int _hold_control_fd_open = 0;
-static int _version_checked = 0;
 static int _version_ok = 1;
+static pthread_once_t _version_once = PTHREAD_ONCE_INIT;
 static unsigned _ioctl_buffer_double_factor = 0;
 /* Max ioctl buffer: 16KB << 16 = 1GB */
 #define DM_IOCTL_BUFFER_MAX_DOUBLINGS 16
@@ -619,8 +619,6 @@ static void _init_version(void)
 {
 	char libversion[64] = "", dmversion[64] = "";
 
-	_version_checked = 1;
-
 	if (_check_version(dmversion, sizeof(dmversion)))
 		return;
 
@@ -638,8 +636,7 @@ static void _init_version(void)
  */
 int dm_check_version(void)
 {
-	if (!_version_checked)
-		_init_version();
+	pthread_once(&_version_once, _init_version);
 
 	return _version_ok;
 }
@@ -2826,8 +2823,6 @@ void dm_lib_exit(void)
 	_dm_bitset = NULL;
 	dm_pools_check_leaks();
 	dm_dump_memory();
-	_version_ok = 1;
-	_version_checked = 0;
 }
 
 #if defined(GNU_SYMVER)
