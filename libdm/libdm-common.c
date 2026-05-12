@@ -1516,17 +1516,67 @@ static int _do_node_op(node_op_t type, const char *dev_name, uint32_t major,
 	return 1;
 }
 
-static DM_LIST_INIT(_node_ops);
-static int _count_node_ops[NUM_NODES];
+struct dm_thread_state {
+	struct dm_list node_ops;
+	int count_node_ops[NUM_NODES];
+};
+
+static pthread_key_t _thread_state_key;
+static pthread_once_t _thread_state_once = PTHREAD_ONCE_INIT;
+
+static void _pop_node_ops(void);
+
+static void _destroy_thread_state(void *ptr)
+{
+	struct dm_thread_state *ts = ptr;
+
+	/*
+	 * Flush any pending node ops as a safety net in case the
+	 * caller did not call update_devs() before thread exit.
+	 * Re-associate so _pop_node_ops() finds the state via accessor.
+	 */
+	pthread_setspecific(_thread_state_key, ts);
+	_pop_node_ops();
+	pthread_setspecific(_thread_state_key, NULL);
+	dm_free(ts);
+}
+
+static void _init_thread_state_key(void)
+{
+	pthread_key_create(&_thread_state_key, _destroy_thread_state);
+}
+
+static struct dm_thread_state *_get_thread_state(void)
+{
+	struct dm_thread_state *ts;
+
+	pthread_once(&_thread_state_once, _init_thread_state_key);
+
+	ts = pthread_getspecific(_thread_state_key);
+	if (!ts) {
+		if (!(ts = dm_zalloc(sizeof(*ts)))) {
+			log_error("Failed to allocate thread state.");
+			return NULL;
+		}
+		dm_list_init(&ts->node_ops);
+		pthread_setspecific(_thread_state_key, ts);
+	}
+
+	return ts;
+}
 
 static struct dm_list *_get_node_ops_list(void)
 {
-	return &_node_ops;
+	struct dm_thread_state *ts = _get_thread_state();
+
+	return ts ? &ts->node_ops : NULL;
 }
 
 static int *_get_count_node_ops(void)
 {
-	return _count_node_ops;
+	struct dm_thread_state *ts = _get_thread_state();
+
+	return ts ? ts->count_node_ops : NULL;
 }
 
 struct node_op_parms {
@@ -1556,7 +1606,10 @@ static void _store_str(char **pos, char **ptr, const char *str)
 
 static void _del_node_op(struct node_op_parms *nop)
 {
-	_get_count_node_ops()[nop->type]--;
+	int *count = _get_count_node_ops();
+
+	if (count)
+		count[nop->type]--;
 	dm_list_del(&nop->list);
 	dm_free(nop);
 }
@@ -1564,10 +1617,14 @@ static void _del_node_op(struct node_op_parms *nop)
 /* Check if there is other the type of node operation stacked */
 static int _other_node_ops(node_op_t type)
 {
+	int *count = _get_count_node_ops();
 	unsigned i;
 
+	if (!count)
+		return 0;
+
 	for (i = 0; i < NUM_NODES; i++)
-		if (type != i && _get_count_node_ops()[i])
+		if (type != i && count[i])
 			return 1;
 	return 0;
 }
@@ -1606,8 +1663,16 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 {
 	struct node_op_parms *nop;
 	struct dm_list *noph, *nopht;
+	struct dm_list *node_ops;
+	int *count;
 	size_t len = strlen(dev_name) + strlen(old_name) + 2;
 	char *pos;
+
+	if (!(node_ops = _get_node_ops_list()))
+		return 0;
+
+	if (!(count = _get_count_node_ops()))
+		return 0;
 
 	/*
 	 * Note: warn_if_udev_failed must have valid content
@@ -1616,7 +1681,7 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 		/*
 		 * Ignore any outstanding operations on the node if deleting it.
 		 */
-		dm_list_iterate_safe(noph, nopht, _get_node_ops_list()) {
+		dm_list_iterate_safe(noph, nopht, node_ops) {
 			nop = dm_list_item(noph, struct node_op_parms);
 			if (!strcmp(dev_name, nop->dev_name)) {
 				_log_node_op("Unstacking", nop);
@@ -1625,12 +1690,12 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 					break; /* no other non DEL ops */
 			}
 		}
-	else if ((type == NODE_ADD) && _get_count_node_ops()[NODE_DEL])
+	else if ((type == NODE_ADD) && count[NODE_DEL])
 		/*
 		 * Ignore previous DEL operation on added node.
 		 * (No other operations for this device than DEL could be stacked here).
 		 */
-		dm_list_iterate_safe(noph, nopht, _get_node_ops_list()) {
+		dm_list_iterate_safe(noph, nopht, node_ops) {
 			nop = dm_list_item(noph, struct node_op_parms);
 			if ((nop->type == NODE_DEL) &&
 			    !strcmp(dev_name, nop->dev_name)) {
@@ -1648,7 +1713,7 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 		 * safe to remove any stacked ADD, RENAME, READ_AHEAD operation
 		 * There cannot be any DEL operation on the renamed device.
 		 */
-		dm_list_iterate_safe(noph, nopht, _get_node_ops_list()) {
+		dm_list_iterate_safe(noph, nopht, node_ops) {
 			nop = dm_list_item(noph, struct node_op_parms);
 			if (!strcmp(old_name, nop->dev_name)) {
 				_log_node_op("Unstacking", nop);
@@ -1686,8 +1751,8 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 	_store_str(&pos, &nop->dev_name, dev_name);
 	_store_str(&pos, &nop->old_name, old_name);
 
-	_get_count_node_ops()[type]++;
-	dm_list_add(_get_node_ops_list(), &nop->list);
+	count[type]++;
+	dm_list_add(node_ops, &nop->list);
 
 	_log_node_op("Stacking", nop);
 
@@ -1696,10 +1761,13 @@ static int _stack_node_op(node_op_t type, const char *dev_name, uint32_t major,
 
 static void _pop_node_ops(void)
 {
-	struct dm_list *noph, *nopht;
+	struct dm_list *noph, *nopht, *node_ops;
 	struct node_op_parms *nop;
 
-	dm_list_iterate_safe(noph, nopht, _get_node_ops_list()) {
+	if (!(node_ops = _get_node_ops_list()))
+		return;
+
+	dm_list_iterate_safe(noph, nopht, node_ops) {
 		nop = dm_list_item(noph, struct node_op_parms);
 		if (!nop->rely_on_udev) {
 			_log_node_op("Processing", nop);
