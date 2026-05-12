@@ -653,9 +653,10 @@ teardown() {
 
 	# Find dangling symlinks with test prefix and remove them
 	# -xtype l matches symlinks whose target no longer exists
+	# maxdepth 2 catches VG/LV symlinks like /dev/TESTvg/lvname
 	local ALL_DANGLING
 	ALL_DANGLING=( $(find /dev/mapper -maxdepth 1 -name "${LEAKED_PREFIX}*" -xtype l -print 2>/dev/null
-		find /dev -maxdepth 1 -name "${LEAKED_PREFIX}*" -xtype l -print 2>/dev/null) ) || true
+		find /dev -maxdepth 2 -path "/dev/${LEAKED_PREFIX}*" -xtype l -print 2>/dev/null) ) || true
 
 	# Check which of the dangling links belong to this test specifically
 	LEAKED_LINKS=()
