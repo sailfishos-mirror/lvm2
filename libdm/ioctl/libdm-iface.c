@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <pthread.h>
 #include <sys/ioctl.h>
 #include <sys/utsname.h>
 #include <limits.h>
@@ -153,6 +154,8 @@ static char *_align(char *ptr, unsigned int a)
 static unsigned _kernel_major = 0;
 static unsigned _kernel_minor = 0;
 static unsigned _kernel_release = 0;
+static pthread_once_t _uname_once = PTHREAD_ONCE_INIT;
+
 static void _init_uname(void)
 {
 	struct utsname uts;
@@ -176,8 +179,7 @@ static void _init_uname(void)
 
 static int _uname(void)
 {
-	if (!_kernel_major)
-		_init_uname();
+	pthread_once(&_uname_once, _init_uname);
 
 	if (!_kernel_major) {
 		log_error("Could not determine kernel version used.");
