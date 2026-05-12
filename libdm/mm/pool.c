@@ -37,24 +37,23 @@ void dm_pools_check_leaks(void);
  */
 static size_t _pagesize = 0;
 static size_t _pagesize_mask = 0;
+static pthread_once_t _pagesize_once = PTHREAD_ONCE_INIT;
 
 static void _init_pagesize(void)
 {
-	if (!_pagesize) {
-		_pagesize = getpagesize();
-		_pagesize_mask = _pagesize - 1;
-	}
+	_pagesize = getpagesize();
+	_pagesize_mask = _pagesize - 1;
 }
 
 static size_t _get_pagesize(void)
 {
-	_init_pagesize();
+	pthread_once(&_pagesize_once, _init_pagesize);
 	return _pagesize;
 }
 
 static size_t _get_pagesize_mask(void)
 {
-	_init_pagesize();
+	pthread_once(&_pagesize_once, _init_pagesize);
 	return _pagesize_mask;
 }
 
