@@ -1365,7 +1365,7 @@ static void add_client_result(struct action *act)
 	}
 
 	pthread_mutex_lock(&client_mutex);
-	if ((act->flags & LD_AF_ADOPT_ONLY) && (act->client_id == INTERNAL_CLIENT_ID))
+	if ((act->flags & (LD_AF_ADOPT_ONLY | LD_AF_ADOPT)) && (act->client_id == INTERNAL_CLIENT_ID))
 		list_add_tail(&act->list, &adopt_results);
 	else
 		list_add_tail(&act->list, &client_results);
