@@ -146,6 +146,7 @@ int pvmove_finish(struct cmd_context *cmd, struct volume_group *vg,
 
 	if (!dm_list_empty(lvs_changed)) {
 		if (!_detach_pvmove_mirror(cmd, lv_mirr, arg_count(cmd, abort_ARG))) {
+			/* abort keeps source */
 			log_error("ABORTING: Removal of temporary pvmove mirror %s failed.",
 				  display_lvname(lv_mirr));
 			return 0;
