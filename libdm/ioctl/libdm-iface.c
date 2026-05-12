@@ -83,6 +83,8 @@ static uint32_t _dm_device_major = 0;
 
 static int _control_fd = -1;
 static int _hold_control_fd_open = 0;
+/* Mutex, not pthread_once: fd can be closed and reopened */
+static pthread_mutex_t _control_fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int _version_ok = 1;
 static pthread_once_t _version_once = PTHREAD_ONCE_INIT;
 static unsigned _ioctl_buffer_double_factor = 0;
@@ -504,10 +506,15 @@ bad:
 
 static int _get_control_fd(void)
 {
+	int fd;
+
+	pthread_mutex_lock(&_control_fd_mutex);
 	if (_control_fd == -1)
 		_open_control();
+	fd = _control_fd;
+	pthread_mutex_unlock(&_control_fd_mutex);
 
-	return _control_fd;
+	return fd;
 }
 
 static void _dm_zfree_string(char *string)
@@ -2793,16 +2800,21 @@ repeat_ioctl:
 
 void dm_hold_control_dev(int hold_open)
 {
+	pthread_mutex_lock(&_control_fd_mutex);
 	_hold_control_fd_open = hold_open ? 1 : 0;
+	pthread_mutex_unlock(&_control_fd_mutex);
 
 	log_debug("Hold of control device is now %sset.",
-		  _hold_control_fd_open ? "" : "un");
+		  hold_open ? "" : "un");
 }
 
 void dm_lib_release(void)
 {
+	pthread_mutex_lock(&_control_fd_mutex);
 	if (!_hold_control_fd_open)
 		_close_control_fd();
+	pthread_mutex_unlock(&_control_fd_mutex);
+
 	dm_timestamp_destroy(_dm_ioctl_timestamp);
 	_dm_ioctl_timestamp = NULL;
 	update_devs();
