@@ -1860,11 +1860,6 @@ static int _lvchange_syncaction_single(struct cmd_context *cmd,
 		return ECMD_FAILED;
 	}
 
-	if (lv_raid_has_integrity(lv) && !strcmp(msg, "repair")) {
-		log_error("Use syncaction check to detect and correct integrity checksum mismatches.");
-		return ECMD_FAILED;
-	}
-
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
 		return_ECMD_FAILED;

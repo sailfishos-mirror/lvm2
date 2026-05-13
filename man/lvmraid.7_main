@@ -786,9 +786,12 @@ New devices require synchronization with existing devices.
 .br
 See \fBSynchronization\fP.
 .P
-If integrity is in use, it will need to be disabled before repair/replace
-commands can be used (lvconvert --raidintegrity n).  Integrity can be
+If integrity is in use, it will need to be disabled before
+lvconvert repair/replace/rebuild commands can be used
+(lvconvert --raidintegrity n).  Integrity can be
 enabled again afterward (lvconvert --raidintegrity y).
+Scrubbing with lvchange --syncaction check or repair
+can be used while integrity is enabled.
 .
 .SS Refreshing an LV
 .

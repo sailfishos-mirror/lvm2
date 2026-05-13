@@ -588,7 +588,6 @@ _add_new_data_to_mnt
 not lvconvert -y -m-1 $vg/$lv1
 not lvconvert --splitmirrors 1 -n tmp -y $vg/$lv1
 not lvconvert --splitmirrors 1 --trackchanges -y $vg/$lv1
-not lvchange --syncaction repair $vg/$lv1
 not lvreduce -L4M $vg/$lv1
 not pvmove -n $vg/$lv1 "$dev1"
 not pvmove "$dev1"
