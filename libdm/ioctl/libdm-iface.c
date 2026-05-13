@@ -67,7 +67,6 @@
 static unsigned _dm_version = DM_VERSION_MAJOR;
 static unsigned _dm_version_minor = 0;
 static unsigned _dm_version_patchlevel = 0;
-static int _log_suppress = 0;
 static struct dm_timestamp *_dm_ioctl_timestamp = NULL;
 static int _dm_warn_inactive_suppress = 0;
 
@@ -581,7 +580,7 @@ int dm_task_get_driver_version(struct dm_task *dmt, char *version, size_t size)
 	return 1;
 }
 
-static int _check_version(char *version, size_t size, int log_suppress)
+static int _check_version(char *version, size_t size)
 {
 	struct dm_task *task;
 	int r;
@@ -592,14 +591,10 @@ static int _check_version(char *version, size_t size, int log_suppress)
 		return 0;
 	}
 
-	if (log_suppress)
-		_log_suppress = 1;
-
 	r = dm_task_run(task);
 	if (!dm_task_get_driver_version(task, version, size))
 		stack;
 	dm_task_destroy(task);
-	_log_suppress = 0;
 
 	return r;
 }
@@ -611,21 +606,19 @@ static int _check_version(char *version, size_t size, int log_suppress)
 int dm_check_version(void)
 {
 	char libversion[64] = "", dmversion[64] = "";
-	const char *compat = "";
 
 	if (_version_checked)
 		return _version_ok;
 
 	_version_checked = 1;
 
-	if (_check_version(dmversion, sizeof(dmversion), 0))
+	if (_check_version(dmversion, sizeof(dmversion)))
 		return 1;
 
 	dm_get_library_version(libversion, sizeof(libversion));
 
-	log_error("Incompatible libdevmapper %s%s and kernel driver %s.",
-		  *libversion ? libversion : "(unknown version)", compat,
-		  *dmversion ? dmversion : "(unknown version)");
+	log_error("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
+		  *libversion ? libversion : "(unknown version)");
 
 	_version_ok = 0;
 	return 0;
@@ -2500,7 +2493,7 @@ static int _dm_ioctl_post(struct dm_task *dmt, struct dm_ioctl *dmi,
 						  (dmt->type == DM_DEVICE_STATUS)))
 			dmi->flags &= ~DM_EXISTS_FLAG;	/* FIXME */
 		else {
-			if (_log_suppress || dmt->ioctl_errno == EINTR)
+			if (dmt->ioctl_errno == EINTR)
 				log_verbose("device-mapper: %s ioctl on %s %s%s%.0d%s%.0d%s%s "
 					    "failed: %s",
 					    _cmd_data_v4[dmt->type].name,
