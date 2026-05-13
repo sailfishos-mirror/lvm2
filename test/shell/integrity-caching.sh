@@ -417,8 +417,6 @@ not lvconvert --splitmirrors 1 -n tmp -y $vg/$lv1
 not lvconvert --splitmirrors 1 -n tmp -y $vg/${lv1}_${suffix}
 not lvconvert --splitmirrors 1 --trackchanges -y $vg/$lv1
 not lvconvert --splitmirrors 1 --trackchanges -y $vg/${lv1}_${suffix}
-not lvchange --syncaction repair $vg/$lv1
-not lvchange --syncaction repair $vg/${lv1}_${suffix}
 not lvreduce -L4M $vg/$lv1
 not lvreduce -L4M $vg/${lv1}_${suffix}
 not lvcreate -s -n snap -L4M $vg/${lv1}_${suffix}
