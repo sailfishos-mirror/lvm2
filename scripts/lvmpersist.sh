@@ -51,7 +51,7 @@ set_cmd() {
 		cmd="mpathpersist"
 		cmdopts=()
 		;;
-	  /dev/mapper*)
+	  /dev/mapper/*)
 		cmd="mpathpersist"
 		cmdopts=()
 		;;
@@ -77,7 +77,7 @@ set_type() {
 		type="$MPATH_PRTYPE"
 		type_str="$MPATH_PRDESC"
 		;;
-	  /dev/mapper*)
+	  /dev/mapper/*)
 		type="$MPATH_PRTYPE"
 		type_str="$MPATH_PRDESC"
 		;;
@@ -524,16 +524,19 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/nvme*)
+		/dev/nvme*)
 			FOUND_NVME=1
 			;;
-	  	/dev/sd*)
+		/dev/sd*)
 			FOUND_SCSI=1
 			;;
 		/dev/dm-*)
 			;&
-		/dev/mapper*)
+		/dev/mapper/*)
 			MAJORMINOR=$("$DMSETUP" info --noheadings -c -o major,minor "$dev")
+			case "$MAJORMINOR" in
+			  *[!0-9:]*|"") errorexit "unexpected dmsetup output for $dev" ;;
+			esac
 			read -r <"/sys/dev/block/$MAJORMINOR/dm/uuid" DM_UUID 2>/dev/null
 			if [[ $DM_UUID == *"mpath-"* ]]; then
 				FOUND_MPATH=1
@@ -542,7 +545,7 @@ check_devices() {
 				err=1
 			fi
 			;;
-	  	*)
+		*)
 			logmsg "device type not supported for $dev."
 			err=1
 		esac
@@ -577,11 +580,11 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/sd*)
+		/dev/sd*)
 			;&
 		/dev/dm-*)
 			;&
-		/dev/mapper*)
+		/dev/mapper/*)
 			sg_turs "$dev" >/dev/null 2>&1
 			ec=$?
 			test $ec -eq 0 || logmsg "test unit ready error $ec from $dev"
