@@ -102,6 +102,70 @@ not fsadm check
 not fsadm resize "$dev_vg_lv" 30M |& tee out
 grep "Cannot get filesystem type" out
 
+# unknown option
+not fsadm --bogus resize "$dev_vg_lv" 30M 2>err
+grep "Wrong argument" err
+
+# resize needs device
+not fsadm resize 2>err
+grep "Missing" err
+
+# check needs device
+not fsadm check 2>err
+grep "Missing" err
+
+# no command at all (prints usage, exits 0)
+fsadm >out
+grep -i "Utility to resize" out
+
+# LVM_BINARY must be absolute path
+LVM_BINARY="relative/path/lvm" not fsadm check "$dev_vg_lv" 2>err
+grep "must be an absolute path" err
+
+# DMSETUP_BINARY must be absolute path
+DMSETUP_BINARY="relative/dmsetup" not fsadm check "$dev_vg_lv" 2>err
+grep "must be an absolute path" err
+
+# non-root-owned fake binary is rejected
+FAKE_DIR=$(mktemp -d)
+FAKE_BIN="$FAKE_DIR/lvm"
+echo "#!/bin/sh" > "$FAKE_BIN"
+chmod 755 "$FAKE_BIN"
+chown nobody "$FAKE_BIN"
+LVM_BINARY="$FAKE_BIN" not fsadm check "$dev_vg_lv" 2>err
+grep -i "owned by root" err
+rm -rf "$FAKE_DIR"
+
+# world-writable binary is rejected (use real lvm path)
+REAL_LVM=$(command -v lvm)
+FAKE_DIR=$(mktemp -d)
+FAKE_BIN="$FAKE_DIR/lvm"
+cp "$REAL_LVM" "$FAKE_BIN"
+chmod 757 "$FAKE_BIN"
+chown root:root "$FAKE_BIN"
+LVM_BINARY="$FAKE_BIN" not fsadm check "$dev_vg_lv" 2>err
+grep -i "must not be group or world writable" err
+rm -rf "$FAKE_DIR"
+
+# poisoned _FSADM_YES is sanitized (injected value != "-y" is reset)
+_FSADM_YES="--inject" fsadm 2>/dev/null || true
+
+# poisoned _FSADM_EXTOFF is sanitized (injected value != 1 is reset)
+_FSADM_EXTOFF="evil" fsadm 2>/dev/null || true
+
+# malformed size values are rejected when fs is present
+if check_missing ext2; then
+	mkfs.ext2 -b4096 "$dev_vg_lv"
+	not fsadm resize "$dev_vg_lv" "10foo" 2>err
+	grep "Invalid size" err
+	not fsadm resize "$dev_vg_lv" "abc" 2>err
+	grep "Invalid size" err
+	not fsadm resize "$dev_vg_lv" '$(echo 10)M' 2>err
+	grep "Invalid size" err
+	not fsadm resize "$dev_vg_lv" '10;reboot' 2>err
+	grep "Invalid size" err
+fi
+
 if check_missing ext2; then
 	mkfs.ext2 -b4096 -j "$dev_vg_lv"
 
