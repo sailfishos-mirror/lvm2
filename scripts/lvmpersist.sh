@@ -551,7 +551,7 @@ check_devices() {
 	test "$err" -eq 1 && exit 1
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
-		which mpathpersist > /dev/null || errorexit "mpathpersist command not found."
+		command -v mpathpersist > /dev/null || errorexit "mpathpersist command not found."
 		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null; then
 			echo "To use persistent reservations with multipath, run:"
 			echo "  mpathconf --option reservation_key:file"
@@ -560,12 +560,13 @@ check_devices() {
 	fi
 
 	if [[ $FOUND_SCSI -eq 1 ]]; then
-		which sg_persist > /dev/null || errorexit "sg_persist command not found."
-		which sg_turs > /dev/null || errorexit "sg_turs command not found."
+		command -v sg_persist > /dev/null || errorexit "sg_persist command not found."
+		command -v sg_turs > /dev/null || errorexit "sg_turs command not found."
 	fi
 
 	if [[ $FOUND_NVME -eq 1 ]]; then
-		which nvme > /dev/null || errorexit "nvme command not found."
+		command -v nvme > /dev/null || errorexit "nvme command not found."
+		command -v jq > /dev/null || errorexit "jq command not found."
 	fi
 
 	# Sometimes a device will return a Unit Attention error
