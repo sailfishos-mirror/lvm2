@@ -1059,7 +1059,7 @@ usage() {
 #
 # BEGIN SCRIPT
 #
-PATH="/sbin:/usr/sbin:/bin:/usr/bin:$PATH"
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
 SCRIPTNAME=$(basename "$0")
 
 if [ $# -lt 1 ]; then
