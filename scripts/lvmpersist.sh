@@ -1143,45 +1143,35 @@ while true
 do
 	case "$1" in
 	--ourkey)
-		OURKEY=$2;
-		shift; shift
+		OURKEY=$2; shift
 		;;
 	--key)
-		KEY=$2;
-		shift; shift
+		KEY=$2; shift
 		;;
 	--removekey)
-		REMKEY=$2;
-		shift; shift
+		REMKEY=$2; shift
 		;;
 	--ptpl)
 		PTPL=1
-		shift
 		;;
 	--access)
-		ACCESS=$2
-		shift; shift;
+		ACCESS=$2; shift
 		;;
 	--prtype)
-		PRTYPE_ARG=$2
-		shift; shift;
+		PRTYPE_ARG=$2; shift
 		;;
 	--device)
 		LAST_DEVICE=$2
-		DEVICES+=("$LAST_DEVICE")
-		shift; shift
+		DEVICES+=("$LAST_DEVICE"); shift
 		;;
 	--vg)
-		VGNAME=$2;
-		shift; shift
+		VGNAME=$2; shift
 		;;
 	--debug)
 		set -x
-		shift
 		;;
 	-h|--help)
 		usage
-		shift
 		exit 0
 		;;
 	--)
@@ -1192,7 +1182,8 @@ do
 		echo "Unknown option \"$1\."
 		exit 1
 		;;
-    esac
+	esac
+	shift
 done
 
 #
