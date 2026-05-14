@@ -92,16 +92,14 @@ key_is_on_device_nvme() {
 	FINDKEY_DEC=$(printf '%u' "$FINDKEY")
 
 	if nvme resv-report --eds -o json "$dev" 2>/dev/null | jq -e ".regctlext[] | select(.rkey == ${FINDKEY_DEC})" > /dev/null 2>&1; then
-		true
-		return
+		return 0
 	fi
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		errorexit "$cmd resv-report error on $dev"
 	fi
 
-	false
-	return
+	return 1
 }
 
 key_is_on_device_scsi() {
@@ -110,16 +108,14 @@ key_is_on_device_scsi() {
 	FINDKEY=" $FINDKEY$"
 
 	if "$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null | grep -q "${FINDKEY}"; then
-		true
-		return
+		return 0
 	fi
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		errorexit "$cmd read-keys error on $dev"
 	fi
 
-	false
-	return
+	return 1
 }
 
 key_is_on_device() {
@@ -198,15 +194,13 @@ get_dev_reservation_holder_nvme() {
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		logmsg "nvme resv-report error on $dev"
 		HOLDER=0
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report holder output not found $dev"
 		HOLDER=0
-		false
-		return
+		return 1
 	fi
 
 	HOLDER=$str
@@ -229,8 +223,7 @@ get_dev_reservation_holder_scsi() {
 			logmsg "$cmd read-reservation error on $dev"
 			HOLDER=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
@@ -240,8 +233,7 @@ get_dev_reservation_holder_scsi() {
 			logmsg "$cmd read-reservation holder output not found $dev"
 			HOLDER=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	HOLDER="${str:4}"
@@ -275,16 +267,14 @@ get_dev_reservation_nvme() {
 		logmsg "nvme resv-report error on $dev"
 		DEV_PRDESC=error
 		DEV_PRTYPE=0
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report no reservation type for $dev"
 		DEV_PRDESC=error
 		DEV_PRTYPE=0
-		false
-		return
+		return 1
 	fi
 
 	case "$str" in
@@ -339,8 +329,7 @@ get_dev_reservation_scsi() {
 			DEV_PRDESC=error
 			DEV_PRTYPE=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
@@ -352,8 +341,7 @@ get_dev_reservation_scsi() {
 			DEV_PRDESC=error
 			DEV_PRTYPE=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	# Output format differs between commands:
@@ -417,24 +405,20 @@ no_reservation_held_nvme() {
 	get_dev_reservation_nvme "$dev"
 
 	if [[ "$DEV_PRDESC" == "none" ]]; then
-		true
-		return
+		return 0
 	fi
 
-	false
-	return
+	return 1
 }
 
 no_reservation_held_scsi() {
 	dev=$1
 
 	if "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -q "there is NO reservation held"; then
-		true
-		return
+		return 0
 	fi
 
-	false
-	return
+	return 1
 }
 
 no_reservation_held() {
@@ -452,12 +436,10 @@ device_supports_type_str_nvme() {
 	dev=$1
 
 	if nvme resv-report --eds "$dev" > /dev/null 2>&1; then
-		true
-		return
+		return 0
 	fi
 
-	false
-	return
+	return 1
 }
 
 device_supports_type_str_scsi() {
@@ -485,8 +467,7 @@ device_supports_type_str_scsi() {
 		;;
 	*)
 		logmsg "unknown type string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
-		false
-		return
+		return 1
 		;;
 	esac
 
@@ -494,16 +475,14 @@ device_supports_type_str_scsi() {
 	# sg_persist works on mpath devs, but mpathpersist doesn't work.
 
 	if sg_persist --in --report-capabilities "$dev" 2>/dev/null | grep -q "${SUPPORTED}"; then
-		true
-		return
+		return 0
 	fi
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		logmsg "sg_persist report-capabilities error on $dev"
 	fi
 
-	false
-	return
+	return 1
 }
 
 device_supports_type_str() {
@@ -621,8 +600,7 @@ do_register_nvme() {
 	if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
 		if ! nvme resv-register --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
 			logmsg "$cmd register error on $dev"
-			false
-			return
+			return 1
 		fi
 	fi
 }
@@ -636,8 +614,7 @@ do_register_scsi() {
 
 	if ! "$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
 		logmsg "$cmd register error on $dev"
-		false
-		return
+		return 1
 	fi
 }
 
