@@ -16,6 +16,70 @@ DMSETUP=${DMSETUP_BINARY:-dmsetup}
 
 IFS_NL='
 '
+
+usage() {
+	cat <<-EOF
+	  ${SCRIPTNAME}: use persistent reservations on devices in an LVM VG.
+
+	  ${SCRIPTNAME} start --ourkey KEY DEST
+	      Register key and reserve device(s).
+
+	  ${SCRIPTNAME} start --ourkey KEY --removekey REMKEY DEST
+	      Register key and reserve device(s), replacing reservation holder by prempt-abort.
+
+	  ${SCRIPTNAME} stop --ourkey KEY DEST
+	      Unregister key, dropping reservation.
+
+	  ${SCRIPTNAME} remove --ourkey KEY --removekey REMKEY DEST
+	      Preempt-abort a key.
+
+	  ${SCRIPTNAME} clear --ourkey KEY DEST
+	      Release reservation and clear registered keys.
+
+	  ${SCRIPTNAME} devtest DEST
+	      Test if devices support PR.
+
+	  ${SCRIPTNAME} check-key --key KEY DEST
+	      Check if a key is registered.
+
+	  ${SCRIPTNAME} read-keys DEST
+	      Display registered keys.
+
+	  ${SCRIPTNAME} read-reservation DEST
+	      Display reservation.
+
+	  ${SCRIPTNAME} read DEST
+	      Display registered keys and reservation.
+
+	  Options:
+	      --ourkey KEY         KEY is the local key.
+	      --removekey REMKEY   REMKEY is another host's key to remove.
+	      --key KEY            KEY is any key to check.
+	      --access ex|sh      Access type: ex (exclusive) for a local VG,
+	                           sh (shared) for a shared VG.
+	      --prtype PRTYPE      Use only a specific PRTYPE, an alternative to --access.
+	      --ptpl               Enable persist through power loss when starting.
+	      --debug              Enable shell debugging.
+
+	  DEST:
+	      --device PATH ...    One or more devices to operate on.
+	                           (Repeat this option to use multiple devices.)
+	      --vg VGNAME          One VG to operate on. All PVs in the VG are used.
+	      --vg VGNAME --device PATH ...
+	                           One or more devices to operate on, and a VG name
+	                           to use as an identifier for the set of devices.
+
+	  PRTYPE: persistent reservation type (use abbreviation with --prtype).
+	      WE:   Write Exclusive
+	      EA:   Exclusive Access
+	      WERO: Write Exclusive - registrants only (not yet supported)
+	      EARO: Exclusive Access - registrants only (not yet supported)
+	      WEAR: Write Exclusive - all registrants
+	      EAAR: Exclusive Access - all registrants
+
+	EOF
+}
+
 error() {
 	echo "  ${SCRIPTNAME}: $1" >&2
 }
@@ -965,78 +1029,6 @@ do_readreservation() {
 			echo "Device $dev: reservation: $DEV_PRDESC holder $HOLDER"
 		fi
 	done
-}
-
-usage() {
-	echo "${SCRIPTNAME}: use persistent reservations on devices in an LVM VG."
-	echo ""
-	echo "${SCRIPTNAME} start --ourkey KEY DEST"
-	echo "	Register key and reserve device(s)."
-	echo ""
-	echo "${SCRIPTNAME} start --ourkey KEY --removekey REMKEY DEST"
-	echo "	Register key and reserve device(s), replacing reservation holder by prempt-abort."
-	echo ""
-	echo "${SCRIPTNAME} stop --ourkey KEY DEST"
-	echo "	Unregister key, dropping reservation."
-	echo ""
-	echo "${SCRIPTNAME} remove --ourkey KEY --removekey REMKEY DEST"
-	echo "	Preempt-abort a key."
-	echo ""
-	echo "${SCRIPTNAME} clear --ourkey KEY DEST" 
-	echo "	Release reservation and clear registered keys."
-	echo ""
-	echo "${SCRIPTNAME} devtest DEST"
-	echo "	Test if devices support PR."
-	echo ""
-	echo "${SCRIPTNAME} check-key --key KEY DEST"
-	echo "	Check if a key is registered."
-	echo ""
-	echo "${SCRIPTNAME} read-keys DEST"
-	echo "	Display registered keys."
-	echo ""
-	echo "${SCRIPTNAME} read-reservation DEST" 
-	echo "	Display reservation."
-	echo ""
-	echo "${SCRIPTNAME} read DEST"
-	echo "	Display registered keys and reservation."
-	echo ""
-	echo "Options:"
-	echo "    --ourkey KEY"
-	echo "        KEY is the local key."
-	echo "    --removekey REMKEY"
-	echo "        REMKEY is a another host's key to remove."
-	echo "    --key KEY"
-	echo "        KEY is any key to check."
-	echo "    --access ex|sh"
-	echo "        Access type: ex (exclusive) for a local VG, sh (shared) for a shared VG."
-	echo "        Translates to a specific PRTYPE for each device as appropriate (usually"
-	echo "        WE for ex and WEAR for sh.)"
-	echo "    --prtype PRTYPE"
-	echo "        Use only a specific PRTYPE, an alternative to --access."
-	echo "    --ptpl"
-	echo "        Enable persist through power loss when starting."
-	echo "    --debug"
-	echo "        Enable shell debugging."
-	echo ""
-	echo "DEST:"
-	echo "    --device PATH ..."
-	echo "        One or more devices to operate on."
-	echo "        (Repeat this option to use multiple devices.)"
-	echo "    --vg VGNAME"
-	echo "        One VG to operate on. All PVs in the VG are used."
-	echo "        (An lvm command is run to find all the PVs.)"
-	echo "    --vg VGNAME --device PATH ..."
-	echo "        One or more devices to operate on, and a VG name to use"
-	echo "        as an identifier for the set of devices."
-	echo ""
-	echo "PRTYPE: persistent reservation type (use abbreviation with --prtype)."
-	echo "        WE: Write Exclusive"
-	echo "        EA: Exclusive Access"
-	echo "        WERO: Write Exclusive – registrants only (not yet supported)"
-	echo "        EARO: Exclusive Access – registrants only (not yet supported)"
-	echo "        WEAR: Write Exclusive – all registrants"
-	echo "        EAAR: Exclusive Access – all registrants"
-	echo ""
 }
 
 validate_override() {
