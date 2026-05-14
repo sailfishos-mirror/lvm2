@@ -1436,6 +1436,14 @@ fi
 
 check_devices
 
+cleanup() {
+	trap '' 1 2 15
+	test -n "$OURKEY" && undo_register
+	exit 1
+}
+
+trap "cleanup" 1 2 15
+
 if [[ "$DO_START" -eq 1 && -n "$REMKEY" ]]; then
 	do_takeover
 elif [[ "$DO_START" -eq 1 ]]; then
