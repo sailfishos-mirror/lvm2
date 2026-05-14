@@ -305,7 +305,7 @@ get_dev_reservation_nvme() {
 		true
 		;;
 	*)
-		echo "Unknown PR value"
+		error "Unknown PR value."
 		exit 1
 		;;
 	esac
@@ -630,12 +630,12 @@ do_register() {
 do_takeover() {
 
 	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
+		error "Missing required option: --ourkey."
 		exit 1
 	fi
 
 	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
+		error "Missing required option: --removekey."
 		exit 1
 	fi
 
@@ -691,7 +691,7 @@ do_start() {
 	err=0
 
 	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
+		error "Missing required option: --ourkey."
 		exit 1
 	fi
 
@@ -763,7 +763,7 @@ do_stop() {
 	err=0
 
 	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
+		error "Missing required option: --ourkey."
 		exit 1
 	fi
 
@@ -797,7 +797,7 @@ do_stop() {
 
 do_clear() {
 	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
+		error "Missing required option: --ourkey."
 		exit 1
 	fi
 
@@ -809,7 +809,7 @@ do_clear() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		if ! device_supports_type_str "$dev" "$type_str"; then
-			echo "Device $dev: does not support PR"
+			error "Device $dev: does not support PR"
 			continue
 		fi
 		if ! key_is_on_device "$dev" "$OURKEY" ; then
@@ -858,12 +858,12 @@ do_remove() {
 	err=0
 
 	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
+		error "Missing required option: --ourkey."
 		exit 1
 	fi
 
 	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
+		error "Missing required option: --removekey."
 		exit 1
 	fi
 
@@ -1124,13 +1124,13 @@ case "$CMD" in
 		exit 0
 		;;
 	*)
-		echo "Unknown command: $CMD."
+		error "Unknown command: $CMD."
 		exit 1
 		;;
 esac
 
 if [ "$UID" != 0 ] && [ "$EUID" != 0 ] && [ "$CMD" != "help" ]; then
-	echo "${SCRIPTNAME} must be run as root."
+	error "must be run as root."
 	exit 1
 fi
 
@@ -1179,7 +1179,7 @@ do
 		break
 		;;
 	*)
-		echo "Unknown option \"$1\."
+		error "Unknown option \"$1\"."
 		exit 1
 		;;
 	esac
@@ -1191,22 +1191,22 @@ done
 #
 
 if [[ -z "$LAST_DEVICE" && -z "$VGNAME" ]]; then
-	echo "Missing required option: --vg or --device."
+	error "Missing required option: --vg or --device."
 	exit 1
 fi
 
 if [[ -n "$PRTYPE_ARG" && -n "$ACCESS" ]]; then
-	echo "Set --prtype or --access, not both."
+	error "Set --prtype or --access, not both."
 	exit 1
 fi
 
 if [[ "$DO_CHECKKEY" -eq 1 && -z "$KEY" ]]; then
-	echo "Missing required option: --key"
+	error "Missing required option: --key."
 	exit 1
 fi
 
 if [[ "$DO_CHECKKEY" -eq 0 && -n "$KEY" ]]; then
-	echo "Invalid option: --key"
+	error "Invalid option: --key."
 	exit 1
 fi
 
