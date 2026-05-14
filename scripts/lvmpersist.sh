@@ -12,23 +12,24 @@ set -o pipefail
 
 # user may override lvm location by setting LVM_BINARY
 LVM=${LVM_BINARY:-lvm}
+DMSETUP=${DMSETUP_BINARY:-dmsetup}
 
 IFS_NL='
 '
-
-errorexit() {
-	echo "  ${SCRIPTNAME}: $1"
-	if [[ "$DO_START" -eq 1 || "$DO_STOP" -eq 1 || "$DO_REMOVE" -eq 1 ]]; then
-		logger "${SCRIPTNAME}: $1"
-	fi
-	exit 1
+error() {
+	echo "  ${SCRIPTNAME}: $1" >&2
 }
 
 logmsg() {
-	echo "  ${SCRIPTNAME}: $1"
+	error "$@"
 	if [[ "$DO_START" -eq 1 || "$DO_STOP" -eq 1 || "$DO_REMOVE" -eq 1 ]]; then
 		logger "${SCRIPTNAME}: $1"
 	fi
+}
+
+errorexit() {
+	logmsg "$@"
+	exit 1
 }
 
 # nvme commands
@@ -532,7 +533,7 @@ check_devices() {
 		/dev/dm-*)
 			;&
 		/dev/mapper*)
-			MAJORMINOR=$(dmsetup info --noheadings -c -o major,minor "$dev")
+			MAJORMINOR=$("$DMSETUP" info --noheadings -c -o major,minor "$dev")
 			read -r <"/sys/dev/block/$MAJORMINOR/dm/uuid" DM_UUID 2>&1
 			if [[ $DM_UUID == *"mpath-"* ]]; then
 				FOUND_MPATH=1
@@ -1056,6 +1057,26 @@ usage() {
 	echo ""
 }
 
+validate_override() {
+	local MODE OPATH VAL
+
+	VAL=${!1-}
+	test -z "$VAL" && return 0
+	test "${VAL#/}" != "$VAL" ||
+		errorexit "$1 must be an absolute path."
+
+	# -f is sufficient here, stat below catches non-existent paths
+	if ! OPATH=$(readlink -f "$VAL") ||
+	   ! MODE=$(stat -c '%u %a' "$OPATH") ||
+	   test "${MODE%% *}" != "0"; then
+		errorexit "$1 \"$VAL\" must be accessible and owned by root."
+	fi
+
+	MODE=${MODE##* }
+	test $(( (MODE / 10 % 10 & 2) | (MODE % 10 & 2) )) -eq 0 ||
+		errorexit "$1 \"$OPATH\" must not be group or world writable."
+}
+
 #
 # BEGIN SCRIPT
 #
@@ -1066,6 +1087,10 @@ if [ $# -lt 1 ]; then
 	usage
 	exit 0
 fi
+
+# user may override lvm location by setting LVM_BINARY
+validate_override DMSETUP_BINARY
+validate_override LVM_BINARY
 
 DO_START=0
 DO_STOP=0
