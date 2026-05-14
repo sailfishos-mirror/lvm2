@@ -45,19 +45,19 @@ set_cmd() {
 	case "$dev" in
 	  /dev/nvme*)
 		cmd="nvme"
-		cmdopts=""
+		cmdopts=()
 		;;
 	  /dev/dm-*)
 		cmd="mpathpersist"
-		cmdopts=""
+		cmdopts=()
 		;;
 	  /dev/mapper*)
 		cmd="mpathpersist"
-		cmdopts=""
+		cmdopts=()
 		;;
 	  *)
 		cmd="sg_persist"
-		cmdopts="--no-inquiry"
+		cmdopts=("--no-inquiry")
 		;;
 	esac
 }
@@ -109,7 +109,7 @@ key_is_on_device_scsi() {
 	# end-of-line matching required to avoid 0x123ab matching 0x123abc
 	FINDKEY=" $FINDKEY$"
 
-	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q "${FINDKEY}"; then
+	if "$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null | grep -q "${FINDKEY}"; then
 		true
 		return
 	fi
@@ -162,7 +162,7 @@ get_key_list_scsi() {
 		no_keys_msg="there are NO registered reservation keys"
 	fi
 
-	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q $no_keys_msg; then
+	if "$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null | grep -q "$no_keys_msg"; then
 		KEYS=""
 		return
 	fi
@@ -170,7 +170,7 @@ get_key_list_scsi() {
 	# sort with -u eliminates repeated keys listed with multipath
 
 	# shellcheck disable=SC2207 # intentional split of key values
-	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep "    0x" | sort -u | xargs ) )
+	KEYS=( $("$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null | grep "    0x" | sort -u | xargs ) )
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		logmsg "$cmd read-keys error on $dev"
@@ -220,7 +220,7 @@ get_dev_reservation_holder_scsi() {
 
 	set_cmd "$dev"
 
-	str=$( $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "Key\s*=\s*0x" | xargs )
+	str=$( "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "Key\s*=\s*0x" | xargs )
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		if no_reservation_held "$dev"; then
@@ -326,7 +326,7 @@ get_dev_reservation_nvme() {
 get_dev_reservation_scsi() {
 	dev=$1
 
-	str=$( $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type" )
+	str=$( "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type" )
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		if no_reservation_held "$dev"; then
@@ -426,7 +426,7 @@ no_reservation_held_nvme() {
 no_reservation_held_scsi() {
 	dev=$1
 
-	if $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -q "there is NO reservation held"; then
+	if "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -q "there is NO reservation held"; then
 		true
 		return
 	fi
@@ -595,7 +595,7 @@ undo_register() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
 	done
@@ -603,16 +603,16 @@ undo_register() {
 
 do_register_nvme() {
 	dev=$1
-
+	set_cmd "$dev"
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+='--cptpl=1'
+		cmdopts+=("--cptpl=1")
 	fi
 
 	# If our previous key is still registered, then we must use
 	# rrega=2 and iekey.  If our previous key has been removed,
 	# then we must use rrega=0.
 
-	if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
+	if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
 		if ! nvme resv-register --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
 			logmsg "$cmd register error on $dev"
 			false
@@ -624,12 +624,11 @@ do_register_nvme() {
 do_register_scsi() {
 	dev=$1
 	set_cmd "$dev"
-
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+='--param-aptpl'
+		cmdopts+=("--param-aptpl")
 	fi
 
-	if ! $cmd $cmdopts --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
+	if ! "$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
 		logmsg "$cmd register error on $dev"
 		false
 		return
@@ -692,9 +691,10 @@ do_takeover() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
 		fi
 
+		# shellcheck disable=SC2181
 		if [[ "$?" -ne 0 ]]; then
 			logmsg "start $GROUP failed to preempt-abort $REMKEY on $dev."
 			undo_register
@@ -763,9 +763,10 @@ do_start() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --rtype="$type" --racqa=0 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
 		fi
 
+		# shellcheck disable=SC2181
 		if [[ "$?" -ne 0 ]]; then
 			logmsg "start $GROUP failed to reserve $dev."
 			undo_register
@@ -796,7 +797,7 @@ do_stop() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
@@ -846,7 +847,7 @@ do_clear() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-release --crkey="$OURKEY" --rrela=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 
 		test $? -eq 0 || logmsg "$cmd clear error on $dev"
@@ -899,7 +900,7 @@ do_remove() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$DEV_PRTYPE" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$DEV_PRTYPE" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$DEV_PRTYPE" "$dev" >/dev/null 2>&1
 		fi
 
 		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
@@ -976,7 +977,7 @@ do_readreservation() {
 			continue
 		fi
 		get_dev_reservation "$dev"
-		get_dev_reservation_holder "$dev" $DEV_PRDESC
+		get_dev_reservation_holder "$dev" "$DEV_PRDESC"
 		if [[ "$DEV_PRDESC" == "WEAR" || "$DEV_PRDESC" == "EAAR" ]]; then
 			echo "Device $dev: reservation: $DEV_PRDESC"
 		else
@@ -1105,7 +1106,7 @@ DO_READ=0
 CMD=$1
 shift
 
-case $CMD in
+case "$CMD" in
 	start)
 		DO_START=1
 		;;
@@ -1159,7 +1160,7 @@ eval set -- "$OPTIONS"
 
 while true
 do
-	case $1 in
+	case "$1" in
 	--ourkey)
 		OURKEY=$2;
 		shift; shift
