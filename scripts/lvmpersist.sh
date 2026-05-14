@@ -534,7 +534,7 @@ check_devices() {
 			;&
 		/dev/mapper*)
 			MAJORMINOR=$("$DMSETUP" info --noheadings -c -o major,minor "$dev")
-			read -r <"/sys/dev/block/$MAJORMINOR/dm/uuid" DM_UUID 2>&1
+			read -r <"/sys/dev/block/$MAJORMINOR/dm/uuid" DM_UUID 2>/dev/null
 			if [[ $DM_UUID == *"mpath-"* ]]; then
 				FOUND_MPATH=1
 			else
