@@ -1,5 +1,7 @@
-Version 2.03.41 - 
-==================
+Version 2.03.41 - 15th May 2026
+===============================
+  Allow `lvchange --syncaction repair` on RAID LVs with integrity.
+  Fix adopt result routing in lvmlockd for lockspace start actions. (2.03.25)
   Fix gcd division-by-zero and lcm overflow in lvm-maths.
   Fix dual AUTOTYPE matching logic in lvmcmdline.
   Fix nr_dirty tracking, underflows and error-path leak in bcache.
@@ -16,6 +18,7 @@ Version 2.03.41 -
   Reset wwid_buf between duplicate device iterations in lvmcache.
   Read cache_pool_max_chunks as 64bit number.
   Add cppcheck and gccanalyze make targets.
+  Require exclusive lock on origin for snapshot merge.
 
 Version 2.03.40 - 28th April 2026
 =================================
