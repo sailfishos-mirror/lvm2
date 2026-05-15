@@ -4005,7 +4005,7 @@ static int _lvhealthstatus_disp(struct dm_report *rh, struct dm_pool *mem,
 	else if (lv_is_raid_type(lv)) {
 		if (!activation())
 			health = "unknown";
-		else if (!lv_raid_healthy(lv))
+		else if (!lv_raid_healthy(lv, NULL))
 			health = "refresh needed";
 		else if (lv_is_raid(lv)) {
 			if (lv_raid_mismatch_count(lv, &n) && n)
