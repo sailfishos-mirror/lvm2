@@ -847,19 +847,19 @@ char *device_id_system_read(struct cmd_context *cmd, struct device *dev, uint16_
 	case DEV_ID_TYPE_MPATH_UUID:
 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
 			stack;
-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "mpath-"))
+		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "mpath-"))
 			sysbuf[0] = '\0';
                 break;
 	case DEV_ID_TYPE_CRYPT_UUID:
 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
 			stack;
-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "CRYPT-"))
+		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "CRYPT-"))
 			sysbuf[0] = '\0';
                 break;
 	case DEV_ID_TYPE_LVMLV_UUID:
 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
 			stack;
-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "LVM-"))
+		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "LVM-"))
 			sysbuf[0] = '\0';
                 break;
 	case DEV_ID_TYPE_MD_UUID:
@@ -2547,17 +2547,17 @@ static void _replace_incorrect_dm_idtype(struct dev_use *du)
 		return;
 
 	/* Use the IDNAME value to determine the correct IDTYPE. */
-	if (dm_uuid_has_prefix(du->idname, "mpath-") && (du->idtype != DEV_ID_TYPE_MPATH_UUID)) {
+	if (_dm_uuid_has_prefix(du->idname, "mpath-") && (du->idtype != DEV_ID_TYPE_MPATH_UUID)) {
 		log_debug("replace incorrect mpath device id type for %u %s", du->idtype, du->idname);
 		du->idtype = DEV_ID_TYPE_MPATH_UUID;
 		return;
 	}
-	if (dm_uuid_has_prefix(du->idname, "CRYPT-") && (du->idtype != DEV_ID_TYPE_CRYPT_UUID)) {
+	if (_dm_uuid_has_prefix(du->idname, "CRYPT-") && (du->idtype != DEV_ID_TYPE_CRYPT_UUID)) {
 		log_debug("replace incorrect crypt device id type for %u %s", du->idtype, du->idname);
 		du->idtype = DEV_ID_TYPE_CRYPT_UUID;
 		return;
 	}
-	if (dm_uuid_has_prefix(du->idname, "LVM-") && (du->idtype != DEV_ID_TYPE_LVMLV_UUID)) {
+	if (_dm_uuid_has_prefix(du->idname, "LVM-") && (du->idtype != DEV_ID_TYPE_LVMLV_UUID)) {
 		log_debug("replace incorrect lvmlv device id type for %u %s", du->idtype, du->idname);
 		du->idtype = DEV_ID_TYPE_LVMLV_UUID;
 		return;
@@ -2681,9 +2681,9 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct 
 	 * by updating du->idtype to have the correct idtype based on the
 	 * idname dm prefix.
 	 */
-	if (((du->idtype == DEV_ID_TYPE_MPATH_UUID) && !dm_uuid_has_prefix(du->idname, "mpath-")) ||
-	    ((du->idtype == DEV_ID_TYPE_CRYPT_UUID) && !dm_uuid_has_prefix(du->idname, "CRYPT-")) ||
-	    ((du->idtype == DEV_ID_TYPE_LVMLV_UUID) && !dm_uuid_has_prefix(du->idname, "LVM")))
+	if (((du->idtype == DEV_ID_TYPE_MPATH_UUID) && !_dm_uuid_has_prefix(du->idname, "mpath-")) ||
+	    ((du->idtype == DEV_ID_TYPE_CRYPT_UUID) && !_dm_uuid_has_prefix(du->idname, "CRYPT-")) ||
+	    ((du->idtype == DEV_ID_TYPE_LVMLV_UUID) && !_dm_uuid_has_prefix(du->idname, "LVM")))
 		_replace_incorrect_dm_idtype(du);
 
 	/*
