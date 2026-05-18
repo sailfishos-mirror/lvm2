@@ -37,7 +37,7 @@ if not which vdo ; then
 	# enable expansion of aliases within script itself
 	shopt -s expand_aliases
 	alias vdo='lvm_vdo_wrapper'
-	export VDO_BINARY=lvm_vdo_wrapper
+	export VDO_BINARY=$(command -v lvm_vdo_wrapper)
 	echo "Using 'lvm_vdo_wrapper' emulation of 'vdo' manager."
 fi
 which mkfs.ext4 || skip
@@ -45,9 +45,6 @@ export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
 
 # Conversion can be made with this version of vdo driver
 aux have_vdo 6 2 3 || skip
-
-# With new upstream VDO conversion is not supported
-aux have_vdo 9 0 0 && skip
 
 aux prepare_devs 2 20000
 
@@ -98,6 +95,9 @@ vgremove -f $vg
 
 # ensure VDO device is not left in config file
 vdo remove $VDOCONF --force --name "$VDONAME" 2>/dev/null || true
+
+# Non-LV conversion requires modified vdoprepareforlvm compatible with kernel VDO version
+aux have_vdo 9 0 0 && exit 0
 
 aux wipefs_a "$dev1"
 
@@ -197,8 +197,8 @@ vdo create $VDOCONF --name "$VDONAME" --device "$TEST" --vdoSlabSize 128M --vdoL
 dmsetup table
 
 # Get VDO table line
-dmsetup table "$VDONAME" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee vdo-orig
-
+# strip device(5,6), dedup flag(10), name(12) for stable comparison
+dmsetup table "$VDONAME" | tr " " "\n" | sed -e '5,6d' -e '10d' -e '12d' | tee vdo-orig
 mkfs.ext4 -E nodiscard "$DM_DEV_DIR/mapper/$VDONAME"
 rm -f debug.log*
 
@@ -230,7 +230,7 @@ dmsetup table
 fsck -n "$DM_DEV_DIR/$vg/$lv"
 
 # Compare converted LV uses same VDO table line
-dmsetup table "$vg-${lv}_vpool-vpool" | tr " " "\n" | sed -e '5,6d' -e '12d' | tee new-vdo-lv
+dmsetup table "$vg-${lv}_vpool-vpool" | tr " " "\n" | sed -e '5,6d' -e '10d' -e '12d' | tee new-vdo-lv
 
 tail -n+3 vdo-orig >vdo-orig-3
 tail -n+3 new-vdo-lv >new-vdo-lv-3
