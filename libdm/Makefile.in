@@ -103,6 +103,8 @@ install: $(INSTALL_TYPE) install_include
 
 install_device-mapper: install
 
+install_lvm2:
+
 install_include: $(srcdir)/libdevmapper.h
 	$(SHOW) "    [INSTALL] $<"
 	$(Q) $(INSTALL_DATA) -D $< $(includedir)/$(<F)
