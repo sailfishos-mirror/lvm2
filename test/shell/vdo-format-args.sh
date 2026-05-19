@@ -96,7 +96,7 @@ test_vdo_format() {
 
 		# Sparse index uses larger on-disk index (10x more chapters for same indexMemory)
 		# leaving fewer slabs for data
-		test "$SPARSE_SLABS" -lt "$DENSE_SLABS" || \
+		test "$SPARSE_SLABS" -lt "$DENSE_SLABS" ||
 			die "$format_msg: sparse slab count ($SPARSE_SLABS) should be less than dense ($DENSE_SLABS)"
 	fi
 
@@ -115,7 +115,7 @@ test_vdo_format() {
 		test -n "$LARGE_SLAB_COUNT"
 
 		# Doubling slab size should roughly halve the slab count
-		test "$DENSE_SLABS" -gt "$LARGE_SLAB_COUNT" || \
+		test "$DENSE_SLABS" -gt "$LARGE_SLAB_COUNT" ||
 			die "$format_msg: slab count with 256MB ($LARGE_SLAB_COUNT) should be less than with 128MB ($DENSE_SLABS)"
 	fi
 

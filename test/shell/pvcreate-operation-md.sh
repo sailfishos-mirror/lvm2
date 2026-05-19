@@ -92,8 +92,8 @@ EOF
 	cat /sys/dev/block/$maj:$min/size
 
 	sysfs_alignment_offset="/sys/dev/block/$maj:$min/alignment_offset"
-	[ -f "$sysfs_alignment_offset" ] && \
-		alignment_offset=$(< "$sysfs_alignment_offset") || \
+	[ -f "$sysfs_alignment_offset" ] &&
+		alignment_offset=$(< "$sysfs_alignment_offset") ||
 		alignment_offset=0
 
 	fdisk -l "${mddev}" 2>/dev/null || true

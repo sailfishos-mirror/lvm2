@@ -35,9 +35,9 @@ DF="$DFDIR/system.devices"
 # which gets in the way of the test switching the
 # local system id.
 clear_df_systemid() {
-	if [[ -f $DF ]]; then
+	if [[ -f "$DF" ]]; then
 		sed -e "s|SYSTEMID=.||" "$DF" > tmpdf
-		cp tmpdf $DF
+		cp tmpdf "$DF"
 	fi
 }
 
