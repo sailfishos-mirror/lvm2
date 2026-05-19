@@ -141,9 +141,9 @@ static pthread_once_t _log_env_once = PTHREAD_ONCE_INIT;
 static void _init_log_env_vars(void)
 {
 	_abort_on_internal_errors =
-		strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0");
+		strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0") != 0;
 	_debug_with_line_numbers =
-		strcmp(getenv("DM_DEBUG_WITH_LINE_NUMBERS") ? : "0", "0");
+		strcmp(getenv("DM_DEBUG_WITH_LINE_NUMBERS") ? : "0", "0") != 0;
 }
 
 __attribute__((format(printf, 5, 0)))
@@ -161,7 +161,7 @@ static void _default_log_line(int level, const char *file,
 		if (level < _LOG_WARN)
 			out = stderr;
 
-		if (_debug_with_line_numbers)
+		if (_verbose && _debug_with_line_numbers)
 			fprintf(out, "%s:%d     ", file, line);
 
 		vfprintf(out, f, ap);
