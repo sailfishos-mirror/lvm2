@@ -19,7 +19,7 @@ MKFS=mkfs.ext2
 which $MKFS || skip
 
 fill() {
-	dd if=/dev/zero of="$DM_DEV_DIR/${2:-$vg1/lvol0}" bs=$1 count=1 oflag=direct || \
+	dd if=/dev/zero of="$DM_DEV_DIR/${2:-$vg1/lvol0}" bs=$1 count=1 oflag=direct ||
 		die "Snapshot does not fit $1"
 }
 

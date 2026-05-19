@@ -29,7 +29,7 @@ for fsid in $(ls /sys/fs/btrfs/ 2>/dev/null | grep -E '^[0-9a-f-]{36}$' || true)
 	nd=$(cat "/sys/fs/btrfs/$fsid/num_devices" 2>/dev/null)
 	test "${nd:-0}" -gt 1 && stale_btrfs_count=$((stale_btrfs_count + 1))
 done
-test "$stale_btrfs_count" -eq 0 || \
+test "$stale_btrfs_count" -eq 0 ||
 	skip "Found $stale_btrfs_count stale multi-device btrfs registration(s) in kernel (reboot to clear)"
 
 dev_vg_lv1="$DM_DEV_DIR/$vg/$lv1"
@@ -67,7 +67,7 @@ btrfs_path_major_minor()
 {
 	local STAT
 
-	STAT=$(stat --format "echo \$((0x%t)):\$((0x%T))" "$(readlink -e "$1")") || \
+	STAT=$(stat --format "echo \$((0x%t)):\$((0x%T))" "$(readlink -e "$1")") ||
 		die "Cannot get major:minor for \"$1\"."
 	eval "$STAT"
 }
@@ -109,7 +109,7 @@ btrfs_device_size() {
 	local dev=$1 mnt=$2
 	local devid
 
-	devid=$(btrfs_devid $dev)
+	devid=$(btrfs_devid "$dev")
 	btrfs device usage -b "$mnt" | grep -A1 "ID: $devid"$ | grep 'Device size:' \
 		| awk '{print $NF}'
 }

@@ -42,11 +42,11 @@ DF="$DFDIR/system.devices"
 aux lvmconf 'devices/scan = "/dev"' \
 	"global/event_activation = 1"
 
-if [ -e "/sys/block/$(basename $dev1)/dm" ]; then
-    bd1="$DM_DEV_DIR/mapper/$(basename $dev1)"
-    bd2="$DM_DEV_DIR/mapper/$(basename $dev2)"
-    bd3="$DM_DEV_DIR/mapper/$(basename $dev3)"
-    bd4="$DM_DEV_DIR/mapper/$(basename $dev4)"
+if [ -e "/sys/block/$(basename "$dev1")/dm" ]; then
+    bd1="$DM_DEV_DIR/mapper/$(basename "$dev1")"
+    bd2="$DM_DEV_DIR/mapper/$(basename "$dev2")"
+    bd3="$DM_DEV_DIR/mapper/$(basename "$dev3")"
+    bd4="$DM_DEV_DIR/mapper/$(basename "$dev4")"
 else
     bd1="$dev1"
     bd2="$dev2"
