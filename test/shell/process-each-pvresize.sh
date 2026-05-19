@@ -29,8 +29,8 @@ aux prepare_devs 14
 #
 # set up
 #
-# use use dev10 instead of dev1 because simple grep for
-# dev1 matchines dev10,dev11,etc
+# use dev10 instead of dev1 because simple grep for
+# dev1 matches dev10,dev11,etc
 #
 
 vgcreate $SHARED $vg1 "$dev10"
@@ -60,11 +60,11 @@ pvremove "$dev12"
 pvcreate "$dev14"
 
 #
-# test pvresize without orphans and and without non-pv devs
+# test pvresize without orphans and without non-pv devs
 #
 
 # For pvs in vgs, pvresize setphysicalvolumesize does not give us
-# the size requested, but reduces the requested size by some the
+# the size requested, but reduces the requested size by some
 # amount for alignment, metadata areas and pv headers.  So, when we resize
 # to 30M, the result is 28M, and when we resize to 20M, the result is 16M.
 # For orphans, the resulting size is the same as requested.

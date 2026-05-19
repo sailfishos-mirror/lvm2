@@ -99,7 +99,7 @@ check lv_field $vg/cpool cachesettings ""
 
 lvcreate -L10 -n $lv1 $vg
 lvconvert --metadataprofile "${PFILE}1" -y -H --cachepool $vg/cpool $vg/$lv1
-# chunk size 128k is replace with 512k from PFILE1
+# chunk size 128k is replaced with 512k from PFILE1
 check lv_field $vg/$lv1 chunksize "512.00k"
 # cachemode is from PFILE1
 check lv_field $vg/$lv1 cachemode "passthrough"

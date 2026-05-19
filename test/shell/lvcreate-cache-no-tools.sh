@@ -46,7 +46,7 @@ check_change_failed_() {
 
 	cat <<- EOF >fake-tool.sh
 #!/bin/sh
-exit
+exit 0
 EOF
 	chmod +x fake-tool.sh
 	# Activate without any check

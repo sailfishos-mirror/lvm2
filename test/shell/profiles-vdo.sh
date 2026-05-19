@@ -34,7 +34,7 @@ EOF
 
 aux prepare_vg 2 1000000
 
-# Check chunk_size is grabbed from configuration
+# Check vdo_use_compression is grabbed from configuration
 lvcreate --vdo -L5G --config 'allocation/vdo_use_compression=0' $vg/vdopool
 lvdisplay -m $vg/vdopool | tee out
 grep "Compression.*no" out
