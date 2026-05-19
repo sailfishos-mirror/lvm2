@@ -26,7 +26,8 @@ MSG_CMD_PROFILABLE_ONLY="customizable by command profile only, not metadata prof
 MSG_MDA_PROFILABLE_ONLY="customizable by metadata profile only, not command profile"
 
 # fail if the profile requested by --profile cmdline option is not present
-not pvs --profile nonexistent 2>&1 | grep "$MSG_FAILED_TO_APPLY_CMD_PROFILE"
+not pvs --profile nonexistent 2>msg
+grep "$MSG_FAILED_TO_APPLY_CMD_PROFILE" msg
 
 # config/checks=1: warning message about setting not being profilable +
 #                  summary error message about invalid profile
@@ -119,14 +120,14 @@ check lv_field $vg1/$lv1 lv_profile ""
 # dumpconfig and merged lvm.conf + profile
 aux lvmconf 'global/units="m"'
 aux profileconf extra_cmd_profile 'global/units="h"'
-lvm dumpconfig &>out
+lvm dumpconfig >out
 grep 'units="m"' out
 lvm dumpconfig --profile extra_cmd_profile --mergedconfig >out
 grep 'units="h"' out
 
 # dumpconfig --profilable output must be usable as a profile
 lvm dumpconfig --type profilable-command --file etc/profile/generated.profile
-pvs --profile generated &> msg
+pvs --profile generated 2>msg
 not grep "$MSG_NOT_PROFILABLE" msg
 not grep "$MSG_IGNORING_INVALID_CMD_PROFILE" msg
 
