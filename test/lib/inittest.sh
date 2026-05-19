@@ -84,8 +84,6 @@ LVM_TEST_NODEBUG=${LVM_TEST_NODEBUG:-0}
 LVM_TEST_LVM1=${LVM_TEST_LVM1:-0}
 LVM_TEST_FAILURE=${LVM_TEST_FAILURE:-0}
 LVM_TEST_MULTI_HOST=${LVM_TEST_MULTI_HOST:-0}
-# TODO: LVM_TEST_SHARED
-SHARED=${SHARED-}
 
 LVM_TEST_LVMLOCKD=${LVM_TEST_LVMLOCKD:-0}
 LVM_TEST_LVMLOCKD_TEST=${LVM_TEST_LVMLOCKD_TEST:-0}
@@ -169,7 +167,7 @@ if [[ "$SKIP_ROOT_DM_CHECK" -eq 0 ]]; then
 	[[ -n "$BASH" ]] && trap '{ set +vx; } 2>/dev/null; STACKTRACE; exit 1' ERR
 	trap '{ set +vx; } 2>/dev/null; aux teardown' EXIT # don't forget to clean up
 else
-	trap 'cd $TESTOLDPWD; rm -rf "${TESTDIR:?}"' EXIT
+	trap 'cd "$TESTOLDPWD"; rm -rf "${TESTDIR:?}"' EXIT
 fi
 
 cd "$TESTDIR"
@@ -192,7 +190,8 @@ TMPDIR="$TESTDIR/tmp"
 DM_ABORT_ON_INTERNAL_ERRORS=${DM_ABORT_ON_INTERNAL_ERRORS:-1}
 DM_DEBUG_WITH_LINE_NUMBERS=${DM_DEBUG_WITH_LINE_NUMBERS:-1}
 
-export DM_DEFAULT_NAME_MANGLING_MODE DM_DEV_DIR LVM_SYSTEM_DIR DM_ABORT_ON_INTERNAL_ERRORS
+export DM_DEFAULT_NAME_MANGLING_MODE DM_ABORT_ON_INTERNAL_ERRORS DM_DEBUG_WITH_LINE_NUMBERS
+export DM_DEV_DIR LVM_SYSTEM_DIR TMPDIR
 mkdir "$LVM_SYSTEM_DIR" "$DM_DEV_DIR"
 MACHINEID=$(uuidgen 2>/dev/null || echo "abcdefabcdefabcdefabcdefabcdefab")
 echo "${MACHINEID//-/}" > "$LVM_SYSTEM_DIR/machine-id"   # remove all '-'
@@ -202,10 +201,10 @@ if [[ -n "$LVM_TEST_DEVDIR" ]]; then
 elif [[ "$SKIP_ROOT_DM_CHECK" -eq 0 ]]; then
 	mknod "$DM_DEV_DIR/testnull" c 1 3 || die "mknod failed"
 	echo >"$DM_DEV_DIR/testnull" || \
-		die "Filesystem does support devices in $DM_DEV_DIR (mounted with nodev?)"
+		die "Filesystem does not support devices in \"$DM_DEV_DIR\" (mounted with nodev?)"
 	# dmsetup makes here needed control entry if still missing
 	dmsetup version || \
-		die "Dmsetup in $DM_DEV_DIR can't report version?"
+		die "Dmsetup in \"$DM_DEV_DIR\" can't report version?"
 fi
 
 echo "$TESTNAME" >TESTNAME
