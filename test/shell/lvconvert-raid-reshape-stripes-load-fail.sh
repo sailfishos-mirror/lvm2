@@ -72,12 +72,7 @@ df
 # Reshape it to 15 data stripes
 lvconvert --yes --stripes 15 $vg/$lv1
 aux disable_dev "$dev1"
-
-kill "${PIDS[@]}" 2>/dev/null || true
-wait "${PIDS[@]}" || true
-
-aux enable_dev "$dev2"
-#aux delay_dev "$dev2" 10 40 "$(get first_extent_sector "$dev2")"
+aux delay_dev "$dev2" 0 50
 check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
 check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
 check lv_first_seg_field $vg/$lv1 data_stripes 15

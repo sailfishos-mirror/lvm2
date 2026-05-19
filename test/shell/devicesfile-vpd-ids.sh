@@ -83,7 +83,7 @@ DFDIR="$LVM_SYSTEM_DIR/devices"
 mkdir -p "$DFDIR" || true
 DF="$DFDIR/system.devices"
 DFTMP="$DFDIR/system.devices_tmp"
-touch $DF
+touch "$DF"
 
 pvcreate "$DEV1"
 vgcreate $vg "$DEV1"

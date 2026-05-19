@@ -101,7 +101,7 @@ function _not_lvconvert
 	not check lv_first_seg_field $vg/$lv data_stripes $data_stripes
 	not check lv_first_seg_field $vg/$lv stripes $stripes
 
-	[ -n "$region_size" ] && \
+	[ -n "$region_size" ] &&
 		not check lv_field $vg/$lv regionsize $region_size
 	if [ "$wait_and_check" -eq 1 ]
 	then

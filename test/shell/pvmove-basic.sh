@@ -59,7 +59,7 @@ restore_lvs_() {
 lvs_not_changed_() {
 	for i in "${@}"; do
 		get lv_devices "$vg/$i" | tee out
-		diff "${i}_devs" out || \
+		diff "${i}_devs" out ||
 			(cat "${i}_devs"; die "Devices for LV $vg/$i differs!")
 	done
 }
@@ -72,7 +72,7 @@ check_and_cleanup_lvs_() {
 	not grep "^\[pvmove" out
 	vgchange -an $vg
 	lvremove -ff $vg
-	(dm_table | not grep $vg) || \
+	(dm_table | not grep $vg) ||
 	      die "ERROR: lvremove did leave some mappings in DM behind!"
 }
 

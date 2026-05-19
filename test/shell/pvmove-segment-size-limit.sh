@@ -56,7 +56,7 @@ lvs -ao+seg_size,seg_pe_ranges $vg
 test "$split_count" -eq 2 || die "Expected 2 splits, got $split_count"
 
 # Verify that the max segment size message appears
-grep -q "Pvmove max segment size.*4.* extent" pvmove.log || \
+grep -q "Pvmove max segment size.*4.* extent" pvmove.log ||
 	die "Expected to see max segment size configuration in log"
 
 # Verify LV is now on dev2+3+4
@@ -79,13 +79,13 @@ aux lvmconf "allocation/pvmove_max_segment_size_mb = 64"
 pvmove -i0 -vvv "$dev4" "$dev1" 2>&1 | tee pvmove-nosplit.log
 
 # This time we should NOT see splitting
-grep -q "within limit" pvmove-nosplit.log || \
+grep -q "within limit" pvmove-nosplit.log ||
 	die "Expected to see 'within limit' message with large segment size"
 
 # Should see zero splits
 split_count_nosplit=$(grep -c "Split segment.* at LE" pvmove-nosplit.log || true)
 echo "Number of splits with large limit: $split_count_nosplit"
-test "$split_count_nosplit" -eq 0 || \
+test "$split_count_nosplit" -eq 0 ||
 	die "Expected 0 splits with large limit, got $split_count_nosplit"
 
 # Verify LV is on dev1+2+3
