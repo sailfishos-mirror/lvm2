@@ -1278,8 +1278,9 @@ disable_dev() {
 
 	udev_wait
 	for dev in "$@"; do
-		maj=$(($(stat -L --printf=0x%t "$dev")))
-		min=$(($(stat -L --printf=0x%T "$dev")))
+		read -r maj min < <(stat -L --format '0x%t 0x%T' "$dev")
+		maj=$(( maj ))
+		min=$(( min ))
 		echo "Disabling device $dev ($maj:$min)"
 		notify="$notify $maj:$min"
 		if [[ -n "$error" ]]; then
