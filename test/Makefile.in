@@ -188,6 +188,9 @@ check_lvmlockd_test: .tests-stamp
 	$(call run_check,udev-lvmlockd-test)
 endif
 
+check_scripts:
+	$(srcdir)/lib/check_scripts.sh $(srcdir)/shell
+
 run-unit-test unit-test unit/unit-test:
 	@echo "    [MAKE] $(@F)"
 	$(Q) $(MAKE) -C $(top_builddir) $(@F)
