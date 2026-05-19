@@ -127,7 +127,7 @@ static void _default_log_line(int level, const char *file,
 			_debug_with_line_numbers =
 				strcmp(getenv("DM_DEBUG_WITH_LINE_NUMBERS") ? : "0", "0");
 
-		if (_debug_with_line_numbers)
+		if (_verbose && _debug_with_line_numbers)
 			fprintf(out, "%s:%d     ", file, line);
 
 		vfprintf(out, f, ap);
