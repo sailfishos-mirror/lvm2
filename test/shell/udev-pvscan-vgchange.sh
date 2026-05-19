@@ -100,7 +100,7 @@ BDEV3=$(basename "$dev3")
 wipe_all
 touch "$DF"
 for dev in "${REAL_DEVICES[@]}"; do
-	pvcreate $dev
+	pvcreate "$dev"
 done
 
 # 1 dev, 1 vg, 1 lv
@@ -202,8 +202,8 @@ vgremove -y $vg3
 # 3 devs, 1 vg, 4 lvs, concurrent pvscans, metadata on only 1 PV
 
 wipe_all
-rm $DF
-touch $DF
+rm "$DF"
+touch "$DF"
 pvcreate --metadatacopies 0 "$dev1"
 pvcreate --metadatacopies 0 "$dev2"
 pvcreate "$dev3"
@@ -372,7 +372,7 @@ wait_md_create() {
 	echo "$md" > WAIT_MD_DEV
 }
 
-test -f /proc/mdstat && grep -q raid1 /proc/mdstat || \
+test -f /proc/mdstat && grep -q raid1 /proc/mdstat ||
        modprobe raid1 || skip
 
 wipe_all
@@ -495,7 +495,7 @@ echo "$PRODUCT_UUID1" > "$SYS_DIR/devices/virtual/dmi/id/product_uuid"
 vgimportdevices $vg11
 
 grep $PRODUCT_UUID1 "$DF"
-grep $PVID1 "$DF"
+grep "$PVID1" "$DF"
 grep $WWID1 "$DF"
 grep "$dev1" "$DF"
 
@@ -523,7 +523,7 @@ grep "$OPVID1" out
 cat "$DF"
 grep $PRODUCT_UUID2 "$DF"
 not grep $PRODUCT_UUID1 "$DF"
-grep $PVID1 "$DF"
+grep "$PVID1" "$DF"
 grep $WWID2 "$DF"
 not grep $WWID1 "$DF"
 grep "$dev1" "$DF"

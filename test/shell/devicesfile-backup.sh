@@ -27,82 +27,82 @@ mkdir -p "$BKDIR" || true
 DF="$DFDIR/system.devices"
 
 vgcreate $vg "$dev1"
-diff $DF $BKDIR/*.0001
+diff "$DF" "$BKDIR"/*.0001
 
 pvcreate "$dev2"
-diff $DF $BKDIR/*.0002
+diff "$DF" "$BKDIR"/*.0002
 
 lvmdevices --deldev "$dev2"
-diff $DF $BKDIR/*.0003
+diff "$DF" "$BKDIR"/*.0003
 
 lvmdevices --adddev "$dev2"
-diff $DF $BKDIR/*.0004
+diff "$DF" "$BKDIR"/*.0004
 
 # DF update and backup when an entry is manually removed
-cat $DF | grep -v "$dev2" > tmp1
-cp tmp1 $DF
+cat "$DF" | grep -v "$dev2" > tmp1
+cp tmp1 "$DF"
 pvs
-diff $DF $BKDIR/*.0005
+diff "$DF" "$BKDIR"/*.0005
 
 lvmdevices --adddev "$dev2"
-diff $DF $BKDIR/*.0006
+diff "$DF" "$BKDIR"/*.0006
 
 # DF update and abckup when HASH value changes
-sed -e "s|HASH=.......|HASH=1111111|" $DF > tmp1
-cp tmp1 $DF
+sed -e "s|HASH=.......|HASH=1111111|" "$DF" > tmp1
+cp tmp1 "$DF"
 pvs
-not grep "HASH=1111111" $DF
-diff $DF $BKDIR/*.0007
+not grep "HASH=1111111" "$DF"
+diff "$DF" "$BKDIR"/*.0007
 
 # DF update and backup when old DF has no HASH value
-cat $DF | grep -v HASH > tmp1
-cp tmp1 $DF
+cat "$DF" | grep -v HASH > tmp1
+cp tmp1 "$DF"
 pvs
-grep HASH $DF
-diff $DF $BKDIR/*.0008
+grep HASH "$DF"
+diff "$DF" "$BKDIR"/*.0008
 
 # DF update and backup when dev names change
 pvcreate "$dev3"
-diff $DF $BKDIR/*.0009
-grep "$dev2" $DF
-grep "$dev3" $DF
+diff "$DF" "$BKDIR"/*.0009
+grep "$dev2" "$DF"
+grep "$dev3" "$DF"
 dd if="$dev2" of=dev2_header bs=1M count=1
 dd if="$dev3" of=dev3_header bs=1M count=1
 dd if=dev2_header of="$dev3"
 dd if=dev3_header of="$dev2"
 pvs
-diff $DF $BKDIR/*.0010
+diff "$DF" "$BKDIR"/*.0010
 
 # backup limit, remove 1
 aux lvmconf 'devices/devicesfile_backup_limit = 10'
 lvmdevices --deldev "$dev2"
-diff $DF $BKDIR/*.0011
-not ls $BKDIR/*.0001
+diff "$DF" "$BKDIR"/*.0011
+not ls "$BKDIR"/*.0001
 
 # backup limit, remove N
 aux lvmconf 'devices/devicesfile_backup_limit = 5'
 lvmdevices --adddev "$dev2"
-diff $DF $BKDIR/*.0012
-not ls $BKDIR/*.0002
-not ls $BKDIR/*.0003
-not ls $BKDIR/*.0004
-not ls $BKDIR/*.0005
-not ls $BKDIR/*.0006
-not ls $BKDIR/*.0007
-ls $BKDIR/*.0008
-ls $BKDIR/*.0009
-ls $BKDIR/*.0010
-ls $BKDIR/*.0011
+diff "$DF" "$BKDIR"/*.0012
+not ls "$BKDIR"/*.0002
+not ls "$BKDIR"/*.0003
+not ls "$BKDIR"/*.0004
+not ls "$BKDIR"/*.0005
+not ls "$BKDIR"/*.0006
+not ls "$BKDIR"/*.0007
+ls "$BKDIR"/*.0008
+ls "$BKDIR"/*.0009
+ls "$BKDIR"/*.0010
+ls "$BKDIR"/*.0011
 
 # backup disabled
 aux lvmconf 'devices/devicesfile_backup_limit = 0'
 lvmdevices --deldev "$dev2"
-not ls $BKDIR/*.0013
+not ls "$BKDIR"/*.0013
 
 # backup re-enabled
 aux lvmconf 'devices/devicesfile_backup_limit = 5'
 lvmdevices --adddev "$dev2"
-ls $BKDIR/*.0014
-not ls $BKDIR/*.0013
+ls "$BKDIR"/*.0014
+not ls "$BKDIR"/*.0013
 
 vgremove -ff $vg

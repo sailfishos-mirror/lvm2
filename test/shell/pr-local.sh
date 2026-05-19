@@ -41,8 +41,8 @@ aux lvmconf 'devices/use_devicesfile = 1'
 aux lvmconf 'local/host_id = 1'
 DFDIR="$LVM_SYSTEM_DIR/devices"
 DF="$DFDIR/system.devices"
-mkdir $DFDIR || true
-not ls $DF
+mkdir "$DFDIR" || true
+not ls "$DF"
 
 get_real_devs
 
@@ -50,7 +50,7 @@ test $num_devs -gt 0 || skip
 
 wipe_all() {
 	for dev in "${REAL_DEVICES[@]}"; do
-		aux wipefs_a $dev
+		aux wipefs_a "$dev"
 	done
 }
 
@@ -146,5 +146,5 @@ done
 
 vgremove -y $vg
 
-rm $DF
+rm "$DF"
 

@@ -170,7 +170,7 @@ aux lvmconf "devices/hints = \"all\"" \
 	"devices/obtain_device_list_from_udev = 1" \
 	"devices/search_for_devnames = \"none\""
 
-rm $DF || true
+rm "$DF" || true
 
 # create 2 disk MD raid0 array
 # by default using metadata format 1.0 with data at the end of device

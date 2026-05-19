@@ -142,7 +142,7 @@ not grep "$dev4" out
 
 # Prints the deviceid that's saved in metadata.
 pvs -o uuid,deviceid "$dev1" | tee out
-grep $OPVID1 out
+grep "$OPVID1" out
 grep $SERIAL1 out
 
 # PV1 moves from dev1 to dev3 (and dev1 goes away)
@@ -201,7 +201,7 @@ not grep $SERIAL4 "$DF"
 # "invalid" is printed when displaying the outdated
 # deviceid from the metadata.
 pvs -o uuid,deviceid "$dev3" | tee out
-grep $OPVID1 out
+grep "$OPVID1" out
 grep invalid out
 
 # bring back dev1

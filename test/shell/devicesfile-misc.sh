@@ -85,7 +85,7 @@ dev4="/dev/ram3"
 DFDIR="$LVM_SYSTEM_DIR/devices"
 mkdir -p "$DFDIR" || true
 DF="$DFDIR/system.devices"
-touch $DF
+touch "$DF"
 
 vgcreate $vg1 "$dev1"
 eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$dev1")"
@@ -120,17 +120,17 @@ create_base
 # dev3 (without wwid) is listed before dev1 (with wwid), and they swap names
 # pvs handles it
 
-rm $DF
+rm "$DF"
 lvmdevices --adddev "$dev3"
 lvmdevices --adddev "$dev2"
 lvmdevices --adddev "$dev1"
-cat $DF
+cat "$DF"
 
 cp "$DF" orig
 sed -e "s|DEVNAME=$dev1|DEVNAME=tmpnm|" orig > tmp1
 sed -e "s|DEVNAME=$dev3|DEVNAME=$dev1|" tmp1 > tmp2
 sed -e "s|IDNAME=$dev3|IDNAME=$dev1|" tmp2 > tmp3
-sed -e "s|DEVNAME=tmpnm|DEVNAME=$dev3|" tmp3 > $DF
+sed -e "s|DEVNAME=tmpnm|DEVNAME=$dev3|" tmp3 > "$DF"
 cat "$DF"
 
 pvs -o+uuid |tee out
@@ -161,18 +161,18 @@ vgremove $vg1 $vg2 $vg3 $vg4
 vgcreate $vg1 "$dev1" "$dev2" "$dev3" "$dev4"
 lvcreate -an -n $lv1 -l1 $vg1
 
-rm $DF
+rm "$DF"
 lvmdevices --adddev "$dev4"
 lvmdevices --adddev "$dev3"
 lvmdevices --adddev "$dev2"
 lvmdevices --adddev "$dev1"
-cat $DF
+cat "$DF"
 
 cp "$DF" orig
 sed -e "s|DEVNAME=$dev1|DEVNAME=tmpnm|" orig > tmp1
 sed -e "s|DEVNAME=$dev3|DEVNAME=$dev1|" tmp1 > tmp2
 sed -e "s|IDNAME=$dev3|IDNAME=$dev1|" tmp2 > tmp3
-sed -e "s|DEVNAME=tmpnm|DEVNAME=$dev3|" tmp3 > $DF
+sed -e "s|DEVNAME=tmpnm|DEVNAME=$dev3|" tmp3 > "$DF"
 cat "$DF"
 
 _clear_online_files
@@ -193,18 +193,18 @@ pvscan --cache --listvg --checkcomplete --vgonline --autoactivation event "$dev4
 ls "$RUNDIR/lvm/pvs_online/$PVID1"
 ls "$RUNDIR/lvm/vgs_online/$vg1"
 
-cat $DF
+cat "$DF"
 
 vgchange -aay --autoactivation event $vg1
 
-cat $DF
+cat "$DF"
 
 # pvs will fix the DF entries
 # (pvscan and vgchange aay skip the update to avoid interfering
 # with the autoactivation process.)
 pvs -o+uuid |tee out
 
-cat $DF
+cat "$DF"
 
 grep "$dev1" out |tee out1
 grep "$dev2" out |tee out2
@@ -230,12 +230,12 @@ DEVNAME_NONE=/dev/sdxyz
 PVID_NONE=aaaaaa
 WWID_NONE=naa.56789
 
-rm $DF
+rm "$DF"
 lvmdevices --adddev "$dev1"
 lvmdevices --adddev "$dev2"
 lvmdevices --adddev "$dev3"
 lvmdevices --adddev "$dev4"
-cat $DF
+cat "$DF"
 cp "$DF" orig
 
 # 1. lvmdevices --check|--update : devs with wwid
@@ -244,37 +244,37 @@ sed -e "s|DEVNAME=$dev1|DEVNAME=$DEVNAME_NONE|" orig > tmp1
 sed -e "s|PVID=$PVID1|PVID=$PVID_NONE|" tmp1 > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old $DEVNAME_NONE" out
 grep "old $PVID_NONE" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # 1.b change devname
 sed -e "s|DEVNAME=$dev1|DEVNAME=$DEVNAME_NONE|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old $DEVNAME_NONE" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # 1.c change pvid
 sed -e "s|PVID=$PVID1|PVID=$PVID_NONE|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old $PVID_NONE" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # 2. lvmdevices --check|--update : devs with only devname
@@ -283,42 +283,42 @@ sed -e "s|IDNAME=$dev3|IDNAME=$DEVNAME_NONE|" orig > tmp1
 sed -e "s|DEVNAME=$dev3|DEVNAME=$DEVNAME_NONE|" tmp1 > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old $DEVNAME_NONE" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # 2.b change devname
 sed -e "s|DEVNAME=$dev3|DEVNAME=$DEVNAME_NONE|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old $DEVNAME_NONE" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # 2.c change idname
 sed -e "s|IDNAME=$dev3|IDNAME=$DEVNAME_NONE|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old $DEVNAME_NONE" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # 3. lvmdevices --check|--update --refresh devs with IDTYPE=sys_wwid
@@ -330,15 +330,15 @@ cat "$DF"
 lvmdevices --check |tee out
 grep 'device not found' out
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 grep "old sys_serial" out1
 grep "old S123" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -349,19 +349,19 @@ sed -e "s|IDTYPE=sys_wwid IDNAME=$WWID1|IDTYPE=devname IDNAME=$DEVNAME_NONE|" tm
 cat "$DF"
 # the command without --refresh thinks the update should be just to the devname
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out | tee out1
-grep DEVNAME=$dev1 out1
-grep IDNAME=$dev1 out1
+grep PVID="$PVID1" out | tee out1
+grep DEVNAME="$dev1" out1
+grep IDNAME="$dev1" out1
 grep IDTYPE=devname out1
 # the command with --refresh sees the update should use sys_wwid
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out | tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out | tee out1
+grep DEVNAME="$dev1" out1
 grep IDNAME=$WWID1 out1
 grep IDTYPE=sys_wwid out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -373,15 +373,15 @@ cat "$DF"
 lvmdevices --check |tee out
 grep 'device not found' out
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 grep "old sys_serial" out1
 grep "old S123" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -394,14 +394,14 @@ cat "$DF"
 lvmdevices --check |tee out
 grep 'device not found' out
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 grep "old $WWID_NONE" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -413,14 +413,14 @@ cat "$DF"
 lvmdevices --check |tee out
 grep 'device not found' out
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 grep "old $WWID_NONE" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -429,17 +429,17 @@ lvmdevices --check
 sed -e "s|DEVNAME=$dev1|DEVNAME=$DEVNAME_NONE|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep "old $DEVNAME_NONE" out1
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" out |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out1
-grep DEVNAME=$dev1 out1
+grep PVID="$PVID1" "$DF" |tee out1
+grep DEVNAME="$dev1" out1
 grep IDTYPE=sys_wwid out1
 grep IDNAME=$WWID1 out1
 lvmdevices --check
@@ -453,36 +453,36 @@ sed -e "s|DEVNAME=$dev1|DEVNAME=.|" orig > tmp1
 sed -e "s|PVID=$PVID1|PVID=.|" tmp1 > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old none" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # PV with wwid, set DEVNAME=.
 sed -e "s|DEVNAME=$dev1|DEVNAME=.|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old none" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # PV with wwid, set PVID=.
 sed -e "s|PVID=$PVID1|PVID=.|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID1 out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" out
+grep DEVNAME="$dev1" out
 grep "old none" out
 lvmdevices --update
-grep PVID=$PVID1 "$DF" |tee out
-grep DEVNAME=$dev1 out
+grep PVID="$PVID1" "$DF" |tee out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # PV with wwid, set IDNAME=. DEVNAME=.
@@ -490,34 +490,34 @@ sed -e "s|IDNAME=$WWID1|IDNAME=.|" orig > tmp1
 sed -e "s|DEVNAME=$dev1|DEVNAME=.|" tmp1 > "$DF"
 cat "$DF"
 lvmdevices --check |tee out
-grep PVID=$PVID1 out |tee out1
+grep PVID="$PVID1" out |tee out1
 grep 'device not found' out1
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
+grep PVID="$PVID1" out |tee out1
 grep IDNAME=$WWID1 out1
-grep DEVNAME=$dev1 out1
+grep DEVNAME="$dev1" out1
 grep "old none" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out
+grep PVID="$PVID1" "$DF" |tee out
 grep IDNAME=$WWID1 out
-grep DEVNAME=$dev1 out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # PV with wwid, set IDNAME=.
 sed -e "s|IDNAME=$WWID1|IDNAME=.|" orig > "$DF"
 cat "$DF"
 lvmdevices --check |tee out
-grep PVID=$PVID1 out |tee out1
+grep PVID="$PVID1" out |tee out1
 grep 'device not found' out1
 not lvmdevices --check --refresh |tee out
-grep PVID=$PVID1 out |tee out1
+grep PVID="$PVID1" out |tee out1
 grep IDNAME=$WWID1 out1
-grep DEVNAME=$dev1 out1
+grep DEVNAME="$dev1" out1
 grep "old none" out1
 lvmdevices --update --refresh
-grep PVID=$PVID1 "$DF" |tee out
+grep PVID="$PVID1" "$DF" |tee out
 grep IDNAME=$WWID1 out
-grep DEVNAME=$dev1 out
+grep DEVNAME="$dev1" out
 lvmdevices --check
 
 # PV without wwid, set IDNAME=. DEVNAME=.
@@ -525,42 +525,42 @@ sed -e "s|IDNAME=$dev3|IDNAME=.|" orig > tmp1
 sed -e "s|DEVNAME=$dev3|DEVNAME=.|" tmp1 > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old none" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # PV without wwid, set IDNAME=.
 sed -e "s|DEVNAME=$dev3|DEVNAME=.|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old none" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # PV without wwid, set DEVNAME=.
 sed -e "s|DEVNAME=$dev3|DEVNAME=.|" orig > "$DF"
 cat "$DF"
 not lvmdevices --check |tee out
-grep PVID=$PVID3 out |tee out1
-grep IDNAME=$dev3 out1
-grep DEVNAME=$dev3 out1
+grep PVID="$PVID3" out |tee out1
+grep IDNAME="$dev3" out1
+grep DEVNAME="$dev3" out1
 grep "old none" out1
 lvmdevices --update
-grep PVID=$PVID3 "$DF" |tee out
-grep IDNAME=$dev3 out
-grep DEVNAME=$dev3 out
+grep PVID="$PVID3" "$DF" |tee out
+grep IDNAME="$dev3" out
+grep DEVNAME="$dev3" out
 lvmdevices --check
 
 # Without a wwid or a pvid, an entry is indeterminate; there's not enough

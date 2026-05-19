@@ -20,7 +20,7 @@ aux lvmconf "global/support_mirrored_mirror_log=1"
 
 cleanup_lvs() {
 	lvremove -ff $vg
-	(dm_table | not grep $vg) || \
+	(dm_table | not grep $vg) ||
 		die "ERROR: lvremove did leave some some mappings in DM behind!"
 }
 
