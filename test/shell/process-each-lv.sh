@@ -31,7 +31,7 @@ aux prepare_devs 10
 # (lv can also be a tag matching an lv tag, and
 #  vg can also be a tag matching a vg tag.)
 #
-# The logic in process_each_vl is mainly related to
+# The logic in process_each_lv is mainly related to
 # selecting which vgs/lvs to process.
 #
 
@@ -227,7 +227,7 @@ vgchange --addtag V35 $vg5
 vgchange --addtag V5  $vg5
 
 lvremove @V35 @V5
-check lv_not_exists $vg3 $lv1 $lv2 /$lv3
+check lv_not_exists $vg3 $lv1 $lv2 $lv3
 check lv_not_exists $vg5 $lv1 $lv2 $lv3 $lv4 $lv5
 # verify unremoved exist
 check lv_exists $vg1 $lv1
