@@ -67,7 +67,7 @@ dd if="$dev1" of="$dev2" bs=1M iflag=direct oflag=direct,sync
 # The single preferred dev is shown from 'pvs'.
 pvs -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -98,7 +98,7 @@ not grep "$DUP" main
 # Repeat above checking preferred/dup in output
 pvs 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -108,7 +108,7 @@ not grep "$DUP" main
 # The duplicate dev is included in 'pvs -a'
 pvs -a -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -134,7 +134,7 @@ grep "prefers device" warn
 
 pvs -o+uuid "$dev1" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -147,7 +147,7 @@ grep "prefers device" warn
 
 pvs -o+uuid "$dev2" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -160,7 +160,7 @@ grep "prefers device" warn
 
 pvs -o+uuid,duplicate "$dev1" "$dev2" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -183,7 +183,7 @@ pvs --noheadings -o vg_name,vg_uuid "$dev2" 2>&1 | tee out2
 grep -v WARNING out1 > main1 || true
 grep -v WARNING out2 > main2 || true
 diff main1 main2
-rm out1 out2 main1 main2 || true
+rm -f out1 out2 main1 main2
 
 check pv_field "$dev1" pv_in_use "used"
 check pv_field "$dev2" pv_in_use "used"
@@ -196,7 +196,7 @@ check pv_field "$DUP" pv_duplicate "duplicate"
 
 pvs --noheadings -o name,pv_allocatable "$dev1" "$dev2" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -208,7 +208,7 @@ test "$(grep -c allocatable main)" -eq 1
 
 pvs --noheadings -o name,pv_duplicate "$dev1" "$dev2" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -224,7 +224,7 @@ test "$(grep -c duplicate main)" -eq 1
 
 pvs --config "devices { filter=[ \"a|$dev2|\", \"r|.*|\" ] }" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -237,7 +237,7 @@ not grep "prefers device" warn
 
 pvs --config "devices { filter=[ \"a|$dev1|\", \"r|.*|\"] }" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -305,7 +305,7 @@ dd if="$dev3" of="$dev4" bs=1M iflag=direct oflag=direct,sync
 
 pvs -o+uuid 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -319,7 +319,7 @@ grep "prefers device" warn
 
 pvs -a -o+uuid 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -338,7 +338,7 @@ grep "prefers device" warn
 
 pvs -o+uuid "$dev3" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -350,7 +350,7 @@ grep "prefers device" warn
 
 pvs -o+uuid "$dev4" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -362,7 +362,7 @@ grep "prefers device" warn
 
 pvs -o+uuid "$dev3" "$dev4" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -405,7 +405,7 @@ pvscan --cache
 
 pvs -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -424,7 +424,7 @@ not grep "prefers device $dev6" warn
 
 pvs -a -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -441,7 +441,7 @@ not grep "prefers device $dev6" warn
 
 pvs -o+uuid,duplicate "$dev3" "$dev4" "$dev5" "$dev6" 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -487,7 +487,7 @@ pvscan --cache
 
 pvs -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -501,7 +501,7 @@ check pv_field "$dev4" pv_duplicate "duplicate"
 
 pvs -a -o+uuid,duplicate 2>&1 | tee out
 
-rm warn main || true
+rm -f warn main
 grep    WARNING out > warn || true
 grep -v WARNING out > main || true
 
@@ -523,3 +523,5 @@ dd if=/dev/zero of="$dev4" bs=1M oflag=direct,sync || true
 lvremove -y $vg2/$lv1
 lvremove -y $vg2/$lv2
 vgremove $vg2
+pvremove -ff -y "$dev5"
+pvremove -ff -y "$dev6"
