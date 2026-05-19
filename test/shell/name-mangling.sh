@@ -67,8 +67,8 @@ function check_create_and_remove()
 		verify_udev=""
 	fi
 
-	aux dmsetup create "${PREFIX}$input_name" $verify_udev --manglename $mode --table "0 1 zero" 2>err && \
-	test -b "$DM_DEV_DIR/mapper/${PREFIX}$dm_name" && \
+	aux dmsetup create "${PREFIX}$input_name" $verify_udev --manglename $mode --table "0 1 zero" 2>err &&
+	test -b "$DM_DEV_DIR/mapper/${PREFIX}$dm_name" &&
 	aux dmsetup remove "${PREFIX}$input_name" $verify_udev --manglename $mode || r=1
 
 	if [ "$dm_name" = "FAIL_MIXED" ]; then
@@ -113,10 +113,10 @@ function check_expected_names()
 
 	create_dm_dev none "$dm_name"
 
-	test -b "$DM_DEV_DIR/mapper/${PREFIX}$dm_name" && \
-	check_dm_field none "$dm_name" name "$dm_name" && \
-	check_dm_field $mode "$dm_name" name "$3" && \
-	check_dm_field $mode "$dm_name" mangled_name "$4" && \
+	test -b "$DM_DEV_DIR/mapper/${PREFIX}$dm_name" &&
+	check_dm_field none "$dm_name" name "$dm_name" &&
+	check_dm_field $mode "$dm_name" name "$3" &&
+	check_dm_field $mode "$dm_name" mangled_name "$4" &&
 	check_dm_field $mode "$dm_name" unmangled_name "$5" || r=1
 
 	remove_dm_dev none "$dm_name"
@@ -177,7 +177,7 @@ function check_mangle_cmd()
 		# failed to rename to expected or renamed when it should not - find the new name
 		new_name=$(sed -e "s/.*: $RENAMING_STR //g" out)
 		# try to remove any of the form - falling back to less probable error scenario
-		remove_dm_dev none "$new_name" || \
+		remove_dm_dev none "$new_name" ||
 		remove_dm_dev none "$dm_name" || remove_dm_dev none "$expected"
 	else
 		# successfully done nothing

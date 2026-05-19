@@ -64,7 +64,7 @@ for i in raid1 raid4 raid5 raid6 raid10
 do
 COMM "vgsplit correctly splits $i LV with integrity enabled"
 		create_vg_ $vg1 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
-		lvcreate -an -Zn -l 1 --type $i --raidintegrity y -n $lv1 $vg1 $dev1 $dev2 $dev3 $dev4 $dev5
+		lvcreate -an -Zn -l 1 --type $i --raidintegrity y -n $lv1 $vg1 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
 		fail vgsplit $vg1 $vg2 "$dev1" 2>&1 | tee err
 		grep "Can't split LV LV1 between two Volume Groups" err
 		vgsplit $vg1 $vg2 "$dev6"

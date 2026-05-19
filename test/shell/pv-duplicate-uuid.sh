@@ -34,7 +34,7 @@ test "$(grep -c $UUID1 main)" -eq 1
 COUNT=$(grep --count "Not using device" warn)
 [ "$COUNT" -eq 2 ]
 
-pvs -o+uuid --devices $dev2 2>&1 | tee out
+pvs -o+uuid --devices "$dev2" 2>&1 | tee out
 
 rm warn main || true
 grep    WARNING out > warn || true

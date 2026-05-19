@@ -155,7 +155,7 @@ for i in {100..0}; do
 		# Should be in "resync", but it is possible things are only
 		# just getting going - in which case, it could be "idle"
 		# with 0% sync ratio
-		[ "${a[7]}" = "resync" ] || \
+		[ "${a[7]}" = "resync" ] ||
 		  [[ "${a[7]}" = "idle" && "${b[0]}" -eq "0" ]]
 	else
 		should [ "${a[5]}" = "AA" ] # RHBZ 1507719

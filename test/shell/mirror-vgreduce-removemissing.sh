@@ -104,7 +104,7 @@ BLOCKS1=8-15
 prepare_lvs_()
 {
 	lvremove -ff $vg
-	(dm_table | not grep $vg) || \
+	(dm_table | not grep $vg) ||
 		die "ERROR: lvremove did leave some some mappings in DM behind!"
 }
 

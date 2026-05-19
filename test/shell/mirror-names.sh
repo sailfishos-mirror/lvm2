@@ -57,7 +57,7 @@ lv_convert_lv_() {
 check_and_cleanup_lvs_() {
 	lvs -a -o+devices $vg
 	lvremove -ff $vg
-	(dm_table | not grep $vg) || \
+	(dm_table | not grep $vg) ||
 		die "ERROR: lvremove did leave some some mappings in DM behind!"
 }
 

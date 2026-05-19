@@ -59,11 +59,11 @@ test_lvconvert() {
 	#test $finish_count -gt $start_count && up=true
 
 	# Do we have enough devices for the mirror images?
-	test $start_count_p1 -gt ${#DEVICES[@]} && \
+	test $start_count_p1 -gt ${#DEVICES[@]} &&
 		die "Action requires too many devices"
 
 	# Do we have enough devices for the mirror images?
-	test $finish_count_p1 -gt ${#DEVICES[@]} && \
+	test $finish_count_p1 -gt ${#DEVICES[@]} &&
 		die "Action requires too many devices"
 
 	start_log_count=$(log_name_to_count $start_log_type)
