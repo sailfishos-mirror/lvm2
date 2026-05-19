@@ -434,8 +434,9 @@ sysfs() {
 	local min
 	local P
 	local val
-	maj=$(($(stat -L --printf=0x%t "$1")))
-	min=$(($(stat -L --printf=0x%T "$1")))
+	read -r maj min < <(stat -L --format '0x%t 0x%T' "$1")
+	maj=$(( maj ))
+	min=$(( min ))
 	P="/sys/dev/block/$maj:$min/$2"
 	val=$(< "$P") || return 0 # no sysfs ?
 	[[ "$val" -eq "$3" ]] || \
