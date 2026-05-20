@@ -6932,6 +6932,15 @@ static void adopt_locks(void)
 			count_adopt_done++;
 			free_action(act);
 
+		} else if (act->result == -ENOLS && act->rt == LD_RT_GL) {
+			/*
+			 * No started lockspace has gl enabled, so there is
+			 * no orphan gl lock to adopt.
+			 */
+			log_debug("Did not adopt gl lock, no gl lockspace found");
+			count_adopt_done++;
+			free_action(act);
+
 		} else if (act->result < 0) {
 			/*
 			 * Some unexpected error.
