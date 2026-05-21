@@ -177,8 +177,13 @@ run_syncaction_check() {
 	#  may think this is bad because those buffers could prevent
 	#  us from seeing bad disk blocks, however, the stripe cache
 	#  is not long lived.  (RAID1/10 are immediately checked.)
-	lvchange -an $vg/$lv
-	lvchange -ay $vg/$lv
+	if [ -z "$THIN_POSTFIX" ]; then
+		lvchange -an $vg/$lv
+		lvchange -ay $vg/$lv
+	else
+		lvchange -an $vg/$2
+		lvchange -ay $vg/$2
+	fi
 
 	# "check" should find discrepancies but not change them
 	# 'lvs' should show results
@@ -285,7 +290,7 @@ run_checks() {
 # Hey, specifying devices for thin allocation doesn't work
 #		lvconvert -y --thinpool $1/$2 "$dev6"
 		lvcreate -aey -L 2M -n ${2}_meta $1 "$dev6"
-		lvconvert --thinpool $1/$2 --poolmetadata ${2}_meta
+		lvconvert -y --thinpool $1/$2 --poolmetadata ${2}_meta
 		lvcreate -T $1/$2 -V 1 -n thinlv
 		THIN_POSTFIX="_tdata"
 
@@ -339,7 +344,7 @@ TEST_TYPES="- snapshot"
 # thinpool works EX in cluster
 # but they don't work together in a cluster yet
 #  (nor does thinpool+mirror work in a cluster yet)
-aux have_thin 1 8 0 && TEST_TYPE="$TEST_TYPES thinpool_data thinpool_meta"
+aux have_thin 1 8 0 && TEST_TYPES="$TEST_TYPES thinpool_data thinpool_meta"
 
 # Implicit test for 'raid1' only
 if test "${TEST_RAID:-raid1}" = raid1 ; then
