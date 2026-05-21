@@ -73,7 +73,7 @@ lvchange --addtag secondlvtag3 $vg1/$lv2
 check lv_field $vg1/$lv1 tags "firstlvtag1,firstlvtag2,firstlvtag3"
 not check lv_field $vg1/$lv1 tags "secondlvtag1"
 check lv_field $vg1/$lv2 tags "secondlvtag1,secondlvtag2,secondlvtag3"
-not check lv_field $vg1/$lv1 tags "secondlvtag1"
+not check lv_field $vg1/$lv2 tags "firstlvtag1"
 # deleting a tag multiple times is not an error
 lvchange --deltag firstlvtag2 $vg1/$lv1
 lvchange --deltag firstlvtag2 $vg1/$lv1
