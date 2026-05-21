@@ -119,7 +119,7 @@ lvremove -y $vg1/$lv1
 # lvconvert on dev4k, fsunknown, result 4k
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
 # clear any residual fs so that libblkid cannot find an fs block size
-aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
 lvconvert --raidintegrity y $vg2/$lv1
 pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
 lvremove -y $vg2/$lv1
@@ -127,20 +127,20 @@ lvremove -y $vg2/$lv1
 # lvconvert --bs 4k on dev512, fsunknown, result fail
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
 # clear any residual fs so that libblkid cannot find an fs block size
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 not lvconvert --raidintegrity y --raidintegrityblocksize 4096 $vg1/$lv1
 lvremove -y $vg1/$lv1
 
 # lvconvert --bs 512 on dev4k, fsunknown, result fail
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
 # clear any residual fs so that libblkid cannot find an fs block size
-aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
 not lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg2/$lv1
 lvremove -y $vg2/$lv1
 
 # lvconvert on dev512, ext4 1024, result 1024
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | tee out
 grep BLOCK_SIZE=\"1024\" out
@@ -165,7 +165,7 @@ lvremove -y $vg2/$lv1
 
 # lvconvert on dev512, ext4 1024, result 1024 (LV active when adding)
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
 lvconvert --raidintegrity y $vg1/$lv1
@@ -177,7 +177,7 @@ lvremove -y $vg1/$lv1
 
 # lvconvert on dev512, ext4 1024, result 1024 (LV inactive when adding)
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
 lvchange -an $vg1/$lv1
@@ -191,7 +191,7 @@ lvremove -y $vg1/$lv1
 
 # lvconvert on dev4k, ext4 4096, result 4096
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
-aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
 mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
 blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
 lvconvert --raidintegrity y $vg2/$lv1
@@ -205,7 +205,7 @@ dm_table | grep ${PREFIX}
 
 # lvconvert --bs 512 on dev512, ext4 4096, result 512
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
 lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
@@ -218,7 +218,7 @@ lvremove -y $vg1/$lv1
 
 # lvconvert --bs 1024 on dev512, ext4 4096, result 1024
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
 lvchange -an $vg1/$lv1
@@ -234,7 +234,7 @@ lvremove -y $vg1/$lv1
 
 # lvconvert --bs 512 on dev512, ext4 1024, result 512
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
 blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
 lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
@@ -246,14 +246,14 @@ lvremove -y $vg1/$lv1
 
 # lvconvert --bs 512 on dev4k, ext4 4096, result fail
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
-aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
 mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
 not lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg2/$lv1
 lvremove -y $vg2/$lv1
 
 # lvconvert on dev512, ext4 1024, result 1024, (detect fs with LV inactive)
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
-aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
 mkfs.ext4 "$DM_DEV_DIR/$vg1/$lv1"
 mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
 echo "test" > "$mnt/test"
@@ -273,7 +273,7 @@ lvremove -y $vg1/$lv1
 
 # lvconvert on dev4k, ext4 4096, result 4096 (detect fs with LV inactive)
 lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
-aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
 mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
 mount "$DM_DEV_DIR/$vg2/$lv1" "$mnt"
 echo "test" > "$mnt/test"
