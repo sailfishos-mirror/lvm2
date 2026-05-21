@@ -40,7 +40,7 @@ for mdacp in 0 1 2; do
     # check pvremove truly wipes the label (pvscan won't find) (---metadatacopies $mdacp)
     pvcreate --metadatacopies $mdacp "$dev3"
     pvremove "$dev3"
-    # try to remove agail - should fail cleanly
+    # try to remove again - should fail cleanly
     not pvremove "$dev3"
     pvscan | not grep "$dev3"
 

@@ -63,7 +63,7 @@ lvcreate -H -L10 $vg/vpool1
 not lvrename $vg/vpool1 $vg/vpool2 2>&1 | tee out
 grep "Cannot rename" out
 
-# Ofline should work
+# Offline should work
 lvchange -an $vg
 lvrename $vg/vpool1 $vg/vpool2
 lvchange -ay $vg
@@ -77,7 +77,7 @@ lvconvert --yes --type vdo-pool $vg/vpool1
 not lvrename $vg/vpool1 $vg/vpool2 2>&1 | tee out
 grep "Cannot rename" out
 
-# Ofline should work
+# Offline should work
 lvchange -an $vg
 lvrename $vg/vpool1 $vg/vpool2
 lvchange -ay $vg
