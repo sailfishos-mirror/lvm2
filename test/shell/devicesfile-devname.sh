@@ -384,8 +384,8 @@ cat "$DF"
 
 # edit DF idname&devname, s/dev1/dev2/, creating two entries with same devname
 
-sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > "$DF"
-sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp1.devices > "$DF"
+sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > tmp2.devices
+sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp2.devices > "$DF"
 cat "$DF"
 # pvs reports correct info
 pvs -o+uuid | tee pvs.out
@@ -403,8 +403,8 @@ grep "DEVNAME=$dev2" out
 grep "IDNAME=$dev2" out
 cat "$DF"
 
-sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > "$DF"
-sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp1.devices > "$DF"
+sed -e "s|DEVNAME=$dev1|DEVNAME=$dev2|" tmp1.devices > tmp2.devices
+sed -e "s|IDNAME=$dev1|IDNAME=$dev2|" tmp2.devices > "$DF"
 cat "$DF"
 # lvmdevices fixes the DF
 lvmdevices --update
