@@ -187,17 +187,17 @@ grep "seqno 500" m1b
 # same results when using file as on device
 pvck --dump metadata_search --settings "mda_num=1 mda_size=34598912" dev1dd > m1c
 # by experimentation, metadata 484 is the last in the mda1 buffer
-grep "seqno 484" m1b
+grep "seqno 484" m1c
 # by experimentation, metadata 485 is the last in the mda1 buffer
-grep "seqno 485" m1b
-grep "seqno 500" m1b
+grep "seqno 485" m1c
+grep "seqno 500" m1c
 
 # by experimentation, mda_size for mda2 is 33554432
 pvck --dump metadata_search --settings "mda_num=2 mda_size=33554432" "$dev1" > m2
 # by experimentation, metadata 477 is the last in the mda2 buffer
-grep "seqno 477" m1b
+grep "seqno 477" m2
 # by experimentation, metadata 478 is the last in the mda2 buffer
-grep "seqno 478" m1b
+grep "seqno 478" m2
 grep "seqno 500" m2
 
 dd if=dev1dd of="$dev1" bs=4K count=1 oflag=direct
