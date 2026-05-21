@@ -38,7 +38,7 @@ check lv_field $vg/pool1 discards "nopassdown"
 check lv_field $vg/pool1 kernel_discards "nopassdown"
 lvcreate -l1 --discards passdown -T $vg/pool2
 check lv_field $vg/pool2 discards "passdown"
-check lv_field $vg/pool2 discards "passdown"
+check lv_field $vg/pool2 kernel_discards "passdown"
 
 lvchange --discards nopassdown $vg/pool2
 
