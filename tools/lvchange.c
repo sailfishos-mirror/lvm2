@@ -1555,10 +1555,11 @@ static int _lvchange_properties_check(struct cmd_context *cmd,
 		 * lv_is_thin_pool_data: e.g. needed when the data sublv
 		 * is a cache lv and we need to change cache properties.
 		 */
-		if (lv_is_thin_pool_data(lv))
-			return 1;
-
-		if (lv_is_vdo_pool_data(lv))
+		if (lv_is_thin_pool_data(lv) ||
+		    lv_is_thin_pool_metadata(lv) ||
+		    lv_is_cache_pool_data(lv) ||
+		    lv_is_cache_pool_metadata(lv) ||
+		    lv_is_vdo_pool_data(lv))
 			return 1;
 
 		if (lv_is_named_arg)
@@ -1775,6 +1776,13 @@ static int _lvchange_refresh_check(struct cmd_context *cmd,
 		return 1;
 
 	if (!lv_is_visible(lv)) {
+		if (lv_is_thin_pool_data(lv) ||
+		    lv_is_thin_pool_metadata(lv) ||
+		    lv_is_cache_pool_data(lv) ||
+		    lv_is_cache_pool_metadata(lv) ||
+		    lv_is_vdo_pool_data(lv))
+			return 1;
+
 		if (lv_is_named_arg)
 			log_error("Operation not permitted on hidden LV %s.", display_lvname(lv));
 		return 0;
