@@ -69,7 +69,7 @@ test "$i" -ge 49 && die "Waited for cleaner policy on $vg/$lv1 too long!"
 kill -INT $PID_CONVERT
 # extra time in case we are in some slow 'flushing' suspend
 sleep 0.5
-aux enable_dev "$dev2"
+aux enable_dev "$dev1"
 wait "$PID_CONVERT" || true
 # close 'tee' descriptor
 exec 3>$-
