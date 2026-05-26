@@ -1,5 +1,7 @@
 Version 2.03.42 - 
 ==================
+  Fix autoactivation on top of MD and loop devices if udev db records incomplete.
+  Make MD device ready state check in udev to be in sync with MD udev rules.
 
 Version 2.03.41 - 15th May 2026
 ===============================
