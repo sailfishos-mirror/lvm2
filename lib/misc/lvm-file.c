@@ -317,3 +317,87 @@ void lvm_stat_ctim(struct timespec *ctim, const struct stat *buf)
 	ctim->tv_nsec = 0;
 #endif
 }
+
+static const char *_backup_prefix;
+static size_t _backup_prefix_len;
+
+static int _filter_backup(const struct dirent *de)
+{
+	if (de->d_name[0] == '.')
+		return 0;
+	if (strncmp(de->d_name, _backup_prefix, _backup_prefix_len))
+		return 0;
+	return 1;
+}
+
+#define SECS_PER_DAY 86400
+
+#ifndef HAVE_VERSIONSORT
+#define versionsort alphasort
+#endif
+
+void backup_dir_cleanup(const char *dir, const char *prefix,
+			unsigned int keep_min, unsigned int keep_days)
+{
+	struct dirent **namelist = NULL;
+	struct stat sb;
+	time_t retain_time = 0;
+	char path[PATH_MAX];
+	int count, i;
+	int dir_fd = -1;
+	unsigned int remove_count;
+	DIR *dp;
+
+	_backup_prefix = prefix;
+	_backup_prefix_len = strlen(prefix);
+
+	count = scandir(dir, &namelist, _filter_backup, versionsort);
+	if (count < 0) {
+		log_sys_debug("scandir", dir);
+		return;
+	}
+
+	if ((unsigned int)count <= keep_min)
+		goto out;
+
+	remove_count = (unsigned int)count - keep_min;
+
+	if (keep_days) {
+		retain_time = time(NULL) - (time_t)keep_days * SECS_PER_DAY;
+	}
+
+	if (!(dp = opendir(dir))) {
+		log_sys_debug("opendir", dir);
+		goto out;
+	}
+	if ((dir_fd = dirfd(dp)) < 0) {
+		log_sys_debug("dirfd", dir);
+		closedir(dp);
+		goto out;
+	}
+
+	/* namelist is sorted oldest-first; remove from the beginning */
+	for (i = 0; i < (int)count && remove_count; i++) {
+		if (keep_days) {
+			if (dm_snprintf(path, sizeof(path), "%s/%s", dir, namelist[i]->d_name) < 0)
+				continue;
+			if (stat(path, &sb)) {
+				log_sys_debug("stat", path);
+				continue;
+			}
+			if (sb.st_mtime > retain_time)
+				continue;
+		}
+
+		log_debug("Remove backup %s", namelist[i]->d_name);
+		if (unlinkat(dir_fd, namelist[i]->d_name, 0) < 0 && errno != ENOENT)
+			log_sys_debug("unlinkat", namelist[i]->d_name);
+		remove_count--;
+	}
+
+	closedir(dp);
+out:
+	for (i = 0; i < count; i++)
+		free(namelist[i]);
+	free(namelist);
+}
