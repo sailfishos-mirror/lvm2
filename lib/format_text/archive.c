@@ -28,8 +28,6 @@
 #include <fcntl.h>
 #include <time.h>
 
-#define SECS_PER_DAY 86400	/* 24*60*60 */
-
 /*
  * The format instance is given a directory path upon creation.
  * Each file in this directory whose name is of the form
@@ -178,55 +176,6 @@ static struct dm_list *_scan_archive(struct dm_pool *mem,
 	return results;
 }
 
-static void _remove_expired(const char *dir, const char *vgname,
-			    struct dm_list *archives, uint32_t archives_size,
-			    uint32_t retain_days, uint32_t min_archives)
-{
-	struct archive_file *bf;
-	struct stat sb;
-	time_t retain_time;
-	uint64_t sum = 0;
-	char path[PATH_MAX];
-
-	/* Make sure there are enough archives to even bother looking for
-	 * expired ones... */
-	if (archives_size <= min_archives)
-		return;
-
-	/* Convert retain_days into the time after which we must retain */
-	retain_time = time(NULL) - (time_t) retain_days *SECS_PER_DAY;
-
-	/* Assume list is ordered newest first (by index) */
-	dm_list_iterate_back_items(bf, archives) {
-		if (dm_snprintf(path, sizeof(path), "%s/%s", dir, bf->name) < 0)
-			continue;
-
-		/* Get the mtime of the file and unlink if too old */
-		if (stat(path, &sb)) {
-			log_sys_debug("stat", path);
-			continue;
-		}
-
-		sum += sb.st_size;
-		if (sb.st_mtime > retain_time)
-			continue;
-
-		log_very_verbose("Expiring archive %s", path);
-		/* coverity[toctou] stat check is for cleanup logic; ENOENT is handled */
-		if (unlink(path) && (errno != ENOENT))
-			log_sys_debug("unlink", path);
-
-		/* Don't delete any more if we've reached the minimum */
-		if (--archives_size <= min_archives)
-			break;
-	}
-
-	sum /= 1024 * 1024;
-	if (sum > 128 || archives_size > 8192)
-		log_print_unless_silent("Consider pruning %s VG archive with more than %u MiB in %u files (see archiving settings in lvm.conf).",
-					vgname, (unsigned)sum, archives_size);
-}
-
 int archive_vg(struct volume_group *vg,
 	       const char *dir, const char *desc,
 	       uint32_t retain_days, uint32_t min_archives)
@@ -235,6 +184,7 @@ int archive_vg(struct volume_group *vg,
 	uint32_t ix = 0;
 	struct archive_file *last;
 	FILE *fp = NULL;
+	char vg_prefix[NAME_LEN + 2];
 	char temp_file[PATH_MAX], archive_name[PATH_MAX];
 	struct dm_list *archives;
 
@@ -295,8 +245,8 @@ int archive_vg(struct volume_group *vg,
 	if (!renamed)
 		log_error("Archive rename failed for %s", temp_file);
 
-	_remove_expired(dir, vg->name, archives, dm_list_size(archives) + renamed, retain_days,
-			min_archives);
+	if (dm_snprintf(vg_prefix, sizeof(vg_prefix), "%s_", vg->name) > 0)
+		backup_dir_cleanup(dir, vg_prefix, min_archives, retain_days);
 
 	return 1;
 }
