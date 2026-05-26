@@ -1507,40 +1507,14 @@ int device_ids_read(struct cmd_context *cmd)
  * backup files with version >9999:
  * 31 chars + 5+ chars (uint32 counter, not zero padded, up to 10 chars) + null byte
  */
-#define BACKUP_NAME_SIZE 48  /* larger than the longest backup file name */
-
-static int _filter_backup_files(const struct dirent *de)
-{
-	int len = strlen(de->d_name);
-
-	if (len < 35 || len > BACKUP_NAME_SIZE-1)
-		return 0;
-	if (strncmp(de->d_name, "system.devices-", 15))
-		return 0;
-	return 1;
-}
-
 static void devices_file_backup(struct cmd_context *cmd, char *fc, char *fb, time_t *tp, uint32_t df_counter)
 {
-	struct dirent *de;
-	struct dirent **namelist = NULL;
-	DIR *dir = NULL;
 	FILE *fp = NULL;
 	struct tm *tm;
 	char dirpath[PATH_MAX];
 	char path[PATH_MAX];
 	char datetime_str[48];
-	char de_date_str[16];
-	char de_time_str[16];
-	char de_count_str[16];
-	char low_name[BACKUP_NAME_SIZE] = { 0 }; /* oldest backup file name */
-	uint32_t low_date = 0, low_time = 0, low_count = 0;
-	uint32_t de_date, de_time, de_count;
-	unsigned int backup_limit = 0, backup_count = 0, remove_count;
-	int namelen;
-	int sort_count;
-	int dir_fd;
-	int i;
+	unsigned int backup_limit = 0;
 
 	/* Skip backup with --devicesfile <name>, only back up default system.devices. */
 	if (cmd->devicesfile)
@@ -1602,112 +1576,12 @@ static void devices_file_backup(struct cmd_context *cmd, char *fc, char *fb, tim
 	fp = NULL;
 	log_debug("Wrote backup %s", path);
 
-	/* Open dir after backup file is written, so it can be accounted */
-	if (!(dir = opendir(dirpath))) {
-		log_sys_debug("opendir", dirpath);
-		return;
-	}
-
-	/* Possibly remove old backup files per configurable limit on backup files. */
-
-	while ((de = readdir(dir))) {
-		if (de->d_name[0] == '.')
-			continue;
-
-		namelen = strlen(de->d_name);
-
-		if (namelen < 35 || namelen > BACKUP_NAME_SIZE-1)
-			continue;
-
-		memset(de_date_str, 0, sizeof(de_date_str));
-		memset(de_time_str, 0, sizeof(de_time_str));
-		memset(de_count_str, 0, sizeof(de_count_str));
-
-		/*
-		 * Save the oldest backup file name:
-		 *
-		 * backup files with version 1-9999 have 4 digit suffix:
-		 * system.devices-YYYYMMDD.HHMMSS.NNNN
-		 * 12345678901234567890123456789012345 (len 35)
-		 * date YYYYMMDD is 8 chars 16-23
-		 * time HHMMSS is 6 chars 25-30
-		 * count NNNN is 4 chars 32-35
-		 *
-		 * backup files with version >9999 have
-		 * non-zero-padded variable length suffix:
-		 * system.devices-YYYYMMDD.HHMMSS.NNNNN...
-		 */
-		memcpy(de_date_str, de->d_name+15, 8);
-		memcpy(de_time_str, de->d_name+24, 6);
-		memcpy(de_count_str, de->d_name+31, namelen - 31);
-
-		de_date = (uint32_t)strtoul(de_date_str, NULL, 10);
-		de_time = (uint32_t)strtoul(de_time_str, NULL, 10);
-		de_count = (uint32_t)strtoul(de_count_str, NULL, 10);
-
-		if (!low_date ||
-		    (de_date < low_date) ||
-		    (de_date == low_date && de_time < low_time) ||
-		    (de_date == low_date && de_time == low_time && de_count < low_count)) {
-			dm_strncpy(low_name, de->d_name, sizeof(low_name));
-			low_date = de_date;
-			low_time = de_time;
-			low_count = de_count;
-		}
-		backup_count++;
-	}
-
-	if (backup_count <= backup_limit)
-		goto out;
-
-	remove_count = backup_count - backup_limit;
-
-	if ((dir_fd = dirfd(dir)) < 0) {
-		log_sys_debug("dirfd", dirpath);
-		goto out;
-	}
-
-	/* The common case removes the oldest file and can avoid sorting. */
-	if (remove_count == 1 && low_name[0]) {
-		log_debug("Remove backup %s", low_name);
-		if (unlinkat(dir_fd, low_name, 0) < 0 && errno != ENOENT)
-			log_sys_debug("unlinkat", low_name);
-		goto out;
-	}
-
-	/* Remove the n oldest files by sorting system.devices-*. */
-	setlocale(LC_COLLATE, "C"); /* Avoid sorting by locales */
-	#ifndef HAVE_VERSIONSORT
-	/* fallback to alphasort when versionsort is not defined */
-	#define versionsort     alphasort
-	#endif /* !HAVE_VERSIONSORT */
-	sort_count = scandir(dirpath, &namelist, _filter_backup_files, versionsort);
-	setlocale(LC_COLLATE, "");
-	if (sort_count < 0) {
-		log_warn("WARNING: Failed to sort backup devices files.");
-		goto out;
-	}
-
-	log_debug("Limit backup %u found %u sorted %d removing %u.",
-		  backup_limit, backup_count, sort_count, remove_count);
-
-	for (i = 0; namelist && i < sort_count; i++) {
-		if (remove_count) {
-			log_debug("Remove backup %s", namelist[i]->d_name);
-			if (unlinkat(dir_fd, namelist[i]->d_name, 0) < 0 && errno != ENOENT)
-				log_sys_debug("unlinkat", namelist[i]->d_name);
-			remove_count--;
-		}
-		free(namelist[i]);
-	}
-	free(namelist);
+	backup_dir_cleanup(dirpath, "system.devices-", backup_limit, 0);
+	return;
 
 out:
 	if (fp && fclose(fp))
 		stack;
-
-	if (dir && closedir(dir))
-		log_sys_debug("closedir", dirpath);
 }
 
 int device_ids_write(struct cmd_context *cmd)

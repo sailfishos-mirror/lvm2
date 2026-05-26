@@ -41,6 +41,14 @@ int create_temp_name(const char *dir, char *buffer, size_t len, int *fd,
 int lvm_rename(const char *old, const char *new);
 
 /*
+ * Remove old backup files from dir matching prefix.
+ * Keep at least keep_min files.
+ * If keep_days > 0, only remove files older than keep_days.
+ */
+void backup_dir_cleanup(const char *dir, const char *prefix,
+			unsigned int keep_min, unsigned int keep_days);
+
+/*
  * Return 1 if path exists else return 0
  */
 int path_exists(const char *path);
