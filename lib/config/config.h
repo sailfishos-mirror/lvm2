@@ -149,6 +149,7 @@ typedef enum {
 	CFG_DEF_TREE_CURRENT,		/* tree of nodes with values currently set in the config */
 	CFG_DEF_TREE_MISSING,		/* tree of nodes missing in current config using default values */
 	CFG_DEF_TREE_FULL,		/* CURRENT + MISSING, the tree actually used within execution */
+	CFG_DEF_TREE_FULL_DIFF,		/* like FULL, but comment out settings at default values */
 	CFG_DEF_TREE_DEFAULT,		/* tree of all possible config nodes with default values */
 	CFG_DEF_TREE_NEW,		/* tree of all new nodes that appeared in given version */
 	CFG_DEF_TREE_NEW_SINCE,		/* tree of all new nodes that appeared since given version */
@@ -241,6 +242,7 @@ config_source_t config_get_source_type(struct dm_config_tree *cft);
 typedef uint32_t (*checksum_fn_t) (uint32_t initial, const uint8_t *buf, size_t size);
 
 struct dm_config_tree *config_open(config_source_t source, const char *filename, int keep_open);
+int config_set_source(struct dm_config_tree *cft, config_source_t type);
 int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_reason_t reason,
 			off_t offset, size_t size, off_t offset2, size_t size2,
 			checksum_fn_t checksum_fn, uint32_t checksum,

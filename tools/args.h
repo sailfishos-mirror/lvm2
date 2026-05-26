@@ -274,6 +274,12 @@ arg(dump_ARG, '\0', "dump", dumptype_VAL, 0, 0,
     "searching standard locations in case of damaged headers,\n"
     "\\fBmetadata_area\\fP to save an entire text metadata area to a file.\n")
 
+arg(edit_ARG, '\0', "edit", string_VAL, ARG_GROUPABLE, 0,
+    "Edit or remove a setting in an lvm config file.\n"
+    "The setting is specified as Section/Field=Value.\n"
+    "To remove a setting, use Section/Field=-.\n"
+    "Repeat this option to edit multiple settings.\n")
+
 arg(errorwhenfull_ARG, '\0', "errorwhenfull", bool_VAL, 0, 0,
     "Specifies thin pool behavior when data space is exhausted.\n"
     "When yes, device-mapper will immediately return an error\n"
@@ -369,6 +375,9 @@ arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
 arg(importdevices_ARG, '\0', "importdevices", 0, 0, 0,
     "Add devices to the devices file.\n")
 
+arg(input_ARG, '\0', "input", string_VAL, 0, 0,
+    "Read configuration from the specified input file.\n")
+
 arg(integritysettings_ARG, '\0', "integritysettings", string_VAL, ARG_GROUPABLE, 0,
     "Specifies tunable kernel options for dm-integrity.\n"
     "See \\fBlvmraid\\fP(7) for more information.\n")
@@ -420,6 +429,7 @@ arg(locktype_ARG, '\0', "locktype", locktype_VAL, 0, 0,
 
 arg(logonly_ARG, '\0', "logonly", 0, 0, 0,
     "Suppress command report and display only log report.\n")
+
 
 arg(longhelp_ARG, '\0', "longhelp", 0, 0, 0,
     "Display long help text.\n")
@@ -583,6 +593,12 @@ arg(originname_ARG, '\0', "originname", lv_VAL, 0, 0,
     "Specifies the name to use for the external origin LV when converting an LV\n"
     "to a thin LV. The LV being converted becomes a read-only external origin\n"
     "with this name.\n")
+
+arg(output_ARG, '\0', "output", string_VAL, 0, 0,
+    "Write lvm configuration to the specified output file.\n"
+    "Used with --input to read configuration from one file,\n"
+    "optionally apply edits, and write the configuration to\n"
+    "another file.\n")
 
 arg(persist_ARG, '\0', "persist", string_VAL, 0, 0,
     "Persistent Reservation operation.\n"

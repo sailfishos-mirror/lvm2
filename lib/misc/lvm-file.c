@@ -318,18 +318,6 @@ void lvm_stat_ctim(struct timespec *ctim, const struct stat *buf)
 #endif
 }
 
-static const char *_backup_prefix;
-static size_t _backup_prefix_len;
-
-static int _filter_backup(const struct dirent *de)
-{
-	if (de->d_name[0] == '.')
-		return 0;
-	if (strncmp(de->d_name, _backup_prefix, _backup_prefix_len))
-		return 0;
-	return 1;
-}
-
 #define SECS_PER_DAY 86400
 
 #ifndef HAVE_VERSIONSORT
@@ -343,18 +331,33 @@ void backup_dir_cleanup(const char *dir, const char *prefix,
 	struct stat sb;
 	time_t retain_time = 0;
 	char path[PATH_MAX];
-	int count, i;
+	size_t prefix_len = strlen(prefix);
+	int total, count, i, j;
 	int dir_fd = -1;
 	unsigned int remove_count;
 	DIR *dp;
 
-	_backup_prefix = prefix;
-	_backup_prefix_len = strlen(prefix);
-
-	count = scandir(dir, &namelist, _filter_backup, versionsort);
-	if (count < 0) {
+	total = scandir(dir, &namelist, NULL, versionsort);
+	if (total < 0) {
 		log_sys_debug("scandir", dir);
 		return;
+	}
+
+	/* Filter out non-matching entries in place */
+	for (i = 0, count = 0; i < total; i++) {
+		if (namelist[i]->d_name[0] == '.' ||
+		    strncmp(namelist[i]->d_name, prefix, prefix_len)) {
+			free(namelist[i]);
+			namelist[i] = NULL;
+		} else {
+			count++;
+		}
+	}
+
+	/* Compact the array so matching entries are contiguous */
+	for (i = 0, j = 0; i < total; i++) {
+		if (namelist[i])
+			namelist[j++] = namelist[i];
 	}
 
 	if ((unsigned int)count <= keep_min)
@@ -362,9 +365,8 @@ void backup_dir_cleanup(const char *dir, const char *prefix,
 
 	remove_count = (unsigned int)count - keep_min;
 
-	if (keep_days) {
+	if (keep_days)
 		retain_time = time(NULL) - (time_t)keep_days * SECS_PER_DAY;
-	}
 
 	if (!(dp = opendir(dir))) {
 		log_sys_debug("opendir", dir);
@@ -377,7 +379,7 @@ void backup_dir_cleanup(const char *dir, const char *prefix,
 	}
 
 	/* namelist is sorted oldest-first; remove from the beginning */
-	for (i = 0; i < (int)count && remove_count; i++) {
+	for (i = 0; i < count && remove_count; i++) {
 		if (keep_days) {
 			if (dm_snprintf(path, sizeof(path), "%s/%s", dir, namelist[i]->d_name) < 0)
 				continue;
