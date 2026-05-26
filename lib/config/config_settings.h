@@ -1003,6 +1003,13 @@ cfg(backup_retain_min_CFG, "retain_min", backup_CFG_SECTION, CFG_DEFAULT_COMMENT
 cfg(backup_retain_days_CFG, "retain_days", backup_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_ARCHIVE_DAYS, vsn(1, 0, 0), NULL, 0, NULL,
 	"Minimum number of days to keep archive files.\n")
 
+cfg(backup_config_file_backup_limit_CFG, "config_file_backup_limit", backup_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_CONFIG_FILE_BACKUP_LIMIT, vsn(2, 3, 35), NULL, 0, NULL,
+	"The max number of backup files to keep in /etc/lvm/old_conf.\n"
+	"LVM creates a backup of the config file each time\n"
+	"lvmconfig --edit modifies lvm.conf or lvmlocal.conf.\n"
+	"When the max number of backups is reached, the oldest are\n"
+	"removed to remain at the limit. Set to 0 to disable backups.\n")
+
 cfg(shell_history_size_CFG, "history_size", shell_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_MAX_HISTORY, vsn(1, 0, 0), NULL, 0, NULL,
 	"Number of lines of history to store in ~/.lvm_history.\n")
 

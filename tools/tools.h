@@ -251,4 +251,6 @@ int lvconvert_cachevol_attach_single(struct cmd_context *cmd,
 int lvresize_cmd(struct cmd_context *cmd, int argc, char **argv);
 int lvextend_policy_cmd(struct cmd_context *cmd, int argc, char **argv);
 
+int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv);
+
 #endif

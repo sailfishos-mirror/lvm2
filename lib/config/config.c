@@ -145,6 +145,24 @@ fail:
 	return NULL;
 }
 
+int config_set_source(struct dm_config_tree *cft, config_source_t type)
+{
+	struct config_source *cs;
+
+	if (dm_config_get_custom(cft))
+		return 1;
+
+	if (!(cs = dm_pool_zalloc(cft->mem, sizeof(struct config_source)))) {
+		log_error("Failed to allocate config source.");
+		return 0;
+	}
+
+	cs->type = type;
+	dm_config_set_custom(cft, cs);
+
+	return 1;
+}
+
 /*
  * Doesn't populate filename if the file is empty.
  */
@@ -1817,7 +1835,8 @@ static int _out_prefix_fn(const struct dm_config_node *cn, const char *line, voi
 		if (cfg_def->flags & CFG_DEFAULT_COMMENTED)
 			fprintf(out->fp, "%s# This configuration %s has an automatic default value.\n", line, node_type_name);
 
-		if ((out->tree_spec->type == CFG_DEF_TREE_FULL) &&
+		if ((out->tree_spec->type == CFG_DEF_TREE_FULL ||
+		     out->tree_spec->type == CFG_DEF_TREE_FULL_DIFF) &&
 		    (out->tree_spec->check_status[cn->id] & CFG_USED))
 			fprintf(out->fp, "%s# Value defined in existing configuration has been used for this setting.\n", line);
 	}
@@ -1918,18 +1937,34 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 			line++;
 	}
 
-	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
-	    (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
-	    (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
-	    !out->tree_spec->valuesonly &&
-	    (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
-		/* print with # at the front to comment out the line */
-		if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
-			space_prefix_len = strspn(line, "\t ");
-			fprintf(out->fp, "%.*s%s%s\n", space_prefix_len, line, "# ",
-				line + space_prefix_len);
+	/* Determine if this value should be commented out */
+	if (!out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
+		int should_comment = 0;
+
+		/* For FULL_DIFF tree: comment if value is at default (no CFG_DIFF) */
+		if ((out->tree_spec->type == CFG_DEF_TREE_FULL_DIFF) &&
+		    out->tree_spec->check_status &&
+		    !(out->tree_spec->check_status[cn->id] & CFG_DIFF)) {
+			should_comment = 1;
 		}
-		return 1;
+		/* For DEFAULT/MISSING/etc trees: comment if CFG_DEFAULT_COMMENTED flag set */
+		else if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
+			 (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
+			 (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
+			 (out->tree_spec->type != CFG_DEF_TREE_FULL_DIFF) &&
+			 (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
+			should_comment = 1;
+		}
+
+		if (should_comment) {
+			/* print with # at the front to comment out the line */
+			if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn)) {
+				space_prefix_len = strspn(line, "\t ");
+				fprintf(out->fp, "%.*s%s%s\n", space_prefix_len, line, "# ",
+					line + space_prefix_len);
+			}
+			return 1;
+		}
 	}
 
 	/* print the line as it is */
@@ -2122,6 +2157,8 @@ static int _should_skip_def_node(const struct config_def_tree_spec *spec, int se
 	switch (spec->type) {
 		case CFG_DEF_TREE_FULL:
 			/* fall through */
+		case CFG_DEF_TREE_FULL_DIFF:
+			/* fall through */
 		case CFG_DEF_TREE_MISSING:
 			if (!spec->check_status) {
 				log_error_once(INTERNAL_ERROR "couldn't determine missing "
@@ -2231,7 +2268,7 @@ struct dm_config_tree *config_def_create_tree(struct config_def_tree_spec *spec)
 
 	cft->root = root;
 
-	if (spec->type == CFG_DEF_TREE_FULL) {
+	if (spec->type == CFG_DEF_TREE_FULL || spec->type == CFG_DEF_TREE_FULL_DIFF) {
 		if (!(tmp_cft = dm_config_create())) {
 			log_error("Failed to create temporary config tree while creating full tree.");
 			goto bad;
