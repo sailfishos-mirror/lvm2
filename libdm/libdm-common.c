@@ -127,14 +127,26 @@ void dm_lib_init(void)
  * function.
  */
 
+static int _abort_on_internal_errors = 0;
+static int _debug_with_line_numbers = 0;
+static pthread_once_t _log_env_once = PTHREAD_ONCE_INIT;
+
+static void _init_log_env_vars(void)
+{
+	_abort_on_internal_errors =
+		strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0");
+	_debug_with_line_numbers =
+		strcmp(getenv("DM_DEBUG_WITH_LINE_NUMBERS") ? : "0", "0");
+}
+
 __attribute__((format(printf, 5, 0)))
 static void _default_log_line(int level, const char *file,
 			      int line, int dm_errno_or_class,
 			      const char *f, va_list ap)
 {
-	static int _abort_on_internal_errors = -1;
-	static int _debug_with_line_numbers = -1;
 	FILE *out = log_stderr(level) ? stderr : stdout;
+
+	pthread_once(&_log_env_once, _init_log_env_vars);
 
 	level = log_level(level);
 
@@ -142,22 +154,12 @@ static void _default_log_line(int level, const char *file,
 		if (level < _LOG_WARN)
 			out = stderr;
 
-		if (_debug_with_line_numbers < 0)
-			/* Set when env DM_DEBUG_WITH_LINE_NUMBERS is not "0" */
-			_debug_with_line_numbers =
-				strcmp(getenv("DM_DEBUG_WITH_LINE_NUMBERS") ? : "0", "0");
-
 		if (_debug_with_line_numbers)
 			fprintf(out, "%s:%d     ", file, line);
 
 		vfprintf(out, f, ap);
 		fputc('\n', out);
 	}
-
-	if (_abort_on_internal_errors < 0)
-		/* Set when env DM_ABORT_ON_INTERNAL_ERRORS is not "0" */
-		_abort_on_internal_errors =
-			strcmp(getenv("DM_ABORT_ON_INTERNAL_ERRORS") ? : "0", "0");
 
 	if (_abort_on_internal_errors &&
 	    !strncmp(f, INTERNAL_ERROR, sizeof(INTERNAL_ERROR) - 1))
