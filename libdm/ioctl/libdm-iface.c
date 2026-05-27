@@ -68,7 +68,6 @@
 static unsigned _dm_version = DM_VERSION_MAJOR;
 static unsigned _dm_version_minor = 0;
 static unsigned _dm_version_patchlevel = 0;
-static struct dm_timestamp *_dm_ioctl_timestamp = NULL;
 static int _dm_warn_inactive_suppress = 0;
 
 /*
@@ -577,6 +576,7 @@ void dm_task_destroy(struct dm_task *dmt)
 	dm_free(dmt->geometry);
 	dm_free(dmt->uuid);
 	dm_free(dmt->mangled_uuid);
+	dm_timestamp_destroy(dmt->ioctl_timestamp);
 	dm_free(dmt);
 }
 
@@ -1163,10 +1163,10 @@ int dm_task_set_event_nr(struct dm_task *dmt, uint32_t event_nr)
 
 int dm_task_set_record_timestamp(struct dm_task *dmt)
 {
-	if (!_dm_ioctl_timestamp)
-		_dm_ioctl_timestamp = dm_timestamp_alloc();
+	if (!dmt->ioctl_timestamp)
+		dmt->ioctl_timestamp = dm_timestamp_alloc();
 
-	if (!_dm_ioctl_timestamp)
+	if (!dmt->ioctl_timestamp)
 		return_0;
 
 	dmt->record_timestamp = 1;
@@ -1176,7 +1176,7 @@ int dm_task_set_record_timestamp(struct dm_task *dmt)
 
 struct dm_timestamp *dm_task_get_ioctl_timestamp(struct dm_task *dmt)
 {
-	return dmt->record_timestamp ? _dm_ioctl_timestamp : NULL;
+	return dmt->record_timestamp ? dmt->ioctl_timestamp : NULL;
 }
 
 struct target *create_target(uint64_t start, uint64_t len, const char *type,
@@ -2606,7 +2606,7 @@ static struct dm_ioctl *_do_dm_ioctl(struct dm_task *dmt,
 	r = _dm_ioctl_exec_retry(_get_control_fd(), dmt);
 
 	if (dmt->record_timestamp)
-		if (!dm_timestamp_get(_dm_ioctl_timestamp))
+		if (!dm_timestamp_get(dmt->ioctl_timestamp))
 			stack;
 
 	if (!_dm_ioctl_post(dmt, dmi, r)) {
@@ -2826,8 +2826,6 @@ void dm_lib_release(void)
 		_close_control_fd();
 	pthread_mutex_unlock(&_control_fd_mutex);
 
-	dm_timestamp_destroy(_dm_ioctl_timestamp);
-	_dm_ioctl_timestamp = NULL;
 	update_devs();
 }
 

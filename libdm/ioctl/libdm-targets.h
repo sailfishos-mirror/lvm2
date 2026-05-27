@@ -75,6 +75,7 @@ struct dm_task {
 	int ima_measurement;
 
 	int record_timestamp;
+	struct dm_timestamp *ioctl_timestamp;
 
 	char *uuid;
 	char *mangled_uuid;
