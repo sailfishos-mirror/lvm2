@@ -89,6 +89,7 @@ static struct selabel_handle *_get_selabel_handle(void)
 }
 #endif
 
+/* Set once in dm_lib_init(), immutable after -- safe for concurrent reads */
 static int _udev_disabled = 0;
 
 /* Thread that called dm_lib_init() -- only this thread may call set-once setters */
