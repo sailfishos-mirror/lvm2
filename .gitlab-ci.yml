@@ -115,6 +115,44 @@ make-all:
 # - spell checker
 # - autoformatter
 
+gccanalyze:
+  stage: test1
+  artifacts:
+    paths:
+      - gccanalyze.out
+  tags:
+    - cppcheck
+  timeout: 1h
+  script:
+    - if bash ci/dry-run.sh; then echo "# make gccanalyze"; exit 0; fi
+    - ./configure ${COMMON_CONFIG} ${F43_CONFIGURE}
+    - make gccanalyze &> gccanalyze.out
+  rules:
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft:/
+      when: never
+    - if: $CI_MERGE_REQUEST_PROJECT_PATH == "lvmteam/lvm2"
+      when: on_success
+  allow_failure: true
+
+cppcheck:
+  stage: test1
+  artifacts:
+    paths:
+      - cppcheck.out
+  tags:
+    - cppcheck
+  timeout: 1h
+  script:
+    - if bash ci/dry-run.sh; then echo "# make cppcheck"; exit 0; fi
+    - ./configure ${COMMON_CONFIG} ${F43_CONFIGURE}
+    - make cppcheck &> cppcheck.out
+  rules:
+    - if: $CI_MERGE_REQUEST_TITLE =~ /^Draft:/
+      when: never
+    - if: $CI_MERGE_REQUEST_PROJECT_PATH == "lvmteam/lvm2"
+      when: on_success
+  allow_failure: true
+
 test-single:
   stage: test1
   artifacts:
