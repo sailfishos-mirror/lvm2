@@ -587,6 +587,8 @@ int lv_cache_remove(struct logical_volume *cache_lv)
 		case CACHE_MODE_PASSTHROUGH:
 			/* For inactive pass/writethrough just drop cache layer */
 			corigin_lv = seg_lv(cache_seg, 0);
+			if (!deactivate_lv(cmd, corigin_lv))
+				return_0;
 			if (!detach_pool_lv(cache_seg))
 				return_0;
 			if (!remove_layer_from_lv(cache_lv, corigin_lv))
