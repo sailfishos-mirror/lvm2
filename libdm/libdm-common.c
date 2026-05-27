@@ -1560,6 +1560,8 @@ static int _do_node_op(node_op_t type, const char *dev_name, uint32_t major,
 struct dm_thread_state {
 	struct dm_list node_ops;
 	int count_node_ops[NUM_NODES];
+	char uuid_prefix[DM_MAX_UUID_PREFIX_LEN + 1];
+	int uuid_prefix_set;
 };
 
 static pthread_key_t _thread_state_key;
@@ -1930,6 +1932,7 @@ const char *dm_sysfs_dir(void)
  */
 int dm_set_uuid_prefix(const char *uuid_prefix)
 {
+	struct dm_thread_state *ts;
 	size_t len;
 
 	if (!uuid_prefix)
@@ -1940,13 +1943,22 @@ int dm_set_uuid_prefix(const char *uuid_prefix)
 		return 0;
 	}
 
-	memcpy(_default_uuid_prefix, uuid_prefix, len + 1);
+	if (!(ts = _get_thread_state()))
+		return_0;
+
+	memcpy(ts->uuid_prefix, uuid_prefix, len + 1);
+	ts->uuid_prefix_set = 1;
 
 	return 1;
 }
 
 const char *dm_uuid_prefix(void)
 {
+	struct dm_thread_state *ts = _get_thread_state();
+
+	if (ts && ts->uuid_prefix_set)
+		return ts->uuid_prefix;
+
 	return _default_uuid_prefix;
 }
 
