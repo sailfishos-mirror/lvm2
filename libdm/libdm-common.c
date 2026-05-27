@@ -107,8 +107,6 @@ static int _is_init_thread(const char *action)
 #ifdef UDEV_SYNC_SUPPORT
 static int _semaphore_supported = 0;
 static int _udev_running = 0;
-static int _sync_with_udev = 1;
-static int _udev_checking = 1;
 #endif
 
 void dm_lib_init(void)
@@ -1562,6 +1560,10 @@ struct dm_thread_state {
 	int count_node_ops[NUM_NODES];
 	char uuid_prefix[DM_MAX_UUID_PREFIX_LEN + 1];
 	int uuid_prefix_set;
+#ifdef UDEV_SYNC_SUPPORT
+	int sync_with_udev;
+	int udev_checking;
+#endif
 };
 
 static pthread_key_t _thread_state_key;
@@ -1604,6 +1606,10 @@ static struct dm_thread_state *_get_thread_state(void)
 			return NULL;
 		}
 		dm_list_init(&ts->node_ops);
+#ifdef UDEV_SYNC_SUPPORT
+		ts->sync_with_udev = 1;
+		ts->udev_checking = 1;
+#endif
 		pthread_setspecific(_thread_state_key, ts);
 	}
 
@@ -2608,21 +2614,35 @@ static void _init_udev_sync_requirements(void)
 
 void dm_udev_set_sync_support(int sync_with_udev)
 {
+	struct dm_thread_state *ts;
+
 	pthread_once(&_udev_sync_once, _init_udev_sync_requirements);
-	_sync_with_udev = sync_with_udev;
+
+	if ((ts = _get_thread_state()))
+		ts->sync_with_udev = sync_with_udev;
 }
 
 int dm_udev_get_sync_support(void)
 {
+	struct dm_thread_state *ts;
+
 	pthread_once(&_udev_sync_once, _init_udev_sync_requirements);
 
+	ts = _get_thread_state();
+
 	return !_udev_disabled && _semaphore_supported &&
-		dm_cookie_supported() && _udev_running && _sync_with_udev;
+		dm_cookie_supported() && _udev_running &&
+		(ts ? ts->sync_with_udev : 1);
 }
 
 void dm_udev_set_checking(int checking)
 {
-	if ((_udev_checking = checking))
+	struct dm_thread_state *ts;
+
+	if ((ts = _get_thread_state()))
+		ts->udev_checking = checking;
+
+	if (checking)
 		log_debug_activation("DM udev checking enabled");
 	else
 		log_debug_activation("DM udev checking disabled");
@@ -2630,7 +2650,9 @@ void dm_udev_set_checking(int checking)
 
 int dm_udev_get_checking(void)
 {
-	return _udev_checking;
+	struct dm_thread_state *ts = _get_thread_state();
+
+	return ts ? ts->udev_checking : 1;
 }
 
 static int _get_cookie_sem(uint32_t cookie, int *semid)
