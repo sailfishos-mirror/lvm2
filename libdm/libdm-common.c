@@ -91,6 +91,9 @@ static struct selabel_handle *_get_selabel_handle(void)
 
 static int _udev_disabled = 0;
 
+/* Thread that called dm_lib_init() -- only this thread may call set-once setters */
+static pthread_t _init_tid;
+
 #ifdef UDEV_SYNC_SUPPORT
 static int _semaphore_supported = -1;
 static int _udev_running = -1;
@@ -101,6 +104,8 @@ static int _udev_checking = 1;
 void dm_lib_init(void)
 {
 	const char *env;
+
+	_init_tid = pthread_self();
 
 	if (getenv("DM_DISABLE_UDEV"))
 		_udev_disabled = 1;
