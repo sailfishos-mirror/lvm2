@@ -105,8 +105,8 @@ static int _is_init_thread(const char *action)
 }
 
 #ifdef UDEV_SYNC_SUPPORT
-static int _semaphore_supported = -1;
-static int _udev_running = -1;
+static int _semaphore_supported = 0;
+static int _udev_running = 0;
 static int _sync_with_udev = 1;
 static int _udev_checking = 1;
 #endif
@@ -2593,29 +2593,28 @@ bad:
 	return 0;
 }
 
-static void _check_udev_sync_requirements_once(void)
-{
-	if (_semaphore_supported < 0)
-		_semaphore_supported = _check_semaphore_is_supported();
+static pthread_once_t _udev_sync_once = PTHREAD_ONCE_INIT;
 
-	if (_udev_running < 0) {
-		_udev_running = _check_udev_is_running();
-		if (_udev_disabled && _udev_running)
-			log_warn("Udev is running and DM_DISABLE_UDEV environment variable is set. "
-				 "Bypassing udev, device-mapper library will manage device "
-				 "nodes in device directory.");
-	}
+static void _init_udev_sync_requirements(void)
+{
+	_semaphore_supported = _check_semaphore_is_supported();
+	_udev_running = _check_udev_is_running();
+
+	if (_udev_disabled && _udev_running)
+		log_warn("Udev is running and DM_DISABLE_UDEV environment variable is set. "
+			 "Bypassing udev, device-mapper library will manage device "
+			 "nodes in device directory.");
 }
 
 void dm_udev_set_sync_support(int sync_with_udev)
 {
-	_check_udev_sync_requirements_once();
+	pthread_once(&_udev_sync_once, _init_udev_sync_requirements);
 	_sync_with_udev = sync_with_udev;
 }
 
 int dm_udev_get_sync_support(void)
 {
-	_check_udev_sync_requirements_once();
+	pthread_once(&_udev_sync_once, _init_udev_sync_requirements);
 
 	return !_udev_disabled && _semaphore_supported &&
 		dm_cookie_supported() && _udev_running && _sync_with_udev;
