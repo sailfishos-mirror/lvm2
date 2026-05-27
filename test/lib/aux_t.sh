@@ -577,12 +577,10 @@ teardown() {
 			# Compare against device baseline captured after prepare_devs
 			TEST_LEAKED_DEVICES=$(dmsetup info -c --noheadings -o name | \
 				grep "^${PREFIX}" | sort | \
-				comm -23 - DM_DEV_BASELINE | \
-				grep -Fv -f <(cat ERR_DEV_NAME ZERO_DEV_NAME 2>/dev/null)) || true
+				comm -23 - DM_DEV_BASELINE) || true
 		else
 			TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | \
-				grep -Ev "${PREFIX}(pv|[0-9])" | \
-				grep -Fv -f <(cat ERR_DEV_NAME ZERO_DEV_NAME 2>/dev/null)) || true
+				grep -Ev "${PREFIX}(pv|[0-9])") || true
 		fi
 	fi
 
