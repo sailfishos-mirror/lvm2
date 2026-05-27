@@ -573,10 +573,17 @@ teardown() {
 
 	if [[ ! -f SKIP_THIS_TEST  ]]; then
 		# Evaluate left devices only for non-skipped tests
-		TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | \
-			grep -Ev "${PREFIX}(pv|[0-9])" | \
-			grep -v "$(cat ERR_DEV_NAME 2>/dev/null)" | \
-			grep -v "$(cat ZERO_DEV_NAME 2>/dev/null)") || true
+		if [[ -s DM_DEV_BASELINE ]]; then
+			# Compare against device baseline captured after prepare_devs
+			TEST_LEAKED_DEVICES=$(dmsetup info -c --noheadings -o name | \
+				grep "^${PREFIX}" | sort | \
+				comm -23 - DM_DEV_BASELINE | \
+				grep -Fv -f <(cat ERR_DEV_NAME ZERO_DEV_NAME 2>/dev/null)) || true
+		else
+			TEST_LEAKED_DEVICES=$(dmsetup table | grep "$PREFIX" | \
+				grep -Ev "${PREFIX}(pv|[0-9])" | \
+				grep -Fv -f <(cat ERR_DEV_NAME ZERO_DEV_NAME 2>/dev/null)) || true
+		fi
 	fi
 
 	kill_tagged_processes
@@ -1171,6 +1178,10 @@ prepare_devs() {
 
 	printf "%s\\n" "${DEVICES[@]}" > DEVICES
 #	( IFS=$'\n'; echo "${DEVICES[*]}" ) >DEVICES
+
+	# Save DM device baseline for leak detection in teardown
+	dmsetup info -c --noheadings -o name | grep "^${PREFIX}" | sort > DM_DEV_BASELINE 2>/dev/null || true
+
 	echo "ok"
 }
 
