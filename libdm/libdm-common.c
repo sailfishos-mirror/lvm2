@@ -62,7 +62,6 @@ union semun
 
 static char _dm_dir[PATH_MAX] = DEV_DIR DM_DIR;
 static char _sysfs_dir[PATH_MAX] = "/sys/";
-static char _path0[PATH_MAX];           /* path buffer, safe 4kB on stack */
 static const char _mountinfo[] = "/proc/self/mountinfo";
 
 #define DM_MAX_UUID_PREFIX_LEN	15
@@ -1347,6 +1346,7 @@ static int _open_dev_node(const char *dev_name)
 int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
 			    uint32_t *read_ahead)
 {
+	char path0[PATH_MAX];
 	char buf[24];
 	int len;
 	int r = 1;
@@ -1358,17 +1358,17 @@ int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor
 	 * Otherwise use BLKRAGET ioctl.
 	 */
 	if (*_sysfs_dir && major != 0) {
-		if (dm_snprintf(_path0, sizeof(_path0), "%sdev/block/%" PRIu32
+		if (dm_snprintf(path0, sizeof(path0), "%sdev/block/%" PRIu32
 				":%" PRIu32 "/bdi/read_ahead_kb", _sysfs_dir,
 				major, minor) < 0) {
 			log_error("Failed to build sysfs_path.");
 			return 0;
 		}
 
-		if ((fd = open(_path0, O_RDONLY, 0)) != -1) {
+		if ((fd = open(path0, O_RDONLY, 0)) != -1) {
 			/* Reading from sysfs, expecting number\n */
 			if ((len = read(fd, buf, sizeof(buf) - 1)) < 1) {
-				log_sys_error("read", _path0);
+				log_sys_error("read", path0);
 				r = 0;
 			} else {
 				buf[len] = 0; /* kill \n and ensure \0 */
@@ -1378,12 +1378,12 @@ int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor
 			}
 
 			if (close(fd))
-				log_sys_debug("close", _path0);
+				log_sys_debug("close", path0);
 
 			return r;
 		}
 
-		log_sys_debug("open", _path0);
+		log_sys_debug("open", path0);
 		/* Fall back to use dev_name */
 	}
 
@@ -1417,6 +1417,7 @@ int get_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor
 static int _set_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
 			   uint32_t read_ahead)
 {
+	char path0[PATH_MAX];
 	char buf[24];
 	int len;
 	int r = 1;
@@ -1431,7 +1432,7 @@ static int _set_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
 	 * Otherwise use BLKRASET ioctl. RA is set after resume.
 	 */
 	if (*_sysfs_dir && major != 0) {
-		if (dm_snprintf(_path0, sizeof(_path0), "%sdev/block/%" PRIu32
+		if (dm_snprintf(path0, sizeof(path0), "%sdev/block/%" PRIu32
 				":%" PRIu32 "/bdi/read_ahead_kb",
 				_sysfs_dir, major, minor) < 0) {
 			log_error("Failed to build sysfs_path.");
@@ -1445,19 +1446,19 @@ static int _set_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
 			return 0;
 		}
 
-		if ((fd = open(_path0, O_WRONLY, 0)) != -1) {
+		if ((fd = open(path0, O_WRONLY, 0)) != -1) {
 			if (write(fd, buf, len) < len) {
-				log_sys_error("write", _path0);
+				log_sys_error("write", path0);
 				r = 0;
 			}
 
 			if (close(fd))
-				log_sys_debug("close", _path0);
+				log_sys_debug("close", path0);
 
 			return r;
 		}
 
-		log_sys_debug("open", _path0);
+		log_sys_debug("open", path0);
 		/* Fall back to use dev_name */
 	}
 
