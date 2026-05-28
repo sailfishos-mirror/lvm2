@@ -1860,6 +1860,9 @@ const char *dm_dir(void)
 
 int dm_set_sysfs_dir(const char *sysfs_dir)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return 0;
+
 	if (!sysfs_dir || !*sysfs_dir) {
 		_sysfs_dir[0] = '\0';
 		return 1;
