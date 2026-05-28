@@ -1847,6 +1847,9 @@ static int _canonicalize_and_set_dir(const char *src, const char *suffix, size_t
 
 int dm_set_dev_dir(const char *dev_dir)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return 0;
+
 	return _canonicalize_and_set_dir(dev_dir, DM_DIR, sizeof _dm_dir, _dm_dir);
 }
 
