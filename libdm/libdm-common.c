@@ -323,6 +323,9 @@ int dm_get_suspended_counter(void)
 
 int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling_mode)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return 0;
+
 	_name_mangling_mode = name_mangling_mode;
 
 	return 1;
