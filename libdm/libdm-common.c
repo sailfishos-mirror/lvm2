@@ -266,6 +266,9 @@ void dm_log_with_errno_init(dm_log_with_errno_fn fn)
 
 void dm_log_init_verbose(int level)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return;
+
 	_verbose = level;
 }
 
