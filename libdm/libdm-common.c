@@ -239,6 +239,9 @@ static void _log_to_default_log_with_errno(int level,
 
 void dm_log_init(dm_log_fn fn)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return;
+
 	if (fn)  {
 		dm_log = fn;
 		dm_log_with_errno = _log_to_default_log;
@@ -255,6 +258,9 @@ int dm_log_is_non_default(void)
 
 void dm_log_with_errno_init(dm_log_with_errno_fn fn)
 {
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return;
+
 	if (fn) {
 		dm_log = _log_to_default_log_with_errno;
 		dm_log_with_errno = fn;
