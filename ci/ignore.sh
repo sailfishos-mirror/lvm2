@@ -14,4 +14,4 @@ fi
 
 # Find all failed tests, sort the list, and filter out anything matching patterns in IGNORE_FILE:
 # sed: ignore all comments and print non empty lines only
-grep failed | sort | grep -v -f <(sed -n -e 's/\s*#.*$//' -e '/^.\+$/p' "$IGNORE_FILE)
+grep failed | sort | grep -v -f <(sed -n -e 's/\s*#.*$//' -e '/^.\+$/p' "$IGNORE_FILE")
