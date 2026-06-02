@@ -5,10 +5,6 @@ die() {
 	exit 2
 }
 
-hash() {
-	git log -1 --pretty="format:%h" "$@"
-}
-
 IGNORE_SPEC='\|spec/'
 while [[ -n "$*" ]]; do
 case "$1" in
@@ -29,8 +25,6 @@ done
 HEAD="${1:-"HEAD"}"
 TARGET=${2:-"origin/main"}
 
-answ=0
-
 echo -e "\nFiles changed in the MR:"
 git diff --exit-code --name-only "${HEAD}" "^${TARGET}"
 case $? in
@@ -40,8 +34,7 @@ case $? in
 	1)
 		;;
 	*)
-		die "Problem with git diff. The tests will run anyway."
-		exit 2 ;;
+		die "Problem with git diff. The tests will run anyway." ;;
 esac
 
 echo -e "\nChecking the files for significant changes:"

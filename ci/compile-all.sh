@@ -18,7 +18,7 @@ DEST=results
 mkdir "$DEST" || die "Failed to create '$DEST'"
 
 # TODO: What should be default configure options?
-CONFIGURE="\
+CONFIGURE=(\
       --with-default-use-devices-file=1\
       --enable-app-machineid\
       --enable-editline\
@@ -37,7 +37,7 @@ CONFIGURE="\
       --enable-dmfilemapd\
       --with-vdo-format=/usr/bin/vdoformat\
       --disable-silent-rules\
-"
+)
 
 answ=0
 
@@ -47,14 +47,14 @@ answ=0
 autoreconf
 git commit -a -m "configure: autoreconf" || :
 
-./configure $CONFIGURE && make generate
+./configure "${CONFIGURE[@]}" && make generate
 git add man/*_pregen || :
 git commit -a -m "make: generate" || :
 
-if git diff $HASH..HEAD &>/dev/null; then
+if git diff "$HASH"..HEAD &>/dev/null; then
 	answ=1
 	echo "ERROR: May need to run autoreconf or make generate" >&2
-	git diff $HASH..HEAD > $DEST/autoreconf_make_generate.out
+	git diff "$HASH"..HEAD > $DEST/autoreconf_make_generate.out
 fi
 
 ################################################################################
@@ -65,23 +65,23 @@ commits="$(git log --pretty="%h" "${HASH}" "^${TARGET}" | tac)"
 [[ -n "$commits" ]] || die "No commits found in '${HEAD}' ($DESCRIBE) which are not already in '${TARGET}'"
 
 for commit in $commits; do
-	git reset --hard $commit
+	git reset --hard "$commit"
 
-	OUT=$DEST/$commit.configure.out
-	if ! ./configure $CONFIGURE &> "$OUT"; then
+	OUT="$DEST/$commit.configure.out"
+	if ! ./configure "${CONFIGURE[@]}" &> "$OUT"; then
 		answ=1
 		echo "$commit: ERROR: Failed to configure" >&2
 		continue
 	fi
-	rm $OUT
+	rm "$OUT"
 
-	OUT=$DEST/$commit.make.out
-	if ! make &>> $OUT; then
+	OUT="$DEST/$commit.make.out"
+	if ! make &>> "$OUT"; then
 		answ=1
 		echo "$commit: ERROR: Failed to compile" >&2
 		continue
 	fi
-	rm $OUT
+	rm "$OUT"
 
 	#OUT=$DEST/$commit.make_rpm.out
 	#if ! make rpm &>> $OUT; then
