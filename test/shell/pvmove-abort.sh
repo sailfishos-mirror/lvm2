@@ -68,7 +68,7 @@ lvremove -ff $vg
 # not required as pvmove would exit with:
 # 'No pvmove in progress - already finished or aborted.'
 if test -z "$backgroundarg" ; then
-	kill "$PVMOVE1_PID" "$PVMOVE2_PID"
+	kill "$PVMOVE1_PID" "$PVMOVE2_PID" || true
 	wait "$PVMOVE1_PID" "$PVMOVE2_PID" || true
 fi
 aux kill_tagged_processes
