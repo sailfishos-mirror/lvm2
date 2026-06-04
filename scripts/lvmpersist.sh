@@ -766,6 +766,15 @@ do_start() {
 		fi
 
 		if [[ "$?" -ne 0 ]]; then
+			# For WEAR/EAAR, another host may have acquired the
+			# reservation between our check and our acquire attempt.
+			# Re-check: if the reservation now exists, that's fine.
+			if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
+				get_dev_reservation "$dev"
+				if [[ "$DEV_PRDESC" == "$type_str" ]]; then
+					continue
+				fi
+			fi
 			logmsg "start $GROUP failed to reserve $dev."
 			undo_register
 			exit 1
