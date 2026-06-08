@@ -195,3 +195,5 @@ check inactive $vg orig
 check inactive $vg snap
 
 dm_table $vg-orig2-real | grep thin
+
+vgremove -f $vg
