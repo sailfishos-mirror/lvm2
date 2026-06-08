@@ -562,6 +562,7 @@ kill_tagged_processes() {
 }
 
 teardown() {
+	local test_exit_status=$?
 	local cfg
 	local TEST_LEAKED_DEVICES=""
 	local had_devices=0
@@ -619,9 +620,14 @@ teardown() {
 	fi
 
 	if [[ -n "${TEST_LEAKED_DEVICES-}" ]]; then
-		echo "## unexpected devices left dm table:"
-		echo "$TEST_LEAKED_DEVICES"
-		return 1
+		if [[ "$test_exit_status" -eq 0 ]]; then
+			echo "## unexpected devices left dm table:"
+			echo "$TEST_LEAKED_DEVICES"
+			return 1
+		else
+			echo "## devices left after test failure (expected):"
+			echo "$TEST_LEAKED_DEVICES"
+		fi
 	fi
 
 	if [[ "${LVM_TEST_PARALLEL:-0}" = 0 && -z "$RUNNING_DMEVENTD" ]]; then
