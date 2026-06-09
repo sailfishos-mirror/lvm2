@@ -2865,6 +2865,11 @@ static int _lv_remove_any_missing_subdevs(struct logical_volume *lv)
 	return 1;
 }
 
+int lv_remove_any_missing_subdevs(struct logical_volume *lv)
+{
+	return _lv_remove_any_missing_subdevs(lv);
+}
+
 /* Remove any "*-missing_*" sub devices added by the activation layer for an rmeta/rimage missing PV mapping */
 int lv_deactivate_any_missing_subdevs(const struct logical_volume *lv)
 {
