@@ -284,6 +284,18 @@ struct load_properties {
 	unsigned skip_reload_params_compare;
 
 	/*
+	 * Force table reload even if the table is identical.
+	 * Set when a child device table has been loaded,
+	 * because the kernel recalculates device limits only
+	 * during DM_TABLE_LOAD, not during suspend/resume.
+	 */
+	unsigned force_reload;
+
+	/* Node is being replaced with a stub (error/zero) for teardown.
+	 * Its table load should not propagate force_reload to parents. */
+	unsigned suppress_parent_reload;
+
+	/*
 	 * Call node_send_messages(), set to 2 if there are messages
 	 * When != 0, it validates matching transaction id, thus thin-pools
 	 * where transaction_id is passed as 0 are never validated, this
@@ -3288,11 +3300,14 @@ static int _load_node(struct dm_tree_node *dnode)
 				   seg, &seg_start))
 			goto_out;
 
-	if (!dm_task_suppress_identical_reload(dmt))
-		log_warn("WARNING: Failed to suppress reload of identical tables.");
-
-	if (dnode->props.skip_reload_params_compare)
-		dmt->skip_reload_params_compare = 1;
+	if (!dnode->props.force_reload) {
+		if (!dm_task_suppress_identical_reload(dmt))
+			log_warn("WARNING: Failed to suppress reload of identical tables.");
+		if (dnode->props.skip_reload_params_compare)
+			dmt->skip_reload_params_compare = 1;
+	} else
+		log_debug_activation("Forcing %s table reload to update device limits.",
+				     _node_name(dnode));
 
 	if ((r = dm_task_run(dmt))) {
 		r = dm_task_get_info(dmt, &dnode->info);
@@ -3386,6 +3401,7 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 	void *handle = NULL;
 	struct dm_tree_node *child;
 	int update_devs_flag = 0;
+	int had_inactive_table;
 
 	/* Preload children first */
 	while ((child = dm_tree_next_child(&handle, dnode, 0))) {
@@ -3431,6 +3447,9 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 		if (child->props.delay_resume_if_extended)
 			dnode->props.delay_resume_if_extended = 1;
 
+		/* Remember if child already had an inactive table before _load_node */
+		had_inactive_table = child->info.inactive_table;
+
 		if (!child->info.inactive_table &&
 		    child->props.segment_count &&
 		    !_load_node(child)) {
@@ -3443,6 +3462,21 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 				stack;
 			r = 0;
 			continue;
+		}
+
+		/*
+		 * Propagate force_reload only when _load_node() just set
+		 * inactive_table in THIS traversal.
+		 * A stale inactive_table (e.g. delay_resume_if_new device
+		 * loaded in the PRELOAD tree but seen again in the ACTIVATE
+		 * tree) must not trigger a parent reload - that reload was
+		 * already done during PRELOAD.
+		 */
+		if (child->info.inactive_table && !had_inactive_table &&
+		    !child->props.suppress_parent_reload) {
+			dnode->props.force_reload = 1;
+			log_debug_activation("Child %s table loaded, forcing reload of parent.",
+					     _node_name(child));
 		}
 
 		/* No resume for a device without parents or with unchanged or smaller size */
@@ -3691,6 +3725,8 @@ int dm_tree_node_add_error_target(struct dm_tree_node *node,
 	if (!_add_segment(node, SEG_ERROR, size))
 		return_0;
 
+	node->props.suppress_parent_reload = 1;
+
 	return 1;
 }
 
@@ -3699,6 +3735,8 @@ int dm_tree_node_add_zero_target(struct dm_tree_node *node,
 {
 	if (!_add_segment(node, SEG_ZERO, size))
 		return_0;
+
+	node->props.suppress_parent_reload = 1;
 
 	return 1;
 }
