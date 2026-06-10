@@ -662,13 +662,37 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
 		log_print_unless_silent("Detected pvmove in progress for %s.", pv_name);
-		if (pp->pv_count || lv_name)
-			log_warn("WARNING: Ignoring remaining command line arguments.");
 
 		if (!(lvs_changed = lvs_using_lv(cmd, vg, lv_mirr))) {
 			log_error("ABORTING: Failed to generate list of moving LVs.");
 			goto out;
 		}
+
+		/*
+		 * If a named LV was specified, check if it is part of this
+		 * pvmove.  In a shared VG, another node may have created a
+		 * pvmove for a different LV on the same PV.  In that case,
+		 * fall through to start a new pvmove for the named LV.
+		 */
+		if (lv) {
+			int found = 0;
+			dm_list_iterate_items(lvl, lvs_changed)
+				if (lv_lock_holder(lvl->lv) == lv) {
+					found = 1;
+					break;
+				}
+			if (!found) {
+				log_print_unless_silent("Existing pvmove for %s does not "
+							"include %s, setting up new pvmove.",
+							pv_name, lv_name);
+				lv_mirr = NULL;
+			}
+		}
+	}
+
+	if (lv_mirr) {
+		if (pp->pv_count || lv_name)
+			log_warn("WARNING: Ignoring remaining command line arguments.");
 
 		dm_list_iterate_items(lvl, lvs_changed) {
 			lvh = lv_lock_holder(lvl->lv);
