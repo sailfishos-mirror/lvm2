@@ -805,10 +805,18 @@ prepare_scsi_debug_dev() {
 		skip "Not enough vmalloc space (need ${NEED_KB}kB, total ${VTOTAL}kB)"
 
 	# Create the scsi_debug device and determine the new scsi device's name
-	# NOTE: it will _never_ make sense to pass num_tgts param;
-	# last param wins.. so num_tgts=1 is imposed
+	local DELAY="delay=0"
+	local NUM_TGTS="num_tgts=1"
+	local p
+	for p in "$@" ; do
+		case "$p" in
+		delay=*) DELAY= ;;
+		num_tgts=*) NUM_TGTS= ;;
+		esac
+	done
 	touch SCSI_DEBUG_DEV
-	modprobe scsi_debug dev_size_mb="$(( DEV_SIZE + 2 ))" "$@" num_tgts=1 || skip
+	modprobe scsi_debug dev_size_mb="$(( DEV_SIZE + 2 ))" \
+		${DELAY:+"$DELAY"} "$@" ${NUM_TGTS:+"$NUM_TGTS"} || skip
 
 	for i in {1..20} ; do
 		sleep .1 # allow for async Linux SCSI device registration
