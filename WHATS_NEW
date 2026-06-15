@@ -1,5 +1,9 @@
 Version 2.03.42 - 
 ==================
+  Add --enable-asan/--enable-tsan to build with sanitizer options.
+  Mirror cleans orphaned missing DM nodes on image removal.
+  Splitcache deactivates individually activated component.
+  Fix memleak in vgimportclone and vg_write_commit_bad_mdas().
   Fix autoactivation on top of MD and loop devices if udev db records incomplete.
   Make MD device ready state check in udev to be in sync with MD udev rules.
 
