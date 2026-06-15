@@ -787,6 +787,9 @@ LIBSANLOCKCLIENT_LIBS
 LIBSANLOCKCLIENT_CFLAGS
 VALGRIND_LIBS
 VALGRIND_CFLAGS
+SANITIZER_LDFLAGS
+SANITIZER_CFLAGS
+SANITIZER
 GENPNG
 GENHTML
 LCOV
@@ -947,6 +950,8 @@ enable_debug
 with_optimisation
 with_symvers
 enable_profiling
+enable_asan
+enable_tsan
 enable_valgrind_pool
 enable_devmapper
 enable_lvmpolld
@@ -1692,6 +1697,9 @@ Optional Features:
   --enable-cmirrord       enable the cluster mirror log daemon
   --enable-debug          enable debugging
   --enable-profiling      gather gcov profiling data
+  --enable-asan           enable AddressSanitizer and
+                          UndefinedBehaviorSanitizer
+  --enable-tsan           enable ThreadSanitizer
   --enable-valgrind-pool  enable valgrind awareness of pools
   --disable-devmapper     disable LVM2 device-mapper interaction
   --enable-lvmpolld       enable the LVM Polling Daemon
@@ -11973,6 +11981,144 @@ fi
 fi
 
 fi
+
+################################################################################
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to enable AddressSanitizer" >&5
+printf %s "checking whether to enable AddressSanitizer... " >&6; }
+# Check whether --enable-asan was given.
+if test ${enable_asan+y}
+then :
+  enableval=$enable_asan; ASAN=$enableval
+else case e in #(
+  e) ASAN="no" ;;
+esac
+fi
+
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ASAN" >&5
+printf '%s\n' "$ASAN" >&6; }
+
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to enable ThreadSanitizer" >&5
+printf %s "checking whether to enable ThreadSanitizer... " >&6; }
+# Check whether --enable-tsan was given.
+if test ${enable_tsan+y}
+then :
+  enableval=$enable_tsan; TSAN=$enableval
+else case e in #(
+  e) TSAN="no" ;;
+esac
+fi
+
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $TSAN" >&5
+printf '%s\n' "$TSAN" >&6; }
+
+if test "$ASAN" = "yes" && test "$TSAN" = "yes"
+then :
+  as_fn_error $? "--enable-asan and --enable-tsan are mutually exclusive" "$LINENO" 5
+fi
+
+SANITIZER=no
+
+if test "$ASAN" = "yes"
+then :
+
+	ac_save_CFLAGS="$CFLAGS"
+	ac_save_LDFLAGS="$LDFLAGS"
+	CFLAGS="-fsanitize=address"
+	LDFLAGS="-fsanitize=address"
+	{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -fsanitize=address" >&5
+printf %s "checking whether $CC supports -fsanitize=address... " >&6; }
+	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+else case e in #(
+  e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+			as_fn_error $? "compiler does not support -fsanitize=address" "$LINENO" 5 ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+	CFLAGS="$ac_save_CFLAGS"
+	LDFLAGS="$ac_save_LDFLAGS"
+
+				SANITIZER=asan
+	SANITIZER_CFLAGS="-fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict -fno-omit-frame-pointer"
+	SANITIZER_LDFLAGS="-fsanitize=address -fsanitize=undefined"
+	ELDFLAGS="$ELDFLAGS $SANITIZER_LDFLAGS"
+	CLDFLAGS="$CLDFLAGS -fno-sanitize=all"
+
+printf '%s\n' "#define ENABLE_ASAN 1" >>confdefs.h
+
+
+printf '%s\n' "#define ENABLE_SANITIZER 1" >>confdefs.h
+
+
+fi
+
+if test "$TSAN" = "yes"
+then :
+
+	ac_save_CFLAGS="$CFLAGS"
+	ac_save_LDFLAGS="$LDFLAGS"
+	CFLAGS="-fsanitize=thread"
+	LDFLAGS="-fsanitize=thread"
+	{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether $CC supports -fsanitize=thread" >&5
+printf %s "checking whether $CC supports -fsanitize=thread... " >&6; }
+	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf '%s\n' "yes" >&6; }
+else case e in #(
+  e) { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf '%s\n' "no" >&6; }
+			as_fn_error $? "compiler does not support -fsanitize=thread" "$LINENO" 5 ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+	CFLAGS="$ac_save_CFLAGS"
+	LDFLAGS="$ac_save_LDFLAGS"
+
+	SANITIZER=tsan
+	SANITIZER_CFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+	SANITIZER_LDFLAGS="-fsanitize=thread"
+	ELDFLAGS="$ELDFLAGS $SANITIZER_LDFLAGS"
+	CLDFLAGS="$CLDFLAGS -fno-sanitize=all"
+
+printf '%s\n' "#define ENABLE_TSAN 1" >>confdefs.h
+
+
+printf '%s\n' "#define ENABLE_SANITIZER 1" >>confdefs.h
+
+
+fi
+
+
+
+
 
 ################################################################################
 TESTSUITE_DATA='${datarootdir}/lvm2-testsuite'

@@ -136,6 +136,15 @@
 /* Define to 1 to include the LVM editline shell. */
 #undef EDITLINE_SUPPORT
 
+/* Enable AddressSanitizer build */
+#undef ENABLE_ASAN
+
+/* Build with sanitizer support */
+#undef ENABLE_SANITIZER
+
+/* Enable ThreadSanitizer build */
+#undef ENABLE_TSAN
+
 /* Path to fsadm binary. */
 #undef FSADM_PATH
 
