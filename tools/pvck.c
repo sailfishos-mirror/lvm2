@@ -2137,7 +2137,7 @@ static int _check_for_mda2(struct cmd_context *cmd, struct device *dev,
 			   uint64_t *mda2_offset, uint64_t *mda2_size)
 {
 	struct mda_header *mh;
-	char buf2[256];
+	char buf2[257];
 	char *buf;
 	uint64_t mda_offset, mda_size, extra_bytes; /* bytes */
 	unsigned i, found = 0;
@@ -2186,7 +2186,8 @@ static int _check_for_mda2(struct cmd_context *cmd, struct device *dev,
 	 * in the first half of the metadata area.
 	 */
 	for (i = 0; i < (mda_size / 1024); i++) {
-		memcpy(buf2, buf + 512 + (i * 512), sizeof(buf2));
+		memcpy(buf2, buf + 512 + (i * 512), sizeof(buf2) - 1);
+		buf2[sizeof(buf2) - 1] = '\0';
 
 		if (strstr(buf2, mf->vgid_str)) {
 			log_print("Found mda2 header at offset %llu size %llu",
