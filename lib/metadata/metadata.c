@@ -4412,7 +4412,7 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
 {
 	char vgid[ID_LEN + 1] __attribute__((aligned(8)));
 	DM_LIST_INIT(bad_mda_list);
-	struct mda_list *mdal;
+	struct mda_list *mdal, *safe;
 	struct metadata_area *mda;
 	struct device *dev;
 
@@ -4494,6 +4494,11 @@ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
 				 vg->name, mda->mda_num, (unsigned long long)mda->header_start, dev_name(dev));
 			continue;
 		}
+	}
+
+	dm_list_iterate_items_safe(mdal, safe, &bad_mda_list) {
+		dm_list_del(&mdal->list);
+		free(mdal);
 	}
 }
 
