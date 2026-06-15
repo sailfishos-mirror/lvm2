@@ -1689,7 +1689,7 @@ static int _text_pv_write(struct cmd_context *cmd, const struct format_type *fmt
 	unsigned mda_index;
 
 	if (is_orphan_vg(pv->vg_name))
-		memcpy(vgid, pv->vg_name, ID_LEN);
+		strncpy(vgid, pv->vg_name, ID_LEN);
 	else if (pv->vg)
 		memcpy(vgid, &pv->vg->id.uuid, ID_LEN);
 
