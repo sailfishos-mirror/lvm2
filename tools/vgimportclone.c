@@ -205,7 +205,7 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
 	struct dm_list vgnames;
 	struct vgnameid_list *vgnl;
 	struct device *dev;
-	struct device_list *devl;
+	struct device_list *devl, *devl2;
 	struct dm_list other_devs;
 	struct volume_group *vg, *error_vg = NULL;
 	const char *vgname;
@@ -523,6 +523,16 @@ retry_name:
 out:
 	if (error_vg)
 		release_vg(error_vg);
+
+	dm_list_iterate_items_safe(devl, devl2, &vp.new_devs) {
+		dm_list_del(&devl->list);
+		free(devl);
+	}
+	dm_list_iterate_items_safe(devl, devl2, &other_devs) {
+		dm_list_del(&devl->list);
+		free(devl);
+	}
+
 	unlock_devices_file(cmd);
 	return ret;
 }
