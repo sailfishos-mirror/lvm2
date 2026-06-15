@@ -23,6 +23,12 @@ expect_failure() {
         echo "TEST EXPECT FAILURE"
 }
 
+with_sanitizer() {
+	local _ver
+	_ver=$(lvm version 2>/dev/null) || return 1
+	[[ "$_ver" == *enable-[at]san* ]]
+}
+
 check_daemon_in_builddir() {
 	# skip if we don't have our own daemon...
 	if [[ -z "${installed_testsuite+varset}" ]]; then

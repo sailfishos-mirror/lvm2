@@ -109,7 +109,7 @@ not grep scan: tmptest
 # test that 'pvs' submits only three reads, one for each PV in hints
 # for initial scan, and one more in vg_read rescan check
 
-if which strace; then
+if which strace && ! aux with_sanitizer; then
 strace -e io_submit pvs 2>&1|tee tmptest
 test "$(grep -c io_submit tmptest)" -eq 3
 

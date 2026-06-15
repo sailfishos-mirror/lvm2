@@ -26,6 +26,9 @@ DMTEST="${PREFIX}-test-secure"
 # Test needs installed gdb package with gcore app
 which gcore || skip
 
+# gcore uses ptrace which is not usable under sanitizer
+aux with_sanitizer && skip
+
 aux driver_at_least 4 6 || skip
 
 # ensure we can create devices (uses dmsetup, etc)
