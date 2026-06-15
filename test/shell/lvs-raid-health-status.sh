@@ -43,8 +43,8 @@ grep "needs to be refreshed" out
 lvchange --refresh $vg/$lv1
 aux wait_for_sync $vg $lv1
 
-check lv_field $vg/$lv1 lv_health_status ""
-check lv_attr_bit health $vg/$lv1 "-"
+check lv_field $vg/$lv1 lv_health_status "refresh needed"
+check lv_attr_bit health $vg/$lv1 "r"
 
 lvremove -ff $vg/$lv1
 
