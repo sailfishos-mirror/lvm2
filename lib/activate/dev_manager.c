@@ -3473,6 +3473,18 @@ static int _add_segment_to_dtree(struct dev_manager *dm,
 				  lv_layer(seg->writecache)))
 		return_0;
 
+	/* Integrity reads superblock during TABLE_LOAD -- fails with EIO
+	 * when backing device uses error target (missing PV).
+	 * Use error target for the whole integrity device so RAID handles
+	 * degradation via I/O errors, same as simple error-backed rimage. */
+	if (seg_is_integrity(seg) && lv_is_partial(seg->lv)) {
+		log_debug_activation("Using error for partial integrity %s.",
+				     display_lvname(seg->lv));
+		if (!dm_tree_node_add_error_target(dnode, (uint64_t)seg->lv->vg->extent_size * _seg_len(seg)))
+			return_0;
+		return 1;
+	}
+
 	if (seg->integrity_meta_dev && !laopts->origin_only &&
 	    !_add_new_lv_to_dtree(dm, dtree, seg->integrity_meta_dev, laopts,
 				  lv_layer(seg->integrity_meta_dev)))
