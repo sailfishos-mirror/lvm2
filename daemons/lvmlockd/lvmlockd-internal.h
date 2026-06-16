@@ -299,7 +299,7 @@ static inline void INIT_LIST_HEAD(struct list_head *list)
 	list->prev = list;
 }
 
-/* Suppress false positive buffer overflow warnings from gcc -fanalyzer. */
+/* Suppress false positive warnings from gcc -fanalyzer. */
 GCC_SUPPRESS_BUFFER_WARNING
 
 static inline void __list_add(struct list_head *new,
