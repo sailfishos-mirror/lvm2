@@ -36,4 +36,4 @@ aux enable_dev "$dev2" "$dev4"
 dmsetup table
 dmsetup status
 dmsetup info -c
-vgremove -vvvv -ff $vg
+vgremove -ff $vg
