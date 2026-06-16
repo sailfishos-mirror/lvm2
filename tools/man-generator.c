@@ -1521,6 +1521,7 @@ static int _get_category_index(const char *value)
  * Returns 1 if the field was found, 0 if not found, -1 on error.
  * The value is copied into buf with the trailing newline stripped.
  */
+__attribute__((nonnull(1, 2, 3)))
 static int _read_meta_field(FILE *fp, const char *key,
 			    char *buf, size_t buf_size)
 {

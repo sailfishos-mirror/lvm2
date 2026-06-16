@@ -31,6 +31,7 @@
  * Typically backups will be stored in /etc/lvm/backups.
  */
 
+__attribute__((nonnull(1, 2)))
 int archive_init(struct cmd_context *cmd, const char *dir,
 		 unsigned int keep_days, unsigned int keep_min,
 		 int enabled);
@@ -41,6 +42,7 @@ int archive(struct volume_group *vg);
 int archive_display(struct cmd_context *cmd, const char *vg_name);
 int archive_display_file(struct cmd_context *cmd, const char *file);
 
+__attribute__((nonnull(1, 2)))
 int backup_init(struct cmd_context *cmd, const char *dir, int enabled);
 void backup_exit(struct cmd_context *cmd);
 

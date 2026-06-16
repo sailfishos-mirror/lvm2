@@ -43,7 +43,9 @@ int lvm_rename(const char *old, const char *new);
 /*
  * Return 1 if path exists else return 0
  */
+__attribute__((nonnull(1)))
 int path_exists(const char *path);
+__attribute__((nonnull(1)))
 int dir_exists(const char *path);
 int dir_create_recursive(const char *path, int mode);
 

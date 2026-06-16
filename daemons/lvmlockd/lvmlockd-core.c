@@ -573,21 +573,24 @@ struct lockspace *alloc_lockspace(void)
 	return ls;
 }
 
+__attribute__((nonnull(1)))
 static char **alloc_pvs_path(struct pvs *pvs, int num)
 {
 	if (!num)
 		return NULL;
 
 	pvs->path = calloc(num, sizeof(char *));
-	if (!pvs->path)
-		return NULL;
 
 	return pvs->path;
 }
 
+__attribute__((nonnull(1)))
 static void free_pvs_path(struct pvs *pvs)
 {
 	int i;
+
+	if (!pvs->path)
+		return;
 
 	for (i = 0; i < pvs->num; i++)
 		free((char *)pvs->path[i]);
@@ -596,6 +599,7 @@ static void free_pvs_path(struct pvs *pvs)
 	pvs->path = NULL;
 }
 
+__attribute__((nonnull(1, 2)))
 static char **alloc_and_copy_pvs_path(struct pvs *dst, struct pvs *src)
 {
 	int i;

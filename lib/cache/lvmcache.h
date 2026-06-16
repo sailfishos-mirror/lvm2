@@ -72,6 +72,7 @@ int lvmcache_label_rescan_vg_rw(struct cmd_context *cmd, const char *vgname, con
 int lvmcache_label_reopen_vg_rw(struct cmd_context *cmd, const char *vgname, const char *vgid);
 
 /* Add/delete a device */
+__attribute__((nonnull(1, 2, 3, 4)))
 struct lvmcache_info *lvmcache_add(struct cmd_context *cmd, struct labeller *labeller, const char *pvid,
                                    struct device *dev, uint64_t label_sector,
                                    const char *vgname, const char *vgid,

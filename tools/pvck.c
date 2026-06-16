@@ -2813,6 +2813,7 @@ static int _backup_file_to_raw_metadata(char *back_buf, uint64_t back_size,
 	return 1;
 }
 
+__attribute__((nonnull(1, 2)))
 static int _is_backup_file(struct cmd_context *cmd, char *text_buf, uint64_t text_size)
 {
 	if ((text_buf[0] == '#') && !strncmp(text_buf, "# Generated", 11))
@@ -2913,7 +2914,7 @@ fail_close:
 }
 
 /* all sizes and offsets in bytes */
-
+__attribute__((nonnull(1, 2, 3)))
 static int _check_metadata_file(struct cmd_context *cmd, struct metadata_file *mf,
 				char *text_buf, uint64_t text_size)
 {

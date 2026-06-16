@@ -76,6 +76,7 @@ static int read_msg(int fd, struct helper_msg *msg)
 	return 0;
 }
 
+__attribute__((nonnull(1)))
 static void exec_command(char *cmd_str)
 {
 	char arg[ONE_ARG_LEN];

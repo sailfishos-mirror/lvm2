@@ -15,6 +15,7 @@
 
 #include "tools.h"
 
+__attribute__((nonnull(1, 2, 3)))
 static int _expand_filename(const char *template, const char *vg_name,
 			    char *last_filename)
 {

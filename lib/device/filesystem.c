@@ -133,9 +133,9 @@ static int _fs_get_mnt(struct fs_info *fsi, dev_t devt)
 
 		if (strcmp(me->mnt_type, fsi->fstype))
 			continue;
-		if (me->mnt_dir[0] != '/')
+		if (!me->mnt_dir || me->mnt_dir[0] != '/')
 			continue;
-		if (me->mnt_fsname[0] != '/')
+		if (!me->mnt_fsname || me->mnt_fsname[0] != '/')
 			continue;
 
 		if (stat(stat_path, &stme) < 0) {
@@ -401,9 +401,9 @@ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *l
 	while ((me = getmntent(fme))) {
 		if (strcmp(me->mnt_type, fstype))
 			continue;
-		if (me->mnt_dir[0] != '/')
+		if (!me->mnt_dir || me->mnt_dir[0] != '/')
 			continue;
-		if (me->mnt_fsname[0] != '/')
+		if (!me->mnt_fsname || me->mnt_fsname[0] != '/')
 			continue;
 		if (stat(me->mnt_dir, &stme) < 0)
 			continue;

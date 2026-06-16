@@ -33,12 +33,12 @@ int prop_get_property(struct lvm_property_type *p, const void *obj,
 		struct lvm_property_type *prop,
 		unsigned type)
 {
-	while (p->id[0]) {
+	while (p->id && p->id[0]) {
 		if (!strcmp(p->id, prop->id))
 			break;
 		p++;
 	}
-	if (!p->id[0]) {
+	if (!p->id || !p->id[0]) {
 		log_errno(EINVAL, "Invalid property name %s", prop->id);
 		return 0;
 	}
@@ -60,12 +60,12 @@ int prop_set_property(struct lvm_property_type *p, void *obj,
 		struct lvm_property_type *prop,
 		unsigned type)
 {
-	while (p->id[0]) {
+	while (p->id && p->id[0]) {
 		if (!strcmp(p->id, prop->id))
 			break;
 		p++;
 	}
-	if (!p->id[0]) {
+	if (!p->id || !p->id[0]) {
 		log_errno(EINVAL, "Invalid property name %s", prop->id);
 		return 0;
 	}

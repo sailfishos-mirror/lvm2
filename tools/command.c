@@ -816,6 +816,7 @@ static void _include_optional_opt_args(struct cmd_context *cmdtool, struct comma
  * This function sets the opt_args.opt value for it.
  */
 
+__attribute__((nonnull(1, 2)))
 static void _add_opt_arg(struct command *cmd, char *str,
 			int *takes_arg, int *already, int required)
 {
@@ -1726,6 +1727,9 @@ static void _print_usage_description(struct command *cmd)
 	char buf[MAX_LINE] = {0};
 	unsigned di = 0;
 	int bi = 0;
+
+	if (!desc)
+		return;
 
 	for (di = 0; desc[di]; di++) {
 		if (!strncmp(&desc[di], "DESC:", 5)) {

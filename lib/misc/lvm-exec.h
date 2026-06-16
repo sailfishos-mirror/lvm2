@@ -34,6 +34,7 @@ struct cmd_context;
  * \return
  * 1 (success) or 0 (failure).
  */
+__attribute__((nonnull(1, 2)))
 int exec_cmd(struct cmd_context *cmd, const char *const argv[],
 	     int *rstatus, int sync_needed);
 

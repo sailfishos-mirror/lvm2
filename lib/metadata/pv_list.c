@@ -144,6 +144,7 @@ error:
 	return 0;
 }
 
+__attribute__((nonnull(1, 2, 5)))
 static int _create_pv_entry(struct dm_pool *mem, struct pv_list *pvl,
 			     char *colon, int allocatable_only, struct dm_list *r)
 {

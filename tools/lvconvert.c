@@ -153,8 +153,8 @@ static int _read_conversion_type(struct cmd_context *cmd,
 
 	const char *type_str = arg_str_value(cmd, type_ARG, "");
 
-	lp->type_str =  type_str;
-	if (!lp->type_str[0])
+	lp->type_str = type_str;
+	if (!lp->type_str || !lp->type_str[0])
 		return 1;
 
 	/* FIXME: Check thin-pool and thin more thoroughly! */
@@ -1799,6 +1799,9 @@ static int _lvconvert_raid_types(struct cmd_context *cmd, struct logical_volume 
 
 	/* If LV is inactive here, ensure it's not active elsewhere. */
 	if (!lockd_lv(cmd, lv, "ex", 0))
+		return_ECMD_FAILED;
+
+	if (!lp->type_str)
 		return_ECMD_FAILED;
 
 	/* Set up segtype either from type_str or else to match the existing one. */

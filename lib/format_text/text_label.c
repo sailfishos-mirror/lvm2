@@ -472,7 +472,7 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 	char pvid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
 	char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
 	struct lvmcache_info *info;
-	const struct format_type *fmt = labeller->fmt;
+	const struct format_type *fmt;
 	struct pv_header *pvhdr;
 	struct pv_header_extension *pvhdr_ext;
 	struct metadata_area *mda = NULL;
@@ -593,6 +593,8 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 	 * are saved in a separate bad_mdas list in lvmcache so that repair can
 	 * find them to repair.
 	 */
+
+	fmt = labeller->fmt;
 
 	if (mda1) {
 		log_debug_metadata("Scanning %s mda1 summary.", dev_name(dev));

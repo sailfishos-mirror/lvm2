@@ -304,7 +304,11 @@ int vg_remove_snapshot(struct logical_volume *cow)
 	if (!lv_is_cow(cow))
 		return_0;
 
-	origin = origin_from_cow(cow);
+	if (!(origin = origin_from_cow(cow))) {
+		log_error(INTERNAL_ERROR "COW \"%s\" is missing origin.",
+			  display_lvname(cow));
+		return 0;
+	}
 
 	is_origin_active = lv_is_active(origin);
 

@@ -425,7 +425,8 @@ static void *fork_and_poll(void *args)
 
 		GCC_UNSUPPRESS_WARNINGS
 
-		execve(*(pdlv->cmdargv), (char *const *)pdlv->cmdargv, (char *const *)pdlv->cmdenvp);
+		if (*(pdlv->cmdargv))
+			execve(*(pdlv->cmdargv), (char *const *)pdlv->cmdargv, (char *const *)pdlv->cmdenvp);
 
 		_exit(LVMPD_RET_EXC_FAILED);
 	} else {
