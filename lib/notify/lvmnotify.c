@@ -32,7 +32,7 @@ int lvmnotify_is_supported(void)
 	return 1;
 }
 
-static int lvmdbusd_running(void)
+static int _lvmdbusd_running(void)
 {
 	int fd = -1;
 	int rc = 0;
@@ -108,7 +108,7 @@ void lvmnotify_send(struct cmd_context *cmd)
 	cmd->pv_notify = 0;
 
 	/* If lvmdbusd isn't running, don't notify as you will start it as it will auto activate */
-	if (!lvmdbusd_running()) {
+	if (!_lvmdbusd_running()) {
 		log_debug_dbus("dbus daemon not running, not notifying");
 		return;
 	}

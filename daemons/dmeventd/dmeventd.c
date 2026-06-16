@@ -137,7 +137,7 @@ static void _dmeventd_log(int level, const char *file, int line,
 
 #ifdef DEBUG
 #  define DEBUGLOG  log_debug
-static const char *decode_cmd(uint32_t cmd)
+static const char *_decode_cmd(uint32_t cmd)
 {
 	switch (cmd) {
 	case DM_EVENT_CMD_ACTIVE:			return "ACTIVE";
@@ -2231,7 +2231,7 @@ static void _process_request(struct dm_event_fifos *fifos)
 
 	cmd = msg.cmd;
 
-	DEBUGLOG(">>> CMD:%s (0x%x) processing...", decode_cmd(cmd), (unsigned) cmd);
+	DEBUGLOG(">>> CMD:%s (0x%x) processing...", _decode_cmd(cmd), (unsigned) cmd);
 
 	/* _do_process_request fills in msg (if memory allows for
 	   data, otherwise just cmd and size = 0) */
@@ -2240,7 +2240,7 @@ static void _process_request(struct dm_event_fifos *fifos)
 	if (!_client_write(fifos, &msg))
 		stack;
 
-	DEBUGLOG("<<< CMD:%s (0x%x) completed (result %d).", decode_cmd(cmd), (unsigned) cmd, (int) msg.cmd);
+	DEBUGLOG("<<< CMD:%s (0x%x) completed (result %d).", _decode_cmd(cmd), (unsigned) cmd, (int) msg.cmd);
 
 	free(msg.data);
 

@@ -21,8 +21,8 @@
 
 //----------------------------------------------------------------
 
-static bool byte_range_to_block_range(struct bcache *cache, uint64_t start, size_t len,
-				      block_address *bb, block_address *be)
+static bool _byte_range_to_block_range(struct bcache *cache, uint64_t start, size_t len,
+				       block_address *bb, block_address *be)
 {
 	block_address block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
 
@@ -48,7 +48,7 @@ void bcache_prefetch_bytes(struct bcache *cache, int di, uint64_t start, size_t 
 {
 	block_address bb, be;
 
-	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
 		return;
 	while (bb < be) {
 		bcache_prefetch(cache, di, bb);
@@ -68,7 +68,7 @@ bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len,
 
 	bcache_prefetch_bytes(cache, di, start, len);
 
-	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
 		return false;
 
 	for (; bb != be; bb++) {
@@ -92,7 +92,7 @@ bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_
 	block_address bb, be;
 	bool result = true;
 
-	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
 		return false;
 
 	for (; bb != be; bb++) {
@@ -128,7 +128,7 @@ static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 	uint64_t block_offset = start % block_size;
 	uint64_t nr_whole;
 
-	if (!byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
 		return false;
 
 	// If the last block is partial, we will require a read, so let's

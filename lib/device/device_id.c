@@ -978,7 +978,7 @@ char *device_id_system_read(struct cmd_context *cmd, struct device *dev, uint16_
 	return NULL;
 }
 
-static int device_id_system_read_preferred(struct cmd_context *cmd, struct device *dev,
+static int _device_id_system_read_preferred(struct cmd_context *cmd, struct device *dev,
 					   uint16_t *new_idtype, char **new_idname)
 {
 	char *idname = NULL;
@@ -1227,7 +1227,7 @@ static const char *_dev_idname(struct device *dev, uint16_t idtype)
 	return NULL;
 }
 
-static struct dev_id *get_dev_id(struct device *dev, uint16_t idtype)
+static struct dev_id *_get_dev_id(struct device *dev, uint16_t idtype)
 {
 	struct dev_id *id;
 
@@ -1520,7 +1520,7 @@ static int _filter_backup_files(const struct dirent *de)
 	return 1;
 }
 
-static void devices_file_backup(struct cmd_context *cmd, char *fc, char *fb, time_t *tp, uint32_t df_counter)
+static void _devices_file_backup(struct cmd_context *cmd, char *fc, char *fb, time_t *tp, uint32_t df_counter)
 {
 	struct dirent *de;
 	struct dirent **namelist = NULL;
@@ -1945,7 +1945,7 @@ int device_ids_write(struct cmd_context *cmd)
 	log_debug("Wrote devices file %s hash %u hashed size %d total size %d",
 		  version_buf, hash, fb_bytes, fb_bytes + fc_bytes);
 
-	devices_file_backup(cmd, fc, fb, &t, df_counter+1);
+	_devices_file_backup(cmd, fc, fb, &t, df_counter+1);
 
 out:
 	if (fb)
@@ -2192,7 +2192,7 @@ int device_id_add(struct cmd_context *cmd, struct device *dev, const char *pvid_
 		}
 	}
 
-	if (!device_id_system_read_preferred(cmd, dev, &idtype, &idname))
+	if (!_device_id_system_read_preferred(cmd, dev, &idtype, &idname))
 		return_0;
 	if (!idname)
 		return_0;
@@ -3293,7 +3293,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs, 
 			continue;
 		if (!(du->dev->flags & DEV_UPDATE_USE_ID))
 			continue;
-		if ((id = get_dev_id(du->dev, DEV_ID_TYPE_SYS_WWID)) && id->idname) {
+		if ((id = _get_dev_id(du->dev, DEV_ID_TYPE_SYS_WWID)) && id->idname) {
 			log_debug("Validate %s %s PVID %s on %s: replace old wwid with %s",
 				  idtype_to_str(du->idtype), du->idname ?: ".", du->pvid ?: ".",
 				  dev_name(du->dev), id->idname);
@@ -4344,7 +4344,7 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 		new_devname = NULL;
 
 		if (cmd->device_ids_refresh_trigger || all_ids) {
-			if (!device_id_system_read_preferred(cmd, dev, &new_idtype, &new_idname))
+			if (!_device_id_system_read_preferred(cmd, dev, &new_idtype, &new_idname))
 				continue;
 			if (new_idname)
 				new_idname2 = strdup(new_idname);

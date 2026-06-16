@@ -132,7 +132,7 @@ struct pool_disk {
 #define CPIN_32(x, y) {(x) = htobe32((y));}
 #define CPIN_64(x, y) {(x) = htobe64((y));}
 
-static void pool_label_in(struct pool_disk *pl, void *buf)
+static void _pool_label_in(struct pool_disk *pl, void *buf)
 {
 	struct pool_disk *bufpl = (struct pool_disk *) buf;
 
@@ -160,7 +160,7 @@ int dev_is_pool(struct device *dev, char *buf, int buflen)
 	struct pool_disk pd;
 	int ret;
 
-	pool_label_in(&pd, buf);
+	_pool_label_in(&pd, buf);
 
 	/* can ignore 8 rightmost bits for ondisk format check */
 	if ((pd.pl_magic == POOL_MAGIC) &&

@@ -729,7 +729,7 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 			}
 		}
 
-		printf_hyphen(']');
+		_printf_hyphen(']');
 	}
 
 	if (lv_type_bits) {

@@ -51,7 +51,7 @@ static inline int _di_valid(int di)
 
 //----------------------------------------------------------------
 
-static void log_sys_warn(const char *call, int err)
+static void _log_sys_warn(const char *call, int err)
 {
 	log_warn("WARNING: %s failed: %s.", call, strerror(err));
 }
@@ -169,7 +169,7 @@ static void _async_destroy(struct io_engine *ioe)
 			log_debug_devs("Destroy AIO context.");
 			r = io_destroy(e->aio_context); // really slow (~40ms)
 			if (r < 0)
-				log_sys_warn("io_destroy", -r);
+				_log_sys_warn("io_destroy", -r);
 		}
 	}
 
@@ -352,7 +352,7 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 		if (r == -EINTR)
 			stack;
 		else
-			log_sys_warn("io_getevents", -r);
+			_log_sys_warn("io_getevents", -r);
 		return false;
 	}
 

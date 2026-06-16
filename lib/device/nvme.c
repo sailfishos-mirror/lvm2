@@ -41,7 +41,7 @@
 #ifdef NVME_SUPPORT
 #include <libnvme.h>
 
-static int iszero(unsigned char *d, size_t n)
+static int _is_zero(unsigned char *d, size_t n)
 {
 	size_t i;
 
@@ -200,9 +200,9 @@ void dev_read_nvme_wwids(struct device *dev)
 	memcpy(nguid, ns->nguid, 16);
 	memcpy(eui64, ns->eui64, 8);
 
-	if (!iszero(nguid, 16))
+	if (!_is_zero(nguid, 16))
 		_save_nguid(dev, nguid);
-	if (!iszero(eui64, 8))
+	if (!_is_zero(eui64, 8))
 		_save_eui64(dev, eui64);
 
 	if (!(ctrl_id = _nvme_alloc(sizeof(struct nvme_id_ctrl))))
@@ -255,11 +255,11 @@ void dev_read_nvme_wwids(struct device *dev)
 
 		len += sizeof(*cur);
 
-		if (!iszero(uuid, NVME_UUID_LEN))
+		if (!_is_zero(uuid, NVME_UUID_LEN))
 			_save_uuid(dev, uuid);
-		else if (!iszero(nguid, 16))
+		else if (!_is_zero(nguid, 16))
 			_save_nguid(dev, nguid);
-		else if (!iszero(eui64, 8))
+		else if (!_is_zero(eui64, 8))
 			_save_eui64(dev, eui64);
 	}
 out:
@@ -271,7 +271,7 @@ out:
 		log_sys_debug("close", devpath);
 }
 
-static int prtype_from_nvme(uint8_t nvme_type)
+static int _prtype_from_nvme(uint8_t nvme_type)
 {
 	switch (nvme_type) {
 	case 0:
@@ -337,7 +337,7 @@ int dev_read_reservation_nvme(struct cmd_context *cmd, struct device *dev, uint6
 		goto out;
 	}
 
-	*prtype_ret = prtype_from_nvme(status->rtype);
+	*prtype_ret = _prtype_from_nvme(status->rtype);
 	ret = 1;
 
 	if (!holder_ret)

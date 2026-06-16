@@ -1988,7 +1988,7 @@ static int _setup_devices_file_dmeventd(struct cmd_context *cmd)
  * the old file may not longer be correct due to changes to the
  * system while it was disabled.
  */
-static void devices_file_rename_unused(struct cmd_context *cmd)
+static void _devices_file_rename_unused(struct cmd_context *cmd)
 {
 	char path[PATH_MAX];
 	char path2[PATH_MAX];
@@ -2065,7 +2065,7 @@ int setup_devices_file(struct cmd_context *cmd)
 		if (!cmd->devicesfile &&
 		    (cft = get_config_tree_by_source(cmd, CONFIG_MERGED_FILES)) &&
 		    !find_config_bool(cmd, cft, devices_use_devicesfile_CFG))
-			devices_file_rename_unused(cmd);
+			_devices_file_rename_unused(cmd);
 		return 1;
 	}
 

@@ -200,7 +200,7 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 	return 1;
 }
 
-static int lockd_lockargs_get_version(char *str, unsigned int *major, unsigned int *minor, unsigned int *patch)
+static int _lockd_lockargs_get_version(char *str, unsigned int *major, unsigned int *minor, unsigned int *patch)
 {
 	char version[16] = {0};
 	char *major_str, *minor_str, *patch_str;
@@ -252,7 +252,7 @@ int lockd_lockargs_get_meta_flags(const char *str, uint32_t *flags)
 	split_line(buf, &argc, argv, MAX_LOCKARGS, ':');
 
 	for (i = 0; i < argc; i++) {
-		if (!i && !lockd_lockargs_get_version(argv[i], NULL, NULL, NULL))
+		if (!i && !_lockd_lockargs_get_version(argv[i], NULL, NULL, NULL))
 			*flags |= LOCKARGS_VERSION;
 		else if ((i == 1) && !strcmp(argv[i], "lvmlock"))
 			*flags |= LOCKARGS_LVMLOCK;

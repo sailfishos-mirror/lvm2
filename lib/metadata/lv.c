@@ -1231,7 +1231,7 @@ int lv_raid_image_in_sync(const struct logical_volume *lv)
 	return 0;
 }
 
-static int lv_raid_integrity_image_in_sync(const struct logical_volume *lv_iorig)
+static int _lv_raid_integrity_image_in_sync(const struct logical_volume *lv_iorig)
 {
 	struct logical_volume *lv_image = NULL;
 	struct logical_volume *lv_raid = NULL;
@@ -1466,7 +1466,7 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
 	else if (lv_is_cache_type(lv) || lv_is_writecache(lv))
 		repstr[0] = 'C';
 	else if (lv_is_integrity_origin(lv))
-		repstr[0] = lv_raid_integrity_image_in_sync(lv) ? 'i' : 'I';
+		repstr[0] = _lv_raid_integrity_image_in_sync(lv) ? 'i' : 'I';
 	else if (lv_is_integrity(lv))
 		repstr[0] = 'g';
 	else if (lv_is_raid(lv))

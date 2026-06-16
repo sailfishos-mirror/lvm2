@@ -238,7 +238,7 @@ static bool _insert_value_chain(struct radix_tree *rt, struct value *v, const ui
 	return _insert(rt, &vc->child, kb, ke, rv);
 }
 
-static unsigned min(unsigned lhs, unsigned rhs)
+static unsigned _min_unsigned(unsigned lhs, unsigned rhs)
 {
 	if (lhs <= rhs)
 		return lhs;
@@ -258,7 +258,7 @@ static bool _insert_prefix_chain(struct radix_tree *rt, struct value *v, const u
 	if (*kb == pc->prefix[0]) {
 		/* There's a common prefix let's split the chain into two and
 		 * recurse. */
-		len = min(pc->len, ke - kb);
+		len = _min_unsigned(pc->len, ke - kb);
 
 		for (i = 0; i < len; i++)
 			if (kb[i] != pc->prefix[i])
@@ -857,7 +857,7 @@ static bool _remove_subtree(struct radix_tree *rt, struct value *root, const uin
 
 	case PREFIX_CHAIN:
 		pc = root->value.ptr;
-		len = min(pc->len, ke - kb);
+		len = _min_unsigned(pc->len, ke - kb);
 		for (i = 0; i < len; i++)
 			if (kb[i] != pc->prefix[i])
 				return true;

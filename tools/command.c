@@ -175,7 +175,7 @@ static struct oo_line _oo_lines[MAX_OO_LINES];
 static void _add_optional_opt_line(struct cmd_context *cmdtool, struct command *cmd, int argc, char *argv[]);
 
 static unsigned _was_hyphen = 0;
-static void printf_hyphen(char c)
+static void _printf_hyphen(char c)
 {
 	/* When .hy 1 was printed, we do not want to emit empty space */
 	printf("%c%c\n", _was_hyphen ? '\n' : ' ', c);
@@ -1925,7 +1925,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 			}
 		}
 
-		printf_hyphen(')');
+		_printf_hyphen(')');
 	} else  /* !any_req */
 		for (ro = 0; ro < cmd->ro_count; ro++) {
 			opt_enum = cmd->required_opt_args[ro].opt;
