@@ -403,7 +403,7 @@ int lv_is_active(const struct logical_volume *lv)
 {
 	return 0;
 }
-int lv_check_transient(struct logical_volume *lv)
+int lv_check_transient(const struct logical_volume *lv)
 {
 	return 1;
 }
