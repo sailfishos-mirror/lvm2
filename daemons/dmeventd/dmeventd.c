@@ -109,6 +109,18 @@ static time_t _idle_since = 0;
 static int _kernel_major = 0;
 static const char *_exit_on = DEFAULT_DMEVENTD_EXIT_ON_PATH;
 
+/*
+ * TSAN by default only logs races and continues running.
+ * Override to abort on first race so test teardown detects the failure.
+ */
+#ifdef ENABLE_TSAN
+const char *__tsan_default_options(void);
+const char *__tsan_default_options(void)
+{
+	return "halt_on_error=1";
+}
+#endif
+
 /* FIXME Make configurable at runtime */
 
 /* All libdm messages */
