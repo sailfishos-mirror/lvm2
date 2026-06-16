@@ -164,7 +164,7 @@ static int szscanf(const char *input, const char *format, ...)
 				 * dest buffer.  input bytes that would have been copied
 				 * but did not fit in the dest buffer are skipped.
 				 */
-				size_t dest_size = va_arg(args, size_t);
+				size_t dest_size = (size_t)va_arg(args, void *);
 				char *dest = va_arg(args, char *);
 				char *out = dest;
 
@@ -300,6 +300,7 @@ static void format_info_ls(char *line)
 	/* info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_args=%s lm_type=%s */
 
 	if (szscanf(line, "info=ls ls_name=%s vg_name=%s vg_uuid=%s vg_args=%s lm_type=%s",
+		    (void *) /* gcc analyze needs to see all va_args as sizeof(void *) */
 		    sizeof(ls_name), ls_name,
 		    sizeof(vg_name), vg_name,
 		    sizeof(vg_uuid), vg_uuid,
