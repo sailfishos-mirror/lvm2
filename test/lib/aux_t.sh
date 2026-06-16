@@ -611,7 +611,14 @@ teardown() {
 
 	echo -n .
 
-	kill_sleep_kill_ LOCAL_DMEVENTD "${LVM_VALGRIND_DMEVENTD:-0}"
+	if [[ -s LOCAL_DMEVENTD ]]; then
+		kill_sleep_kill_ LOCAL_DMEVENTD "${LVM_VALGRIND_DMEVENTD:-0}"
+		# Kill any dmeventd auto-restarted with a new PID after a crash
+		if DPID=$(pgrep dmeventd 2>/dev/null); then
+			echo "## killing leftover dmeventd ($DPID)"
+			kill -KILL $DPID 2>/dev/null || true
+		fi
+	fi
 
 	echo -n .
 
