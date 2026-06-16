@@ -343,6 +343,11 @@ static int _memlock_maps(struct cmd_context *cmd, lvmlock_t lock, size_t *mstats
 	ssize_t n;
 	int ret = 1;
 
+#ifdef ENABLE_SANITIZER
+	log_debug_mem("Skipping %slocking of memory maps (sanitizer build).",
+		      (lock == LVM_MLOCK) ? "" : "un") ;
+	return 1;
+#endif
 	if (cmd->running_on_valgrind) {
 		log_debug_mem("Skipping %slocking of memory maps (running in VALGRIND).",
 			      (lock == LVM_MLOCK) ? "" : "un") ;
@@ -726,10 +731,14 @@ void memlock_dec_daemon(struct cmd_context *cmd)
 
 void memlock_init(struct cmd_context *cmd)
 {
+#ifdef ENABLE_SANITIZER
+	_size_stack = _size_malloc_tmp = 0;
+#else
 	/* When threaded, caller already limited stack size so just use the default. */
 	_size_stack = 1024ULL * (cmd->threaded ? DEFAULT_RESERVED_STACK :
 				 find_config_tree_int(cmd, activation_reserved_stack_CFG, NULL));
 	_size_malloc_tmp = find_config_tree_int(cmd, activation_reserved_memory_CFG, NULL) * 1024ULL;
+#endif
 	_default_priority = find_config_tree_int(cmd, activation_process_priority_CFG, NULL);
 }
 

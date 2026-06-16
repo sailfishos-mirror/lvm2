@@ -58,8 +58,8 @@ include $(top_builddir)/libdm/make.tmpl
 CFLAGS_dmsetup.o += $(UDEV_CFLAGS) $(EXTRA_EXEC_CFLAGS)
 CFLAGS_dmvdostats.o += $(EXTRA_EXEC_CFLAGS)
 CFLAGS_dmfilemapd.o += $(EXTRA_EXEC_CFLAGS)
-LIBDM_LIBS = -L$(interfacebuilddir) -ldevmapper
-LIBDM_SHARED = $(interfacebuilddir)/libdevmapper.so
+LIBDM_LIBS = -L$(interfacebuilddir) -l$(LIBDM_NAME)
+LIBDM_SHARED = $(interfacebuilddir)/lib$(LIBDM_NAME).so
 LIBDM_STATIC = $(interfacebuilddir)/libdevmapper.a
 
 DMSETUP_OBJS = dmsetup.o dmvdostats.o

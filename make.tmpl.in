@@ -70,6 +70,15 @@ LDFLAGS ?= @LDFLAGS@
 STATIC_LDFLAGS += @STATIC_LDFLAGS@
 CLDFLAGS += @CLDFLAGS@
 ELDFLAGS += @ELDFLAGS@
+SANITIZER = @SANITIZER@
+SANITIZER_CFLAGS = @SANITIZER_CFLAGS@
+SANITIZER_LDFLAGS = @SANITIZER_LDFLAGS@
+ifneq ("$(SANITIZER)", "no")
+  CFLAGS += $(SANITIZER_CFLAGS)
+  LIBDM_NAME = devmapper-san
+else
+  LIBDM_NAME = devmapper
+endif
 LDDEPS += @LDDEPS@
 LIB_SUFFIX = @LIB_SUFFIX@
 USE_TRACKING = @USE_TRACKING@
@@ -336,7 +345,7 @@ endif
 endif
 
 ifeq ("@BUILD_DMEVENTD@", "yes")
-  DMEVENT_LIBS = -L$(top_builddir)/daemons/dmeventd -ldevmapper-event -L$(interfacebuilddir) -ldevmapper
+  DMEVENT_LIBS = -L$(top_builddir)/daemons/dmeventd -ldevmapper-event -L$(interfacebuilddir) -l$(LIBDM_NAME)
 endif
 
 # Combination of DEBUG_POOL and DEBUG_ENFORCE_POOL_LOCKING is not supported.
@@ -409,7 +418,7 @@ endif
 INTERNAL_LIBS = \
 	$(top_builddir)/libdaemon/client/libdaemonclient.a
 
-LIBS += -L$(top_builddir)/libdm/ioctl -ldevmapper -Wl,-rpath-link,$(top_builddir)/libdm/ioctl
+LIBS += -L$(top_builddir)/libdm/ioctl -l$(LIBDM_NAME) -Wl,-rpath-link,$(top_builddir)/libdm/ioctl
 LVMINTERNAL_LIBS = $(top_builddir)/lib/liblvm-internal.a $(INTERNAL_LIBS)
 
 all: $(SUBDIRS) $(TARGETS)

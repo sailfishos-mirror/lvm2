@@ -34,7 +34,7 @@ LDFLAGS += $(EXTRA_EXEC_LDFLAGS) $(ELDFLAGS)
 cmirrord: $(OBJECTS)
 	$(SHOW) "    [CC] $@"
 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) \
-		$(LMLIBS) -L$(top_builddir)/libdm -ldevmapper $(LIBS)
+		$(LMLIBS) -L$(top_builddir)/libdm -l$(LIBDM_NAME) $(LIBS)
 
 install_cluster: $(TARGETS)
 	$(SHOW) "    [INSTALL] $<"

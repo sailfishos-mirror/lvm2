@@ -47,7 +47,7 @@ endif
 
 LIB_VERSION = $(LIB_VERSION_DM)
 LIB_SHARED = $(LIB_NAME).$(LIB_SUFFIX)
-LIBS = $(PTHREAD_LIBS) -L$(interfacebuilddir) -ldevmapper
+LIBS = $(PTHREAD_LIBS) -L$(interfacebuilddir) -l$(LIBDM_NAME)
 
 CLEAN_TARGETS = dmeventd.static $(LIB_NAME).a
 

@@ -55,6 +55,9 @@ ifeq ("@SHARED_LINK@", "yes")
 LIB_SHARED = $(interface)/libdevmapper.$(LIB_SUFFIX)
 LIB_VERSION = $(LIB_VERSION_DM)
 TARGETS = libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION) .symver_check
+ifneq ("@SANITIZER@", "no")
+TARGETS += $(LIB_SAN) $(LIB_SAN).$(LIB_VERSION_DM)
+endif
 endif
 
 CFLOW_LIST = $(SOURCES)
@@ -62,6 +65,10 @@ CFLOW_LIST_TARGET = libdevmapper.cflow
 
 EXPORTED_HEADER = $(srcdir)/libdevmapper.h
 EXPORTED_FN_PREFIX = dm
+
+SAN_OBJECTS = $(SOURCES:%.c=%-san.o)
+LIB_SAN = libdevmapper-san.$(LIB_SUFFIX)
+LIB_SHARED_SAN = $(interface)/$(LIB_SAN)
 
 include $(top_builddir)/libdm/make.tmpl
 
@@ -74,6 +81,25 @@ dm-tools.device-mapper: device-mapper
 libdevmapper.$(LIB_SUFFIX) libdevmapper.$(LIB_SUFFIX).$(LIB_VERSION): $(LIB_SHARED)
 	$(SHOW) "    [LN] $<"
 	$(Q) $(LN_S) -f $< $@
+%-san.o: %.c %.o
+	$(SHOW) "    [CC] $(<F) (@SANITIZER@)"
+	@mkdir -p $(@D)
+	$(Q) $(CC) -c $(INCLUDES) $(VALGRIND_CFLAGS) $(PROGS_CFLAGS) $(DEFS) $(DEFS_$@) $(WFLAGS) $(WCFLAGS) $(CFLAGS) $(CFLAGS_$@) $(SANITIZER_CFLAGS) $(CPPFLAGS) $< -o $@
+
+ifneq ("@SANITIZER@", "no")
+$(LIB_SHARED_SAN).$(LIB_VERSION_DM): $(SAN_OBJECTS) $(LDDEPS)
+	$(SHOW) "    [CC] $@ (@SANITIZER@)"
+	$(Q) $(CC) -shared -Wl,-soname,$(notdir $@) \
+		$(CFLAGS) $(SANITIZER_CFLAGS) $(LDFLAGS) $(SANITIZER_LDFLAGS) $(CLDFLAGS) $(SAN_OBJECTS) $(LIBS) -o $@
+
+$(LIB_SHARED_SAN): $(LIB_SHARED_SAN).$(LIB_VERSION_DM)
+	$(SHOW) "    [LN] $(<F)"
+	$(Q) $(LN_S) -f $(<F) $@
+
+$(LIB_SAN) $(LIB_SAN).$(LIB_VERSION_DM): $(LIB_SHARED_SAN)
+	$(SHOW) "    [LN] $<"
+	$(Q) $(LN_S) -f $< $@
+endif
 
 # Check versioned build when default versioned symbol is present @@
 # also the older symbol is built-in
@@ -128,5 +154,17 @@ install_ioctl_static: $(LIB_STATIC)
 	$(SHOW) "    [INSTALL] $<"
 	$(Q) $(INSTALL_DATA) -D $< $(usrlibdir)/$(<F)
 
-CLEAN_TARGETS += ioctl/libdevmapper.a
+ifneq ("@SANITIZER@", "no")
+install_ioctl: install_lib_shared_san
+install_lib_shared_san: $(LIB_SHARED_SAN)
+	$(SHOW) "    [INSTALL] $<"
+	$(Q) $(INSTALL_PROGRAM) -D $< $(libdir)/$(<F).$(LIB_VERSION_DM)
+	$(Q) $(INSTALL_DIR) $(usrlibdir)
+	$(Q) $(LN_S) -f $(USRLIB_RELPATH)$(<F).$(LIB_VERSION_DM) $(usrlibdir)/$(<F)
+endif
+
+CLEAN_TARGETS += ioctl/libdevmapper.a \
+	$(SAN_OBJECTS) \
+	$(LIB_SHARED_SAN) $(LIB_SHARED_SAN).$(LIB_VERSION_DM) \
+	$(LIB_SAN) $(LIB_SAN).$(LIB_VERSION_DM)
 DISTCLEAN_TARGETS += libdevmapper.pc make.tmpl

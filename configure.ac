@@ -876,6 +876,79 @@ AS_IF([test "$PROFILING" = "yes"], [
 ])
 
 ################################################################################
+dnl -- Enable AddressSanitizer
+AC_MSG_CHECKING([whether to enable AddressSanitizer])
+AC_ARG_ENABLE(asan,
+	      AS_HELP_STRING([--enable-asan],
+			     [enable AddressSanitizer and UndefinedBehaviorSanitizer]),
+	      ASAN=$enableval, ASAN="no")
+AC_MSG_RESULT([$ASAN])
+
+dnl -- Enable ThreadSanitizer
+AC_MSG_CHECKING([whether to enable ThreadSanitizer])
+AC_ARG_ENABLE(tsan,
+	      AS_HELP_STRING([--enable-tsan],
+			     [enable ThreadSanitizer]),
+	      TSAN=$enableval, TSAN="no")
+AC_MSG_RESULT([$TSAN])
+
+AS_IF([test "$ASAN" = "yes" && test "$TSAN" = "yes"],
+  [AC_MSG_ERROR([--enable-asan and --enable-tsan are mutually exclusive])])
+
+SANITIZER=no
+
+AS_IF([test "$ASAN" = "yes"], [
+	ac_save_CFLAGS="$CFLAGS"
+	ac_save_LDFLAGS="$LDFLAGS"
+	CFLAGS="-fsanitize=address"
+	LDFLAGS="-fsanitize=address"
+	AC_MSG_CHECKING([whether $CC supports -fsanitize=address])
+	AC_LINK_IFELSE([AC_LANG_PROGRAM()],
+		       [AC_MSG_RESULT([yes])],
+		       [AC_MSG_RESULT([no])
+			AC_MSG_ERROR([compiler does not support -fsanitize=address])])
+	CFLAGS="$ac_save_CFLAGS"
+	LDFLAGS="$ac_save_LDFLAGS"
+
+	dnl -- Sanitizer flags are NOT added to COPTIMISE_FLAG.
+	dnl -- make.tmpl.in adds SANITIZER_CFLAGS to CFLAGS for lib/tools/daemons.
+	dnl -- libdm/make.tmpl.in compiles separate %-san.o objects with SANITIZER_CFLAGS.
+	SANITIZER=asan
+	SANITIZER_CFLAGS="-fsanitize=address -fsanitize=undefined -fsanitize=bounds-strict -fno-omit-frame-pointer"
+	SANITIZER_LDFLAGS="-fsanitize=address -fsanitize=undefined"
+	ELDFLAGS="$ELDFLAGS $SANITIZER_LDFLAGS"
+	CLDFLAGS="$CLDFLAGS -fno-sanitize=all"
+	AC_DEFINE([ENABLE_ASAN], 1, [Enable AddressSanitizer build])
+	AC_DEFINE([ENABLE_SANITIZER], 1, [Build with sanitizer support])
+])
+
+AS_IF([test "$TSAN" = "yes"], [
+	ac_save_CFLAGS="$CFLAGS"
+	ac_save_LDFLAGS="$LDFLAGS"
+	CFLAGS="-fsanitize=thread"
+	LDFLAGS="-fsanitize=thread"
+	AC_MSG_CHECKING([whether $CC supports -fsanitize=thread])
+	AC_LINK_IFELSE([AC_LANG_PROGRAM()],
+		       [AC_MSG_RESULT([yes])],
+		       [AC_MSG_RESULT([no])
+			AC_MSG_ERROR([compiler does not support -fsanitize=thread])])
+	CFLAGS="$ac_save_CFLAGS"
+	LDFLAGS="$ac_save_LDFLAGS"
+
+	SANITIZER=tsan
+	SANITIZER_CFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+	SANITIZER_LDFLAGS="-fsanitize=thread"
+	ELDFLAGS="$ELDFLAGS $SANITIZER_LDFLAGS"
+	CLDFLAGS="$CLDFLAGS -fno-sanitize=all"
+	AC_DEFINE([ENABLE_TSAN], 1, [Enable ThreadSanitizer build])
+	AC_DEFINE([ENABLE_SANITIZER], 1, [Build with sanitizer support])
+])
+
+AC_SUBST(SANITIZER)
+AC_SUBST(SANITIZER_CFLAGS)
+AC_SUBST(SANITIZER_LDFLAGS)
+
+################################################################################
 dnl -- Set LVM2 testsuite data
 TESTSUITE_DATA='${datarootdir}/lvm2-testsuite'
 # double eval needed ${datarootdir} -> ${prefix}/share -> real path
