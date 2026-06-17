@@ -103,7 +103,8 @@
 #define log_warn_suppress(s, ...) LOG_LINE((s) ? _LOG_NOTICE : (_LOG_WARN | _LOG_STDERR), ##__VA_ARGS__)
 #define log_err(...) LOG_LINE_WITH_ERRNO(_LOG_ERR, EUNCLASSIFIED, ##__VA_ARGS__)
 #define log_err_suppress(s, ...) LOG_LINE_WITH_ERRNO((s) ? _LOG_NOTICE : _LOG_ERR, EUNCLASSIFIED, ##__VA_ARGS__)
-/* First occurrence: error; subsequent occurrences: downgraded to NOTICE (invisible without -v) */
+/* First occurrence: warn/error; subsequent: downgraded to NOTICE (invisible without -v) */
+#define log_warn_once(...) LOG_LINE(_LOG_WARN | _LOG_STDERR | _LOG_ONCE, ##__VA_ARGS__)
 #define log_err_once(...) LOG_LINE_WITH_ERRNO(_LOG_ERR | _LOG_ONCE, EUNCLASSIFIED, ##__VA_ARGS__)
 #define log_fatal(...) LOG_LINE_WITH_ERRNO(_LOG_FATAL, EUNCLASSIFIED, ##__VA_ARGS__)
 
