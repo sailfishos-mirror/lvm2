@@ -100,6 +100,7 @@
 #define log_info(...) LOG_LINE(_LOG_INFO, ##__VA_ARGS__)
 #define log_notice(...) LOG_LINE(_LOG_NOTICE, ##__VA_ARGS__)
 #define log_warn(...) LOG_LINE(_LOG_WARN | _LOG_STDERR, ##__VA_ARGS__)
+#define log_warn_once(...) LOG_LINE(_LOG_WARN | _LOG_STDERR | _LOG_ONCE, ##__VA_ARGS__)
 #define log_warn_suppress(s, ...) LOG_LINE((s) ? _LOG_NOTICE : (_LOG_WARN | _LOG_STDERR), ##__VA_ARGS__)
 #define log_err(...) LOG_LINE_WITH_ERRNO(_LOG_ERR, EUNCLASSIFIED, ##__VA_ARGS__)
 #define log_err_suppress(s, ...) LOG_LINE_WITH_ERRNO((s) ? _LOG_NOTICE : _LOG_ERR, EUNCLASSIFIED, ##__VA_ARGS__)
