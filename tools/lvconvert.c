@@ -3335,6 +3335,11 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 			goto_bad;
 	}
 
+	if (!warn_thin_pool_chunk_size_not_pow2(cmd, chunk_size,
+					       arg_count(cmd, yes_ARG),
+					       "convert to"))
+		goto_bad;
+
 	if (metadata_lv && (meta_extents > metadata_lv->le_count)) {
 		log_error("Pool metadata LV %s is too small (%u extents) for required metadata (%u extents).",
 			  display_lvname(metadata_lv), metadata_lv->le_count, meta_extents);

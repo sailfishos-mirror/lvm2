@@ -294,6 +294,10 @@ static int _thin_pool_add_target_line(struct dev_manager *dm,
 		return 0;
 	}
 
+	if (!is_power_of_2(seg->chunk_size))
+		log_warn_once("WARNING: Thin pool %s chunk size %s is not a power of 2 -- discards may not work.",
+			      display_lvname(seg->lv), display_size(cmd, seg->chunk_size));
+
 	if (!(metadata_dlid = build_dm_uuid(mem, seg->metadata_lv, NULL))) {
 		log_error("Failed to build uuid for metadata LV %s.",
 			  display_lvname(seg->metadata_lv));

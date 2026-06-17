@@ -416,6 +416,12 @@ static int _update_extents_params(struct volume_group *vg,
 						     &lp->discards,
 						     &lp->zero_new_blocks))
 				return_0;
+
+			if (!warn_thin_pool_chunk_size_not_pow2(vg->cmd,
+							       lp->chunk_size,
+							       arg_count(vg->cmd, yes_ARG),
+							       "create"))
+				return_0;
 		} else if (segtype_is_cache_pool(lp->segtype) || segtype_is_cache(lp->segtype)) {
 			if (!update_cache_pool_params(vg->cmd, vg->profile, vg->extent_size,
 						      lp->segtype, lp->target_attr,
