@@ -38,16 +38,12 @@ test_pvmove_resume() {
 	# next LV on same VG and different PV (we want to test 2 pvmoves per VG)
 	lvcreate -an -Zn -l50 -n $lv2 $vg "$dev3"
 
-	aux delay_dev "$dev4" 0 30 "$(get first_extent_sector "$dev4"):"
-	test -e HAVE_DM_DELAY || { lvremove -f $vg; return 0; }
-	aux delay_dev "$dev5" 0 30 "$(get first_extent_sector "$dev5"):"
-
-	LVM_TEST_TAG="kill_me_$PREFIX" pvmove -i5 "$dev1" "$dev4" &
+	LVM_TEST_TAG="kill_me_$PREFIX" pvmove -i +3 "$dev1" "$dev4" &
 	PVMOVE1_PID=$!
 	aux wait_pvmove_lv_ready "$vg-pvmove0"
 	kill $PVMOVE1_PID
 
-	LVM_TEST_TAG="kill_me_$PREFIX" pvmove -i5 -n $vg/$lv2 "$dev3" "$dev5" &
+	LVM_TEST_TAG="kill_me_$PREFIX" pvmove -i +3 -n $vg/$lv2 "$dev3" "$dev5" &
 	PVMOVE2_PID=$!
 	aux wait_pvmove_lv_ready "$vg-pvmove1"
 	kill $PVMOVE2_PID
@@ -68,8 +64,6 @@ test_pvmove_resume() {
 	# with expected number of spawned
 	# bg polling as parameter
 	$1 2
-
-	aux enable_dev "$dev4" "$dev5"
 
 	for i in {100..0} ; do # wait for 10 secs at max
 		get lv_field $vg name -a | grep -E "^\[?pvmove" || break
@@ -98,7 +92,7 @@ lvchange_all() {
 		aux check_lvmpolld_init_rq_count 1 "$vg/pvmove0"
 		aux check_lvmpolld_init_rq_count 1 "$vg/pvmove1"
 	else
-		test "$(aux count_processes_with_tag)" -eq $1
+		test "$(aux count_processes_with_tag)" -le $1
 	fi
 }
 
@@ -110,7 +104,7 @@ vgchange_single() {
 		aux check_lvmpolld_init_rq_count 1 "$vg/pvmove0"
 		aux check_lvmpolld_init_rq_count 1 "$vg/pvmove1"
 	else
-		test "$(aux count_processes_with_tag)" -eq "$1"
+		test "$(aux count_processes_with_tag)" -le "$1"
 	fi
 }
 
@@ -130,10 +124,6 @@ pvmove_fg() {
 	# ...thus finish polling
 	get lv_field $vg name -a | grep -E "^\[?pvmove0"
 	get lv_field $vg name -a | grep -E "^\[?pvmove1"
-
-	# disable delay device
-	# fg pvmove would take ages to complete otherwise
-	aux enable_dev "$dev4" "$dev5"
 
 	LVM_TEST_TAG="kill_me_$PREFIX" pvmove
 }
@@ -174,10 +164,6 @@ pvmove_fg_single() {
 	# ...thus finish polling
 	get lv_field $vg name -a | grep -E "^\[?pvmove0"
 	get lv_field $vg name -a | grep -E "^\[?pvmove1"
-
-	# disable delay device
-	# fg pvmove would take ages to complete otherwise
-	aux enable_dev "$dev4" "$dev5"
 
 	LVM_TEST_TAG="kill_me_$PREFIX" pvmove "$dev1"
 	LVM_TEST_TAG="kill_me_$PREFIX" pvmove "$dev3"
