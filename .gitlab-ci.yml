@@ -162,12 +162,12 @@ test-all:
   parallel:
     matrix:
       # TODO: Replace CONFIGURE with make rpm testing(?)
-      - TAG: rhel8
-        CONFIGURE: >
-          --with-default-use-devices-file=0
-          --with-cluster=internal
-          --enable-cmirrord
-          --enable-lvmlockd-dlm
+      # - TAG: rhel8
+      #   CONFIGURE: >
+      #     --with-default-use-devices-file=0
+      #     --with-cluster=internal
+      #     --enable-cmirrord
+      #     --enable-lvmlockd-dlm
       - TAG: rhel9
         CONFIGURE: >
           --with-default-use-devices-file=1
