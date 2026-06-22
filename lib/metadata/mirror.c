@@ -1142,11 +1142,6 @@ static int _remove_mirror_images(struct logical_volume *lv,
 
 	sync_local_dev_names(lv->vg->cmd);
 
-	/* Remove any orphaned "-missing_*" error devices from removed images */
-	dm_list_iterate_items(lvl, &tmp_orphan_lvs)
-		if (!lv_remove_any_missing_subdevs(lvl->lv))
-			stack;
-
 	if (!collapse) {
 		dm_list_iterate_items(lvl, &tmp_orphan_lvs)
 			if (!_deactivate_and_remove_lv(lvl->lv, NULL, NULL))

@@ -2475,6 +2475,74 @@ static int _add_dev_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 	return 1;
 }
 
+/*
+ * Build a list of all DM devices belonging to this VG.
+ * Uses DM LIST ioctl filtered by VG name prefix.
+ * Skips devices with open_count > 0 (still referenced by a parent).
+ */
+static int _add_missing_devs_to_clean_tree(struct dev_manager *dm,
+					   struct dm_tree *dtree)
+{
+	struct dm_list *devs;
+	struct dm_active_device *dm_dev;
+	struct dm_info info;
+	unsigned devs_features = 0;
+	char *vg_name, *lv_name, *layer;
+	char *dm_prefix;
+	size_t prefix_len;
+
+	if (!(dm_prefix = dm_build_dm_name(dm->mem, dm->vg_name, "", NULL)))
+		return_0;
+
+	prefix_len = strlen(dm_prefix);
+
+	if (!dev_manager_get_dm_active_devices(NULL, &devs, &devs_features))
+		return_0;
+
+	dm_list_iterate_items(dm_dev, devs) {
+		if (!dm_dev->name)
+			continue;
+
+		if (strncmp(dm_dev->name, dm_prefix, prefix_len))
+			continue;
+
+		if (!dm_split_lvm_name(dm->mem, dm_dev->name,
+				       &vg_name, &lv_name, &layer))
+			continue;
+
+		if (strncmp(layer, "missing_", 8))
+			continue;
+
+		if (!_info_run(NULL, &info, NULL, NULL, NULL, 1, 0,
+			       MAJOR(dm_dev->devno), MINOR(dm_dev->devno)))
+			continue;
+
+		if (!info.exists)
+			continue;
+
+		if (info.open_count) {
+			log_debug_activation("Skipping in-use missing dev %s-%s "
+					     "(open_count %d).",
+					     lv_name, layer, info.open_count);
+			continue;
+		}
+
+		log_debug_activation("Adding orphaned missing dev %s-%s "
+				     "to clean tree.", lv_name, layer);
+
+		if (!dm_tree_add_dev_with_udev_flags(dtree,
+						     MAJOR(dm_dev->devno),
+						     MINOR(dm_dev->devno), 0)) {
+			dm_device_list_destroy(&devs);
+			return_0;
+		}
+	}
+
+	dm_device_list_destroy(&devs);
+
+	return 1;
+}
+
 struct pool_cb_data {
 	struct dev_manager *dm;
 	const struct logical_volume *pool_lv;
@@ -4054,6 +4122,8 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
 	case CLEAN:
 		if (retry_deactivation())
 			dm_tree_retry_remove(root);
+		if (!_add_missing_devs_to_clean_tree(dm, dtree))
+			goto_out;
 		/* Deactivate any unused non-toplevel nodes */
 		if (!_clean_tree(dm, root, laopts->origin_only ? dlid : NULL))
 			goto_out;

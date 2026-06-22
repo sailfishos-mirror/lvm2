@@ -2599,16 +2599,6 @@ int lv_deactivate(struct cmd_context *cmd, const char *lvid_s, const struct logi
 
 	critical_section_inc(cmd, "deactivating");
 	r = _lv_deactivate(lv);
-
-	/*
-	 * Remove any transiently activated error
-	 * devices which aren't used any more.
-	 */
-	if (r && lv_is_raid(lv) && !lv_deactivate_any_missing_subdevs(lv)) {
-		log_error("Failed to remove temporary SubLVs from %s",
-			  display_lvname(lv));
-		r = 0;
-	}
 	critical_section_dec(cmd, "deactivated");
 
 	if (!lv_info(cmd, lv, 0, &info, 0, 0) || info.exists) {
