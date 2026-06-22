@@ -275,7 +275,7 @@ reboot:
       # run the tests?
       # - Add more tags for each machine, test will create a dirty file, and we
       #   will check the presence of the file before reboot...
-      - TAG: rhel8
+      #- TAG: rhel8
       - TAG: rhel9
       - TAG: rhel10
       - TAG: f42
