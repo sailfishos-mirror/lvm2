@@ -378,10 +378,6 @@ int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv)
 {
 	return 1;
 }
-int lv_deactivate_any_missing_subdevs(const struct logical_volume *lv)
-{
-	return 1;
-}
 int pv_uses_vg(struct physical_volume *pv,
 	       struct volume_group *vg)
 {
@@ -2791,91 +2787,6 @@ int lv_mknodes(struct cmd_context *cmd, const struct logical_volume *lv)
 	fs_unlock();
 
 	return r;
-}
-
-/*
- * Remove any existing, closed mapped device by @name.
- *
- * TODO: missing devices should be tracked in the DM tree and removed
- * automatically by the CLEAN action instead of this name-guessing hack.
- * Current approach may leak devices if they are dropped via lvconvert
- * or other operations that don't call lv_deactivate_any_missing_subdevs().
- */
-static int _remove_dm_dev_by_name(const char *name)
-{
-	int r = 0;
-	uint32_t cookie;
-	struct dm_task *dmt;
-	struct dm_info info;
-
-	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
-		return_0;
-
-	/* Check, if the device exists. */
-	if (dm_task_set_name(dmt, name) && dm_task_run(dmt) && dm_task_get_info(dmt, &info)) {
-		dm_task_destroy(dmt);
-
-		/* Ignore non-existing or open dm devices */
-		if (!info.exists || info.open_count)
-			return 1;
-
-		if (!(dmt = dm_task_create(DM_DEVICE_REMOVE)))
-			return_0;
-
-		cookie = fs_get_cookie();
-		if (dm_task_set_name(dmt, name) &&
-		    dm_task_set_cookie(dmt, &cookie, 0))
-			r = dm_task_run(dmt);
-		fs_set_cookie(cookie);
-	}
-
-	dm_task_destroy(dmt);
-
-	return r;
-}
-
-/* Work all segments of @lv removing any existing, closed "*-missing_N_0" sub devices. */
-static int _lv_remove_any_missing_subdevs(struct logical_volume *lv)
-{
-	char name[NAME_LEN];
-	struct lv_segment *seg;
-	uint32_t seg_no = 0;
-
-	if (lv) {
-		dm_list_iterate_items(seg, &lv->segments) {
-			if (dm_snprintf(name, sizeof(name), "%s-%s-missing_%u_0", seg->lv->vg->name, seg->lv->name, seg_no) < 0)
-				return_0;
-			if (!_remove_dm_dev_by_name(name))
-				return_0;
-
-			seg_no++;
-		}
-	}
-
-	return 1;
-}
-
-int lv_remove_any_missing_subdevs(struct logical_volume *lv)
-{
-	return _lv_remove_any_missing_subdevs(lv);
-}
-
-/* Remove any "*-missing_*" sub devices added by the activation layer for an rmeta/rimage missing PV mapping */
-int lv_deactivate_any_missing_subdevs(const struct logical_volume *lv)
-{
-	uint32_t s;
-	struct lv_segment *seg = first_seg(lv);
-
-	for (s = 0; s < seg->area_count; s++) {
-		if (seg_type(seg, s) == AREA_LV &&
-		    !_lv_remove_any_missing_subdevs(seg_lv(seg, s)))
-			return_0;
-		if (seg->meta_areas && seg_metatype(seg, s) == AREA_LV &&
-		    !_lv_remove_any_missing_subdevs(seg_metalv(seg, s)))
-			return_0;
-	}
-
-	return 1;
 }
 
 /*
