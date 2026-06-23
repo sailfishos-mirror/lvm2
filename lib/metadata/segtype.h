@@ -327,6 +327,7 @@ struct segment_type *init_unknown_segtype(struct cmd_context *cmd,
  * certain the new behavior exists is to check for version 1.9.0.
  */
 #define RAID_FEATURE_NEW_DEVICES_ACCEPT_REBUILD	(1U << 6) /* version 1.9.0 */
+#define RAID_FEATURE_FIXED_HEALTH_CHARS		(1U << 7) /* version 1.9.2 stale health chars fixed */
 
 bool raid_is_available(const struct logical_volume *lv);
 #ifdef RAID_INTERNAL

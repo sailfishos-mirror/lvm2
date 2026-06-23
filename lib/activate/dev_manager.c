@@ -223,6 +223,87 @@ out:
 	return r;
 }
 
+/*
+ * Old dm-raid kernels reset health chars after table reload (suspend/resume),
+ * reporting 'A' for devices that are actually missing. Cross-check against
+ * the DM table where missing devices show as "- -" and correct to 'D'.
+ */
+static void _raid_health_fixup_from_table(const struct dm_info *dminfo,
+					  struct dm_status_raid *s,
+					  const struct lv_segment *seg)
+{
+	struct dm_task *dmt;
+	uint64_t start, length;
+	char *type, *params, *p, *copy, *tok;
+	unsigned num_params, num_devs, i, attrs = 0;
+	int fixed = 0;
+
+	if (seg->segtype->ops->target_present &&
+	    seg->segtype->ops->target_present(seg->lv->vg->cmd, seg, &attrs) &&
+	    (attrs & RAID_FEATURE_FIXED_HEALTH_CHARS))
+		return;
+
+	if (!(dmt = _setup_task_run(DM_DEVICE_TABLE, NULL, NULL, NULL, 0,
+				    dminfo->major, dminfo->minor, 0, 0, 0)))
+		return;
+
+	(void) dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
+
+	if (!type || !params || strcmp(type, TARGET_NAME_RAID))
+		goto out;
+
+	if (!(copy = dm_strdup(params)))
+		goto out;
+
+	p = copy;
+
+	/* Table: <raid_type> <#raid_params> [params...] <#devs> [<meta> <data>]... */
+	if (!(tok = strtok(p, " ")))	/* raid_type */
+		goto bad;
+
+	if (!(tok = strtok(NULL, " ")))	/* #raid_params */
+		goto bad;
+
+	num_params = (unsigned) atoi(tok);
+
+	for (i = 0; i < num_params; i++)
+		if (!strtok(NULL, " "))
+			goto bad;
+
+	if (!(tok = strtok(NULL, " ")))	/* #devs */
+		goto bad;
+
+	num_devs = (unsigned) atoi(tok);
+
+	if (num_devs != strlen(s->dev_health))
+		goto bad;
+
+	for (i = 0; i < num_devs; i++) {
+		char *meta = strtok(NULL, " ");
+		char *data = strtok(NULL, " ");
+
+		if (!meta || !data)
+			break;
+
+		if ((*meta == '-' || *data == '-') && s->dev_health[i] != 'D') {
+			log_warn("WARNING: Kernel RAID health char at position %u is '%c'"
+				 " but device-mapper table shows missing device"
+				 " -- overriding to 'D'.",
+				 i, s->dev_health[i]);
+			s->dev_health[i] = 'D';
+			fixed++;
+		}
+	}
+
+	if (fixed)
+		log_warn("WARNING: Kernel dm-raid health status is stale"
+			 " (known old kernel bug after table reload).");
+bad:
+	dm_free(copy);
+out:
+	dm_task_destroy(dmt);
+}
+
 static int _get_segment_status_from_target_params(const char *target_name,
 						  const char *params,
 						  const struct dm_info *dminfo,
@@ -271,6 +352,7 @@ static int _get_segment_status_from_target_params(const char *target_name,
 	} else if (segtype_is_raid(segtype)) {
 		if (!dm_get_status_raid(seg_status->mem, params, &seg_status->raid))
 			return_0;
+		_raid_health_fixup_from_table(dminfo, seg_status->raid, seg);
 		seg_status->type = SEG_STATUS_RAID;
 	} else if (segtype_is_thin_volume(segtype)) {
 		if (!dm_get_status_thin(seg_status->mem, params, &seg_status->thin))
