@@ -12,7 +12,7 @@
 
 # Test manual repair on transient majority mirror/raid leg failure.
 #
-# Uses 4 PVs only so repair has no spare for allocation.
+# Uses 5 PVs (raid1 needs extra for metadata LVs).
 
 
 
@@ -30,11 +30,11 @@ cleanup_mounted_and_teardown()
 
 trap 'cleanup_mounted_and_teardown' EXIT
 
+aux prepare_vg 5
+
 # Mirror (synced) - majority transient failure + manual repair
 test_mirror_synced_manual_repair()
 {
-	aux prepare_vg 4
-
 	lvcreate -aey --type mirror -m 3 --ignoremonitoring -L 1 -n $lv1 $vg \
 		"$dev1" "$dev2" "$dev3" "$dev4"
 	aux wait_for_sync $vg $lv1
@@ -60,14 +60,12 @@ test_mirror_synced_manual_repair()
 	umount "$MOUNT_DIR"
 	fsck -n "$DM_DEV_DIR/$vg/$lv1"
 
-	vgremove -ff $vg
+	lvremove -ff $vg
 }
 
 # Mirror (nosync) - majority transient failure + manual repair
 test_mirror_nosync_manual_repair()
 {
-	aux prepare_vg 4
-
 	lvcreate -aey --type mirror -m 3 --ignoremonitoring --nosync -L 1 -n $lv1 $vg \
 		"$dev1" "$dev2" "$dev3" "$dev4"
 
@@ -91,16 +89,12 @@ test_mirror_nosync_manual_repair()
 	umount "$MOUNT_DIR"
 	fsck -n "$DM_DEV_DIR/$vg/$lv1"
 
-	vgremove -ff $vg
+	lvremove -ff $vg
 }
 
 # Raid1 (synced) - majority transient failure + manual repair
 test_raid1_synced_manual_repair()
 {
-	aux have_raid 1 3 0 || skip
-
-	aux prepare_vg 5
-
 	lvcreate -aey --type raid1 -m 3 --ignoremonitoring -L 1 -n $lv1 $vg
 	aux wait_for_sync $vg $lv1
 
@@ -132,14 +126,12 @@ test_raid1_synced_manual_repair()
 	#umount "$MOUNT_DIR"
 	#fsck -n "$DM_DEV_DIR/$vg/$lv1"
 
-	vgremove -ff $vg
+	lvremove -ff $vg
 }
 
 # Raid1 (nosync) - majority transient failure + manual repair
 test_raid1_nosync_manual_repair()
 {
-	aux prepare_vg 5
-
 	lvcreate -aey --type raid1 -m 3 --ignoremonitoring --nosync -L 1 -n $lv1 $vg
 
 	mkfs.ext3 "$DM_DEV_DIR/$vg/$lv1"
@@ -169,7 +161,7 @@ test_raid1_nosync_manual_repair()
 	umount "$MOUNT_DIR"
 	fsck -n "$DM_DEV_DIR/$vg/$lv1"
 
-	vgremove -ff $vg
+	lvremove -ff $vg
 }
 
 #####################################################################
@@ -178,5 +170,7 @@ test_raid1_nosync_manual_repair()
 
 test_mirror_synced_manual_repair
 test_mirror_nosync_manual_repair
-test_raid1_synced_manual_repair
+aux have_raid 1 3 0 && test_raid1_synced_manual_repair
 #test_raid1_nosync_manual_repair
+
+vgremove -ff $vg
