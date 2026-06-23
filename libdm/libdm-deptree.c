@@ -3270,6 +3270,7 @@ static int _emit_segment(struct dm_task *dmt, uint32_t major, uint32_t minor,
 static int _load_node(struct dm_tree_node *dnode)
 {
 	int r = 0;
+	unsigned kmaj = 0, kmin = 0, krel = 0;
 	struct dm_task *dmt;
 	struct load_segment *seg;
 	uint64_t seg_start = 0, existing_table_size;
@@ -3344,6 +3345,14 @@ static int _load_node(struct dm_tree_node *dnode)
 				dnode->props.size_changed = 0;
 			}
 		}
+	} else if (dnode->props.force_reload &&
+		   get_uname_version(&kmaj, &kmin, &krel) && kmaj < 3) {
+		/* Pre-3.x kernels lack snapshot COW handover (c1f0c183f6ac,
+		 * v2.6.33) so reload calls read_metadata and fails */
+		log_debug_activation("Forced reload of %s identical table failed, continuing.",
+				     _node_name(dnode));
+		dnode->props.force_reload = 0;
+		r = 1;
 	}
 
 	dnode->props.segment_count = 0;
