@@ -682,6 +682,14 @@ do_takeover() {
 		exit 1
 	fi
 
+	# The register above triggers udev to re-probe the device (blkid,
+	# scsi_id).  Those probing reads share the iSCSI connection with
+	# the preempt-abort below.  If probing is still in-flight when the
+	# preempt-abort arrives at the LIO target, the target deadlocks in
+	# core_tmr_drain_state_list (waiting for in-flight reads) vs
+	# iscsit_close_connection (waiting for RX thread exit).
+	udevadm settle
+
 	# Reserve the device
 
 	for dev in "${DEVICES[@]}"; do
