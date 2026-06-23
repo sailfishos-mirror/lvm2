@@ -235,7 +235,7 @@ echo "@PREFIX=$PREFIX"
 echo "## DATE: $(date || true)"
 
 # Hostname IP address
-HOSTNAME=$(hostname -I 2>/dev/null) || HOSTNAME=
+HOSTNAME=$(hostname -I 2>/dev/null || true)
 HOSTNAME="$(hostname 2>/dev/null) ${HOSTNAME}" || true
 echo "## HOST: $HOSTNAME"
 
