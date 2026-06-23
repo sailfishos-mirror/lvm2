@@ -1794,6 +1794,49 @@ uint64_t dm_task_get_existing_table_size(const struct dm_task *dmt)
 	return dmt->existing_table_size;
 }
 
+/*
+ * Check if raid params are functionally equivalent despite
+ * differing param count.  dm-raid < 1.15.1 double-counts
+ * rebuild/writemostly in its table output, producing a higher
+ * count than what was loaded.  The actual tokens are identical.
+ *
+ * Params format: "<personality> <count> <tokens...>"
+ */
+static int _raid_params_equiv(const char *p1, const char *p2)
+{
+	const char *s1, *s2;
+
+	s1 = strchr(p1, ' ');
+	s2 = strchr(p2, ' ');
+
+	if (!s1 || !s2)
+		return 0;
+
+	/* Raid personality must match */
+	if ((s1 - p1) != (s2 - p2) ||
+	    memcmp(p1, p2, s1 - p1))
+		return 0;
+
+	/* Skip past the param count */
+	s1 = strchr(s1 + 1, ' ');
+	s2 = strchr(s2 + 1, ' ');
+
+	if (!s1 || !s2)
+		return 0;
+
+	/* Everything after the count must be identical */
+	return !strcmp(s1, s2);
+}
+
+static int _target_params_equiv(const char *type,
+				const char *p1, const char *p2)
+{
+	if (!strcmp(type, "raid"))
+		return _raid_params_equiv(p1, p2);
+
+	return 0;
+}
+
 static int _reload_with_suppression_v4(struct dm_task *dmt)
 {
 	struct dm_task *task;
@@ -1862,6 +1905,11 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
 		if (strcmp(t1->params, t2->params)) {
 			if (dmt->skip_reload_params_compare) {
 				log_debug("reload %d:%d diff params ignore for type %s.",
+					  task->major, task->minor, t1->type);
+				log_debug("reload params1 %s", t1->params);
+				log_debug("reload params2 %s", t2->params);
+			} else if (_target_params_equiv(t1->type, t1->params, t2->params)) {
+				log_debug("reload %d:%d diff params equiv for type %s.",
 					  task->major, task->minor, t1->type);
 				log_debug("reload params1 %s", t1->params);
 				log_debug("reload params2 %s", t2->params);
