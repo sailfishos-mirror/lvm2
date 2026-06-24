@@ -382,9 +382,13 @@ For more information on using PR with LVM in general, see
 .P
 The vgcreate options to enable PR-based lock recovery in a new VG are shown above.
 .P
-To enable PR-based lock recovery in an existing VG:
+To enable PR-based lock recovery in an existing VG, first enable PR (if
+not already), then change the lock args:
 .br
-.B $ vgchange --setpersist y --setlockargs persist,notimeout
+.B $ vgchange --setpersist y
+.I VG
+.br
+.B $ vgchange --setlockargs persist,notimeout
 .I VG
 .P
 Changing the PR or lockargs settings requires the VG to be stopped on all
