@@ -2399,12 +2399,13 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
 		 * requesting sh at once can cause one to fail here.)
 		 * Retry here to attempt to cover these transient failures.
 		 *
-		 * The command also has its own configurable retry logic.
-		 * The intention is to handle actual lock contention retries
-		 * from the command, and the transient failures from concurrent
-		 * shared requests here.  We don't actually know when a failure
-		 * was related to the transient concurrent sh, so we just guess
-		 * it was if we were requesting a sh lock.
+		 * The lvm command has its own configurable retry logic for
+		 * actual lock contention (global/lvmlockd_lock_retries or
+		 * --lockopt retries=N).  The daemon retries here are only
+		 * for the transient sanlock shared lock collisions.  We don't
+		 * actually know when a failure was related to the transient
+		 * concurrent sh, so we just guess it was if we were requesting
+		 * a sh lock.
 		 */
 
 		*retry = (ld_mode == LD_LK_SH) ? 1 : 0;

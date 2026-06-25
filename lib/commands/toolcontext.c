@@ -1654,6 +1654,7 @@ struct cmd_context *create_toolcontext(const char *system_dir,
 	cmd->hosttags = 0;
 	cmd->check_devs_used = 1;
 	cmd->running_on_valgrind = RUNNING_ON_VALGRIND;
+	cmd->lockopt_retries = -1;
 
 	dm_list_init(&cmd->arg_value_groups);
 	dm_list_init(&cmd->formats);

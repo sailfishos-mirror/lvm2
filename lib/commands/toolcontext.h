@@ -293,6 +293,7 @@ struct cmd_context {
 	struct dm_pool *pending_delete_mem;	/* memory pool for pending deletes */
 	struct vdo_convert_params *lvcreate_vcp;/* params for LV to VDO conversion */
 	uint32_t lockopt;			/* LOCKOPT_* from --lockopt string */
+	int lockopt_retries;			/* retries=N from --lockopt, -1 if not set */
 };
 
 /*

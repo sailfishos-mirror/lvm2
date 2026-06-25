@@ -1201,8 +1201,18 @@ cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COM
 	"information.\n")
 
 cfg(global_lvmlockd_lock_retries_CFG, "lvmlockd_lock_retries", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_LVMLOCKD_LOCK_RETRIES, vsn(2, 2, 125), NULL, 0, NULL,
-	"Retry lvmlockd lock requests this many times.\n"
-	"Applicable only if LVM is compiled with lockd support\n")
+	"Retry global and VG lock requests this many times per owner.\n"
+	"When a global or VG lock request fails because the lock is\n"
+	"held by another host, the lock request is retried after a\n"
+	"one second delay, up to this many times.  If the lock owner\n"
+	"changes between retries, the per-owner retry count resets,\n"
+	"allowing the command to wait through multiple owners in a\n"
+	"busy cluster.  A ceiling of retries*10 total attempts\n"
+	"prevents indefinite delays.  LV lock requests are not\n"
+	"retried by default.  The --lockopt retries=N option\n"
+	"overrides this setting for a single command, and applies to\n"
+	"LV locks as well as global and VG locks.\n"
+	"Applicable only if LVM is compiled with lockd support.\n")
 
 cfg(global_sanlock_lv_extend_CFG, "sanlock_lv_extend", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_SANLOCK_LV_EXTEND_MB, vsn(2, 2, 124), NULL, 0, NULL,
 	"Size in MiB to extend the internal LV holding sanlock locks.\n"

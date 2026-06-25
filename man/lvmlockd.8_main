@@ -614,12 +614,41 @@ held only while an LVM command is running.)
 .TP
 .I lock retries
 If a request for a global or VG lock fails due to a lock conflict with
-another host, lvmlockd automatically retries for a short time before
-returning a failure to the LVM command.  If those retries are
-insufficient, the LVM command will retry the entire lock request a number
-of times specified by global/lvmlockd_lock_retries before failing.  If a
+another host, the LVM command will retry the lock request a number of
+times specified by global/lvmlockd_lock_retries before failing.  If a
 request for an LV lock fails due to a lock conflict, the command fails
 immediately.
+.P
+The retries value specifies the number of retries per lock owner.  If the
+lock owner (host_id) changes between retries, the per-owner retry count
+resets to zero, allowing the command to wait while the lock cycles through
+multiple hosts in a busy cluster.  A ceiling of retries*10 total attempts
+prevents indefinite delays.  With the default retries=6, the lock can
+cycle through up to 10 different owners (60 seconds) before failing.
+.P
+The --lockopt option can include a "retries=N" value to override the
+number of lock retries for a single command.  This applies to global, VG,
+and LV lock requests, replacing the global/lvmlockd_lock_retries config
+value for global and VG locks, and adding retry capability for LV locks
+which otherwise have none.  Each retry waits one second before repeating
+the lock request.
+.P
+When a host in a shared VG fails, its locks are not immediately available
+to other hosts.  The sanlock host_dead_seconds interval (usually 80
+seconds) must pass before another host can acquire those locks.  Using
+"--lockopt retries=N" with a sufficiently large value allows an activation
+command to wait for this interval.
+.nf
+  lvchange -ay --lockopt retries=80 vg/lv
+.fi
+.P
+Shared lock contention during autoactivation can also cause transient
+failures when multiple nodes start simultaneously and attempt to
+acquire shared locks on the same LV.  Using retries allows the command
+to wait and reattempt:
+.nf
+  lvchange -asy --lockopt retries=10 vg/lv
+.fi
 .
 .SS Managing the global lock in sanlock VGs
 .
@@ -1061,9 +1090,11 @@ vgreduce or pvmove of a PV in a sanlock VG will fail if it holds the
 internal "lvmlock" LV that holds the sanlock locks.
 .
 .IP \[bu]
-lvmlockd uses lock retries instead of lock queueing, so high lock
-contention may require increasing global/lvmlockd_lock_retries to
-avoid transient lock failures.
+lvmlockd uses lock retries instead of lock queueing.  The per-owner
+retry count resets when the lock owner changes, so clusters with many
+nodes generally do not require increasing global/lvmlockd_lock_retries.
+Using "--lockopt retries=N" can override the retry count for a single
+command if needed.
 .
 .IP \[bu]
 lvmlockd includes VG reporting options lock_type and lock_args, and LV

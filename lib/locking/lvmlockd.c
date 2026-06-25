@@ -1937,6 +1937,8 @@ int lockd_global_create(struct cmd_context *cmd, const char *def_mode, const cha
 	struct owner owner = { 0 };
 	const char *mode = NULL;
 	uint32_t result_flags;
+	uint32_t prev_owner_id = 0;
+	int total_retries = 0;
 	int retries = 0;
 	int result;
 
@@ -1988,14 +1990,19 @@ int lockd_global_create(struct cmd_context *cmd, const char *def_mode, const cha
 		return 0;
 	}
 
-	if (result == -EAGAIN || result == -EIOTIMEOUT) {
-		if (retries < find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL)) {
-			if (result == -EIOTIMEOUT)
-				log_warn("Retrying global lock: io timeout");
-			else
-				log_warn("Retrying global lock: held by other host%s", _owner_str(&owner));
+	if (result == -EAGAIN) {
+		int owner_retries = (cmd->lockopt_retries >= 0) ?
+			cmd->lockopt_retries :
+			find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL);
+		if (retries < owner_retries && total_retries < owner_retries * 10) {
+			if (owner.host_id && owner.host_id != prev_owner_id) {
+				retries = 0;
+				prev_owner_id = owner.host_id;
+			}
+			log_warn("Retrying global lock: held by other host%s", _owner_str(&owner));
 			sleep(1);
 			retries++;
+			total_retries++;
 			goto req;
 		}
 	}
@@ -2189,6 +2196,8 @@ int lockd_global(struct cmd_context *cmd, const char *def_mode)
 	const char *mode = NULL;
 	const char *opts = NULL;
 	uint32_t result_flags;
+	uint32_t prev_owner_id = 0;
+	int total_retries = 0;
 	int retries = 0;
 	int result;
 
@@ -2263,14 +2272,19 @@ int lockd_global(struct cmd_context *cmd, const char *def_mode)
 		return 0;
 	}
 
-	if (result == -EAGAIN || result == -EIOTIMEOUT) {
-		if (retries < find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL)) {
-			if (result == -EIOTIMEOUT)
-				log_warn("Retrying global lock: io timeout");
-			else
-				log_warn("Retrying global lock: held by other host%s", _owner_str(&owner));
+	if (result == -EAGAIN) {
+		int owner_retries = (cmd->lockopt_retries >= 0) ?
+			cmd->lockopt_retries :
+			find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL);
+		if (retries < owner_retries && total_retries < owner_retries * 10) {
+			if (owner.host_id && owner.host_id != prev_owner_id) {
+				retries = 0;
+				prev_owner_id = owner.host_id;
+			}
+			log_warn("Retrying global lock: held by other host%s", _owner_str(&owner));
 			sleep(1);
 			retries++;
+			total_retries++;
 			goto req;
 		}
 	}
@@ -2489,6 +2503,8 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
 	const char *opts = NULL;
 	uint32_t prev_flags = lks->flags;
 	uint32_t result_flags;
+	uint32_t prev_owner_id = 0;
+	int total_retries = 0;
 	int retries = 0;
 	int result;
 	int ret = 1;
@@ -2610,14 +2626,19 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
 		return 1;
 	}
 
-	if (result == -EAGAIN || result == -EIOTIMEOUT) {
-		if (retries < find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL)) {
-			if (result == -EIOTIMEOUT)
-				log_warn("Retrying lock on VG %s: io timeout", vg_name);
-			else
-				log_warn("Retrying lock on VG %s: held by other host%s", vg_name, _owner_str(&owner));
+	if (result == -EAGAIN) {
+		int owner_retries = (cmd->lockopt_retries >= 0) ?
+			cmd->lockopt_retries :
+			find_config_tree_int(cmd, global_lvmlockd_lock_retries_CFG, NULL);
+		if (retries < owner_retries && total_retries < owner_retries * 10) {
+			if (owner.host_id && owner.host_id != prev_owner_id) {
+				retries = 0;
+				prev_owner_id = owner.host_id;
+			}
+			log_warn("Retrying lock on VG %s: held by other host%s", vg_name, _owner_str(&owner));
 			sleep(1);
 			retries++;
+			total_retries++;
 			goto req;
 		}
 	}
@@ -3018,7 +3039,10 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 	const char *mode = NULL;
 	uint32_t result_flags;
 	uint64_t our_generation = 0;
+	uint32_t prev_owner_id = 0;
+	int total_retries = 0;
 	int refreshed = 0;
+	int retries = 0;
 	int result;
 	struct lvmlockd_pvs lock_pvs;
 
@@ -3142,6 +3166,19 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 		return 1;
 
 	if (result == -EAGAIN) {
+		if (cmd->lockopt_retries > 0 && retries < cmd->lockopt_retries &&
+		    total_retries < cmd->lockopt_retries * 10) {
+			if (owner.host_id && owner.host_id != prev_owner_id) {
+				retries = 0;
+				prev_owner_id = owner.host_id;
+			}
+			log_warn("Retrying LV %s/%s lock: held by other host%s",
+				 vg->name, lv_name, _owner_str(&owner));
+			sleep(1);
+			retries++;
+			total_retries++;
+			goto retry;
+		}
 		log_error("LV locked by other host: %s/%s%s", vg->name, lv_name, _owner_str(&owner));
 		return 0;
 	}
@@ -4658,7 +4695,7 @@ int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_params *lp)
 
 #define MAX_LOCKOPT 16
 
-void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
+void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries)
 {
 	char buf[PATH_MAX];
 	char *argv[MAX_LOCKOPT];
@@ -4711,7 +4748,10 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
 			*flags |= LOCKOPT_REPAIRVG;
 		else if (!strcmp(argv[i], "repairlv"))
 			*flags |= LOCKOPT_REPAIRLV;
-		else
+		else if (!strncmp(argv[i], "retries=", 8)) {
+			if (retries)
+				*retries = atoi(argv[i] + 8);
+		} else
 			log_warn("Ignoring unknown lockopt value: %s", argv[i]);
 	}
 }
