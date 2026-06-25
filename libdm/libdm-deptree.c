@@ -3504,6 +3504,8 @@ int dm_tree_preload_children(struct dm_tree_node *dnode,
 		if (child->info.inactive_table && !had_inactive_table &&
 		    !child->props.suppress_parent_reload) {
 			dnode->props.force_reload = 1;
+			if (child->props.delay_resume_if_new)
+				dnode->props.delay_resume_if_new = 1;
 			log_debug_activation("Child %s table loaded, forcing reload of parent.",
 					     _node_name(child));
 		}
