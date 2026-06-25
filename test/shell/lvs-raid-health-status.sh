@@ -30,21 +30,34 @@ aux disable_dev "$dev2"
 lvchange --refresh --activationmode partial $vg/$lv1
 aux enable_dev "$dev2"
 
-check lv_field $vg/$lv1 lv_health_status "refresh needed"
-check lv_attr_bit health $vg/$lv1 "r"
+if aux have_raid 1 9 0; then
+	v1_9_0=1
+	HEALTH="refresh needed"
+	HATTR="r"
+else
+	# Old dm-raid resets health chars to 'A' after table reload
+	v1_9_0=0
+	HEALTH=""
+	HATTR="-"
+fi
+
+check lv_field $vg/$lv1 lv_health_status "$HEALTH"
+check lv_attr_bit health $vg/$lv1 "$HATTR"
 
 # Also check sub-LV health status
-check lv_field $vg/${lv1}_rimage_1 lv_health_status "refresh needed" -a
-check lv_attr_bit health $vg/${lv1}_rimage_1 "r" -a
+check lv_field $vg/${lv1}_rimage_1 lv_health_status "$HEALTH" -a
+check lv_attr_bit health $vg/${lv1}_rimage_1 "$HATTR" -a
 
-lvs $vg/$lv1 2>&1 | tee out
-grep "needs to be refreshed" out
+if [ "$v1_9_0" -eq 1 ]; then
+	lvs $vg/$lv1 2>&1 | tee out
+	grep "needs to be refreshed" out
+fi
 
 lvchange --refresh $vg/$lv1
 aux wait_for_sync $vg $lv1
 
-check lv_field $vg/$lv1 lv_health_status "refresh needed"
-check lv_attr_bit health $vg/$lv1 "r"
+check lv_field $vg/$lv1 lv_health_status "$HEALTH"
+check lv_attr_bit health $vg/$lv1 "$HATTR"
 
 lvremove -ff $vg/$lv1
 
