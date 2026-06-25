@@ -48,6 +48,11 @@ include $(top_builddir)/make.tmpl
 
 T ?= .
 S ?= @ # never match anything by default
+G ?=
+C ?=
+CLUSTER_ID ?=
+CLUSTER_OS_IMAGE ?=
+CLUSTER_REVERT_ON_FAIL ?=
 # Ensure basic system binaries are found even under env -i
 export PATH := $(if $(PATH),$(PATH),/usr/sbin:/usr/bin:/sbin:/bin)
 VERBOSE ?= 0
@@ -94,10 +99,9 @@ help:
 	@echo "  check_lvmpolld 	Run tests with lvmpolld daemon."
 	@echo "  check_devicesfile	Run tests using a devices file."
 	@echo "  check_all_lvmpolld	Run all tests with lvmpolld daemon."
-	@echo "  check_lvmlockd_sanlock Run tests with lvmlockd and sanlock."
-	@echo "  check_lvmlockd_dlm	Run tests with lvmlockd and dlm."
 	@echo "  check_lvmlockd_idm	Run tests with lvmlockd and idm."
 	@echo "  check_lvmlockd_test	Run tests with lvmlockd --test."
+	@echo "  check_cluster		Run cluster tests (G= or T=+C=)."
 	@echo "  run-unit-test		Run only unit tests (root not needed)."
 	@echo "  clean			Clean dir."
 	@echo "  help			Display callable targets."
@@ -136,6 +140,8 @@ help:
 	@echo "  S			Skip given test(s) (regex)."
 	@echo "  T			Run given test(s) (regex)."
 	@echo "  VERBOSE		Verbose output (1), timing (2)."
+	@echo "  G			Group category for check_cluster (e.g. basic, basic,standard)."
+	@echo "  C			Config file for check_cluster (e.g. cluster/configs/foo.conf)."
 
 check: .tests-stamp
 	VERBOSE=$(VERBOSE) ./lib/runner \
@@ -175,16 +181,6 @@ check_devicesfile: .tests-stamp
 		--flavours ndev-devicesfile --only $(T) --skip $(S)
 
 ifeq ("@BUILD_LVMLOCKD@", "yes")
-check_lvmlockd_sanlock: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-sanlock --only $(T) --skip $(S)
-
-check_lvmlockd_dlm: .tests-stamp
-	VERBOSE=$(VERBOSE) ./lib/runner \
-		--testdir . --outdir $(LVM_TEST_RESULTS) \
-		--flavours udev-lvmlockd-dlm --only shell/aa-lvmlockd-dlm-prepare.sh,$(T),shell/zz-lvmlockd-dlm-remove.sh --skip $(S)
-
 check_lvmlockd_idm: .tests-stamp lib/idm_inject_failure
 	$(INSTALL_PROGRAM) lib/idm_inject_failure $(EXECDIR)
 	VERBOSE=$(VERBOSE) ./lib/runner \
@@ -196,6 +192,55 @@ check_lvmlockd_test: .tests-stamp
 		--testdir . --outdir $(LVM_TEST_RESULTS) \
 		--flavours udev-lvmlockd-test --only $(T) --skip $(S)
 endif
+
+check_cluster:
+	@if [ -n "$(G)" ]; then \
+		gargs=""; \
+		for g in $$(echo "$(G)" | tr ',' ' '); do \
+			gargs="$$gargs -g groups/$$g"; \
+		done; \
+		$(srcdir)/cluster/lvmtest \
+			$(if $(CLUSTER_ID),-i $(CLUSTER_ID)) \
+			$(if $(CLUSTER_OS_IMAGE),-o $(CLUSTER_OS_IMAGE)) \
+			$(if $(filter 1,$(CLUSTER_REVERT_ON_FAIL)),-R) \
+			group $$gargs; \
+	elif [ -n "$(filter-out .,$(T))" ] && [ -n "$(C)" ]; then \
+		cid=$(if $(CLUSTER_ID),$(CLUSTER_ID),lvmtest-$(basename $(notdir $(C)))); \
+		if ! $(srcdir)/cluster/lvmtest -i $$cid status >/dev/null 2>&1; then \
+			$(srcdir)/cluster/lvmtest -i $$cid \
+				$(if $(CLUSTER_OS_IMAGE),-o $(CLUSTER_OS_IMAGE)) \
+				-c $(srcdir)/$(C) create || exit 1; \
+		fi; \
+		$(srcdir)/cluster/lvmtest -i $$cid run -t $(srcdir)/$(T); \
+	else \
+		echo "Usage:"; \
+		echo "  make check_cluster G=basic"; \
+		echo "  make check_cluster G=basic,standard"; \
+		echo "  make check_cluster G=standard/shared-vg-3node-4scsi-caw-io2-512.txt"; \
+		echo "  make check_cluster T=<test> C=<config>"; \
+		echo ""; \
+		echo "Group mode (create cluster, run tests, destroy):"; \
+		echo "  G=<category>[,<category>]  Category dirs or files under cluster/groups/"; \
+		echo "  Categories: basic, standard, bridge, my"; \
+		echo ""; \
+		echo "Single test mode (create cluster if needed, run test, keep cluster):"; \
+		echo "  T=<test>                 Test script (e.g. cluster/shell/dir/test.sh)"; \
+		echo "  C=<config>               Config file (e.g. cluster/configs/foo.conf)"; \
+		echo ""; \
+		echo "Options:"; \
+		echo "  CLUSTER_ID=<id>          Use specific cluster ID"; \
+		echo "  CLUSTER_OS_IMAGE=<path>  OS image override"; \
+		echo "  CLUSTER_REVERT_ON_FAIL=1 Only revert after failures (group mode)"; \
+		echo ""; \
+		echo "Available groups:"; \
+		for d in $(srcdir)/cluster/groups/*/; do \
+			dname=$$(basename "$$d"); \
+			echo "  $$dname/"; \
+			ls "$$d"*.txt 2>/dev/null | sed 's|.*/|    |'; \
+		done; \
+		echo ""; \
+		exit 1; \
+	fi
 
 run-unit-test unit-test unit/unit-test:
 	@echo "    [MAKE] $(@F)"

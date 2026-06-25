@@ -177,11 +177,13 @@ check lv_field $vg/$lv3 lv_read_ahead "8.00k"
 check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
 lvcreate -L 8 -n $lv4 --readahead auto $vg "$dev1"
 check lv_field $vg/$lv4 lv_read_ahead "auto"
-# figure RA value of a PV origin device
+# figure RA value of a PV origin device (only applicable to DM-backed devices)
+if dmsetup info "$dev1" > /dev/null 2>&1; then
 DEVICE=$(dmsetup deps -o blkdevname "$dev1" | sed -e "s,.*:\ (\(.*\)),/dev/\1,")
 RASZ=$(( $(blockdev --getra "$DEVICE" ) / 2 ))
 test "$RASZ" -ge 128 || RASZ="128"
 check lv_field $vg/$lv4 lv_kernel_read_ahead "${RASZ}.00k" --units k
+fi
 lvcreate -vvvvv -L 8 -n $lv5 -i2 --stripesize 16k --readahead auto $vg
 check lv_field $vg/$lv5 lv_read_ahead "auto"
 # For 16k stripe we set '128k' as the is the minimum size we get when creating DM device

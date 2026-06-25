@@ -78,9 +78,9 @@ not grep "$dev1" out
 not grep "$dev2" out
 # N.B. in this case hints are disabled for duplicate pvs seen by scan
 # it would be preferable if this didn't happen as in auto mode, but it's ok.
-test "$pass" = "auto" && grep "$mddev" "$HINTS"
-not grep "$dev1" "$HINTS"
-not grep "$dev2" "$HINTS"
+test "$pass" = "auto" && grep "^scan:.*$mddev" "$HINTS"
+not grep "^scan:.*$dev1" "$HINTS"
+not grep "^scan:.*$dev2" "$HINTS"
 
 # normal activation works
 lvchange -ay $vg/$lv1
@@ -153,9 +153,9 @@ not grep "$mddev" out
 not grep "$dev1" out
 not grep "$dev2" out
 pvscan --cache
-not grep "$mddev" "$HINTS"
-not grep "$dev1" "$HINTS"
-not grep "$dev2" "$HINTS"
+not grep "^scan:.*$mddev" "$HINTS"
+not grep "^scan:.*$dev1" "$HINTS"
+not grep "^scan:.*$dev2" "$HINTS"
 
 # the vg is not seen, normal activation does nothing
 not lvchange -ay $vg/$lv1
@@ -212,11 +212,11 @@ not grep "$mddev" out
 not grep "$dev1" out
 not grep "$dev2" out
 pvscan --cache
-not grep "$mddev" "$HINTS"
+not grep "^scan:.*$mddev" "$HINTS"
 # N.B. would be preferable for this md component to not be in hints
 # grep "$dev1" $HINTS
-not grep "$dev1" "$HINTS"
-not grep "$dev2" "$HINTS"
+not grep "^scan:.*$dev1" "$HINTS"
+not grep "^scan:.*$dev2" "$HINTS"
 
 # the vg is not seen, normal activation does nothing
 not lvchange -ay $vg/$lv1
@@ -273,10 +273,10 @@ not grep "$dev1" out
 not grep "$dev2" out
 not grep "$dev4" out
 pvscan --cache
-not grep "$mddev" "$HINTS"
-not grep "$dev1" "$HINTS"
-not grep "$dev2" "$HINTS"
-not grep "$dev4" "$HINTS"
+not grep "^scan:.*$mddev" "$HINTS"
+not grep "^scan:.*$dev1" "$HINTS"
+not grep "^scan:.*$dev2" "$HINTS"
+not grep "^scan:.*$dev4" "$HINTS"
 
 # the vg is not seen, normal activation does nothing
 not lvchange -ay $vg/$lv1
