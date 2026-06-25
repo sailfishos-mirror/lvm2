@@ -204,10 +204,10 @@ pvs > out
 not grep "$dev1" out
 not grep "$dev2" out
 
-grep "$mddev" "$HINTS"
-grep "$dev3" "$HINTS"
-not grep "$dev1" "$HINTS"
-not grep "$dev2" "$HINTS"
+grep "^scan:.*$mddev" "$HINTS"
+grep "^scan:.*$dev3" "$HINTS"
+not grep "^scan:.*$dev1" "$HINTS"
+not grep "^scan:.*$dev2" "$HINTS"
 
 vgchange -an $vg
 

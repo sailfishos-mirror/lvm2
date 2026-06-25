@@ -143,6 +143,8 @@ check lv_field $vg/${lv1}_rimage_1_imeta size "20.00m"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
+# FIXME: remove this or make it optional, because it prevents
+# running this test on scsi devs.
 # As the test doesn't wait for full resync
 # delay legs so not all data need to be written.
 aux delay_dev "$dev1" 400 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"

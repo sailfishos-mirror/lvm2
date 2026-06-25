@@ -50,12 +50,12 @@ pvcreate "$dev2"
 pvs --nohints |tee out
 grep "$dev1" out
 grep "$dev2" out
-not grep "$dev1" $HINTS
-not grep "$dev2" $HINTS
+not grep "^scan:.*$dev1" $HINTS
+not grep "^scan:.*$dev2" $HINTS
 # pvs creates hints
 pvs
-grep "$dev1" $HINTS
-grep "$dev2" $HINTS
+grep "^scan:.*$dev1" $HINTS
+grep "^scan:.*$dev2" $HINTS
 
 # save hints with dev1 and dev2 before dev3 is created
 cp $HINTS $PREV
@@ -67,7 +67,7 @@ pvs --nohints |tee out
 grep "$dev1" out
 grep "$dev2" out
 grep "$dev3" out
-not grep "$dev3" $HINTS
+not grep "^scan:.*$dev3" $HINTS
 # restore old hint file without dev3
 cp $PREV $HINTS
 # pvs --nohints does not update hints
@@ -75,17 +75,17 @@ pvs --nohints |tee out
 grep "$dev1" out
 grep "$dev2" out
 grep "$dev3" out
-grep "$dev1" $HINTS
-grep "$dev2" $HINTS
-not grep "$dev3" $HINTS
+grep "^scan:.*$dev1" $HINTS
+grep "^scan:.*$dev2" $HINTS
+not grep "^scan:.*$dev3" $HINTS
 # pvs updates hints
 pvs |tee out
 grep "$dev1" out
 grep "$dev2" out
 grep "$dev3" out
-grep "$dev1" $HINTS
-grep "$dev2" $HINTS
-grep "$dev3" $HINTS
+grep "^scan:.*$dev1" $HINTS
+grep "^scan:.*$dev2" $HINTS
+grep "^scan:.*$dev3" $HINTS
 
 aux wipefs_a "$dev1" "$dev2" "$dev3"
 
@@ -127,14 +127,14 @@ fi
 #
 
 not pvs "$dev3"
-not grep "$dev3" $HINTS
+not grep "^scan:.*$dev3" $HINTS
 cp $HINTS $PREV
 pvcreate "$dev3"
 grep "# Created empty" $HINTS
 cat $NEWHINTS
 # next cmd recreates hints
 pvs "$dev3"
-grep "$dev3" $HINTS
+grep "^scan:.*$dev3" $HINTS
 not diff $HINTS $PREV
 not cat $NEWHINTS
 
@@ -155,7 +155,7 @@ grep "# Created empty" $HINTS
 cat $NEWHINTS
 # next cmd recreates hints
 vgs $vg2
-grep "$dev4" $HINTS
+grep "^scan:.*$dev4" $HINTS
 not diff $HINTS $PREV
 not cat $NEWHINTS
 
@@ -165,7 +165,7 @@ grep "# Created empty" $HINTS
 cat $NEWHINTS
 # next cmd recreates hints
 vgs $vg2
-grep "$dev4" $HINTS
+grep "^scan:.*$dev4" $HINTS
 not diff $HINTS $PREV
 not cat $NEWHINTS
 
@@ -186,8 +186,8 @@ cat $NEWHINTS
 # next cmd recreates hints
 not pvs "$dev3"
 not pvs "$dev4"
-not grep "$dev3" $HINTS
-not grep "$dev4" $HINTS
+not grep "^scan:.*$dev3" $HINTS
+not grep "^scan:.*$dev4" $HINTS
 not diff $HINTS $PREV
 not cat $NEWHINTS
 
@@ -382,8 +382,8 @@ pvs > foo
 not diff $HINTS $PREV
 grep "$dev4" foo
 not grep "$dev5" foo
-grep "$dev4" $HINTS
-not grep "$dev5" $HINTS
+grep "^scan:.*$dev4" $HINTS
+not grep "^scan:.*$dev5" $HINTS
 
 #
 # Test pvscan --cache <dev> forces refresh
@@ -430,7 +430,7 @@ grep "# Created empty" $HINTS
 cat $NEWHINTS
 # this next pvs will create new hints with the new uuid
 pvs
-grep "$dev4" $HINTS > tmp-newuuid
+grep "^scan:.*$dev4" $HINTS > tmp-newuuid
 cp $HINTS tmp-new
 not diff tmp-old tmp-new
 # hints are stable

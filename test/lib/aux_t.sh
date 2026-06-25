@@ -136,12 +136,10 @@ prepare_lvmlockd() {
 	pgrep lvmlockd && skip "Cannot run while existing lvmlockd process exists."
 
 	if [[ "${LVM_TEST_LOCK_TYPE_SANLOCK:-0}" != 0 ]]; then
-		# make check_lvmlockd_sanlock
 		echo "Starting lvmlockd for sanlock."
 		lvmlockd -o 2
 
 	elif [[ "${LVM_TEST_LOCK_TYPE_DLM:-0}" != 0 ]]; then
-		# make check_lvmlockd_dlm
 		echo "Starting lvmlockd for dlm."
 		lvmlockd
 
@@ -1074,7 +1072,7 @@ corrupt_dev() {
 	[[ -n "$position" ]] || return 0
 
 	# Seek to the position and replace with corruption pattern
-	echo -n "$3" | LANG=C dd of="$1" bs=1 seek="$position" conv=notrunc,fdatasync 2>/dev/null
+	echo -n "$3" | LANG=C dd of="$1" bs=1 seek="$position" conv=notrunc,fdatasync
 }
 
 prepare_backing_dev() {
@@ -1908,7 +1906,7 @@ wait_recalc() {
 	local sync
 	local checklv=$1
 
-	for i in {1..100} ; do
+	for i in {1..200} ; do
 		sync=$(get lv_field "$checklv" sync_percent | cut -d. -f1)
 		echo "sync_percent is $sync"
 
