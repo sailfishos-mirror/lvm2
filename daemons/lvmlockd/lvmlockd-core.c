@@ -2380,9 +2380,9 @@ static void res_process(struct lockspace *ls, struct resource *r,
 	 *
 	 * Retry a lock request that fails due to a lock conflict (-EAGAIN):
 	 * if we have not exceeded max retries and lm sets lm_retry (sanlock
-	 * transient conflicts from shared lock implementation), or r type
-	 * is gl or vg (transient real conflicts we want to hide from command).
-	 * lv lock conflicts won't be transient so don't retry them.
+	 * transient conflicts from shared lock implementation).
+	 * Actual lock contention retries are handled by the lvm command
+	 * using global/lvmlockd_lock_retries or --lockopt retries=N.
 	 */
 
 	/*
@@ -2440,8 +2440,8 @@ static void res_process(struct lockspace *ls, struct resource *r,
 				*retry_out = 1;
 
 			} else if ((rv == -EAGAIN) &&
-			    (act->retries <= act->max_retries) &&
-			    (lm_retry || (r->type != LD_RT_LV))) {
+			    (act->retries < DEFAULT_MAX_RETRIES) &&
+			    lm_retry) {
 				/* leave act on list */
 				log_debug("%s:%s res_lock EAGAIN retry", ls->name, r->name);
 				act->retries++;
@@ -2495,8 +2495,8 @@ static void res_process(struct lockspace *ls, struct resource *r,
 				add_fence_action(ls, &owner);
 				*retry_out = 1;
 			} else if ((rv == -EAGAIN) &&
-			    (act->retries <= act->max_retries) &&
-			    (lm_retry || (r->type != LD_RT_LV))) {
+			    (act->retries < DEFAULT_MAX_RETRIES) &&
+			    lm_retry) {
 				/* leave act on list */
 				log_debug("%s:%s res_lock EAGAIN retry", ls->name, r->name);
 				act->retries++;
@@ -6026,8 +6026,6 @@ static void client_recv_action(struct client *cl)
 	}
 
 skip_pvs_path:
-	act->max_retries = daemon_request_int(req, "max_retries", DEFAULT_MAX_RETRIES);
-
 	dm_config_destroy(req.cft);
 	buffer_destroy(&req.buffer);
 

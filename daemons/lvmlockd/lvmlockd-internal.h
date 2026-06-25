@@ -193,7 +193,6 @@ struct action {
 	int8_t mode;			/* lock mode LD_LK_ */
 	int8_t lm_type;			/* lock manager: LM_DLM, LM_SANLOCK */
 	int retries;
-	int max_retries;
 	int result;
 	int lm_rv;			/* return value from lm_ function */
 	int align_mb;

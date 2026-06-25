@@ -2956,7 +2956,7 @@ static int _init_lvmlockd(struct cmd_context *cmd)
 		cmd->enable_hints = 0;
 
 	if (arg_is_set(cmd, lockopt_ARG)) {
-		lockd_lockopt_get_flags(arg_str_value(cmd, lockopt_ARG, ""), &cmd->lockopt);
+		lockd_lockopt_get_flags(arg_str_value(cmd, lockopt_ARG, ""), &cmd->lockopt, &cmd->lockopt_retries);
 
 		if (use_lvmlockd) {
 			if (cmd->lockopt & LOCKOPT_SKIPLV)
