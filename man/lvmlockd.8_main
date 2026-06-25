@@ -383,16 +383,27 @@ For more information on using PR with LVM in general, see
 The vgcreate options to enable PR-based lock recovery in a new VG are shown above.
 .P
 To enable PR-based lock recovery in an existing VG, first enable PR (if
-not already), then change the lock args:
+not already), then change the lock args.  Changing lock args can involve
+stopping/starting PR and locking at different stages.  Changing the PR or
+lock args settings requires the VG to be stopped on all other nodes.
+.P
+.I Example
+.br
+.B $ vgcreate --shared
+.I VG
+.I devices
 .br
 .B $ vgchange --setpersist y
 .I VG
 .br
+.B $ vgchange --persist start
+.I VG
+.br
 .B $ vgchange --setlockargs persist,notimeout
 .I VG
-.P
-Changing the PR or lockargs settings requires the VG to be stopped on all
-other nodes.
+.br
+.B $ vgchange --persist start --lockstart
+.I VG
 .P
 Display the VG attributes configured by setpersist and setlockargs:
 .br
