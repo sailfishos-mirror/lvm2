@@ -16,6 +16,7 @@
 #include "lib/metadata/metadata.h"
 #include "lib/locking/locking.h"
 #include "lib/misc/lvm-string.h"
+#include "lib/misc/lvm-signal.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/display/display.h"
 #include "lib/metadata/segtype.h"
@@ -367,6 +368,73 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 	return 1;
 }
 
+static int _format_vdo_pool_kernel(struct logical_volume *vdo_pool_lv)
+{
+	struct cmd_context *cmd = vdo_pool_lv->vg->cmd;
+	struct lv_status_vdo *vdo_status;
+	enum dm_vdo_index_state index_state;
+	int r = 0;
+
+	if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
+		return_0;
+
+	if (!activate_lv(cmd, vdo_pool_lv)) {
+		log_error("Failed to activate VDO pool %s for kernel formatting.",
+			  display_lvname(vdo_pool_lv));
+		goto out;
+	}
+
+	sync_local_dev_names(cmd);
+
+	/* Wait for the UDS index to finish initializing */
+	for (;;) {
+		if (!lv_vdo_pool_status(vdo_pool_lv, 0, &vdo_status)) {
+			stack;
+			break;
+		}
+
+		index_state = vdo_status->vdo->index_state;
+		dm_pool_destroy(vdo_status->mem);
+
+		if (index_state == DM_VDO_INDEX_ERROR) {
+			log_error("Failed to format VDO pool %s, index error.",
+				  display_lvname(vdo_pool_lv));
+			break;
+		}
+
+		log_verbose("VDO pool %s index state: %s.",
+			    display_lvname(vdo_pool_lv),
+			    get_vdo_index_state_name(index_state));
+
+		if (index_state != DM_VDO_INDEX_OPENING) {
+			r = 1; /* Initialized */
+			break;
+		}
+
+		/* 50ms: formatting is typically fast, avoid unnecessary delay */
+		if (!sigint_usleep(50000)) {
+			log_warn("WARNING: Interrupted waiting for VDO index on %s.",
+				 display_lvname(vdo_pool_lv));
+			break;
+		}
+	}
+
+	if (!deactivate_lv(cmd, vdo_pool_lv)) {
+		log_error("Failed to deactivate VDO pool %s after kernel formatting.",
+			  display_lvname(vdo_pool_lv));
+		r = 0;
+	}
+out:
+	vdo_pool_lv->status &= ~LV_VDOFORMAT;
+
+	if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
+		return_0;
+
+	sync_local_dev_names(cmd);
+
+	return r;
+}
+
 /*
  * convert_vdo_pool_lv
  * @data_lv
@@ -388,6 +456,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 	struct logical_volume *vdo_pool_lv = data_lv;
 	const struct segment_type *vdo_pool_segtype;
 	struct lv_segment *vdo_pool_seg;
+	struct vdo_pool_info pinfo = { 0 };
 	uint64_t vdo_logical_size = 0;
 	uint64_t adjust;
 	unsigned attrs = 0;
@@ -414,29 +483,37 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 	if (format) {
 		if (test_mode()) {
 			log_verbose("Test mode: Skipping formatting of VDO pool volume.");
-		} else if (use_kernel) {
+		} else {
 			if (use_kernel &&
 			    (!vdo_pool_segtype->ops->target_present ||
 			     !vdo_pool_segtype->ops->target_present(cmd, NULL, &attrs) ||
 			     !(attrs & VDO_FEATURE_KERNEL_FORMAT))) {
-				log_error("Kernel direct formatting (vdo_use_kernel_format=1) requires VDO target version 9.2.0 or newer.");
-				return 0;
+				log_verbose("Kernel formatting requires VDO target version 9.2.0 or newer, using vdoformat.");
+				use_kernel = 0;
 			}
 
-			/* Kernel decides to format if the first 4k are zeroes */
-			if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
-				log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
-					  display_lvname(data_lv));
-				return 0;
-			}
+			if (use_kernel) {
+				/* Kernel decides to format if the first 4k are zeroes */
+				if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
+					log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
+						  display_lvname(data_lv));
+					return 0;
+				}
 
-			if (!*virtual_extents)
-				vdo_logical_size = data_lv->size;
-		} else {
-			/* Traditional userspace vdoformat */
-			if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
-				log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
-				return 0;
+				if (!vdo_pool_info(data_lv->size, vtp, &pinfo)) {
+					log_error("Pool %s is too small for the given VDO configuration.",
+						  display_lvname(data_lv));
+					return 0;
+				}
+
+				if (!*virtual_extents)
+					vdo_logical_size = pinfo.data_blocks * DM_VDO_BLOCK_SIZE;
+			} else {
+				/* Traditional userspace vdoformat */
+				if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
+					log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
+					return 0;
+				}
 			}
 		}
 	} else {
@@ -484,6 +561,33 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 
 	vdo_pool_lv->status |= LV_VDO_POOL;
 	data_lv->status |= LV_VDO_POOL_DATA;
+
+	if (use_kernel) {
+		vdo_pool_lv->status |= LV_VDOFORMAT;
+
+		if (!_format_vdo_pool_kernel(vdo_pool_lv)) {
+			log_error("Failed to kernel format VDO pool %s, reverting.",
+				  display_lvname(vdo_pool_lv));
+			vdo_pool_lv->status &= ~LV_VDO_POOL;
+			data_lv->status &= ~LV_VDO_POOL_DATA;
+			if (!remove_layer_from_lv(vdo_pool_lv, data_lv))
+				return_0;
+			if (!lv_remove(data_lv))
+				return_0;
+			if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
+				return_0;
+			return 0;
+		}
+
+		log_print_unless_silent("  The VDO volume can address %s in %u data slabs, each %s.",
+					display_size(cmd, (uint64_t)pinfo.data_per_slab * pinfo.slab_count * DM_VDO_BLOCK_SIZE),
+					pinfo.slab_count,
+					display_mb_size(cmd, vtp->slab_size_mb));
+		log_print_unless_silent("  It can grow to address at most %s of physical storage in %u slabs.",
+					display_mb_size(cmd, (uint64_t)DM_VDO_SLABS_MAXIMUM * vtp->slab_size_mb),
+					(unsigned)DM_VDO_SLABS_MAXIMUM);
+		log_print_unless_silent("  If a larger maximum size might be needed, use bigger slabs.");
+	}
 
 	return 1;
 }

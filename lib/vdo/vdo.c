@@ -391,6 +391,7 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
 				     struct dm_tree_node *node, uint64_t len,
 				     uint32_t *pvmove_mirror_count __attribute__((unused)))
 {
+	struct dm_vdo_target_params vdo_params;
 	char *vdo_pool_name, *data_uuid;
 	unsigned attrs = 0;
 
@@ -411,11 +412,15 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
 	if (!(data_uuid = build_dm_uuid(mem, seg_lv(seg, 0), lv_layer(seg_lv(seg, 0)))))
 		return_0;
 
+	/* Use local copy to avoid mutating in-memory metadata */
+	vdo_params = seg->vdo_params;
+	vdo_params.use_kernel_format = (seg->lv->status & LV_VDOFORMAT) ? 1 : 0;
+
 	/* VDO uses virtual size instead of its physical size */
 	if (!dm_tree_node_add_vdo_target(node, get_vdo_pool_virtual_size(seg),
 					 !(attrs & VDO_FEATURE_VERSION4) ? 2 : 4,
 					 vdo_pool_name, data_uuid, seg_lv(seg, 0)->size,
-					 &seg->vdo_params))
+					 &vdo_params))
 		return_0;
 
 	return 1;
