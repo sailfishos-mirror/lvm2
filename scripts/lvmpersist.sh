@@ -96,9 +96,9 @@ key_is_on_device_nvme() {
 	fi
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		logmsg "$cmd resv-report error on $dev"
+		errorexit "$cmd resv-report error on $dev"
 	fi
-	
+
 	false
 	return
 }
@@ -114,9 +114,9 @@ key_is_on_device_scsi() {
 	fi
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		logmsg "$cmd read-keys error on $dev"
+		errorexit "$cmd read-keys error on $dev"
 	fi
-	
+
 	false
 	return
 }
@@ -142,7 +142,7 @@ get_key_list_nvme() {
 	KEYS=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.regctlext[].rkey' | sort | xargs printf '0x%x ')
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		logmsg "$cmd read-keys error on $dev"
+		errorexit "$cmd read-keys error on $dev"
 	fi
 
 	if [[ "$KEYS" == "0x0 " ]]; then
@@ -172,7 +172,7 @@ get_key_list_scsi() {
 	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep "    0x" | sort -u | xargs ) )
 
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		logmsg "$cmd read-keys error on $dev"
+		errorexit "$cmd read-keys error on $dev"
 	fi
 }
 
