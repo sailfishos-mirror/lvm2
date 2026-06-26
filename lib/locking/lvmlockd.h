@@ -80,7 +80,7 @@ int is_lockd_type(const char *lock_type);
 int vg_is_shared(const struct volume_group *vg);
 int vg_is_sanlock(const struct volume_group *vg);
 
-void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries);
+void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries, int *removeretry);
 int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags);
 int lockd_lockargs_get_meta_flags(const char *str, uint32_t *flags);
 
@@ -176,7 +176,7 @@ static inline int vg_is_sanlock(const struct volume_group *vg)
 	return 0;
 }
 
-static inline void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries)
+static inline void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries, int *removeretry)
 {
 }
 
