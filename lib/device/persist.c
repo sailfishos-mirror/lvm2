@@ -1412,6 +1412,8 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 	int pv_res_other_type = 0;
 	int pv_res_local = 0;
 	int pv_res_other = 0;
+	int pv_multi_local_key = 0;
+	int ki, kj, host_id_ki, key_matches;
 	int prtype;
 
 	if (vg_is_sanlock(vg) && !local_host_id) {
@@ -1501,6 +1503,34 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 			if (vg_is_shared(vg) && other_key_count && (found_key_count != other_key_count))
 				log_warn("WARNING: Unexpected number of registered keys %d (vs %d) on %s.",
 					  found_key_count, other_key_count, dev_name(dev));
+
+			/* Check for any host_id with multiple registered keys */
+			if (!local_key && found_keys && (found_key_count > 1)) {
+				for (ki = 0; ki < found_key_count; ki++) {
+					host_id_ki = (int)(found_keys[ki] & 0xFFFF);
+					for (kj = 0; kj < ki; kj++) {
+						if (host_id_ki == (int)(found_keys[kj] & 0xFFFF))
+							break;
+					}
+					if (kj < ki)
+						continue;
+					key_matches = 0;
+					for (kj = ki; kj < found_key_count; kj++) {
+						if (host_id_ki == (int)(found_keys[kj] & 0xFFFF))
+							key_matches++;
+					}
+					if (key_matches > 1) {
+						if (host_id_ki == local_host_id) {
+							log_warn("WARNING: %d keys registered for local host_id %d on %s.",
+								 key_matches, host_id_ki, dev_name(dev));
+							pv_multi_local_key++;
+						} else {
+							log_warn("WARNING: %d keys registered for host_id %d on %s.",
+								 key_matches, host_id_ki, dev_name(dev));
+						}
+					}
+				}
+			}
 
 			if (!vg_is_shared(vg) && (found_key_count == 1) && found_keys) {
 				if (!one_key_val)
@@ -1634,6 +1664,9 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 
 	if (saved_keys)
 		dm_pool_free(cmd->mem, saved_keys);
+
+	if (pv_multi_local_key)
+		log_warn("WARNING: Multiple keys are registered for local host_id %d.", local_host_id);
 
 	if (!pv_res_wear_local && !pv_res_wear_other && !pv_res_we_local && !pv_res_we_other)
 		log_print_unless_silent("no reservation");
