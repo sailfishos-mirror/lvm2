@@ -273,6 +273,7 @@ get_dev_reservation_nvme() {
 	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
 		logmsg "nvme resv-report error on $dev"
 		DEV_PRDESC=error
+		DEV_PRTYPE=0
 		false
 		return
 	fi
@@ -280,6 +281,7 @@ get_dev_reservation_nvme() {
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report no reservation type for $dev"
 		DEV_PRDESC=error
+		DEV_PRTYPE=0
 		false
 		return
 	fi
