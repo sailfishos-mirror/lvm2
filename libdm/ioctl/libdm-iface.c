@@ -1795,19 +1795,54 @@ uint64_t dm_task_get_existing_table_size(const struct dm_task *dmt)
 }
 
 /*
- * Check if raid params are functionally equivalent despite
- * differing param count.  dm-raid < 1.15.1 double-counts
- * rebuild/writemostly in its table output, producing a higher
- * count than what was loaded.  The actual tokens are identical.
- *
- * Params format: "<personality> <count> <tokens...>"
+ * Skip "rebuild N" or "write_mostly N" token pair.
+ * Old dm-raid may drop these from table output.
  */
-static int _raid_params_equiv(const char *p1, const char *p2)
+static int _skip_raid_volatile_token(const char **pp)
 {
-	const char *s1, *s2;
+	const char *p = *pp;
 
-	s1 = strchr(p1, ' ');
-	s2 = strchr(p2, ' ');
+	if (strncmp(p, "rebuild ", 8) &&
+	    strncmp(p, "write_mostly ", 13))
+		return 0;
+
+	while (*p && *p != ' ')
+		p++;
+	if (*p == ' ')
+		p++;
+	while (*p && *p != ' ')
+		p++;
+	if (*p == ' ')
+		p++;
+
+	*pp = p;
+	return 1;
+}
+
+/*
+ * Check if raid params are functionally equivalent.
+ * p1 = new table, p2 = active table (kernel STATUSTYPE_TABLE).
+ *
+ * Old dm-raid (< 1.15.1) double-counts rebuild/writemostly in
+ * the param count, and early versions drop "rebuild N" from
+ * table output once In_sync is set.  Both cause spurious string
+ * mismatches that defeat reload suppression.  We skip the param
+ * count and ignore volatile "rebuild N" / "write_mostly N" pairs.
+ *
+ * The 'suspended' flag gates which side gets the volatile skip.
+ * Do not simplify this to always-symmetric or always-asymmetric.
+ * When NOT suspended, skip only in p2 -- a rebuild in p1 is a
+ * deliberate request that must trigger a reload.  When suspended,
+ * skip in both p1 and p2 -- LVM is in the second preload pass
+ * (the first already loaded the rebuild table via force_reload),
+ * the active table is stale, and a redundant reload here would
+ * hit "Internal error: table load while devices are suspended".
+ */
+static int _raid_params_equiv(const char *p1, const char *p2,
+			      int suspended)
+{
+	const char *s1 = strchr(p1, ' ');
+	const char *s2 = strchr(p2, ' ');
 
 	if (!s1 || !s2)
 		return 0;
@@ -1824,15 +1859,49 @@ static int _raid_params_equiv(const char *p1, const char *p2)
 	if (!s1 || !s2)
 		return 0;
 
-	/* Everything after the count must be identical */
-	return !strcmp(s1, s2);
+	/* Fast path */
+	if (!strcmp(s1, s2))
+		return 1;
+
+	s1++;
+	s2++;
+
+	for (;;) {
+		if (suspended)
+			while (*s1 && _skip_raid_volatile_token(&s1))
+				;
+		while (*s2 && _skip_raid_volatile_token(&s2))
+			;
+
+		if (!*s1 && !*s2)
+			return 1;
+
+		if (!*s1 || !*s2)
+			return 0;
+
+		while (*s1 && *s2 && *s1 != ' ' && *s2 != ' ') {
+			if (*s1 != *s2)
+				return 0;
+			s1++;
+			s2++;
+		}
+
+		if ((*s1 && *s1 != ' ') || (*s2 && *s2 != ' '))
+			return 0;
+
+		if (*s1 == ' ')
+			s1++;
+		if (*s2 == ' ')
+			s2++;
+	}
 }
 
 static int _target_params_equiv(const char *type,
-				const char *p1, const char *p2)
+				const char *p1, const char *p2,
+				int suspended)
 {
 	if (!strcmp(type, "raid"))
-		return _raid_params_equiv(p1, p2);
+		return _raid_params_equiv(p1, p2, suspended);
 
 	return 0;
 }
@@ -1908,7 +1977,8 @@ static int _reload_with_suppression_v4(struct dm_task *dmt)
 					  task->major, task->minor, t1->type);
 				log_debug("reload params1 %s", t1->params);
 				log_debug("reload params2 %s", t2->params);
-			} else if (_target_params_equiv(t1->type, t1->params, t2->params)) {
+			} else if (_target_params_equiv(t1->type, t1->params, t2->params,
+					       task->dmi.v4->flags & DM_SUSPEND_FLAG)) {
 				log_debug("reload %d:%d diff params equiv for type %s.",
 					  task->major, task->minor, t1->type);
 				log_debug("reload params1 %s", t1->params);
