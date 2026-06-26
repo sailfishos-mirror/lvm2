@@ -294,6 +294,7 @@ struct cmd_context {
 	struct vdo_convert_params *lvcreate_vcp;/* params for LV to VDO conversion */
 	uint32_t lockopt;			/* LOCKOPT_* from --lockopt string */
 	int lockopt_retries;			/* retries=N from --lockopt, -1 if not set */
+	int lockopt_removeretry;		/* removeretry=SECONDS from --lockopt, 0 if not set */
 };
 
 /*

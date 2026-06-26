@@ -1386,6 +1386,8 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 {
 	daemon_reply reply;
 	uint32_t lockd_flags = 0;
+	int retries = 0;
+	int max_retries;
 	int result;
 	int ret;
 
@@ -1417,6 +1419,11 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 		return 1;
 	}
 
+	max_retries = cmd->lockopt_removeretry;
+
+ req:
+	lockd_flags = 0;
+
 	reply = _lockd_send("free_vg",
 				"pid = " FMTd64, (int64_t) getpid(),
 				"vg_name = %s", vg->name,
@@ -1434,12 +1441,26 @@ static int _free_vg_sanlock(struct cmd_context *cmd, struct volume_group *vg)
 	 * Other hosts could still be joined to the lockspace, which means they
 	 * are using the internal sanlock LV, which means we cannot remove the
 	 * VG.  Once other hosts stop using the VG it can be removed.
+	 *
+	 * --lockopt removeretry=SECONDS will retry for the given number of
+	 * seconds, polling every 1 sec, to handle the transient cases where
+	 * other hosts have stopped but sanlock has not yet detected it.
 	 */
 	if (result == -EBUSY) {
+		if (retries < max_retries) {
+			retries++;
+			if (lockd_flags & LD_RF_HOSTS_UNKNOWN)
+				log_warn("Retrying vgremove of \"%s\": unknown host state.", vg->name);
+			else
+				log_warn("Retrying vgremove of \"%s\": other hosts found in lockspace.", vg->name);
+			daemon_reply_destroy(reply);
+			sleep(1);
+			goto req;
+		}
 		if (lockd_flags & LD_RF_HOSTS_UNKNOWN)
-			log_error("Lockspace for \"%s\" has unknown host state (wait and retry)", vg->name);
+			log_error("Lockspace for \"%s\" has unknown host state (wait and retry).", vg->name);
 		else
-			log_error("Lockspace for \"%s\" not stopped on other hosts", vg->name);
+			log_error("Lockspace for \"%s\" not stopped on other hosts.", vg->name);
 		goto out;
 	} else if (result == -ENOLS) {
 		log_error("Lockspace for \"%s\" is not started.", vg->name);
@@ -4695,7 +4716,7 @@ int lockd_lv_refresh(struct cmd_context *cmd, struct lvresize_params *lp)
 
 #define MAX_LOCKOPT 16
 
-void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries)
+void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries, int *removeretry)
 {
 	char buf[PATH_MAX];
 	char *argv[MAX_LOCKOPT];
@@ -4751,6 +4772,9 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries)
 		else if (!strncmp(argv[i], "retries=", 8)) {
 			if (retries)
 				*retries = atoi(argv[i] + 8);
+		} else if (!strncmp(argv[i], "removeretry=", 12)) {
+			if (removeretry)
+				*removeretry = atoi(argv[i] + 12);
 		} else
 			log_warn("Ignoring unknown lockopt value: %s", argv[i]);
 	}
