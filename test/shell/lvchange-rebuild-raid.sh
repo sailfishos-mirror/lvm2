@@ -132,6 +132,9 @@ lvchange --yes --rebuild "$dev5"  $vg/$lv1
 _sync "AAAAAA"
 
 # Rebuilding any 2 raid6 stripes is fine.
+# Old dm-raid accesses beyond end of small component devices (kernel commit 188a212df1f3)
+if aux have_raid 1 13 0 ; then
+
 lvchange --yes --rebuild "$dev2" --rebuild "$dev4" $vg/$lv1
 [ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "AaAaAA"
 _sync "AAAAAA"
@@ -139,5 +142,7 @@ _sync "AAAAAA"
 lvchange --yes --rebuild "$dev1" --rebuild "$dev5" $vg/$lv1
 [ $v1_9_0 -eq 1 ] && check raid_leg_status $vg $lv1 "aAAAaA"
 _sync "AAAAAA"
+
+fi
 
 vgremove -ff $vg
