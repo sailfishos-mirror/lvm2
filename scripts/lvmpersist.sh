@@ -750,6 +750,11 @@ do_start() {
 		exit 1
 	fi
 
+	# The register above triggers udev to re-probe the device.
+	# Wait for probing to finish before issuing the reservation
+	# to avoid the LIO deadlock (same issue fixed in do_takeover).
+	udevadm settle
+
 	# Reserve devices
 
 	for dev in "${DEVICES[@]}"; do
