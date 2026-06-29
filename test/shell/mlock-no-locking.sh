@@ -13,6 +13,9 @@
 # Check whether activation without memory locking works as expected
 . lib/inittest
 
+# memory locking is disabled with sanitizers
+aux with_sanitizer && skip
+
 aux prepare_vg
 
 lvcreate -L1 -n $lv1 $vg
