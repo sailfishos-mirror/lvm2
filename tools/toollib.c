@@ -6418,9 +6418,25 @@ int persist_start_include(struct cmd_context *cmd, struct volume_group *vg,
 
 	/*
 	 * Supplementary start: --persist start was added to the command.
+	 *
+	 * When VGs are named, always try persist_start; fail if it fails.
+	 *
+	 * When no VGs are named (e.g. "vgchange --lockstart --persist start"),
+	 * the command applies to all shared VGs.  Only attempt persist_start
+	 * on VGs that have PR configured (VG_PR_REQUIRE or VG_PR_AUTOSTART).
+	 * VG_PR_REQUIRE: fail if persist_start fails.
+	 * VG_PR_AUTOSTART: warn if persist_start fails.
+	 * No PR flags: skip persist_start.
 	 */
 	if (op && !strcmp(op, "start")) {
+		if (!cmd->position_argc && !(vg->pr & (VG_PR_REQUIRE|VG_PR_AUTOSTART)))
+			return 1;
+
 		if (!persist_start(cmd, vg, remkey, NULL)) {
+			if (!cmd->position_argc && !(vg->pr & VG_PR_REQUIRE)) {
+				log_warn("WARNING: Failed to start persistent reservation for %s (not required).", vg->name);
+				return 1;
+			}
 			log_error("Failed to start persistent reservation.");
 			return 0;
 		}

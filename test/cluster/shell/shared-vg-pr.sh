@@ -556,6 +556,27 @@ check_key_none out
 node1 vgchange --persist start --lockstart testvg
 node1_vgremove_retry
 
+#
+# lockstart --persist start with no VG arg: ignore VG without PR
+#
+node1 vgcreate --shared --setpersist y testvg1 $d1
+node1 vgcreate --shared testvg2 $d2
+
+node1 vgchange --lockstop testvg1
+node1 vgchange --persist stop testvg1
+
+node1 vgchange --lockstart --persist start
+
+node1 vgchange --persist check testvg1
+node1 not vgchange --persist check testvg2
+
+node1 vgchange --lockstop --persist stop testvg1
+node1 vgchange --lockstop testvg2
+node1 vgchange --lockstart --persist start testvg1
+node1 vgchange --lockstart testvg2
+while ! node1 vgremove -y -f testvg2; do sleep 1; done
+while ! node1 vgremove -y -f testvg1; do sleep 1; done
+
 nodes rm -f /etc/lvm/devices/system.devices
 nodes rm -f /run/lvm/hints
 
