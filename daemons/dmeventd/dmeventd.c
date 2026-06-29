@@ -3002,6 +3002,10 @@ int main(int argc, char *argv[])
 
 	_init_kernel_major();
 
+	/* Set before any thread creation so monitor threads
+	 * never race with main thread on this global */
+	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
+
 	_init_thread_signals();
 
 	if (pthread_mutex_init(&_global_mutex, NULL) ||

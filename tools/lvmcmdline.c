@@ -3468,8 +3468,11 @@ struct cmd_context *init_lvm(unsigned set_connections,
 	 * It's not necessary to use name mangling for LVM:
 	 *   - the character set used for LV names is subset of udev character set
 	 *   - when we check other devices (e.g. device_is_usable fn), we use major:minor, not dm names
+	 *
+	 * Skip if already NONE (dmeventd pre-sets this before threads).
 	 */
-	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
+	if (dm_get_name_mangling_mode() != DM_STRING_MANGLING_NONE)
+		dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
 
 	if (!(cmd = create_toolcontext(NULL, 1, threaded, set_connections, set_filters))) {
 		return_NULL;
