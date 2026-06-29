@@ -13,6 +13,28 @@ stages:
   # Reboot the runners:
   - post
 
+variables:
+  COMMON_CONFIG: >
+    --enable-fsadm
+    --enable-write_install
+    --enable-pkgconfig
+    --enable-cmdlib
+    --enable-dmeventd
+    --enable-blkid_wiping
+    --enable-udev_sync
+    --enable-lvmpolld
+    --enable-lvmlockd-sanlock
+    --enable-dbus-service --enable-notify-dbus
+    --enable-dmfilemapd
+    --with-vdo-format=/usr/bin/vdoformat
+    --disable-silent-rules
+  F43_CONFIGURE: >
+    --with-default-use-devices-file=1
+    --enable-app-machineid
+    --enable-editline
+    --disable-readline
+    --enable-lvmlockd-dlm
+
 approve1:
   stage: approve
   script:
@@ -110,26 +132,7 @@ test-single:
     # - when only doc files were touched,
     #
     # Common options go here, diffs to the above matrix
-    - >
-      ./configure
-      --with-default-use-devices-file=1
-      --enable-app-machineid
-      --enable-editline
-      --disable-readline
-      --enable-lvmlockd-dlm
-      --enable-fsadm
-      --enable-write_install
-      --enable-pkgconfig
-      --enable-cmdlib
-      --enable-dmeventd
-      --enable-blkid_wiping
-      --enable-udev_sync
-      --enable-lvmpolld
-      --enable-lvmlockd-sanlock
-      --enable-dbus-service --enable-notify-dbus
-      --enable-dmfilemapd
-      --with-vdo-format=/usr/bin/vdoformat
-      --disable-silent-rules
+    - ./configure ${COMMON_CONFIG} ${F43_CONFIGURE}
     - make
     - rm -rf test/results
     - mkdir -p /dev/shm/lvm2-test
@@ -192,41 +195,23 @@ test-all:
         TAG: test
         CONFIGURE: >
           --enable-tsan
-          --with-default-use-devices-file=1
-          --enable-app-machineid
-          --enable-editline
-          --disable-readline
-          --enable-lvmlockd-dlm
+          ${F43_CONFIGURE}
       - LABEL: asan
         TAG: test
         CONFIGURE: >
           --enable-asan
-          --with-default-use-devices-file=1
-          --enable-app-machineid
-          --enable-editline
-          --disable-readline
-          --enable-lvmlockd-dlm
+          ${F43_CONFIGURE}
       # f43 (latest supported fedora) is serving as first test - test1
       # - TAG: f43
       #   CONFIGURE: >
-      #     --with-default-use-devices-file=1
-      #     --enable-app-machineid
-      #     --enable-editline
-      #     --disable-readline
-      #     --enable-lvmlockd-dlm
+      #     ${F43_CONFIGURE}
       # f44+ are not yet supported by gitlab runner
       # - TAG: f44
       #   CONFIGURE: >
-      #     --with-default-use-devices-file=1
-      #     --enable-app-machineid
-      #     --enable-editline
-      #     --disable-readline
+      #     ${F43_CONFIGURE}
       # - TAG: rawhide
       #   CONFIGURE: >
-      #     --with-default-use-devices-file=1
-      #     --enable-app-machineid
-      #     --enable-editline
-      #     --disable-readline
+      #     ${F43_CONFIGURE}
   artifacts:
     paths:
       - test/results/
@@ -239,20 +224,7 @@ test-all:
     - if bash ci/dry-run.sh; then echo "# ./configure && make && make check"; exit 0; fi
     # Common options go here, diffs to the above matrix
     - >
-      ./configure ${CONFIGURE}
-      --enable-fsadm
-      --enable-write_install
-      --enable-pkgconfig
-      --enable-cmdlib
-      --enable-dmeventd
-      --enable-blkid_wiping
-      --enable-udev_sync
-      --enable-lvmpolld
-      --enable-lvmlockd-sanlock
-      --enable-dbus-service --enable-notify-dbus
-      --enable-dmfilemapd
-      --with-vdo-format=/usr/bin/vdoformat
-      --disable-silent-rules
+      ./configure ${COMMON_CONFIG} ${CONFIGURE}
     - make
     - rm -rf test/results
     - mkdir -p /dev/shm/lvm2-test
