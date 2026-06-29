@@ -188,6 +188,24 @@ test-all:
           --enable-editline
           --disable-readline
           --enable-lvmlockd-dlm
+      - LABEL: tsan
+        TAG: test
+        CONFIGURE: >
+          --enable-tsan
+          --with-default-use-devices-file=1
+          --enable-app-machineid
+          --enable-editline
+          --disable-readline
+          --enable-lvmlockd-dlm
+      - LABEL: asan
+        TAG: test
+        CONFIGURE: >
+          --enable-asan
+          --with-default-use-devices-file=1
+          --enable-app-machineid
+          --enable-editline
+          --disable-readline
+          --enable-lvmlockd-dlm
       # f43 (latest supported fedora) is serving as first test - test1
       # - TAG: f43
       #   CONFIGURE: >
