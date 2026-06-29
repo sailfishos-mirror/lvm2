@@ -30,15 +30,19 @@ aux disable_dev "$dev2"
 lvchange --refresh --activationmode partial $vg/$lv1
 aux enable_dev "$dev2"
 
-if aux have_raid 1 9 0; then
-	v1_9_0=1
+if aux have_raid 1 15 0; then
 	HEALTH="refresh needed"
 	HATTR="r"
 else
-	# Old dm-raid resets health chars to 'A' after table reload
-	v1_9_0=0
+	# Old dm-raid (< 1.15) may or may not report health correctly
+	# (RHEL backports make version-based detection unreliable)
 	HEALTH=""
 	HATTR="-"
+	lvs --noheadings -o lv_health_status "$vg/$lv1" | tee out
+	if grep -q "refresh needed" out; then
+		HEALTH="refresh needed"
+		HATTR="r"
+	fi
 fi
 
 check lv_field $vg/$lv1 lv_health_status "$HEALTH"
@@ -48,7 +52,7 @@ check lv_attr_bit health $vg/$lv1 "$HATTR"
 check lv_field $vg/${lv1}_rimage_1 lv_health_status "$HEALTH" -a
 check lv_attr_bit health $vg/${lv1}_rimage_1 "$HATTR" -a
 
-if [ "$v1_9_0" -eq 1 ]; then
+if [ "$HEALTH" = "refresh needed" ]; then
 	lvs $vg/$lv1 2>&1 | tee out
 	grep "needs to be refreshed" out
 fi
