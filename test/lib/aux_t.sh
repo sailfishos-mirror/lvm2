@@ -1064,6 +1064,10 @@ clear_devs() {
 corrupt_dev() {
 	local position
 
+	# Drop page cache to ensure we read actual device content,
+	# not stale cache from a different I/O path (e.g. dm-integrity bio writes)
+	blockdev --flushbufs "$1" 2>/dev/null || true
+
 	# Find byte offset of the pattern in file
 	position=$(grep -oba -m 1 -F "$2" "$1" | head -n 1 | cut -d: -f1) || true
 
