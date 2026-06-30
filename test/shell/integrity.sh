@@ -32,9 +32,9 @@ awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' >
 awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
 
 # generate random data
-dd if=/dev/urandom of=randA bs=512K count=2 2>/dev/null
-dd if=/dev/urandom of=randB bs=512K count=3 2>/dev/null
-dd if=/dev/urandom of=randC bs=512K count=4 2>/dev/null
+dd if=/dev/urandom of=randA bs=64K count=2 2>/dev/null
+dd if=/dev/urandom of=randB bs=64K count=3 2>/dev/null
+dd if=/dev/urandom of=randC bs=64K count=4 2>/dev/null
 
 _prepare_vg() {
 	# zero devs so we are sure to find the correct file data
@@ -261,9 +261,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid4 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -278,9 +276,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -295,9 +291,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -314,9 +308,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -330,11 +322,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test adding integrity to an active LV
 
-_prepare_vg
 lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/$lv1
@@ -348,9 +338,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid4 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/$lv1
@@ -364,9 +352,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid5 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/$lv1
@@ -380,9 +366,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid6 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/$lv1
@@ -396,9 +380,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid10 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/$lv1
@@ -412,11 +394,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test lvextend while inactive
 
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -438,9 +418,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,sync_percent,devices $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -465,11 +443,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test lvextend while active
 
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -488,9 +464,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -510,9 +484,7 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
-_prepare_vg
 lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -531,11 +503,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test adding image to raid1
 
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -554,11 +524,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test removing image from raid1
 
-_prepare_vg
 lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -574,11 +542,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test disallowed operations on raid+integrity
 
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -637,10 +603,8 @@ not grep 0 mismatch
 lvchange -an $vg/$lv1
 lvconvert --raidintegrity n $vg/$lv1
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # remove from active lv
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2"
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -653,10 +617,8 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # add to active lv
-_prepare_vg
 lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
 _add_new_data_to_mnt
 lvconvert --raidintegrity y --raidintegritymode bitmap $vg/$lv1
@@ -668,10 +630,8 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # lvextend active
-_prepare_vg
 lvcreate --type raid1 --raidintegrity y --raidintegritymode bitmap -m1 -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -687,10 +647,8 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # add image to raid1
-_prepare_vg
 lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg
 lvs -a -o name,segtype,devices,sync_percent $vg
 aux wait_recalc $vg/${lv1}_rimage_0
@@ -706,12 +664,9 @@ umount "$mnt"
 lvchange -an $vg/$lv1
 _verify_data_on_lv
 lvremove $vg/$lv1
-vgremove -ff $vg
 
 # Test that raid+integrity cannot be a sublv
 # part1: cannot add integrity to a raid LV that is already a sublv
-
-_prepare_vg
 
 lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
 lvconvert -y --type thin-pool $vg/$lv1
