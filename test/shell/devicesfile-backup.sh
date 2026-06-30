@@ -48,7 +48,7 @@ lvmdevices --adddev "$dev2"
 diff $DF $BKDIR/*.0006
 
 # DF update and abckup when HASH value changes
-sed -e "s|HASH=.......|HASH=1111111|" $DF > tmp1
+sed -e "s|HASH=[0-9][0-9]*|HASH=1111111|" $DF > tmp1
 cp tmp1 $DF
 pvs
 not grep "HASH=1111111" $DF
