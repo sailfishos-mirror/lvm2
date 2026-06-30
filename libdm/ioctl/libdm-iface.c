@@ -1896,12 +1896,118 @@ static int _raid_params_equiv(const char *p1, const char *p2,
 	}
 }
 
+/*
+ * Check if integrity params are functionally equivalent.
+ * p1 = new table params, p2 = active table params (kernel STATUSTYPE_TABLE).
+ *
+ * Kernel's integrity table output differs from what LVM emits:
+ * - block_size:512 omitted when sectors_per_block==1 (default)
+ * - fix_padding only reported when SB_FLAG_FIXED_PADDING is in superblock
+ *   (set only on first creation, not on reload)
+ * - recalculate reported from superblock flag, not from table input
+ * - kernel may add tokens LVM did not set (buffer_sectors, etc.)
+ *
+ * We verify every non-skipped token we emit exists in the kernel output.
+ * Extra kernel tokens are acceptable.
+ */
+
+/* Tokens LVM emits that the kernel may legitimately omit */
+static int _integrity_skip_p1_token(const char *token, unsigned len)
+{
+	if (len == 14 && !memcmp(token, "block_size:512", 14))
+		return 1;
+	if (len == 11 && !memcmp(token, "fix_padding", 11))
+		return 1;
+	if (len == 11 && !memcmp(token, "recalculate", 11))
+		return 1;
+	return 0;
+}
+
+/* Find exact token in a space-separated string */
+static int _integrity_has_token(const char *str, const char *token, unsigned len)
+{
+	const char *s = str;
+
+	while (*s) {
+		const char *e = s;
+		while (*e && *e != ' ')
+			e++;
+		if ((unsigned)(e - s) == len && !memcmp(s, token, len))
+			return 1;
+		s = (*e == ' ') ? e + 1 : e;
+	}
+
+	return 0;
+}
+
+/* Advance past one space-separated token */
+static const char *_skip_one_token(const char *s)
+{
+	while (*s && *s != ' ')
+		s++;
+	while (*s == ' ')
+		s++;
+	return s;
+}
+
+static int _integrity_params_equiv(const char *p1, const char *p2,
+				   int suspended __attribute__((unused)))
+{
+	const char *s1 = p1, *s2 = p2;
+	const char *e1, *e2;
+	const char *args1, *args2;
+	const char *tok;
+	unsigned len;
+	int i;
+
+	/* Compare 4 prefix tokens: dev, start, tag_size, mode */
+	for (i = 0; i < 4; i++) {
+		e1 = s1;
+		while (*e1 && *e1 != ' ')
+			e1++;
+		e2 = s2;
+		while (*e2 && *e2 != ' ')
+			e2++;
+		if ((e1 - s1) != (e2 - s2) ||
+		    memcmp(s1, s2, e1 - s1))
+			return 0;
+		s1 = (*e1 == ' ') ? e1 + 1 : e1;
+		s2 = (*e2 == ' ') ? e2 + 1 : e2;
+	}
+
+	/* Skip param count (5th token) -- differs due to kernel omissions */
+	args1 = _skip_one_token(s1);
+	args2 = _skip_one_token(s2);
+
+	/* Fast path */
+	if (!strcmp(args1, args2))
+		return 1;
+
+	/* Check every non-skipped token we emit exists in kernel output */
+	tok = args1;
+	while (*tok) {
+		e1 = tok;
+		while (*e1 && *e1 != ' ')
+			e1++;
+		len = (unsigned)(e1 - tok);
+		if (!_integrity_skip_p1_token(tok, len) &&
+		    !_integrity_has_token(args2, tok, len))
+			return 0;
+		tok = (*e1 == ' ') ? e1 + 1 : e1;
+	}
+
+	return 1;
+}
+
 static int _target_params_equiv(const char *type,
 				const char *p1, const char *p2,
 				int suspended)
 {
 	if (!strcmp(type, "raid"))
 		return _raid_params_equiv(p1, p2, suspended);
+
+	if (!strcmp(type, "integrity"))
+		return _integrity_params_equiv(p1, p2, suspended);
 
 	return 0;
 }

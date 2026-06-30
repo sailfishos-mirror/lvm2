@@ -4222,8 +4222,6 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
 	seg->integrity_settings = *settings;
 	seg->integrity_recalculate = recalculate;
 
-	node->props.skip_reload_params_compare = 1;
-
 	return 1;
 }
 
