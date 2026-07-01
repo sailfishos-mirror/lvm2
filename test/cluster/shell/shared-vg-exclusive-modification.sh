@@ -33,7 +33,7 @@ done
 for i in $(seq 1 5); do
     node1 lvcreate -l10 -n lv1 -an testvg
 
-    nodep lvextend -L+4M testvg/lv1
+    nodep lvextend --lockopt retries=10 -L+4M testvg/lv1
     assert_all_success
 
     node1 lvremove -y testvg/lv1
@@ -49,7 +49,7 @@ wait_host_status_known
 for i in $(seq 1 5); do
     node1 lvcreate -l10 -n lv1 -an testvg
 
-    nodep lvextend -L+4M testvg/lv1
+    nodep lvextend --lockopt retries=10 -L+4M testvg/lv1
     assert_all_success
 
     node1 lvremove -y testvg/lv1
