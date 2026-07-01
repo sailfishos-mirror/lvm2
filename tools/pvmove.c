@@ -527,7 +527,8 @@ static int _populate_pvmove_lv(struct cmd_context *cmd,
 /*
  * Validate a resume of an in-progress pvmove: find participating LVs,
  * check that the named LV (if any) matches, warn about ignored args.
- * Returns 1 on success, 0 on error.
+ * Returns 1 on success, 0 on error, -1 if the named LV is not part
+ * of this pvmove (caller should create a new pvmove for it).
  */
 static int _pvmove_validate_resume(struct cmd_context *cmd,
 				   struct volume_group *vg,
@@ -557,6 +558,12 @@ static int _pvmove_validate_resume(struct cmd_context *cmd,
 			}
 
 		if (!name_matches) {
+			if (vg_is_shared(vg)) {
+				log_print_unless_silent("Existing pvmove for %s does not "
+							"include %s, setting up new pvmove.",
+							pv_name, lv_name);
+				return -1;
+			}
 			log_error("LV %s is not part of the in-progress pvmove on %s.",
 				  lv_name, pv_name);
 			return 0;
@@ -661,11 +668,14 @@ static int _pvmove_resume(struct cmd_context *cmd,
 			  const char *pv_name,
 			  int pv_count)
 {
+	int val;
+
 	if (!_copy_id_components(cmd, lv_mirr, &pp->id_vg_name, &pp->id_lv_name, pp->lvid))
 		return_0;
 
-	if (!_pvmove_validate_resume(cmd, vg, lv_mirr, lv_name, pv_count, pv_name))
-		return_0;
+	val = _pvmove_validate_resume(cmd, vg, lv_mirr, lv_name, pv_count, pv_name);
+	if (val <= 0)
+		return val;
 
 	/*
 	 * In a shared VG, an ex lock on the pvmove LV must be held while pvmove
@@ -860,10 +870,18 @@ static int _pvmove_setup_single(struct cmd_context *cmd,
 
 	/*
 	 * Resume a pvmove that was previously created, or create a new pvmove.
+	 * In a shared VG, _pvmove_resume returns -1 when an existing pvmove
+	 * on this PV does not include the named LV; fall through to create
+	 * a separate pvmove for it.
 	 */
 	if ((lv_mirr = find_pvmove_lv(vg, pv_dev(pv), PVMOVE))) {
-		if (!_pvmove_resume(cmd, pp, vg, lv_mirr, lv_name, pv_name, pp->pv_count))
+		int ret = _pvmove_resume(cmd, pp, vg, lv_mirr, lv_name, pv_name, pp->pv_count);
+		if (!ret)
 			goto_out;
+		if (ret < 0) {
+			if (!_pvmove_create(cmd, pp, vg, pv, lv_name))
+				goto_out;
+		}
 	} else {
 		if (!_pvmove_create(cmd, pp, vg, pv, lv_name))
 			goto_out;
