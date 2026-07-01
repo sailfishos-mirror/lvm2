@@ -1661,18 +1661,11 @@ static void _unregister_all_grace_threads(void)
 
 static void _wait_for_new_pid(void)
 {
-	ino_t st_ino = 0;
-	struct stat st;
 	int i;
 
 	for (i = 0; i < 400000; ++i) {
-		if (lstat(DMEVENTD_PIDFILE, &st) == 0) {
-			if (!st_ino)
-				st_ino = st.st_ino;
-			else if (st_ino != st.st_ino)
-				break; /* different pidfile */
-		} else if (errno == ENOENT)
-			break; /* pidfile is removed */
+		if (!dm_daemon_is_running(DMEVENTD_PIDFILE))
+			break;
 		usleep(100);
 	}
 }
