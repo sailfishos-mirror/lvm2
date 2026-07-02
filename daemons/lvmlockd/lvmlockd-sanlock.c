@@ -1079,7 +1079,10 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char 
 		align_size = lms->align_size;
 		rs_flags = lms->rs_flags;
 		using_caw = lms->using_caw;
-		offset = ls->free_lock_offset;
+		if (ls->free_lock_offset)
+			offset = ls->free_lock_offset;
+		else
+			offset = lms->align_size * LV_LOCK_BEGIN;
 	} else {
 		/* FIXME: optimize repeated init_lv for vgchange --locktype sanlock,
 		   to avoid finding align_size/rs_flags each time. */
