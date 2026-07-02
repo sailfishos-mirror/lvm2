@@ -271,7 +271,11 @@ echo "== Test 4: --setlockargs timeout,nopersist =="
 node1 vgcreate --shared testvg $dev1 $dev2
 node1 vgchange --lockstart testvg
 
-node1 vgchange --setlockargs timeout,nopersist testvg
+# Retry: sanlock may not have host info yet after lockspace just started
+for i in $(seq 1 10); do
+	node1 vgchange --setlockargs timeout,nopersist testvg && break
+	sleep 1
+done
 
 node1 vgs -o lockargs --noheadings testvg | grep '1.0.0'
 
