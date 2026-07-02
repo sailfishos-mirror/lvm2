@@ -54,16 +54,15 @@ lvchange -an $vg/$lv1
 lvremove -ff $vg
 
 # ===================================================================
-# Test 2: activation of a pvmove-LOCKED LV is refused when pvmove
-#         is not active locally
+# Test 2: pre-activation of pvmove LV on restart
 #
-# pvmove holds EX on the pvmove0 LV.  The LOCKED flag on the named
-# LV prevents activation when pvmove is not active locally:
-# _lv_pvmove_is_active() checks lv_is_active(pvmove_lv) and returns
-# 0 when pvmove0 is not in DM, causing lockd_lv() to fail.
+# After reboot (or daemon kill + DM removal), pvmove0 is not active
+# in DM but the local lvmlockd still holds persistent EX on it.
+# lv_active_change() pre-activates pvmove0 before lockd_lv() so
+# _lv_pvmove_is_active() sees it active and allows activation.
 #
-# We simulate the "another node" condition by starting pvmove in the
-# background, then killing the poll daemon and removing pvmove0 from DM.
+# This is the "restart on same node" case -- the local host can
+# re-acquire the pvmove0 lock and resume.
 # ===================================================================
 
 lvcreate -an -l4 -n $lv1 $vg "$dev1"
@@ -89,18 +88,66 @@ aux kill_tagged_processes
 lvmlockctl --info | tee out
 grep "LK LV ex $pvmove0_uuid" out
 
-# Remove the pvmove0 DM device to simulate pvmove running on another node.
+# Remove the pvmove0 DM device to simulate restart.
 dmsetup remove "${vg}-pvmove0"
 not dmsetup info "${vg}-pvmove0"
 
-# _lv_pvmove_is_active(lv1) returns 0: pvmove0 is not active in DM.
-# lockd_lv(lv1, "ex") fails -> activation refused.
-not lvchange -ay $vg/$lv1
+# lv_active_change() pre-activates pvmove0 (lock re-acquired from
+# local lvmlockd), then _lv_pvmove_is_active() sees it active.
+lvchange -ay $vg/$lv1
+check active $vg $lv1
 
-# Clean up: abort the in-progress pvmove.
+# pvmove0 must be active again (pre-activated by lv_active_change).
+dmsetup info "${vg}-pvmove0"
+
+# Clean up: deactivate lv1, abort the in-progress pvmove.
+lvchange -an $vg/$lv1
 pvmove --abort
 
 # pvmove0 must be gone after abort.
+not dmsetup info "${vg}-pvmove0"
+check inactive $vg $lv1
+
+lvremove -ff $vg
+
+# ===================================================================
+# Test 2b: LOCKED LV activation refused when pvmove lock held remotely
+#
+# Same setup as Test 2, but inject remote EX on pvmove0 to simulate
+# another cluster node running pvmove.  lv_active_change() tries to
+# pre-activate pvmove0 but lockd_lv() fails (remote EX blocks lock
+# acquisition in test mode), so _lv_pvmove_is_active() returns 0
+# and activation is refused.
+# ===================================================================
+
+lvcreate -an -l4 -n $lv1 $vg "$dev1"
+check inactive $vg $lv1
+
+lv1_uuid=$(get lv_field $vg/$lv1 lv_uuid)
+
+# Start background pvmove.
+LVM_TEST_TAG="kill_me_$PREFIX" pvmove -n $vg/$lv1 -i +3 -b "$dev1" "$dev5"
+
+pvmove0_uuid=$(get lv_field $vg/pvmove0 lv_uuid)
+
+# Kill the poll daemon and remove pvmove0 from DM.
+aux kill_tagged_processes
+dmsetup remove "${vg}-pvmove0"
+not dmsetup info "${vg}-pvmove0"
+
+# Inject remote EX on pvmove0 -- simulates another node running pvmove.
+# lm_lock_dlm test mode returns EAGAIN when test_remote_ex is set,
+# blocking the pre-activation lock attempt.
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$pvmove0_uuid" --lock-mode ex
+
+# Pre-activation of pvmove0 fails (remote EX blocks lock).
+# _lv_pvmove_is_active(lv1) returns 0 -> activation refused.
+not lvchange -ay $vg/$lv1
+
+# Clear remote lock, abort, clean up.
+lvmlockctl --set-remote-lv-lock $vg --lv-uuid "$pvmove0_uuid" --lock-mode un
+pvmove --abort
+
 not dmsetup info "${vg}-pvmove0"
 check inactive $vg $lv1
 
