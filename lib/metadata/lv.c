@@ -1796,12 +1796,21 @@ char *lv_host_dup(struct dm_pool *mem, const struct logical_volume *lv)
 int lv_active_change(struct cmd_context *cmd, struct logical_volume *lv,
 		     enum activation_change activate)
 {
+	const struct logical_volume *pvmove_lv;
 	const char *ay_with_mode = NULL;
 
 	if (activate == CHANGE_ASY)
 		ay_with_mode = "sh";
 	if (activate == CHANGE_AEY)
 		ay_with_mode = "ex";
+
+	if (!lv_is_pvmove(lv) && is_change_activating(activate) && lv_is_locked(lv)) {
+		if ((pvmove_lv = find_pvmove_lv_in_lv(lv)) &&
+		    !lv_is_active(pvmove_lv) &&
+		    !lv_active_change(cmd, (struct logical_volume *)pvmove_lv, activate))
+			log_warn("WARNING: Failed to activate pvmove LV %s.",
+				 display_lvname(pvmove_lv));
+	}
 
 	if (is_change_activating(activate) &&
 	    !lockd_lv(cmd, lv, ay_with_mode, LDLV_PERSISTENT)) {
