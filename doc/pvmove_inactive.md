@@ -36,7 +36,7 @@ is collapsed and metadata updated to point to the new PV.
 | `lib/metadata/mirror.c` | Mirror manipulation, `refresh_pvmoved_lvs()` |
 | `lib/activate/activate.c` | Activation with `track_pvmove_deps` control |
 | `lib/activate/dev_manager.c` | Device tree building, pvmove dependency tracking |
-| `lib/metadata/lv.c` | `lv_lock_holder()` - lock holder resolution |
+| `lib/metadata/lv.c` | `lv_lock_holder()`, `lv_active_change()` pvmove pre-activation |
 
 ## Current Implementation
 
@@ -361,23 +361,41 @@ against remote activation relies on the LOCKED metadata flag and the
    `lockd_free_removed_lvs()`.  LOCKED flag is cleared from
    participant LVs when mirror is detached.
 
-4. **Resume** (crash recovery): `_pvmove_resume()` re-acquires EX
-   on pvmove0 only.  Participant LV locks are not re-acquired
-   (protection is via LOCKED flag + pvmove0 activity, not per-LV
-   locks).
+4. **Resume** (explicit `pvmove <pv>` after crash): `_pvmove_resume()`
+   re-acquires EX on pvmove0 and activates it.  Participant LV locks
+   are not re-acquired (protection is via LOCKED flag + pvmove0
+   activity, not per-LV locks).
+
+5. **Restart** (implicit via `vgchange -aey` after reboot):
+   `lv_active_change()` detects LOCKED LVs with inactive pvmove0
+   and pre-activates the pvmove LV (acquiring its lock) before
+   calling `lockd_lv()` on the participant.  This path does not
+   resume polling -- it only restores activation so `pvmove <pv>`
+   can be run afterwards to resume the data copy.
 
 ### LOCKED LV Activation Guard
 
 `lockd_lv()` (`lib/locking/lvmlockd.c`) handles LOCKED LVs through
-the `_lv_pvmove_is_active()` check:
+the `_lv_pvmove_is_active()` check.  Three cases:
 
 - **On pvmove node** (pvmove0 active): `_lv_pvmove_is_active()`
   returns 1, `lockd_lv()` proceeds normally.  Lock/unlock operations
   work as usual.  Active participants keep their own EX lock (from
   activation).
-- **On remote node** (pvmove0 not active): `_lv_pvmove_is_active()`
-  returns 0, `lockd_lv()` returns 0.  Both lock and unlock are
-  blocked -- activation is refused.
+- **On restart node** (pvmove0 not active, no lock held -- after
+  reboot): `lv_active_change()` (`lib/metadata/lv.c`) pre-activates
+  pvmove0 before calling `lockd_lv()`.  This resolves the chicken-
+  and-egg: pvmove0 is invisible so `vgchange -aey` never activates
+  it directly, but `lockd_lv()` requires pvmove0 active to allow
+  LOCKED LV activation.  The pre-activation acquires the pvmove0
+  lock (providing multi-host protection) and makes
+  `_lv_pvmove_is_active()` return 1 for the subsequent `lockd_lv()`
+  call.  The `!lv_is_pvmove(lv)` guard prevents infinite recursion
+  since pvmove LVs also carry the LOCKED flag.
+- **On remote node** (pvmove0 not active, lock held by pvmove host):
+  pre-activation of pvmove0 in `lv_active_change()` fails at lock
+  acquisition (pvmove host holds EX), so `_lv_pvmove_is_active()`
+  returns 0 and `lockd_lv()` returns 0.  Activation is refused.
 
 This mechanism is metadata-based (LOCKED flag in VG metadata +
 pvmove0 local activity check), not cluster-lock-based.  It works
@@ -498,6 +516,9 @@ The operation is rejected unless lvmlockd runs in `--test` mode.
    to per-segment avoidance via `_add_raid_exclusion_pvs()` in
    `build_parallel_areas_from_lv()` (lv_manip.c) -- done.
 9. LOCKED LV activation guard (`_lv_pvmove_is_active` in `lockd_lv`) -- done.
+9b. Activation ordering: `lv_active_change()` pre-activates pvmove0
+    before `lockd_lv()` for LOCKED LVs (resolves restart-after-reboot
+    chicken-and-egg with `vgchange -aey`) -- done.
 10. lvmlockd test lock injection: --set-remote-lv-lock -- done.
 11. Double lockd cleanup fix: `_remove_pvmove_lv` clears `lock_args`
     after lockd cleanup; `_lockd_pvmove_undo` checks `lock_args` before
@@ -552,8 +573,10 @@ Tests 5-8 move all LVs from a PV without naming them.
 
 - Test 1: lvmlockctl --set-remote-lv-lock round-trip: inject EX/UN modes,
           verify remote lock blocks activation
-- Test 2: Activation of LOCKED LV refused when pvmove0 is not active
-          locally; persistent locks survive daemon death
+- Test 2: Pre-activation of pvmove LV on restart: pvmove0 removed from
+          DM, lv_active_change() pre-activates it, activation succeeds
+- Test 2b: LOCKED LV activation refused when pvmove lock held remotely:
+           inject remote EX on pvmove0, pre-activation fails at lock
 - Test 3: pvmove --abort releases pvmove0 lock space (lockd_lvremove_done
           + lockd_free_removed_lvs path); LV lock remains held
 - Test 4: Unnamed pvmove in shared VG: remotely-locked LV skipped, other moved
