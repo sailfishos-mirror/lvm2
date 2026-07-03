@@ -1901,12 +1901,27 @@ static int _raid_params_equiv(const char *p1, const char *p2,
  * p1 = new table params, p2 = active table params (kernel STATUSTYPE_TABLE).
  *
  * Kernel's integrity table output differs from what LVM emits:
- * - block_size:512 omitted when sectors_per_block==1 (default)
- * - fix_padding only reported when SB_FLAG_FIXED_PADDING is in superblock
- *   (set only on first creation, not on reload)
- * - recalculate reported from superblock flag, not from table input
- * - kernel may add tokens LVM did not set (buffer_sectors, etc.)
  *
+ * - block_size:512 -- LVM always emits, kernel omits when
+ *   sectors_per_block==1 (the default).
+ *
+ * - fix_padding -- LVM always emits, kernel only reports when
+ *   SB_FLAG_FIXED_PADDING is set in the on-disk superblock
+ *   (written once by initialize_superblock(), NOT on reload).
+ *
+ * - recalculate -- kernel reports from SB_FLAG_RECALCULATING in the
+ *   on-disk superblock, not from the constructor table line.
+ *   The kernel NEVER clears this flag; recalc_sector simply advances
+ *   past provided_data_sectors.  LVM clears integrity_recalculate in
+ *   VG metadata after the first activation (integrity_manip.c), so
+ *   subsequent activations omit it from the table line, but the kernel
+ *   still reports it from the superblock.  A reload cannot remove the
+ *   flag, so treat it as cosmetic in both directions.
+ *
+ * - kernel may add tokens LVM did not set (buffer_sectors,
+ *   journal_watermark, commit_time, etc.)
+ *
+ * Skipped tokens are listed in _integrity_skip_p1_token().
  * We verify every non-skipped token we emit exists in the kernel output.
  * Extra kernel tokens are acceptable.
  */
