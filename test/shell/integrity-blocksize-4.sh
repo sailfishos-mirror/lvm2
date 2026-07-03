@@ -20,6 +20,12 @@ which mkfs.ext4 || skip
 which mkfs.xfs || skip
 aux have_integrity 1 5 0 || skip
 
+# Kernel 6.1 added "dm integrity: clear the journal on suspend" (984bf2cc531e).
+# Before this fix, the default ~2MB journal retains valid entries across
+# deactivation, so replay_journal() on reactivation silently restores data
+# sectors that corrupt_dev damaged -- giving 0 mismatches.
+aux kernel_at_least  6 1 || skip
+
 mnt="mnt"
 mkdir -p "$mnt"
 
