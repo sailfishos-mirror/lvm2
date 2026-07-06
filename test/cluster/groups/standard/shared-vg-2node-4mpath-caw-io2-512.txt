@@ -16,6 +16,7 @@ run shell/shared-vg-mirror-repair.sh
 run shell/shared-vg-mirror.sh
 run shell/shared-vg-persistent-vs-transient.sh
 run shell/shared-vg-pvmove-linear.sh
+run shell/shared-vg-pvmove.sh
 run shell/shared-vg-raid1.sh
 run shell/shared-vg-raid-repair.sh
 run shell/shared-vg-shared-concurrent.sh
