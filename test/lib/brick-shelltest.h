@@ -1269,6 +1269,8 @@ struct Main {
                     continue;
                 if ( i->substr( 0, 4 ) == "lib/" )
                     continue;
+                if ( i->substr( 0, 8 ) == "cluster/" )
+                    continue;
 
                 if (!options.filter.empty()) {
                     filter = true;
