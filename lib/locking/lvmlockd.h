@@ -69,6 +69,7 @@ struct lockd_state {
 #define LOCKOPT_REPAIRGL	0x00010000
 #define LOCKOPT_REPAIRVG	0x00020000
 #define LOCKOPT_REPAIRLV	0x00040000
+#define LOCKOPT_NOWATCHDOG	0x00080000
 
 
 struct lvresize_params;

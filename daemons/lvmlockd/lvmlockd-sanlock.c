@@ -26,6 +26,7 @@
 
 /* FIXME: defines copied from sanlock header until the sanlock update is more widespread */
 #define SANLK_ADD_NODELAY      0x00000002
+#define SANLK_ADD_NO_WATCHDOG  0x00000004
 #define SANLK_GET_HOST_LOCAL   0x00000001
 #define SANLK_LSF_NO_TIMEOUT   0x00000004
 #define SANLK_WRITE_LS_FLAGS   0x00000001
@@ -370,7 +371,7 @@ out:
 
 #if LOCKDSANLOCK_SUPPORT >= 410
 static int read_info_file(char *vg_name, uint32_t *host_id, uint64_t *generation,
-			  int *sector_size, int *align_size, int *no_timeout, int *using_caw)
+			  int *sector_size, int *align_size, int *no_timeout, int *no_watchdog, int *using_caw)
 {
 	char line[MAX_LINE];
 	char path[PATH_MAX] = { 0 };
@@ -402,6 +403,9 @@ static int read_info_file(char *vg_name, uint32_t *host_id, uint64_t *generation
 		} else if (!strncmp(line, "no_timeout ", 11)) {
 			if (sscanf(line, "no_timeout %d", no_timeout) != 1)
 				goto fail;
+		} else if (!strncmp(line, "no_watchdog ", 12)) {
+			if (sscanf(line, "no_watchdog %d", no_watchdog) != 1)
+				goto fail;
 		} else if (!strncmp(line, "using_caw", 9)) {
 			if (sscanf(line, "using_caw %d", using_caw) != 1)
 				goto fail;
@@ -419,7 +423,7 @@ fail:
 }
 #endif
 
-static int write_info_file(char *vg_name, uint32_t host_id, uint64_t generation, int sector_size, int align_size, int no_timeout, int using_caw)
+static int write_info_file(char *vg_name, uint32_t host_id, uint64_t generation, int sector_size, int align_size, int no_timeout, int no_watchdog, int using_caw)
 {
 	char path[PATH_MAX] = { 0 };
 	FILE *fp;
@@ -439,6 +443,7 @@ static int write_info_file(char *vg_name, uint32_t host_id, uint64_t generation,
 	fprintf(fp, "sector_size %d\n", sector_size);
 	fprintf(fp, "align_size %d\n", align_size);
 	fprintf(fp, "no_timeout %d\n", no_timeout);
+	fprintf(fp, "no_watchdog %d\n", no_watchdog);
 	fprintf(fp, "using_caw %d\n", using_caw);
 
 	if (fflush(fp))
@@ -741,6 +746,7 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 	uint64_t offset;
 	uint64_t dev_size;
 	int no_timeout;
+	int no_watchdog;
 	int persist;
 	int caw;
 	int no_caw;
@@ -754,6 +760,7 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 		return -EARGS;
 	}
 	no_timeout = (lock_args_flags & LOCKARGS_NOTIMEOUT) ? 1 :0;
+	no_watchdog = (lock_args_flags & LOCKARGS_NOWATCHDOG) ? 1 : 0;
 	persist = (lock_args_flags & LOCKARGS_PERSIST) ? 1 : 0;
 	caw = (lock_args_flags & LOCKARGS_CAW) ? 1 : 0;
 	no_caw = (lock_args_flags & LOCKARGS_NOCAW) ? 1 : 0;
@@ -999,14 +1006,12 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 		offset += align_size;
 	}
 
-	if (no_timeout && persist)
-		rv = snprintf(vg_args, MAX_ARGS, "%s:%s:notimeout:persist", VG_LOCK_ARGS_V2, lock_lv_name);
-	else if (no_timeout)
-		rv = snprintf(vg_args, MAX_ARGS, "%s:%s:notimeout", VG_LOCK_ARGS_V2, lock_lv_name);
-	else if (persist)
-		rv = snprintf(vg_args, MAX_ARGS, "%s:%s:persist", VG_LOCK_ARGS_V2, lock_lv_name);
-	else
-		rv = snprintf(vg_args, MAX_ARGS, "%s:%s", VG_LOCK_ARGS_V1, lock_lv_name);
+	rv = snprintf(vg_args, MAX_ARGS, "%s:%s%s%s%s",
+		      (no_timeout || persist || no_watchdog) ? VG_LOCK_ARGS_V2 : VG_LOCK_ARGS_V1,
+		      lock_lv_name,
+		      no_timeout ? ":notimeout" : "",
+		      no_watchdog ? ":nowatchdog" : "",
+		      persist ? ":persist" : "");
 
 	if (rv >= MAX_ARGS) {
 		log_error("S %s init_vg_san vg_args string too long %d %s", ls_name, rv, vg_args);
@@ -1740,6 +1745,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 	int align_size = 0;
 	int align_mb = 0;
 	int no_timeout = 0;
+	int no_watchdog = 0;
 	int using_caw = 0;
 	int retries = 0;
 	int gl_found;
@@ -1876,7 +1882,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
 		uint32_t host_id = 0;
 		uint32_t flags = 0;
 
-		rv = read_info_file(ls->vg_name, &host_id, &generation, &sector_size, &align_size, &no_timeout, &using_caw);
+		rv = read_info_file(ls->vg_name, &host_id, &generation, &sector_size, &align_size, &no_timeout, &no_watchdog, &using_caw);
 		if (rv < 0) {
 			log_error("S %s prepare_lockspace_san cannot repair lockspace no info file", lsname);
 			ret = -EINVAL;
@@ -2008,7 +2014,7 @@ fail:
 	return ret;
 }
 
-int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay)
+int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay, int no_watchdog)
 {
 	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
 	struct sanlk_host *hs = NULL;
@@ -2025,6 +2031,9 @@ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok,
 
 	if (nodelay)
 		flags |= SANLK_ADD_NODELAY;
+
+	if (no_watchdog || ls->no_watchdog)
+		flags |= SANLK_ADD_NO_WATCHDOG;
 
 	rv = sanlock_add_lockspace_timeout(&lms->ss, flags, sanlock_io_timeout);
 	if (rv == -EEXIST && (adopt_ok || adopt_only)) {
@@ -2076,7 +2085,7 @@ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok,
 	}
 	ls->using_caw = (ls_read.flags & SANLK_LSF_USING_CAW) ? 1 : 0;
 
-	write_info_file(ls->vg_name, ls->host_id, ls->generation, lms->sector_size, lms->align_size, ls->no_timeout, ls->using_caw);
+	write_info_file(ls->vg_name, ls->host_id, ls->generation, lms->sector_size, lms->align_size, ls->no_timeout, ls->no_watchdog, ls->using_caw);
 
 	/*
 	 * Don't let the lockspace be cleanly released if orphan locks
@@ -2933,21 +2942,22 @@ int lm_is_running_sanlock(void)
 
 #if LOCKDSANLOCK_SUPPORT >= 420
 
-static void update_info_file(char *vg_name, int no_timeout_new)
+static void update_info_file(char *vg_name, int no_timeout_new, int no_watchdog_new)
 {
 	uint32_t host_id = 0;
 	uint64_t generation = 0;
 	int sector_size = 0;
 	int align_size = 0;
 	int no_timeout = 0;
+	int no_watchdog = 0;
 	int using_caw = 0;
 	int rv;
 
-	rv = read_info_file(vg_name, &host_id, &generation, &sector_size, &align_size, &no_timeout, &using_caw);
+	rv = read_info_file(vg_name, &host_id, &generation, &sector_size, &align_size, &no_timeout, &no_watchdog, &using_caw);
 	if (rv < 0)
 		return;
 
-	write_info_file(vg_name, host_id, generation, sector_size, align_size, no_timeout_new, using_caw);
+	write_info_file(vg_name, host_id, generation, sector_size, align_size, no_timeout_new, no_watchdog_new, using_caw);
 }
 
 void lm_set_host_dead_sanlock(struct lockspace *ls, struct owner *owner)
@@ -3021,6 +3031,7 @@ int lm_setlockargs_vg_sanlock(char *ls_name, char *vg_name, struct action *act)
 	int align_size = 0;
 	int align_mb = 0;
 	int no_timeout;
+	int no_watchdog;
 	int using_caw;
 	int persist;
 	int rv;
@@ -3057,6 +3068,7 @@ int lm_setlockargs_vg_sanlock(char *ls_name, char *vg_name, struct action *act)
 	/* initialize lockspace */
 
 	no_timeout = (lock_args_flags & LOCKARGS_NOTIMEOUT) ? 1 :0;
+	no_watchdog = (lock_args_flags & LOCKARGS_NOWATCHDOG) ? 1 : 0;
 	persist = (lock_args_flags & LOCKARGS_PERSIST) ? 1 : 0;
 
 	strcpy_name_len(ss.name, ls_name, SANLK_NAME_LEN);
@@ -3075,16 +3087,14 @@ int lm_setlockargs_vg_sanlock(char *ls_name, char *vg_name, struct action *act)
 		return rv;
 	}
 
-	update_info_file(vg_name, no_timeout);
+	update_info_file(vg_name, no_timeout, no_watchdog);
 
-	if (no_timeout && persist)
-		rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s:notimeout:persist", VG_LOCK_ARGS_V2, lock_lv_name);
-	else if (no_timeout)
-		rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s:notimeout", VG_LOCK_ARGS_V2, lock_lv_name);
-	else if (persist)
-		rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s:persist", VG_LOCK_ARGS_V2, lock_lv_name);
-	else
-		rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s", VG_LOCK_ARGS_V1, lock_lv_name);
+	rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s%s%s%s",
+		      (no_timeout || persist || no_watchdog) ? VG_LOCK_ARGS_V2 : VG_LOCK_ARGS_V1,
+		      lock_lv_name,
+		      no_timeout ? ":notimeout" : "",
+		      no_watchdog ? ":nowatchdog" : "",
+		      persist ? ":persist" : "");
 
 	log_debug("S %s setlockargs new args %s", ls_name, act->vg_args);
 

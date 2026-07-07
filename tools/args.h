@@ -807,7 +807,12 @@ arg(setlockargs_ARG, '\0', "setlockargs", string_VAL, 0, 0,
     "using the persist feature.\n"
     "nopersist: do not use the persist feature.\n"
     "timeout: do not use the notimeout feature.\n"
-    "The default behavior with no settings configured is: nopersist and timeout.\n")
+    "nowatchdog: do not connect to wdmd/watchdog when starting the VG lockspace.\n"
+    "Requires notimeout. Without timeout-based recovery, the watchdog is not needed.\n"
+    "watchdog: when starting a VG lockspace, sanlock/wdmd connect the lockspace to /dev/watchdog.\n"
+    "If VG lockspace renewals fail (e.g. due to a storage outage, or a sanlock daemon failure),\n"
+    "then the watchdog resets the host if locks are held in the VG.\n"
+    "The default behavior with no settings configured is: nopersist, timeout, watchdog.\n")
 
 arg(setpersist_ARG, '\0', "setpersist", string_VAL, 0, 0,
     "#vgcreate\n"

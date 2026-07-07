@@ -508,6 +508,8 @@ static int lockd_lockargs_get_meta_flags(const char *str, uint32_t *flags)
 			*flags |= LOCKARGS_PERSIST;
 		else if (!strcmp(argv[i], "notimeout"))
 			*flags |= LOCKARGS_NOTIMEOUT;
+		else if (!strcmp(argv[i], "nowatchdog"))
+			*flags |= LOCKARGS_NOWATCHDOG;
 		else {
 			log_error("Unknown lockargs meta value: %s", argv[i]);
 			return -1;
@@ -546,11 +548,22 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 			*flags |= LOCKARGS_CAW;
 		else if (!strcmp(argv[i], "nocaw"))
 			*flags |= LOCKARGS_NOCAW;
+		else if (!strcmp(argv[i], "nowatchdog"))
+			*flags |= LOCKARGS_NOWATCHDOG;
+		else if (!strcmp(argv[i], "watchdog"))
+			*flags |= LOCKARGS_WATCHDOG;
 		else {
 			log_error("Unknown lockargs option value: %s", argv[i]);
 			return -1;
 		}
 	}
+
+	if (((*flags & LOCKARGS_NOWATCHDOG) && (*flags & LOCKARGS_WATCHDOG)) ||
+	    ((*flags & LOCKARGS_NOWATCHDOG) && !(*flags & LOCKARGS_NOTIMEOUT))) {
+		log_error("Invalid lockargs option combination: %s", str);
+		return -1;
+	}
+
 	log_debug("lockd_lockargs_get_user_flags %s = 0x%x", str, *flags);
 	return 0;
 }
@@ -1217,14 +1230,14 @@ static int lm_prepare_lockspace(struct lockspace *ls, struct action *act, int re
 	return rv;
 }
 
-static int lm_add_lockspace(struct lockspace *ls, struct action *act, int adopt_only, int adopt_ok, int nodelay)
+static int lm_add_lockspace(struct lockspace *ls, struct action *act, int adopt_only, int adopt_ok, int nodelay, int no_watchdog)
 {
 	int rv = -1;
 
 	if (ls->lm_type == LD_LM_DLM)
 		rv = lm_add_lockspace_dlm(ls, adopt_only, adopt_ok);
 	else if (ls->lm_type == LD_LM_SANLOCK)
-		rv = lm_add_lockspace_sanlock(ls, adopt_only, adopt_ok, nodelay);
+		rv = lm_add_lockspace_sanlock(ls, adopt_only, adopt_ok, nodelay, no_watchdog);
 	else if (ls->lm_type == LD_LM_IDM)
 		rv = lm_add_lockspace_idm(ls, adopt_only, adopt_ok);
 
@@ -2884,6 +2897,7 @@ static void *lockspace_thread_main(void *arg_in)
 	int repair = 0;
 	int wait_flag = 0;
 	int nodelay = 0;
+	int no_watchdog = 0;
 	int nocreate;
 	int hosts_unknown = 0;
 	int retry;
@@ -2911,6 +2925,8 @@ static void *lockspace_thread_main(void *arg_in)
 				adopt_ok = 1;
 			if (add_act->flags & LD_AF_NODELAY)
 				nodelay = 1;
+			if (add_act->flags & LD_AF_NOWATCHDOG)
+				no_watchdog = 1;
 			if (add_act->flags & LD_AF_REPAIR)
 				repair = 1;
 		}
@@ -2922,8 +2938,8 @@ static void *lockspace_thread_main(void *arg_in)
 		adopt_ok = 1;
 	}
 
-	log_debug("S %s lm_add_lockspace %s act %d wait %d adopt_only %d adopt_ok %d repair %d no_timeout %d",
-		  ls->name, lm_str(ls->lm_type), add_act ? 1 : 0, wait_flag, adopt_only, adopt_ok, repair, ls->no_timeout);
+	log_debug("S %s lm_add_lockspace %s act %d wait %d adopt_only %d adopt_ok %d repair %d no_timeout %d no_watchdog %d",
+		  ls->name, lm_str(ls->lm_type), add_act ? 1 : 0, wait_flag, adopt_only, adopt_ok, repair, ls->no_timeout, no_watchdog || ls->no_watchdog);
 
 	/*
 	 * The prepare step does not wait for anything and is quick;
@@ -2942,7 +2958,7 @@ static void *lockspace_thread_main(void *arg_in)
 	 * The actual lockspace join can take a while.
 	 */
 	if (!error) {
-		error = lm_add_lockspace(ls, add_act, adopt_only, adopt_ok, nodelay);
+		error = lm_add_lockspace(ls, add_act, adopt_only, adopt_ok, nodelay, no_watchdog);
 
 		log_debug("S %s lm_add_lockspace done %d", ls->name, error);
 
@@ -3610,10 +3626,14 @@ static int add_lockspace_thread(const char *ls_name,
 		return -EARGS;
 	}
 	ls->no_timeout = (ls->lock_args_flags & LOCKARGS_NOTIMEOUT) ? 1 : 0;
+	ls->no_watchdog = (ls->lock_args_flags & LOCKARGS_NOWATCHDOG) ? 1 : 0;
 	ls->fence_pr = (ls->lock_args_flags & LOCKARGS_PERSIST) ? 1 : 0;
 
 	if (act) {
 		ls->start_client_id = act->client_id;
+
+		if (act->flags & LD_AF_NOWATCHDOG)
+			ls->no_watchdog = 1;
 
 		/*
 		 * Copy PV list to lockspace structure, so this is
@@ -5456,6 +5476,8 @@ static uint32_t str_to_opts(const char *str)
 		flags |= LD_AF_ENABLE;
 	if (strstr(str, "nodelay"))
 		flags |= LD_AF_NODELAY;
+	if (strstr(str, "nowatchdog"))
+		flags |= LD_AF_NOWATCHDOG;
 	if (strstr(str, "repair"))
 		flags |= LD_AF_REPAIR;
 
@@ -5586,6 +5608,7 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
 			"kill_vg=%u "
 			"fence_pr=%u "
 			"no_timeout=%u "
+			"no_watchdog=%u "
 			"sanlock_gl_enabled=%d\n",
 			prefix,
 			ls->name,
@@ -5603,6 +5626,7 @@ static int print_lockspace(struct lockspace *ls, const char *prefix, int pos, in
 			(unsigned)ls->kill_vg,
 			(unsigned)ls->fence_pr,
 			(unsigned)ls->no_timeout,
+			(unsigned)ls->no_watchdog,
 			ls->sanlock_gl_enabled ? 1 : 0);
 }
 

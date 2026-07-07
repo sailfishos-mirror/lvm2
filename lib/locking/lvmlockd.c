@@ -177,6 +177,10 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 			*flags |= LOCKARGS_CAW;
 		else if (!strcmp(argv[i], "nocaw"))
 			*flags |= LOCKARGS_NOCAW;
+		else if (!strcmp(argv[i], "nowatchdog"))
+			*flags |= LOCKARGS_NOWATCHDOG;
+		else if (!strcmp(argv[i], "watchdog"))
+			*flags |= LOCKARGS_WATCHDOG;
 		else {
 			log_error("Unknown lockargs option value: %s", argv[i]);
 			return 0;
@@ -192,7 +196,9 @@ int lockd_lockargs_get_user_flags(const char *str, uint32_t *flags)
 
 	if (((*flags & LOCKARGS_PERSIST) && (*flags & LOCKARGS_NOPERSIST)) ||
 	    ((*flags & LOCKARGS_TIMEOUT) && (*flags & LOCKARGS_NOTIMEOUT)) ||
-	    ((*flags & LOCKARGS_CAW) && (*flags & LOCKARGS_NOCAW))) {
+	    ((*flags & LOCKARGS_CAW) && (*flags & LOCKARGS_NOCAW)) ||
+	    ((*flags & LOCKARGS_NOWATCHDOG) && (*flags & LOCKARGS_WATCHDOG)) ||
+	    ((*flags & LOCKARGS_NOWATCHDOG) && !(*flags & LOCKARGS_NOTIMEOUT))) {
 		log_error("Invalid setlockargs option combination: %s", str);
 		return 0;
 	}
@@ -260,6 +266,8 @@ int lockd_lockargs_get_meta_flags(const char *str, uint32_t *flags)
 			*flags |= LOCKARGS_PERSIST;
 		else if (!strcmp(argv[i], "notimeout"))
 			*flags |= LOCKARGS_NOTIMEOUT;
+		else if (!strcmp(argv[i], "nowatchdog"))
+			*flags |= LOCKARGS_NOWATCHDOG;
 		else {
 			log_error("Unknown lockargs meta value: %s", argv[i]);
 			return 0;
@@ -1668,16 +1676,28 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 		return 0;
 	}
 
+	if (cmd->lockopt & LOCKOPT_NOWATCHDOG) {
+		uint32_t lock_args_flags = 0;
+
+		if (!vg->lock_args || !lockd_lockargs_get_meta_flags(vg->lock_args, &lock_args_flags) ||
+		    !(lock_args_flags & LOCKARGS_NOTIMEOUT)) {
+			log_error("VG %s start failed: --lockopt nowatchdog requires setlockargs notimeout", vg->name);
+			return 0;
+		}
+	}
+
 	if ((cmd->lockopt & LOCKOPT_NODELAY) ||
 	    (cmd->lockopt & LOCKOPT_ADOPTLS) ||
 	    (cmd->lockopt & LOCKOPT_ADOPT) ||
 	    (cmd->lockopt & LOCKOPT_REPAIRVG) ||
-	    (cmd->lockopt & LOCKOPT_REPAIR)) {
-		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s",
+	    (cmd->lockopt & LOCKOPT_REPAIR) ||
+	    (cmd->lockopt & LOCKOPT_NOWATCHDOG)) {
+		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s%s",
 				(cmd->lockopt & LOCKOPT_NODELAY) ? "nodelay," : "",
 				(cmd->lockopt & LOCKOPT_ADOPTLS) ? "adopt_only," : "",
 				(cmd->lockopt & LOCKOPT_ADOPT) ? "adopt," : "",
-				(cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRVG)) ? "repair" : "") < 0) {
+				(cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRVG)) ? "repair," : "",
+				(cmd->lockopt & LOCKOPT_NOWATCHDOG) ? "nowatchdog" : "") < 0) {
 			log_error("Options string too long %x", cmd->lockopt);
 			return 0;
 		}
@@ -4824,6 +4844,8 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags, int *retries, int
 			*flags |= LOCKOPT_NOWAIT;
 		else if (!strcmp(argv[i], "autonowait"))
 			*flags |= LOCKOPT_AUTONOWAIT;
+		else if (!strcmp(argv[i], "nowatchdog"))
+			*flags |= LOCKOPT_NOWATCHDOG;
 		else if (!strcmp(argv[i], "adoptls"))
 			*flags |= LOCKOPT_ADOPTLS;
 		else if (!strcmp(argv[i], "adoptgl"))

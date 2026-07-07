@@ -127,6 +127,7 @@ struct client {
 #define LD_AF_REPAIR		   0x00800000
 #define LD_AF_NO_TIMEOUT	   0x01000000
 #define LD_AF_HOSTS_UNKNOWN	   0x02000000
+#define LD_AF_NOWATCHDOG	   0x04000000
 
 /*
  * Number of times to repeat a lock request after
@@ -270,6 +271,7 @@ struct lockspace {
 	unsigned int kill_vg: 1;
 	unsigned int fence_pr: 1;
 	unsigned int no_timeout: 1;
+	unsigned int no_watchdog: 1;
 	unsigned int using_caw : 1;
 
 	struct list_head actions;	/* new client actions */
@@ -613,7 +615,7 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char 
 int lm_free_lv_sanlock(struct lockspace *ls, struct resource *r);
 int lm_rename_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_args);
 int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation, int repair);
-int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay);
+int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay, int no_watchdog);
 int lm_rem_lockspace_sanlock(struct lockspace *ls, int free_vg);
 int lm_add_resource_sanlock(struct lockspace *ls, struct resource *r);
 int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
@@ -669,7 +671,7 @@ static inline int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *p
 	return -1;
 }
 
-static inline int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay)
+static inline int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay, int no_watchdog)
 {
 	return -1;
 }

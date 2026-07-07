@@ -504,6 +504,22 @@ is responsible for manually resetting/fencing a failed host, and then
 manually notifying sanlock that the host is dead, which will allow the
 failed host's locks to be granted.
 .P
+.I nowatchdog
+.br
+With notimeout, lock recovery does not depend on the watchdog device,
+so nowatchdog can be included with notimeout in the lock args.
+With nowatchdog, hosts will not connect to the watchdog device (or wdmd)
+when starting the VG lockspace, so a host will not be reset by a watchdog
+if it loses access to VG storage.
+.IP \[bu] 2
+--setlockargs persist,notimeout,nowatchdog
+.P
+The nowatchdog behavior can also be requested per-host without writing
+it in the lock args (in VG metadata):
+.br
+.B $ vgchange --lockstart --lockopt nowatchdog
+.I VG
+.P
 .I Retrying
 .br
 If PR fencing fails (e.g. due to a missing device in the VG), lvmlockd

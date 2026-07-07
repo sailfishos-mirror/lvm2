@@ -18,6 +18,7 @@ run shell/shared-vg-lvremove-snapshot.sh
 run shell/shared-vg-lvremove-thin.sh
 run shell/shared-vg-mirror-repair.sh
 run shell/shared-vg-mirror.sh
+run shell/shared-vg-nowatchdog.sh
 run shell/shared-vg-persistent-vs-transient.sh
 run shell/shared-vg-pvmove-linear.sh
 run shell/shared-vg-pvmove.sh
