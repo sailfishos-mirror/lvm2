@@ -479,11 +479,13 @@ vgchange -an $vg
 lvremove -ff $vg
 
 # ===================================================================
-# Test 11: Resume with wrong LV name is refused
+# Test 11: Concurrent pvmove of different LV in shared VG
 #
-# Start pvmove of lv1, kill daemon, try to resume naming lv2.
-# The resume path must detect that lv2 is not part of the
-# in-progress pvmove and refuse.
+# Start pvmove of lv1, kill daemon, then pvmove lv2.
+# In a shared VG the resume path detects that lv2 is not part of
+# the in-progress pvmove and creates a separate pvmove (pvmove1)
+# for it, allowing concurrent pvmoves of different LVs from the
+# same PV.
 # ===================================================================
 
 lvcreate -an -l4 -n $lv1 $vg "$dev1"
@@ -497,15 +499,17 @@ get lv_field $vg/pvmove0 lv_uuid
 
 aux kill_tagged_processes
 
-# Resume naming lv2 -- must fail (lv2 not part of in-progress pvmove)
-not pvmove -i0 -n $vg/$lv2 "$dev1" "$dev5" 2>err
-grep "not part of" err
+# pvmove of lv2 creates a new pvmove1 (concurrent with pvmove0)
+pvmove -i0 -n $vg/$lv2 "$dev1" "$dev5"
 
-# Original pvmove must still be in metadata
+# lv2 must have moved to dev5
+check lv_on $vg $lv2 "$dev5"
+
+# Original pvmove0 for lv1 must still be in metadata
 get lv_field $vg name -a | tee out
-grep "pvmove" out
+grep "pvmove0" out
 
-# Clean up via abort
+# Clean up via abort (clears pvmove0 for lv1)
 pvmove --abort
 
 get lv_field $vg name -a | not grep "pvmove"
