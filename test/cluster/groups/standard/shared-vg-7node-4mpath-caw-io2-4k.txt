@@ -5,6 +5,7 @@ run shell/shared-vg-contention-skipvg.sh
 run shell/shared-vg-exclusive-activation.sh
 run shell/shared-vg-exclusive-modification.sh
 run shell/shared-vg-independent.sh
+run shell/shared-vg-lockstart-errors.sh
 run shell/shared-vg-lvconvert-types.sh
 run shell/shared-vg-lvcreate-variants.sh
 run shell/shared-vg-lvextend-pools.sh

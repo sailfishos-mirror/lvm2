@@ -195,6 +195,7 @@ static uint32_t helper_msg_id = 1;
  */
 static pthread_mutex_t lockspaces_mutex;
 static struct list_head lockspaces;
+static struct list_head start_results;
 
 /*
  * Client thread reads client requests and writes client results.
@@ -2884,6 +2885,7 @@ static void *lockspace_thread_main(void *arg_in)
 	struct resource *r, *r2;
 	struct action *add_act, *act, *safe;
 	struct action *act_op_free = NULL;
+	struct start_result *sr, *sr_old;
 	struct list_head tmp_act;
 	struct list_head act_close;
 	struct list_head act_fence;
@@ -2977,6 +2979,7 @@ static void *lockspace_thread_main(void *arg_in)
 	if (error) {
 		ls->thread_stop = 1;
 		ls->create_fail = 1;
+		ls->create_result = error;
 	} else {
 		ls->create_done = 1;
 	}
@@ -3499,6 +3502,22 @@ out_act:
 	if (ls->lm_type == LD_LM_IDM && !strcmp(ls->name, gl_lsname_idm))
 		global_idm_lockspace_exists = 0;
 
+	list_for_each_entry(sr_old, &start_results, list) {
+		if (!strcmp(sr_old->vg_name, ls->vg_name)) {
+			list_del(&sr_old->list);
+			free(sr_old);
+			break;
+		}
+	}
+
+	if ((sr = malloc(sizeof(struct start_result)))) {
+		strncpy(sr->vg_name, ls->vg_name, MAX_NAME);
+		sr->vg_name[MAX_NAME] = '\0';
+		sr->result = ls->create_fail ? ls->create_result : 0;
+		sr->client_id = ls->start_client_id;
+		list_add_tail(&sr->list, &start_results);
+	}
+
 	/*
 	 * Avoid a name collision of the same lockspace is added again before
 	 * this thread is cleaned up.  We just set ls->name to a "junk" value
@@ -3982,6 +4001,28 @@ static int count_lockspace_starting(uint32_t client_id)
 		  client_id, count, done, fail);
 
 	return count;
+}
+
+/*
+ * Check start_results for any failures.
+ * Returns -1 if any entry has a non-zero result, 0 otherwise.
+ * Does not consume entries.
+ */
+static int check_start_results_for_failures(void)
+{
+	struct start_result *sr;
+	int found = 0;
+
+	pthread_mutex_lock(&lockspaces_mutex);
+	list_for_each_entry(sr, &start_results, list) {
+		if (sr->result) {
+			found = 1;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&lockspaces_mutex);
+
+	return found ? -1 : 0;
 }
 
 /*
@@ -4599,10 +4640,12 @@ static void *worker_thread_main(void *arg_in)
 
 		} else if (act->op == LD_OP_START_WAIT) {
 			act->result = count_lockspace_starting(0);
-			if (!act->result)
-				add_client_result(act);
-			else
+			if (act->result > 0) {
 				list_add(&act->list, &delayed_list);
+			} else {
+				act->result = check_start_results_for_failures();
+				add_client_result(act);
+			}
 
 		} else if (act->op == LD_OP_VG_STATUS) {
 			act->result = work_vg_status(act);
@@ -4623,6 +4666,22 @@ static void *worker_thread_main(void *arg_in)
 				add_client_result(act);
 			} else
 				list_add(&act->list, &delayed_list);
+
+		} else if (act->op == LD_OP_GET_START_RESULT) {
+			struct start_result *sr, *sr_safe;
+			act->result = -ENOENT;
+
+			pthread_mutex_lock(&lockspaces_mutex);
+			list_for_each_entry_safe(sr, sr_safe, &start_results, list) {
+				if (!strcmp(sr->vg_name, act->vg_name)) {
+					act->result = sr->result;
+					list_del(&sr->list);
+					free(sr);
+					break;
+				}
+			}
+			pthread_mutex_unlock(&lockspaces_mutex);
+			add_client_result(act);
 
 		} else if (act->op == LD_OP_FENCE) {
 			int retry = 0;
@@ -4653,6 +4712,7 @@ static void *worker_thread_main(void *arg_in)
 				log_debug("work delayed start_wait for client %u", act->client_id);
 				act->result = count_lockspace_starting(0);
 				if (!act->result) {
+					act->result = check_start_results_for_failures();
 					list_del(&act->list);
 					add_client_result(act);
 				}
@@ -5419,6 +5479,11 @@ static int str_to_op_rt(const char *req_name, int *op, int *rt)
 		*rt = LD_RT_VG;
 		return 0;
 	}
+	if (!strcmp(req_name, "get_start_result")) {
+		*op = LD_OP_GET_START_RESULT;
+		*rt = LD_RT_VG;
+		return 0;
+	}
 out:
 	return -1;
 }
@@ -6106,6 +6171,7 @@ skip_pvs_path:
 		break;
 	case LD_OP_INIT:
 	case LD_OP_START_WAIT:
+	case LD_OP_GET_START_RESULT:
 	case LD_OP_VG_STATUS:
 	case LD_OP_STOP_ALL:
 	case LD_OP_RENAME_FINAL:
@@ -7561,6 +7627,7 @@ static int main_loop(daemon_state *ds_arg)
 	dm_strncpy(gl_lsname_idm, S_NAME_GL_IDM, sizeof(gl_lsname_idm));
 
 	INIT_LIST_HEAD(&lockspaces);
+	INIT_LIST_HEAD(&start_results);
 	pthread_mutex_init(&lockspaces_mutex, NULL);
 	pthread_mutex_init(&pollfd_mutex, NULL);
 	pthread_mutex_init(&log_mutex, NULL);

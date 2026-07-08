@@ -1668,11 +1668,11 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 		return 1;
 
 	if (!_use_lvmlockd) {
-		log_error("VG %s start failed: lvmlockd is not enabled", vg->name);
+		log_error("VG %s lockstart failed: lvmlockd is not enabled", vg->name);
 		return 0;
 	}
 	if (!_lvmlockd_connected) {
-		log_error("VG %s start failed: lvmlockd is not running", vg->name);
+		log_error("VG %s lockstart failed: lvmlockd is not running", vg->name);
 		return 0;
 	}
 
@@ -1681,7 +1681,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 
 		if (!vg->lock_args || !lockd_lockargs_get_meta_flags(vg->lock_args, &lock_args_flags) ||
 		    !(lock_args_flags & LOCKARGS_NOTIMEOUT)) {
-			log_error("VG %s start failed: --lockopt nowatchdog requires setlockargs notimeout", vg->name);
+			log_error("VG %s lockstart failed: --lockopt nowatchdog requires setlockargs notimeout", vg->name);
 			return 0;
 		}
 	}
@@ -1697,7 +1697,7 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 				(cmd->lockopt & LOCKOPT_ADOPTLS) ? "adopt_only," : "",
 				(cmd->lockopt & LOCKOPT_ADOPT) ? "adopt," : "",
 				(cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRVG)) ? "repair," : "",
-				(cmd->lockopt & LOCKOPT_NOWATCHDOG) ? "nowatchdog" : "") < 0) {
+				(cmd->lockopt & LOCKOPT_NOWATCHDOG) ? "nowatchdog," : "") < 0) {
 			log_error("Options string too long %x", cmd->lockopt);
 			return 0;
 		}
@@ -1776,35 +1776,37 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
 		ret = 1;
 		break;
 	case -ELOCKD:
-		log_error("VG %s start failed: lvmlockd not available", vg->name);
+		log_error("VG %s lockstart failed: lvmlockd not available", vg->name);
 		break;
 	case -EEXIST:
-		log_debug("VG %s start error: already started", vg->name);
+		log_debug("VG %s lockstart error: already started", vg->name);
+		if (exists)
+			*exists = 1;
 		ret = 1;
 		break;
 	case -ESTARTING:
-		log_debug("VG %s start error: already starting", vg->name);
+		log_debug("VG %s lockstart error: already starting", vg->name);
 		if (exists)
 			*exists = 1;
 		ret = 1;
 		break;
 	case -EARGS:
-		log_error("VG %s start failed: invalid parameters for %s", vg->name, lock_type);
+		log_error("VG %s lockstart failed: invalid parameters for %s", vg->name, lock_type);
 		break;
 	case -EHOSTID:
-		log_error("VG %s start failed: invalid sanlock host_id, set in lvmlocal.conf", vg->name);
+		log_error("VG %s lockstart failed: invalid sanlock host_id, set in lvmlocal.conf", vg->name);
 		break;
 	case -EMANAGER:
-		log_error("VG %s start failed: lock manager %s is not running", vg->name, lock_type);
+		log_error("VG %s lockstart failed: lock manager %s is not running", vg->name, lock_type);
 		break;
 	case -EPROTONOSUPPORT:
-		log_error("VG %s start failed: lock manager %s is not supported by lvmlockd", vg->name, lock_type);
+		log_error("VG %s lockstart failed: lock manager %s is not supported by lvmlockd", vg->name, lock_type);
 		break;
 	case -ELOCKREPAIR:
-		log_error("VG %s start failed: sanlock lease needs repair", vg->name);
+		log_error("VG %s lockstart failed: sanlock lease needs repair", vg->name);
 		break;
 	default:
-		log_error("VG %s start failed: %d", vg->name, result);
+		log_error("VG %s lockstart failed: %d", vg->name, result);
 	}
 
 	if (!ret && !strcmp(lock_type, "sanlock")) {
@@ -1913,16 +1915,69 @@ int lockd_start_wait(struct cmd_context *cmd)
 	if (!ret)
 		log_error("Lock start failed");
 
-	/*
-	 * FIXME: get a list of vgs that started so we can
-	 * better report what worked and what didn't?
-	 */
-
 	daemon_reply_destroy(reply);
 
 	if (cmd->lockd_gl_removed) {
 		log_error("Missing global lock: global lock was lost by removing a previous VG.");
 		log_error("To enable the global lock in another VG, see lvmlockctl --gl-enable.");
+	}
+
+	return ret;
+}
+
+int lockd_get_start_result(struct cmd_context *cmd, const char *vg_name, int *result)
+{
+	daemon_reply reply;
+	int ret;
+
+	reply = _lockd_send("get_start_result",
+			"pid = " FMTd64, (int64_t) getpid(),
+			"vg_name = %s", vg_name,
+			NULL);
+
+	if (!_lockd_result(cmd, "get_start_result", reply, result, NULL, NULL, NULL))
+		ret = 0;
+	else
+		ret = 1;
+
+	daemon_reply_destroy(reply);
+
+	if (!ret || !*result)
+		return ret;
+
+	switch (*result) {
+	case -203: /* SANLK_WD_ERROR */
+		log_error("VG %s start failed: watchdog connection or activation error in wdmd", vg_name);
+		break;
+	case -202: /* SANLK_AIO_TIMEOUT */
+		log_error("VG %s start failed: storage I/O timeout", vg_name);
+		break;
+	case -262: /* SANLK_HOSTID_BUSY */
+		log_error("VG %s start failed: sanlock host_id is being used by another host", vg_name);
+		break;
+	case -223: /* SANLK_LEADER_MAGIC */
+		log_error("VG %s start failed: sanlock lease not initialized on disk", vg_name);
+		break;
+	case -226: /* SANLK_LEADER_LOCKSPACE */
+		log_error("VG %s start failed: sanlock lockspace name mismatch on disk", vg_name);
+		break;
+	case -229: /* SANLK_LEADER_CHECKSUM */
+		log_error("VG %s start failed: sanlock lease area checksum error on disk", vg_name);
+		break;
+	case -225: /* SANLK_LEADER_SECTORSIZE */
+		log_error("VG %s start failed: sanlock sector size mismatch", vg_name);
+		break;
+	case -231: /* SANLK_ADDLS_INVALID_HOSTID */
+		log_error("VG %s start failed: sanlock host_id too large", vg_name);
+		break;
+	case -EINPROGRESS:
+		log_error("VG %s start failed: lockspace add already in progress", vg_name);
+		break;
+	case -EAGAIN:
+		log_error("VG %s start failed: lockspace is being removed", vg_name);
+		break;
+	default:
+		log_error("VG %s start failed: error %d", vg_name, *result);
 	}
 
 	return ret;

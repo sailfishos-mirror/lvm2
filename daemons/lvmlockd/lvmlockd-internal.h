@@ -69,6 +69,7 @@ enum {
 	LD_OP_SETLOCKARGS_BEFORE,
 	LD_OP_SETLOCKARGS_FINAL,
 	LD_OP_SET_REMOTE_LV_LOCK, /* test-only: simulate remote node holding LV lock */
+	LD_OP_GET_START_RESULT,
 };
 
 /* resource types */
@@ -263,6 +264,7 @@ struct lockspace {
 	pthread_mutex_t mutex;
 	unsigned int create_fail : 1;
 	unsigned int create_done : 1;
+	int create_result;
 	unsigned int thread_work : 1;
 	unsigned int thread_stop : 1;
 	unsigned int thread_done : 1;
@@ -278,6 +280,13 @@ struct lockspace {
 	struct list_head resources;	/* resource/lock state for gl/vg/lv */
 	struct list_head dispose;	/* resources to free */
 	struct list_head fence_history;	/* internally created actions for fencing */
+};
+
+struct start_result {
+	struct list_head list;
+	char vg_name[MAX_NAME+1];
+	int result;
+	uint32_t client_id;
 };
 
 /* val_blk version */

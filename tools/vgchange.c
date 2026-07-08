@@ -23,6 +23,7 @@ struct vgchange_params {
 	unsigned int lock_start_sanlock : 1;
 	unsigned int vg_complete_to_activate : 1;
 	char *root_dm_uuid; /* dm uuid of LV under root fs */
+	struct dm_list lock_start_vgs;
 };
 
 /*
@@ -766,8 +767,14 @@ do_start:
 
 	r = lockd_start_vg(cmd, vg, &exists);
 
-	if (r || exists)
+	if (r && !exists) {
+		struct dm_str_list *sl;
 		vp->lock_start_count++;
+		if ((sl = dm_pool_alloc(cmd->mem, sizeof(*sl)))) {
+			sl->str = dm_pool_strdup(cmd->mem, vg->name);
+			dm_list_add(&vp->lock_start_vgs, &sl->list);
+		}
+	}
 	if (!strcmp(vg->lock_type, "sanlock"))
 		vp->lock_start_sanlock = 1;
 
@@ -1581,6 +1588,8 @@ int vgchange_lock_start_stop_cmd(struct cmd_context *cmd, int argc, char **argv)
 	struct vgchange_params vp = { 0 };
 	int ret;
 
+	dm_list_init(&vp.lock_start_vgs);
+
 	if (!lvmlockd_use()) {
 		log_error("Using lock start and lock stop requires lvmlockd.");
 		return 0;
@@ -1633,7 +1642,14 @@ int vgchange_lock_start_stop_cmd(struct cmd_context *cmd, int argc, char **argv)
 				log_print_unless_silent("Starting locking.  Waiting for sanlock may take a few seconds to 3 min...");
 			else
 				log_print_unless_silent("Starting locking.  Waiting until locks are ready...");
-			lockd_start_wait(cmd);
+			if (!lockd_start_wait(cmd)) {
+				struct dm_str_list *sl;
+				int result;
+				dm_list_iterate_items(sl, &vp.lock_start_vgs) {
+					lockd_get_start_result(cmd, sl->str, &result);
+				}
+				ret = ECMD_FAILED;
+			}
 		}
 	}
 
