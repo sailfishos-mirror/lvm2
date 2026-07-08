@@ -40,3 +40,4 @@ run shell/stress-shared-vg-create-remove-same.sh
 run shell/stress-shared-vg-create-remove-separate.sh
 run shell/shared-vg-lock-recovery-pr.sh
 run shell/shared-vg-lock-recovery-wd.sh
+run shell/shared-vg-lock-recovery-persist-timeout.sh

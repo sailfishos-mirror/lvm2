@@ -933,6 +933,18 @@ do_remove() {
 		fi
 	done
 
+	# Fencing (remove) requires removing the target's PR key from all
+	# PV devices.  If any device is missing we cannot fully fence the
+	# target: it may retain its key on the missing device and still do
+	# I/O there.  Remove the key from available devices above, but
+	# still fail.
+	# TODO: --allow-missing option may be added for cases where an
+	# admin knows a missing device is physically destroyed.
+	if [[ "$MISSING_DEV_COUNT" -gt 0 ]]; then
+		logmsg "remove failed: $MISSING_DEV_COUNT missing device(s) in VG $VGNAME."
+		err=1
+	fi
+
 	test "$err" -eq 1 && exit 1
 
 	logmsg "removed key $REMKEY for $GROUP."
@@ -1401,8 +1413,20 @@ fi
 # Add a --devicesfile option that can be used for this vgs command?
 get_devices_from_vg() {
 	local IFS=:
+	local ALL_DEVS
 	# shellcheck disable=SC2207 # intentional split of device list
-	DEVICES=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") )
+	ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") )
+
+	DEVICES=()
+	MISSING_DEV_COUNT=0
+	for dev in "${ALL_DEVS[@]}"; do
+		if [[ "$dev" == "/dev/"* ]]; then
+			DEVICES+=("$dev")
+		else
+			logmsg "missing device $dev in VG $VGNAME."
+			MISSING_DEV_COUNT=$((MISSING_DEV_COUNT + 1))
+		fi
+	done
 }
 
 if [[ -z "$LAST_DEVICE" && -n "$VGNAME" ]]; then

@@ -2,6 +2,7 @@ config shared-sanlock-3node-4scsi-caw-io2-512.conf
 run shell/shared-vg-pr.sh
 run shell/shared-vg-lock-recovery-pr.sh
 run shell/shared-vg-lock-recovery-wd.sh
+run shell/shared-vg-lock-recovery-persist-timeout.sh
 run shell/shared-vg-blocked-operations.sh
 run shell/shared-vg-cache-writecache.sh
 run shell/shared-vg-contention-skipvg.sh

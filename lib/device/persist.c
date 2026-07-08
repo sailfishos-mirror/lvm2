@@ -2798,6 +2798,7 @@ int persist_remove(struct cmd_context *cmd, struct volume_group *vg, const char 
 	const char **argv;
 	int args = 0;
 	int pv_count = 0;
+	int missing_count = 0;
 	int status;
 
 	if (!remkey) {
@@ -2820,15 +2821,27 @@ int persist_remove(struct cmd_context *cmd, struct volume_group *vg, const char 
 	if (!_get_our_key(cmd, vg, local_key, local_host_id, our_key_buf, &our_key_val))
 		return_0;
 
+	/*
+	 * Removing a PR key is a fencing operation: we must remove the
+	 * target's key from all PV devices.  If any PV device is missing,
+	 * the target may retain its key on that device and still do I/O,
+	 * so the remove must fail.  Still remove the key from available
+	 * devices to reduce the target's I/O surface.
+	 */
 	dm_list_iterate_items(pvl, &vg->pvs) {
-		if (!(dev = pvl->pv->dev))
+		if (!(dev = pvl->pv->dev)) {
+			missing_count++;
 			continue;
+		}
 		if (dm_list_empty(&dev->aliases))
 			continue;
 		pv_count++;
 	}
-	if (!pv_count)
+	if (!pv_count) {
+		if (missing_count)
+			log_error("Cannot remove PR key: %d PV device(s) missing in VG %s.", missing_count, vg->name);
 		return_0;
+	}
 
 	if (!(argv = dm_pool_alloc(cmd->mem, (11 + pv_count*2) * sizeof(char *))))
 		return_0;
@@ -2863,6 +2876,12 @@ int persist_remove(struct cmd_context *cmd, struct volume_group *vg, const char 
 	}
 
 	/* lvmpersist remove verifies that the key was removed. */
+
+	if (missing_count) {
+		log_error("Persistent reservation remove incomplete: %d PV device(s) missing in VG %s.",
+			  missing_count, vg->name);
+		return 0;
+	}
 
 	return 1;
 }

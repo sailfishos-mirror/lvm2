@@ -353,6 +353,36 @@ for i in $(seq 1 3); do
     sleep 0.5
 done
 
+#
+# remove with missing device: must fail because fencing cannot be
+# complete if a PV device is missing (target may retain its PR key).
+#
+node1 lvmpersist start --ourkey $KEY1 --access sh --vg testvg
+node2 lvmpersist start --ourkey $KEY2 --access sh --vg testvg
+node1 lvmpersist check-key --key $KEY1 --vg testvg
+node1 lvmpersist check-key --key $KEY2 --vg testvg
+
+# remove d2 from system.devices on node1 so it appears as [unknown]
+node1 lvmdevices --deldev $d2
+
+# remove must fail when a VG device is missing
+node1 not lvmpersist remove --ourkey $KEY1 --removekey $KEY2 --vg testvg
+
+# key was removed from available d1, but remains on missing d2
+node1 not lvmpersist check-key --key $KEY2 --device $d1
+node2 lvmpersist check-key --key $KEY2 --device $d2
+
+# restore d2 in system.devices, retry removes key from d2
+node1 lvmdevices --adddev $d2
+node1 lvmpersist remove --ourkey $KEY1 --removekey $KEY2 --vg testvg
+node1 not lvmpersist check-key --key $KEY2 --vg testvg
+
+# verify node2 can no longer write
+node2 not dd if=/dev/zero of=$d1 bs=4096 count=1 oflag=direct,sync
+node2 not dd if=/dev/zero of=$d2 bs=4096 count=1 oflag=direct,sync
+
+node1 lvmpersist stop --ourkey $KEY1 --vg testvg
+
 # Cleanup VG
 node1 vgremove -ff testvg
 
