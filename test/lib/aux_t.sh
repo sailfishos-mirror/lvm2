@@ -2022,19 +2022,29 @@ have_thin() {
 	fi
 }
 
+have_vdoformat() {
+	local vdoformat
+
+	vdoformat=$(lvm lvmconfig --typeconfig full --valuesonly global/vdo_format_executable || true)
+	# Remove surrounding "" around string
+	# TODO: lvmconfig should have an option to give this output directly
+	[[ -x "${vdoformat//\"}" ]]
+}
+
 have_vdo() {
 	lvm segtypes 2>/dev/null | grep 'vdo$' >/dev/null || {
 		echo "VDO is not built-in." >&2
 		return 1
 	}
 	target_at_least dm-vdo "$@"
-	local vdoformat
-
-	vdoformat=$(lvm lvmconfig --typeconfig full --valuesonly global/vdo_format_executable || true)
-	# Remove surrounding "" around string
-	# TODO: lvmconfig should have an option to give this output directly
-	vdoformat=${vdoformat//\"}
-	[[ -x "$vdoformat" ]] || { echo "No executable to format VDO \"$vdoformat\"..."; return 1; }
+	if ! have_vdoformat; then
+		if target_at_least dm-vdo 9 2 0; then
+			echo "No vdoformat executable, we rely entirely on kernel formatting"
+		else
+			echo "No executable to format VDO \"$vdoformat\"..."
+			return 1
+		fi
+	fi
 }
 
 get_vdo_stat() {

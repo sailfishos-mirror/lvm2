@@ -138,15 +138,22 @@ if test "$KERNEL_FORMAT" -eq 1; then
 	lvremove -ff $vg
 fi
 
-# Test userspace vdoformat tool
-test_vdo_format 0 "Userspace vdoformat"
+if aux have_vdoformat; then
+	# Test userspace vdoformat tool
+	test_vdo_format 0 "Userspace vdoformat"
 
-# Verify use_kernel_format is NOT in metadata for userspace-formatted VDO
-lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
-	--vdosettings "use_kernel_format=0"
-vgcfgbackup -f vgbackup $vg
-not grep "use_kernel_format" vgbackup
-lvremove -ff $vg
+	# Verify use_kernel_format is NOT in metadata for userspace-formatted VDO
+	lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
+		--vdosettings "use_kernel_format=0"
+	vgcfgbackup -f vgbackup $vg
+	not grep "use_kernel_format" vgbackup
+	lvremove -ff $vg
+else
+	# Without vdoformat we cannot create VDO volume
+	not lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
+		--vdosettings "use_kernel_format=0"
+	lvremove -ff $vg
+fi
 
 # Test fallback: requesting kernel format on system without support
 if test "$KERNEL_FORMAT" -eq 0; then
