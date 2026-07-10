@@ -413,23 +413,30 @@ static int _create_dm_bitset(int require_module_loaded)
 
 int dm_is_dm_major(uint32_t major)
 {
+	int r = 0;
+
 	pthread_mutex_lock(&_control_fd_mutex);
 	if (!_create_dm_bitset(0)) {
 		pthread_mutex_unlock(&_control_fd_mutex);
 		return 0;
 	}
-	pthread_mutex_unlock(&_control_fd_mutex);
 
 	if (_dm_multiple_major_support) {
-		if (!_dm_bitset)
-			return 0;
-		return dm_bit(_dm_bitset, major) ? 1 : 0;
+		if (_dm_bitset)
+			r = dm_bit(_dm_bitset, major) ? 1 : 0;
+		pthread_mutex_unlock(&_control_fd_mutex);
+		return r;
 	}
 
-	if (!_dm_device_major)
+	if (!_dm_device_major) {
+		pthread_mutex_unlock(&_control_fd_mutex);
 		return 0;
+	}
 
-	return (major == _dm_device_major) ? 1 : 0;
+	r = (major == _dm_device_major) ? 1 : 0;
+	pthread_mutex_unlock(&_control_fd_mutex);
+
+	return r;
 }
 
 static void _close_control_fd(void)
@@ -2837,9 +2844,11 @@ static void _do_lib_exit(void)
 
 	dm_lib_release();
 	selinux_release();
+	pthread_mutex_lock(&_control_fd_mutex);
 	if (_dm_bitset)
 		dm_bitset_destroy(_dm_bitset);
 	_dm_bitset = NULL;
+	pthread_mutex_unlock(&_control_fd_mutex);
 	dm_pools_check_leaks();
 	dm_dump_memory();
 }
