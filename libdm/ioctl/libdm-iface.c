@@ -160,7 +160,8 @@ static void _init_uname(void)
 	int parts;
 
 	if (uname(&uts)) {
-		log_error("uname failed: %s", strerror(errno));
+		log_sys_error("uname", "");
+		_kernel_major = 0;
 		return;
 	}
 
@@ -169,7 +170,7 @@ static void _init_uname(void)
 
 	/* Kernels with a major number of 2 always had 3 parts. */
 	if (parts < 1 || (_kernel_major < 3 && parts < 3)) {
-		log_error("Could not determine kernel version used.");
+		_kernel_major = 0;
 		return;
 	}
 }
@@ -179,7 +180,12 @@ static int _uname(void)
 	if (!_kernel_major)
 		_init_uname();
 
-	return _kernel_major ? 1 : 0;
+	if (!_kernel_major) {
+		log_error("Could not determine kernel version used.");
+		return 0;
+	}
+
+	return 1;
 }
 
 int get_uname_version(unsigned *major, unsigned *minor, unsigned *release)
@@ -363,7 +369,7 @@ static int _create_dm_bitset(int require_module_loaded)
 		return 1;
 
 	if (!_uname())
-		return 0;
+		return_0;
 
 	/*
 	 * 2.6 kernels are limited to one major number.
@@ -451,7 +457,7 @@ static int _open_control(void)
 		return 1;
 
 	if (!_uname())
-		return 0;
+		return_0;
 
 	if (dm_snprintf(control, sizeof(control), "%s/%s", dm_dir(), DM_CONTROL_NODE) < 0)
 		goto_bad;
