@@ -1543,7 +1543,9 @@ static void _destroy_thread_state(void *ptr)
 
 static void _init_thread_state_key(void)
 {
-	pthread_key_create(&_thread_state_key, _destroy_thread_state);
+	/* pthread_once prevents retry on failure -- nothing we can do */
+	if (pthread_key_create(&_thread_state_key, _destroy_thread_state))
+		log_error("Failed to create thread state key.");
 }
 
 static struct dm_thread_state *_get_thread_state(void)
