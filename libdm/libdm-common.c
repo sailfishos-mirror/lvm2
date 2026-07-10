@@ -1847,10 +1847,18 @@ static int _canonicalize_and_set_dir(const char *src, const char *suffix, size_t
 
 int dm_set_dev_dir(const char *dev_dir)
 {
+	char new_dir[PATH_MAX];
+
+	if (!_canonicalize_and_set_dir(dev_dir, DM_DIR, sizeof new_dir, new_dir))
+		return_0;
+
+	if (!strcmp(new_dir, _dm_dir))
+		return 1;
+
 	if (!pthread_equal(pthread_self(), _init_tid))
 		return 0;
 
-	return _canonicalize_and_set_dir(dev_dir, DM_DIR, sizeof _dm_dir, _dm_dir);
+	return dm_strncpy(_dm_dir, new_dir, sizeof _dm_dir);
 }
 
 const char *dm_dir(void)
@@ -1860,15 +1868,29 @@ const char *dm_dir(void)
 
 int dm_set_sysfs_dir(const char *sysfs_dir)
 {
-	if (!pthread_equal(pthread_self(), _init_tid))
-		return 0;
+	char new_dir[PATH_MAX];
 
 	if (!sysfs_dir || !*sysfs_dir) {
+		if (!_sysfs_dir[0])
+			return 1;
+
+		if (!pthread_equal(pthread_self(), _init_tid))
+			return 0;
+
 		_sysfs_dir[0] = '\0';
 		return 1;
 	}
 
-	return _canonicalize_and_set_dir(sysfs_dir, NULL, sizeof _sysfs_dir, _sysfs_dir);
+	if (!_canonicalize_and_set_dir(sysfs_dir, NULL, sizeof new_dir, new_dir))
+		return_0;
+
+	if (!strcmp(new_dir, _sysfs_dir))
+		return 1;
+
+	if (!pthread_equal(pthread_self(), _init_tid))
+		return 0;
+
+	return dm_strncpy(_sysfs_dir, new_dir, sizeof _sysfs_dir);
 }
 
 const char *dm_sysfs_dir(void)
