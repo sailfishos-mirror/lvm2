@@ -452,6 +452,18 @@ has fired.)
 Removal of the PR key is the only mechanism by which a failed host's
 locks are recovered.
 .P
+When PR fencing fails (e.g. due to a missing VG device), lvmlockd
+caches the failure for that host.  Subsequent lock requests for the
+same failed host will reuse the cached failure without re-attempting
+PR fencing.  After resolving the cause of the failure (e.g. restoring
+the missing device), use
+.B --lockopt force
+on the lvchange command to discard the cached failure and re-attempt
+PR fencing:
+.br
+.B $ lvchange -ay --lockopt force
+.IR VG / LV
+.P
 .IP \[bu] 2
 --setlockargs nopersist,timeout
 .br

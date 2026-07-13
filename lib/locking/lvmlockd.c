@@ -3147,12 +3147,14 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
 	    (cmd->lockopt & LOCKOPT_ADOPTLV) ||
 	    (cmd->lockopt & LOCKOPT_ADOPT) ||
 	    (cmd->lockopt & LOCKOPT_REPAIRLV) ||
-	    (cmd->lockopt & LOCKOPT_REPAIR)) {
-		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s",
+	    (cmd->lockopt & LOCKOPT_REPAIR) ||
+	    (cmd->lockopt & LOCKOPT_FORCE)) {
+		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s%s",
 			    (flags & LDLV_PERSISTENT) ? "persistent," : "",
 			    (cmd->lockopt & LOCKOPT_ADOPTLV) ? "adopt_only" : "",
 			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "",
-			    (cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRLV)) ? "repair" : "") < 0) {
+			    (cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRLV)) ? "repair" : "",
+			    (cmd->lockopt & LOCKOPT_FORCE) ? "force" : "") < 0) {
 			log_error("Options string too long %x.", cmd->lockopt);
 			return 0;
 		}
