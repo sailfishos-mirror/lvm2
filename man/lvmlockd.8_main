@@ -380,14 +380,20 @@ Removal of PR keys for failed hosts can be considered a form of "fencing".
 For more information on using PR with LVM in general, see
 .BR lvmpersist (8).
 .P
-The vgcreate options to enable PR-based lock recovery in a new VG are shown above.
+.I Enabling
+.br
+The vgcreate options to enable PR-based lock recovery in a new VG (also
+shown above) are:
+.br
+.B $ vgcreate --shared --setpersist y --setlockargs persist,notimeout ...
 .P
-To enable PR-based lock recovery in an existing VG, first enable PR (if
-not already), then change the lock args.  Changing lock args can involve
-stopping/starting PR and locking at different stages.  Changing the PR or
-lock args settings requires the VG to be stopped on all other nodes.
+Use vgchange to enable PR-based lock recovery in an existing VG.  First
+enable PR for the VG (if not already done), then change the VG lock args.
+Note that changing lock args can involve stopping/starting both PR and the
+lockspace at different stages.  Changing the PR or lock args settings requires
+the VG to be stopped on all other nodes.
 .P
-.I Example
+Example enabling using vgchange:
 .br
 .B $ vgcreate --shared
 .I VG
@@ -413,6 +419,8 @@ Display the VG attributes configured by setpersist and setlockargs:
 .B $ vgs -o+lockargs
 .I VG
 .P
+.I Starting
+.br
 When PR is enabled for a shared VG (the
 .B --setpersist y
 option), LVM requires a specific startup sequence before the VG can be used: PR
@@ -431,6 +439,8 @@ a single command:
 .B $ vgchange --persist start --lockstart
 .I VG
 .P
+.I Variations
+.br
 The sanlock lock manager can be configured to handle recovery of failed
 hosts in different ways.  The first variation (persist,notimeout) is
 considered the standard form of PR-based lock recovery.  The second
@@ -493,6 +503,19 @@ There is no automated recovery of locks with this configuration.  A user
 is responsible for manually resetting/fencing a failed host, and then
 manually notifying sanlock that the host is dead, which will allow the
 failed host's locks to be granted.
+.P
+.I Retrying
+.br
+If PR fencing fails (e.g. due to a missing device in the VG), lvmlockd
+caches the failure for the target host.  Subsequent lock requests for the
+same failed host_id+generation will reuse the cached failure without
+re-attempting PR fencing.  After resolving the cause of the failure (e.g.
+restoring the missing device), use
+.B --lockopt force
+in the activation command re-attempt the PR fencing. e.g.
+.br
+.B $ lvchange -ay --lockopt force
+.IR VG / LV
 .
 .SS System ID
 .br

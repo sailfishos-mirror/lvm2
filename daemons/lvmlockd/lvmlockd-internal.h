@@ -196,6 +196,7 @@ struct action {
 	int result;
 	int lm_rv;			/* return value from lm_ function */
 	int align_mb;
+	unsigned int force_fence_retry : 1;
 	char *path;
 	char vg_uuid[64];
 	char vg_name[MAX_NAME+1];

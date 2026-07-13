@@ -104,6 +104,27 @@ lvchange_ay_loop() {
     exit 1
 }
 
+lvchange_ay_loop_opts() {
+    local nodenum=$1
+    local opts=$2
+    local vgname=$3
+    local lvname=$4
+    local timeout="${5:-120}"
+
+    for i in $(seq 1 $timeout); do
+        if noden ${nodenum} lvchange -ay ${opts} ${vgname}/${lvname} 2>&1; then
+            echo "Lock recovery succeeded after ${i}s"
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "ERROR: Lock recovery did not succeed within ${timeout}s"
+    noden ${nodenum} lvmlockctl -id 2>/dev/null || true
+    noden ${nodenum} sanlock client status -D 2>/dev/null || true
+    exit 1
+}
+
 #
 # Get the PR key for a node.
 # Shared VG PR keys use host_id + sanlock generation:
@@ -115,13 +136,14 @@ get_key() {
 
 verify_key_removed() {
     local key=$1
-    noden 2 lvmpersist read-keys --vg testvg | tee out
+    local nodenum=${2:-2}
+    noden $nodenum lvmpersist read-keys --vg testvg | tee out
     if grep "^Device" out | grep -q "$key"; then
         _error_with_location "PR key $key still registered on testvg devices"
         cat out >&2
         exit 1
     fi
-    echo "✓ PR key $key removed from testvg devices"
+    echo "PR key $key removed from testvg devices"
 }
 
 
@@ -555,6 +577,124 @@ cleanup_vg_pr testvg
 echo "== Test 10 passed =="
 
 fi # CLUSTER_NUM_NODES >= 3
+
+
+# ---------------------------------------------------------------
+# Test 11: PR fencing fails with missing device, reattach and retry
+#
+# node2 holds a lock on lv1.  Kill node2 (simulates failure).
+# node1 attempts to activate lv1: after host_fail_timeout, sanlock
+# sees node2 as FAIL, lvmlockd on node1 attempts PR fencing but
+# fails because a VG device is missing on node1.  Activation
+# fails.  Reattach the missing device on node1, retry activation,
+# and it should succeed because PR fencing can now operate on all
+# devices.
+# ---------------------------------------------------------------
+
+echo "== Test 11: PR fencing fails with missing device, reattach and retry =="
+
+node1 vgcreate --shared --setpersist y --setlockargs persist,notimeout testvg $dev1 $dev2
+nodep vgchange --lockstart --persist start testvg
+
+node2 lvcreate -l5 -n lv1 testvg $dev1
+node1 not lvchange -ay testvg/lv1
+
+KEY2=$(get_key 2)
+
+# Remove dev2 from node1 devices file so it appears missing
+node1 vgimportdevices testvg
+node1 lvmdevices --deldev $dev2
+
+kill_node 2
+
+# After host_fail_timeout, sanlock sees node2 as FAIL.
+# node1 attempts PR fencing which fails because dev2 is missing.
+sleep 100
+node1 not lvchange -ay testvg/lv1
+
+# Reattach the missing device on node1
+node1 lvmdevices --adddev $dev2
+
+# lvmlockd caches the failed fence result in fence_history for the
+# host_id+generation, so retrying lvchange -ay reuses the cached failure
+# without re-attempting PR fencing.  Use --lockopt force to discard the
+# cached failure and re-attempt PR fencing.
+lvchange_ay_loop_opts 1 "--lockopt force" testvg lv1
+
+verify_key_removed $KEY2 1
+verify_lv_active_on 1 testvg lv1
+
+node1 lvchange -an testvg/lv1
+verify_lv_not_active_on 1 testvg lv1
+
+# Restart node2 and clean up
+restart_node 2
+node2 vgchange --lockstart --persist start testvg
+node2 dmsetup remove testvg-lv1 2>/dev/null || true
+
+node1 lvremove -y testvg/lv1
+node1 rm -f /etc/lvm/devices/system.devices
+cleanup_vg_pr testvg
+
+echo "== Test 11 passed =="
+
+
+# ---------------------------------------------------------------
+# Test 12: PR fencing fails with missing device, reboot target node
+#
+# Begins like Test 11: node2 holds lv1, kill node2, node1 attempts
+# activation but PR fencing fails due to missing device.  Instead
+# of reattaching the device on node1, reboot node2.  After node2
+# restarts, node2 activates lv1, then deactivates it, releasing
+# the lock.  node1 then activates lv1 which should succeed because
+# the lock is free and no fencing is needed.
+# ---------------------------------------------------------------
+
+echo "== Test 12: PR fencing fails with missing device, reboot target node =="
+
+node1 vgcreate --shared --setpersist y --setlockargs persist,notimeout testvg $dev1 $dev2
+nodep vgchange --lockstart --persist start testvg
+
+node2 lvcreate -l5 -n lv1 testvg $dev1
+node1 not lvchange -ay testvg/lv1
+
+# Remove dev2 from node1 devices file so it appears missing
+node1 vgimportdevices testvg
+node1 lvmdevices --deldev $dev2
+
+kill_node 2
+
+# After host_fail_timeout, sanlock sees node2 as FAIL.
+# node1 attempts PR fencing which fails because dev2 is missing.
+sleep 100
+node1 not lvchange -ay testvg/lv1
+
+# Restart node2 instead of fixing the missing device on node1
+restart_node 2
+node2 vgchange --lockstart --persist start testvg
+node2 dmsetup remove testvg-lv1 2>/dev/null || true
+
+# node2 activates lv1 (lock is free after restart), then deactivates
+node2 lvchange -ay testvg/lv1
+verify_lv_active_on 2 testvg lv1
+node2 lvchange -an testvg/lv1
+verify_lv_not_active_on 2 testvg lv1
+
+# node1 activates lv1: lock is free (no fencing needed), lv1 is
+# on dev1 which is visible on node1
+node1 lvchange -ay testvg/lv1
+verify_lv_active_on 1 testvg lv1
+node1 lvchange -an testvg/lv1
+verify_lv_not_active_on 1 testvg lv1
+
+# Restore dev2 on node1 for cleanup
+node1 lvmdevices --adddev $dev2
+
+node1 lvremove -y testvg/lv1
+node1 rm -f /etc/lvm/devices/system.devices
+cleanup_vg_pr testvg
+
+echo "== Test 12 passed =="
 
 
 # ---------------------------------------------------------------

@@ -260,7 +260,7 @@ static int alloc_new_structs; /* used for initializing in setup_structs */
 #define DO_FORCE 1
 #define NO_FORCE 0
 
-static int add_fence_action(struct lockspace *ls, struct owner *owner);
+static int add_fence_action(struct lockspace *ls, struct owner *owner, int force_fence_retry);
 static int send_helper_request(struct action *act, char *ls_name, uint32_t new_msg_id);
 static int add_lock_action(struct action *act);
 static int str_to_lm(const char *str);
@@ -2436,7 +2436,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
 				act->owner = owner;
 				list_del(&act->list);
 				list_add(&act->list, &r->fence_wait_actions);
-				add_fence_action(ls, &owner);
+				add_fence_action(ls, &owner, (act->flags & LD_AF_FORCE) ? 1 : 0);
 				*retry_out = 1;
 
 			} else if ((rv == -EAGAIN) &&
@@ -2492,7 +2492,7 @@ static void res_process(struct lockspace *ls, struct resource *r,
 				act->owner = owner;
 				list_del(&act->list);
 				list_add(&act->list, &r->fence_wait_actions);
-				add_fence_action(ls, &owner);
+				add_fence_action(ls, &owner, (act->flags & LD_AF_FORCE) ? 1 : 0);
 				*retry_out = 1;
 			} else if ((rv == -EAGAIN) &&
 			    (act->retries < DEFAULT_MAX_RETRIES) &&
@@ -4389,10 +4389,16 @@ static void work_fence(struct action *act, int *retry)
 			/* new act matches an in-progress fence act */
 			found_busy = 1;
 		} else if (ah->op == LD_OP_FENCE_RESULT) {
-			/* new act matches a completed fence act */
-			found_done = 1;
-			ah_result = ah->result;
-			ah_owner = ah->owner;
+			if (act->force_fence_retry && ah->result) {
+				log_debug("work_fence %s force retry fence for %u:%u prev result %d",
+					  vg_name, ah->owner.host_id, ah->owner.generation, ah->result);
+				list_del(&ah->list);
+				free_action(ah);
+			} else {
+				found_done = 1;
+				ah_result = ah->result;
+				ah_owner = ah->owner;
+			}
 		}
 		break;
 	}
@@ -7265,7 +7271,7 @@ static int send_helper_request(struct action *act, char *ls_name, uint32_t new_m
 
 /* lockspace threads call add_fence_action() */
 
-static int add_fence_action(struct lockspace *ls, struct owner *owner)
+static int add_fence_action(struct lockspace *ls, struct owner *owner, int force_fence_retry)
 {
 	struct action *act;
 
@@ -7283,13 +7289,15 @@ static int add_fence_action(struct lockspace *ls, struct owner *owner)
 	memcpy(act->vg_name, ls->vg_name, sizeof(act->vg_name));
 	memcpy(act->vg_uuid, ls->vg_uuid, sizeof(act->vg_uuid));
 	act->op = LD_OP_FENCE;
+	act->force_fence_retry = force_fence_retry ? 1 : 0;
 	act->ourkey = 0x1000000000000000 | ((ls->generation & 0xFFFFFF) << 16) | (ls->host_id & 0xFFFF);
 	act->remkey = 0x1000000000000000 | (((uint64_t)owner->generation & 0xFFFFFF) << 16) | (owner->host_id & 0xFFFF);
 	memcpy(&act->owner, owner, sizeof(struct owner));
 
-	log_debug("add_fence_action vg %s for host_id %u gen %u ourkey 0x%llx remkey 0x%llx",
+	log_debug("add_fence_action vg %s for host_id %u gen %u ourkey 0x%llx remkey 0x%llx retry %d",
 		  act->vg_name, act->owner.host_id, act->owner.generation,
-		  (unsigned long long)act->ourkey, (unsigned long long)act->remkey);
+		  (unsigned long long)act->ourkey, (unsigned long long)act->remkey,
+		  force_fence_retry);
 
 	add_work_action(act);
 	return 0;
