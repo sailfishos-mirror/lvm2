@@ -1860,6 +1860,7 @@ cluster_vms_snapshot_all() {
             fi
         done
 
+        cluster_vms_reconnect_iscsi "$cluster_id"
         cluster_vms_reconnect_nvme "$cluster_id"
         cluster_log "Cluster restored after snapshot"
     fi
@@ -2060,6 +2061,7 @@ cluster_vms_restart_from_snapshot() {
         fi
     done
 
+    cluster_vms_reconnect_iscsi "$cluster_id"
     cluster_vms_reconnect_nvme "$cluster_id"
     cluster_log "Cluster restarted from snapshot successfully"
     return 0
@@ -2174,6 +2176,119 @@ cluster_vms_reconnect_nvme() {
     done
 }
 
+#
+# cluster_vms_reconnect_iscsi - Re-export iSCSI storage after snapshot restore
+#
+# After a VM snapshot restore that involved a cold boot (no memory restore),
+# loop device associations on node0 are lost.  The saved targetcli config
+# references /dev/loopN devices that no longer exist, so target.service
+# fails to restore backstores and LUNs.
+#
+# This function re-creates the loop devices from the existing backing
+# files, restarts target.service so it can restore successfully, then
+# rescans iSCSI sessions on all test nodes so the LUNs reappear.
+#
+cluster_vms_reconnect_iscsi() {
+    local cluster_id="$1"
+    local num_scsi="${CLUSTER_NUM_SCSI:-0}"
+    local num_multipath="${CLUSTER_NUM_MULTIPATH:-0}"
+
+    if [ "$num_scsi" -eq 0 ] && [ "$num_multipath" -eq 0 ]; then
+        return 0
+    fi
+
+    local num_nodes=${CLUSTER_NUM_NODES:-3}
+    local node0_vm=$(cluster_vm_get_name "$cluster_id" 0)
+    local node0_ip=$(cluster_vm_get_ip "$node0_vm" 2>/dev/null || true)
+
+    if [ -z "$node0_ip" ]; then
+        cluster_warn "Cannot reconnect iSCSI: node0 IP not available"
+        return 0
+    fi
+
+    # Check if LIO target already has LUNs (memory-restored VMs keep loop
+    # devices intact, so no reconnect is needed)
+    local lun_count
+    lun_count=$(cluster_vm_ssh "$node0_ip" "ls /sys/kernel/config/target/iscsi/*/tpgt_1/lun/ 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+    if [ "${lun_count:-0}" -gt 0 ]; then
+        cluster_debug "iSCSI target already has $lun_count LUN(s), skipping reconnect"
+        return 0
+    fi
+
+    cluster_log "Reconnecting iSCSI storage on node0"
+
+    local scsi_backing="${CLUSTER_SCSI_BACKING_TYPE:-loop_prealloc}"
+    local mpath_backing="${CLUSTER_MULTIPATH_BACKING_TYPE:-loop_prealloc}"
+
+    # Re-create loop devices and restart target.service on node0
+    cluster_vm_ssh "$node0_ip" "
+        # Re-attach SCSI backing files to loop devices
+        if [ $num_scsi -gt 0 ]; then
+            scsi_dir='/var/tmp/lvm-cluster-storage-scsi'
+            for i in \$(seq 1 $num_scsi); do
+                img=\"\${scsi_dir}/scsi-disk-${cluster_id}-\${i}.img\"
+                if [ -f \"\$img\" ]; then
+                    case '$scsi_backing' in
+                        loop_prealloc|loop_sparse)
+                            losetup -f \"\$img\" 2>/dev/null || true
+                            ;;
+                    esac
+                fi
+            done
+        fi
+
+        # Re-attach multipath backing files to loop devices
+        if [ $num_multipath -gt 0 ]; then
+            mp_dir='/var/tmp/lvm-cluster-storage-multipath'
+            for i in \$(seq 1 $num_multipath); do
+                img=\"\${mp_dir}/multipath-${cluster_id}-\${i}.img\"
+                if [ -f \"\$img\" ]; then
+                    case '$mpath_backing' in
+                        loop_prealloc|loop_sparse)
+                            losetup -f \"\$img\" 2>/dev/null || true
+                            ;;
+                    esac
+                fi
+            done
+        fi
+
+        # Restart target.service so it can restore the config with loop devices present
+        systemctl restart target 2>/dev/null || true
+
+        # Verify LUNs appeared
+        sleep 1
+        luns=\$(ls /sys/kernel/config/target/iscsi/*/tpgt_1/lun/ 2>/dev/null | wc -l)
+        if [ \"\$luns\" -eq 0 ]; then
+            echo 'WARNING: target.service restarted but no LUNs found' >&2
+            exit 1
+        fi
+    " 2>/dev/null || cluster_warn "iSCSI reconnect on node0 may have failed"
+
+    # Rescan iSCSI sessions on all test nodes so LUNs reappear
+    cluster_log "Rescanning iSCSI sessions on test nodes"
+    for node_num in $(seq 1 "$num_nodes"); do
+        local vm_name=$(cluster_vm_get_name "$cluster_id" "$node_num")
+        local node_ip=$(cluster_vm_get_ip "$vm_name" 2>/dev/null || true)
+
+        if [ -z "$node_ip" ]; then
+            continue
+        fi
+
+        cluster_vm_ssh "$node_ip" "
+            iscsiadm -m session --rescan 2>/dev/null || true
+            # Wait for SCSI devices to appear
+            for i in \$(seq 1 10); do
+                if lsblk -d -n -o VENDOR 2>/dev/null | grep -qi 'LIO-ORG'; then
+                    break
+                fi
+                sleep 1
+            done
+        " &>/dev/null || cluster_warn "iSCSI rescan failed on node $node_num"
+
+        cluster_debug "Rescanned iSCSI on node $node_num"
+    done
+}
+
 # Export functions
 export -f cluster_vm_get_name
 export -f cluster_vm_create cluster_vm_destroy
@@ -2188,4 +2303,4 @@ export -f cluster_vms_create_all cluster_vms_destroy_all
 export -f cluster_vm_save cluster_vm_restore_from_file
 export -f cluster_vms_pause_all cluster_vms_resume_all
 export -f cluster_vms_snapshot_all cluster_vms_restart_from_snapshot cluster_snapshot_delete
-export -f cluster_vms_reconnect_nvme
+export -f cluster_vms_reconnect_nvme cluster_vms_reconnect_iscsi
