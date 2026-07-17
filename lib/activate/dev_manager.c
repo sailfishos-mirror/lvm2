@@ -3990,7 +3990,8 @@ static int _add_new_lv_to_dtree(struct dev_manager *dm, struct dm_tree *dtree,
 		read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;
 	}
 
-	dm_tree_node_set_read_ahead(dnode, read_ahead, read_ahead_flags);
+	if (!lv_is_lockd_sanlock_lv(lv))
+		dm_tree_node_set_read_ahead(dnode, read_ahead, read_ahead_flags);
 
 	/* Add any LVs referencing a PVMOVE LV unless told not to */
 	if (dm->track_pvmove_deps && lv_is_pvmove(lv))
