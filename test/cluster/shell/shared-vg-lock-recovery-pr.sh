@@ -78,6 +78,7 @@ kill_node() {
 #
 restart_node() {
     local nodenum=$1
+    refresh_devices
     noden ${nodenum} systemctl start sanlock
     noden ${nodenum} systemctl start $LOCKD_SERVICE
     echo "Restarted sanlock and lvmlockd on node ${nodenum}"
