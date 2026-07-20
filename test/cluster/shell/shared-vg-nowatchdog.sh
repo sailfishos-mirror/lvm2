@@ -161,8 +161,9 @@ node1 vgs -o lockargs --noheadings testvg | grep 'notimeout'
 node1 lvmlockctl -id | grep "testvg" | grep "no_watchdog=0"
 
 # Add nowatchdog (setlockargs requires sole host in lockspace;
-# retry because sanlock may not have host status info yet)
-for i in $(seq 1 10); do
+# retry because sanlock needs one renewal cycle (2*io_timeout)
+# after lockspace start before get_hosts returns host info)
+for i in $(seq 1 30); do
 	node1 vgchange --setlockargs persist,notimeout,nowatchdog testvg && break
 	sleep 1
 done
@@ -171,8 +172,9 @@ node1 vgchange --lockstart --persist start testvg
 node1 vgs -o lockargs --noheadings testvg | grep 'nowatchdog'
 node1 lvmlockctl -id | grep "testvg" | grep "no_watchdog=1"
 
-# Remove nowatchdog
-for i in $(seq 1 10); do
+# Remove nowatchdog (lockspace was just restarted above, so
+# sanlock needs a full renewal cycle before get_hosts works)
+for i in $(seq 1 30); do
 	node1 vgchange --setlockargs persist,notimeout testvg && break
 	sleep 1
 done
