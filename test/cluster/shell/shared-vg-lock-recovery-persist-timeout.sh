@@ -114,6 +114,7 @@ wait_for_reboot() {
 restart_node() {
     local nodenum=$1
     wait_for_node ${nodenum}
+    refresh_devices
     noden ${nodenum} systemctl start sanlock
     noden ${nodenum} systemctl start $LOCKD_SERVICE
     echo "Restarted sanlock and lvmlockd on node ${nodenum}"
