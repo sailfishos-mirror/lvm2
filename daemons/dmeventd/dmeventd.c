@@ -2884,6 +2884,7 @@ int main(int argc, char *argv[])
 		.server_path = DM_EVENT_FIFO_SERVER
 	};
 	char **initial_registrations = NULL;
+	const char *dev_dir;
 	time_t now, idle_exit_timeout = DMEVENTD_IDLE_EXIT_TIMEOUT;
 
 	optopt = optind = opterr = 0;
@@ -3000,6 +3001,12 @@ int main(int argc, char *argv[])
 
 	_init_kernel_major();
 
+	dev_dir = getenv("DM_DEV_DIR");
+	if (dev_dir && *dev_dir &&
+	    !dm_set_dev_dir(dev_dir)) {
+		log_error("Invalid DM_DEV_DIR environment variable value.");
+		exit(EXIT_FAILURE);
+	}
 	/* Set before any thread creation so monitor threads
 	 * never race with main thread on this global */
 	dm_set_name_mangling_mode(DM_STRING_MANGLING_NONE);
