@@ -87,7 +87,7 @@ int dev_find_key_nvme(struct cmd_context *cmd, struct device *dev, int may_fail,
 		      int find_host_id, uint64_t *found_host_id_key,
 		      int find_all, int *found_count, uint64_t **found_all);
 
-int vg_is_registered(struct cmd_context *cmd, struct volume_group *vg, uint64_t *our_key_ret, int *partial_ret);
+int vg_is_registered(struct cmd_context *cmd, struct volume_group *vg, uint64_t *our_key_ret, int *partial_ret, uint32_t sanlock_gen);
 
 int setpersist_arg_flags(const char *str, uint32_t *flags);
 

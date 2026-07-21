@@ -382,6 +382,59 @@ node1 vgs -o persist testvg | grep 'require,autostart'
 
 node1_vgremove_retry
 
+#
+# multiple keys warning: detect stale registrations, cleanup with --persist remove
+#
+node1 vgcreate --shared --setpersist y testvg $d1 $d2
+KEY1=$(get_key 1)
+
+# Construct a stale key with same host_id as node1 but different generation.
+host_id_hex=$(echo $KEY1 | sed 's/.*\(....\)$/\1/')
+STALE_KEY="0x100000999999${host_id_hex}"
+
+# Re-register so stale key appears before our real key in device key list.
+# This exercises the code that prefers the key matching the current generation.
+node1 lvmpersist stop --ourkey $KEY1 --device $d1 --device $d2
+node2 lvmpersist start --ourkey $STALE_KEY --access sh --device $d1 --device $d2
+node1 lvmpersist start --ourkey $KEY1 --access sh --device $d1 --device $d2
+
+node1 lvmpersist check-key --key $KEY1 --vg testvg
+node1 lvmpersist check-key --key $STALE_KEY --vg testvg
+
+# persist check should warn about multiple keys for the local host_id.
+node1 'vgchange --persist check testvg 2>&1' | tee out
+grep "Multiple keys are registered for local host_id" out
+
+# persist check should report the correct key, not the stale one.
+grep "key for local host is registered" out | grep -q "$KEY1"
+if grep "key for local host is registered" out | grep -q "$STALE_KEY"; then
+	echo "FAIL: persist check reported stale key"
+	exit 1
+fi
+
+# any command reading PR keys should succeed and warn
+node1 'vgs testvg 2>&1' > out
+grep "Multiple keys are registered for local host_id" out
+node1 'lvcreate -l1 -n lv1 -an testvg 2>&1' > out
+grep "Multiple keys are registered for local host_id" out
+node1 'lvremove testvg/lv1 2>&1' > out
+grep "Multiple keys are registered for local host_id" out
+
+# Remove the stale key using the recommended cleanup command.
+node1 vgchange --persist remove --removekey $STALE_KEY testvg
+
+node1 not lvmpersist check-key --key $STALE_KEY --vg testvg
+node1 lvmpersist check-key --key $KEY1 --vg testvg
+
+# persist check should no longer warn about multiple keys.
+node1 'vgchange --persist check testvg 2>&1' | tee out
+if grep -q "Multiple keys are registered for local host_id" out; then
+	echo "FAIL: unexpected multiple keys warning after cleanup"
+	exit 1
+fi
+
+node1_vgremove_retry
+
 # ============================================================
 # vgextend / vgremove
 # ============================================================

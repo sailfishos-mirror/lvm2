@@ -387,6 +387,7 @@ int dev_find_key_nvme(struct cmd_context *cmd, struct device *dev, int may_fail,
 	int status_entries;
 	int regctl;
 	int num_keys;
+	int host_id_match_count = 0;
 	int err;
 	int fd;
 	int i;
@@ -481,10 +482,9 @@ int dev_find_key_nvme(struct cmd_context *cmd, struct device *dev, int may_fail,
 		}
 
 		if (find_host_id && (find_host_id == (int)(key & 0xFFFF))) {
-			if (found_host_id_key)
+			if (!host_id_match_count && found_host_id_key)
 				*found_host_id_key = key;
-			if (!find_all)
-				break;
+			host_id_match_count++;
 		}
 	}
 

@@ -1800,7 +1800,7 @@ static int _vgchange_persist_single(struct cmd_context *cmd, const char *vg_name
 		    vg_is_shared(vg) &&
 		    lockd_vg_is_started(cmd, vg, NULL) &&
 		    lockd_vg_is_busy(cmd, vg) &&
-		    !vg_is_registered(cmd, vg, NULL, NULL)) {
+		    !vg_is_registered(cmd, vg, NULL, NULL, 0)) {
 			log_error("VG lockspace should be stopped on all hosts (vgchange --lockstop) before starting PR.");
 			return ECMD_FAILED;
 		}
