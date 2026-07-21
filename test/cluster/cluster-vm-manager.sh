@@ -360,13 +360,13 @@ cluster_vm_install_packages() {
 
         # Always install initiator tools
         if [[ "$pkg_mgr" =~ ^(dnf|yum)$ ]]; then
-            packages+=(iscsi-initiator-utils nvme-cli sg3_utils jq cryptsetup xxd binutils mdadm)
+            packages+=(iscsi-initiator-utils nvme-cli sg3_utils jq cryptsetup binutils mdadm)
             # Add multipath if multipath devices configured
             if [ "${CLUSTER_NUM_MULTIPATH:-0}" -gt 0 ]; then
                 packages+=(device-mapper-multipath)
             fi
         else
-            packages+=(open-iscsi nvme-cli sg3-utils jq cryptsetup xxd binutils mdadm)
+            packages+=(open-iscsi nvme-cli sg3-utils jq cryptsetup binutils mdadm)
             # Add multipath if multipath devices configured
             if [ "${CLUSTER_NUM_MULTIPATH:-0}" -gt 0 ]; then
                 packages+=(multipath-tools)
@@ -547,9 +547,15 @@ cluster_vm_deploy_sanlock_source() {
     # Create remote directory
     cluster_vm_ssh "$vm_ip" "mkdir -p $remote_dir"
 
-    # Copy source tree (exclude .git and build artifacts)
+    # Copy source tree (exclude .git and build artifacts).
+    # Pre-built binaries/libs must be excluded (not just *.o/*.a): if a
+    # linked target is copied over, rsync -a preserves its mtime and make
+    # sees it as up to date, skipping the rebuild and installing a binary
+    # linked against the host's glibc instead of the VM's.
     cluster_log "Copying sanlock source tree to $vm_ip:$remote_dir"
     rsync -az --exclude='.git' --exclude='*.o' --exclude='*.a' \
+        --exclude='*.so' --exclude='*.so.*' --exclude='*.pc' \
+        --exclude='/src/sanlock' --exclude='/wdmd/wdmd' \
         -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -i ${CLUSTER_SSH_KEY_DIR}/cluster_test_rsa" \
         "$SANLOCK_SOURCE_DIR/" "${CLUSTER_SSH_USER}@${vm_ip}:${remote_dir}/" || \
         cluster_die "Failed to copy sanlock source to node $node_num"
@@ -701,6 +707,19 @@ cluster_vm_deploy_lvm_source() {
 
     # Run ldconfig to update library cache
     cluster_vm_ssh "$vm_ip" "ldconfig"
+
+    # install_system_dirs and install_tmpfiles_configuration are separate
+    # make targets (normally run by the RPM spec, not by "make install").
+    # install_system_dirs creates /var/lib/lvm (needed for persist key files).
+    # install_tmpfiles_configuration creates /run/lvm and /run/lock/lvm
+    # (needed for lvmlockd socket).
+    cluster_log "Installing system dirs and tmpfiles configuration for LVM on node $node_num"
+    cluster_vm_ssh "$vm_ip" "cd $remote_dir && make install_system_dirs" || \
+        cluster_die "Failed to install system dirs on node $node_num"
+    cluster_vm_ssh "$vm_ip" "cd $remote_dir && make install_tmpfiles_configuration" || \
+        cluster_die "Failed to install tmpfiles configuration on node $node_num"
+    cluster_vm_ssh "$vm_ip" "systemd-tmpfiles --create" || \
+        cluster_die "Failed to create runtime dirs from tmpfiles configuration on node $node_num"
 
     # Install systemd service files if they exist but weren't installed by make install
     cluster_log "Checking systemd service files for lvmlockd on node $node_num"
