@@ -95,6 +95,16 @@ static int _udev_disabled = 0;
 /* Thread that called dm_lib_init() -- only this thread may call set-once setters */
 static pthread_t _init_tid;
 
+static int _is_init_thread(const char *action)
+{
+	if (pthread_equal(pthread_self(), _init_tid))
+		return 1;
+
+	log_warn("WARNING: Only main thread can %s.", action);
+
+	return 0;
+}
+
 #ifdef UDEV_SYNC_SUPPORT
 static int _semaphore_supported = -1;
 static int _udev_running = -1;
@@ -242,7 +252,10 @@ static void _log_to_default_log_with_errno(int level,
 
 void dm_log_init(dm_log_fn fn)
 {
-	if (!pthread_equal(pthread_self(), _init_tid))
+	if (fn ? (dm_log == fn) : !dm_log_is_non_default())
+		return;
+
+	if (!_is_init_thread("set log function"))
 		return;
 
 	if (fn)  {
@@ -261,7 +274,10 @@ int dm_log_is_non_default(void)
 
 void dm_log_with_errno_init(dm_log_with_errno_fn fn)
 {
-	if (!pthread_equal(pthread_self(), _init_tid))
+	if (fn ? (dm_log_with_errno == fn) : !dm_log_is_non_default())
+		return;
+
+	if (!_is_init_thread("set log function"))
 		return;
 
 	if (fn) {
@@ -275,7 +291,10 @@ void dm_log_with_errno_init(dm_log_with_errno_fn fn)
 
 void dm_log_init_verbose(int level)
 {
-	if (!pthread_equal(pthread_self(), _init_tid))
+	if (_verbose == level)
+		return;
+
+	if (!_is_init_thread("set log verbose level"))
 		return;
 
 	_verbose = level;
@@ -326,10 +345,11 @@ int dm_get_suspended_counter(void)
 
 int dm_set_name_mangling_mode(dm_string_mangling_t name_mangling_mode)
 {
-	if (!pthread_equal(pthread_self(), _init_tid))
-		return 0;
+	if (_name_mangling_mode == name_mangling_mode)
+		return 1;
 
-	_name_mangling_mode = name_mangling_mode;
+	if (_is_init_thread("change mangling mode"))
+		_name_mangling_mode = name_mangling_mode;
 
 	return 1;
 }
@@ -1870,8 +1890,8 @@ int dm_set_dev_dir(const char *dev_dir)
 	if (!strcmp(new_dir, _dm_dir))
 		return 1;
 
-	if (!pthread_equal(pthread_self(), _init_tid))
-		return 0;
+	if (!_is_init_thread("change dev dir"))
+		return 1;
 
 	return dm_strncpy(_dm_dir, new_dir, sizeof _dm_dir);
 }
@@ -1885,25 +1905,16 @@ int dm_set_sysfs_dir(const char *sysfs_dir)
 {
 	char new_dir[PATH_MAX];
 
-	if (!sysfs_dir || !*sysfs_dir) {
-		if (!_sysfs_dir[0])
-			return 1;
-
-		if (!pthread_equal(pthread_self(), _init_tid))
-			return 0;
-
-		_sysfs_dir[0] = '\0';
-		return 1;
-	}
-
-	if (!_canonicalize_and_set_dir(sysfs_dir, NULL, sizeof new_dir, new_dir))
+	if (!sysfs_dir || !*sysfs_dir)
+		new_dir[0] = '\0';
+	else if (!_canonicalize_and_set_dir(sysfs_dir, NULL, sizeof new_dir, new_dir))
 		return_0;
 
 	if (!strcmp(new_dir, _sysfs_dir))
 		return 1;
 
-	if (!pthread_equal(pthread_self(), _init_tid))
-		return 0;
+	if (!_is_init_thread("change sysfs dir"))
+		return 1;
 
 	return dm_strncpy(_sysfs_dir, new_dir, sizeof _sysfs_dir);
 }
