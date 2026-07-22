@@ -307,13 +307,13 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
 
 	/* Convert size to GiB units or one of these strings: 0.25, 0.50, 0.75 */
 	argv[++args] = buf_pos;
-	if (vtp->index_memory_size_mb >= 1024)
+	if (vtp->index_memory_size_mb > 768)
 		buf_pos += 1 + dm_snprintf(buf_pos, 30, "--uds-memory-size=%u",
-					   vtp->index_memory_size_mb / 1024);
+					   (vtp->index_memory_size_mb + 1023) / 1024);
 	else
 		buf_pos += 1 + dm_snprintf(buf_pos, 30, "--uds-memory-size=0.%2u",
-					   (vtp->index_memory_size_mb < 512) ? 25U :
-					   (vtp->index_memory_size_mb < 768) ? 50U : 75U);
+					   (vtp->index_memory_size_mb <= 256) ? 25U :
+					   (vtp->index_memory_size_mb <= 512) ? 50U : 75U);
 
 	if (vtp->use_sparse_index)
 		argv[++args] = "--uds-sparse";
@@ -501,8 +501,10 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 				}
 
 				if (!vdo_pool_info(data_lv->size, vtp, &pinfo)) {
-					log_error("Pool %s is too small for the given VDO configuration.",
-						  display_lvname(data_lv));
+					log_error("Pool %s is too small (%s) for the given VDO configuration, needs at least %s.",
+						  display_lvname(data_lv),
+						  display_size(data_lv->vg->cmd, data_lv->size),
+						  display_size(data_lv->vg->cmd, pinfo.min_pool_sectors));
 					return 0;
 				}
 

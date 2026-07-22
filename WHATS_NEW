@@ -12,6 +12,7 @@ Version 2.03.42 -
   Support inactive LVs in pvmove with metadata-only mirror insertion.
   Kill orphaned polling process on pvmove --abort.
   Support formatting vdo volumes with kernel vdo target (version >= 9.2).
+  Fix VDO index_memory_size_mb quantization and report minimum required pool size.
   Add vdo_format.c with pre-format logical size computation for kernel format.
   Add --enable-asan/--enable-tsan to build with sanitizer options.
   Mirror cleans orphaned missing DM nodes on image removal.

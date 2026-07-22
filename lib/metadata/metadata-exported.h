@@ -1392,6 +1392,7 @@ uint64_t get_vdo_pool_virtual_size(const struct lv_segment *vdo_pool_seg);
 struct vdo_pool_info {
 	uint64_t data_blocks;
 	uint64_t uds_blocks;
+	uint64_t min_pool_sectors;
 	unsigned slab_count;
 	unsigned data_per_slab;
 };

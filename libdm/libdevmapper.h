@@ -2061,7 +2061,7 @@ int dm_tree_node_add_integrity_target(struct dm_tree_node *node,
 #define DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM	16380
 
 #define DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB	256			// 0.25 GiB
-#define DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB	(1024 * 1024 * 1024)	// 1TiB
+#define DM_VDO_INDEX_MEMORY_SIZE_MAXIMUM_MB	(1024 * 1024)		// 1TiB
 
 #define DM_VDO_SLAB_SIZE_MINIMUM_MB		128			// 128MiB
 #define DM_VDO_SLAB_SIZE_MAXIMUM_MB		(32 * 1024)		// 32GiB

@@ -170,7 +170,7 @@ static uint64_t _uds_index_blocks(unsigned index_memory_mb, int use_sparse)
 		base_chapters = UDS_DEFAULT_CHAPTERS;
 		rpc = 3 * UDS_SMALL_RPC;
 	} else {
-		base_chapters = (index_memory_mb / 1024) * UDS_DEFAULT_CHAPTERS;
+		base_chapters = ((index_memory_mb + 1023) / 1024) * UDS_DEFAULT_CHAPTERS;
 		rpc = UDS_DEFAULT_RPC;
 	}
 
@@ -280,6 +280,11 @@ int vdo_pool_info(uint64_t pool_size_sectors,
 
 	info->uds_blocks = _uds_index_blocks(vtp->index_memory_size_mb,
 					      vtp->use_sparse_index);
+
+	/* Minimum pool: geometry(1) + UDS + super(1) + roots + slab_summary + recovery_journal + 1 slab */
+	info->min_pool_sectors = (info->uds_blocks + 2 + VDO_BLOCK_MAP_ROOT_COUNT +
+				  VDO_SLAB_SUMMARY_BLOCKS + VDO_RECOVERY_JOURNAL_SIZE +
+				  slab_4k) * DM_VDO_BLOCK_SIZE;
 
 	/* Layout: geometry(1) + UDS + super(1) + roots + slab_summary + recovery_journal */
 	offset = info->uds_blocks + 2;
