@@ -233,7 +233,7 @@ int archive_vg(struct volume_group *vg,
 {
 	int i, fd, rnum, renamed = 0;
 	uint32_t ix = 0;
-	struct archive_file *last;
+	struct dm_list *dl;
 	FILE *fp = NULL;
 	char temp_file[PATH_MAX], archive_name[PATH_MAX];
 	struct dm_list *archives;
@@ -269,12 +269,8 @@ int archive_vg(struct volume_group *vg,
 	if (!(archives = _scan_archive(vg->cmd->mem, vg->name, dir)))
 		return_0;
 
-	if (dm_list_empty(archives))
-		ix = 0;
-	else {
-		last = dm_list_item(dm_list_first(archives), struct archive_file);
-		ix = last->index + 1;
-	}
+	if ((dl = dm_list_first(archives)))
+		ix = dm_list_item(dl, struct archive_file)->index + 1;
 
 	rnum = rand_r(&vg->cmd->rand_seed);
 
