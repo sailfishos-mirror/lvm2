@@ -627,6 +627,7 @@ static int _lease_corrupt_error(int rv)
 {
 	if (rv == SANLK_LEADER_MAGIC ||
 	    rv == SANLK_LEADER_VERSION ||
+	    rv == SANLK_LEADER_SECTORSIZE ||
 	    rv == SANLK_LEADER_DIFF ||
 	    rv == SANLK_LEADER_LOCKSPACE ||
 	    rv == SANLK_LEADER_RESOURCE ||
