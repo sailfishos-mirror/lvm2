@@ -494,7 +494,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 
 			if (use_kernel) {
 				/* Kernel decides to format if the first 4k are zeroes */
-				if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
+				if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, PROMPT)) {
 					log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
 						  display_lvname(data_lv));
 					return 0;
