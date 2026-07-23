@@ -1281,7 +1281,11 @@ static void _thread_unused(struct thread_status *thread)
 	LINK(thread, &_thread_registry_unused);
 }
 
-/* Thread cleanup handler to unregister device. */
+/* Thread cleanup handler to unregister device.
+ * Called with thread->mutex held via pthread_cleanup_pop(1).
+ * Note: pthread_cancel() is not used on monitor threads.  If it ever were,
+ * cancellation during usleep() (line ~1365) would invoke this handler
+ * without the mutex held -- that case would need fixing first. */
 static void _monitor_unregister(void *arg)
 {
 	struct thread_status *thread = arg;
@@ -1291,6 +1295,7 @@ static void _monitor_unregister(void *arg)
 	thread->pending = 0;	/* Event pending resolved */
 	thread->processing = 1;	/* Process unregistering */
 	status = thread->status;
+	/* coverity[missing_lock] thread->mutex held by caller */
 	thread->status = DM_THREAD_TERMINATING;
 	_unlock_thread(thread);
 
