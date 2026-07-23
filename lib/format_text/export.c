@@ -1064,7 +1064,8 @@ size_t text_vg_export_raw(struct volume_group *vg, const char *desc, char **buf,
 
 	if (!_text_vg_export(&f, vg, desc)) {
 		free(f.data.buf.start);
-		return 0;
+		/* coverity[leaked_storage] _text_vg_export always frees f.pv_idx */
+		return_0;
 	}
 
 	r = f.data.buf.used + 1;
