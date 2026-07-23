@@ -259,6 +259,11 @@ static inline int lockd_start_wait(struct cmd_context *cmd)
 	return 0;
 }
 
+static inline int lockd_get_start_result(struct cmd_context *cmd, const char *vg_name, int *result)
+{
+	return 0;
+}
+
 static inline int lockd_vg_is_started(struct cmd_context *cmd, struct volume_group *vg, uint32_t *cur_gen)
 {
 	return 0;
