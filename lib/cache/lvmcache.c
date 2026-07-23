@@ -766,6 +766,7 @@ static void _choose_duplicates(struct cmd_context *cmd,
 	struct device_list *devl, *devl_safe, *devl_add, *devl_del;
 	struct lvmcache_info *info;
 	struct device *dev1, *dev2;
+	struct dm_list *dl;
 	struct device *dev_mpath, *dev_md;
 	struct device *dev_drop;
 	struct physical_volume *pvs;
@@ -997,22 +998,23 @@ next:
 		 * One of the altdev entries for the PVID should be added to
 		 * lvmcache.
 		 */
-		if (dm_list_size(&altdevs) == 1) {
-			devl = dm_list_item(dm_list_first(&altdevs), struct device_list);
+		if (!(dl = dm_list_first(&altdevs)))
+			goto next;
+
+		devl = dm_list_item(dl, struct device_list);
+
+		/* Exactly one element in the list */
+		if (dl == dm_list_last(&altdevs)) {
 			dm_list_del(&devl->list);
 			dm_list_add(add_cache_devs, &devl->list);
 
 			log_debug_cache("PV %s with duplicates unselected using %s.",
 					pvid, dev_name(devl->dev));
 			goto next;
-		} else if (dm_list_empty(&altdevs)) {
-			goto next;
-		} else {
-			devl = dm_list_item(dm_list_first(&altdevs), struct device_list);
-			dev1 = devl->dev;
-
-			log_debug_cache("PV %s with duplicates unselected comparing alternatives", pvid);
 		}
+
+		dev1 = devl->dev;
+		log_debug_cache("PV %s with duplicates unselected comparing alternatives", pvid);
 	} else {
 		log_debug_cache("PV %s with duplicates comparing alternatives for %s",
 				pvid, dev_name(info->dev));
