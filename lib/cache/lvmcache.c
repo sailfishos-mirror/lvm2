@@ -1282,7 +1282,7 @@ next:
 static int _label_rescan_vg(struct cmd_context *cmd, const char *vgname, const char *vgid, int rw)
 {
 	struct dm_list devs;
-	struct device_list *devl, *devl2;
+	struct device_list *devl;
 	struct lvmcache_vginfo *vginfo;
 	struct lvmcache_info *info;
 
@@ -1294,6 +1294,7 @@ static int _label_rescan_vg(struct cmd_context *cmd, const char *vgname, const c
 	dm_list_iterate_items(info, &vginfo->infos) {
 		if (!(devl = malloc(sizeof(*devl)))) {
 			log_error("device_list element allocation failed");
+			_destroy_device_list(&devs);
 			return 0;
 		}
 		devl->dev = info->dev;
@@ -1313,10 +1314,7 @@ static int _label_rescan_vg(struct cmd_context *cmd, const char *vgname, const c
 	else
 		label_scan_devs(cmd, cmd->filter, &devs);
 
-	dm_list_iterate_items_safe(devl, devl2, &devs) {
-		dm_list_del(&devl->list);
-		free(devl);
-	}
+	_destroy_device_list(&devs);
 
 	if (!(vginfo = lvmcache_vginfo_from_vgname(vgname, vgid))) {
 		log_warn("VG info not found after rescan of %s", vgname);
