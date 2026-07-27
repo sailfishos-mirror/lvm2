@@ -38,6 +38,10 @@
 
 #define PR_KEY_BUF_SIZE 20 /* hex string. key is 8 bytes (16 hex chars) */
 
+/* key format is 0x100000YYYYYYXXXX where XXXX=host_id, YYYYYY=generation */
+#define PR_KEY_HOST_ID(k)    ((int)((k) & 0xFFFF))
+#define PR_KEY_GEN(k)         ((uint32_t)(((k) & 0xFFFFFF0000) >> 16))
+
 #define PRIN_CMD 0x5e
 #define PRIN_CMDLEN 10
 #define PRIN_RKEY 0x00 /* READ KEYS */
@@ -315,8 +319,8 @@ static int _read_key_file(struct cmd_context *cmd, struct volume_group *vg,
 		return 0;
 	}
 
-	found_host_id = (val & 0xFFFF);
-	found_gen = (val & 0xFFFFFF0000) >> 16;
+	found_host_id = PR_KEY_HOST_ID(val);
+	found_gen = PR_KEY_GEN(val);
 
 	if (key_str)
 		dm_strncpy(key_str, buf_key, PR_KEY_BUF_SIZE);
@@ -607,7 +611,7 @@ static int _dev_find_key_scsi(struct cmd_context *cmd, struct device *dev, int m
 				break;
 		}
 
-		if (find_host_id && (find_host_id == (int)(key & 0xFFFF))) {
+		if (find_host_id && (find_host_id == PR_KEY_HOST_ID(key))) {
 			if (!host_id_match_count && found_host_id_key)
 				*found_host_id_key = key;
 			host_id_match_count++;
@@ -729,6 +733,33 @@ static int _vg_is_registered_by_key(struct cmd_context *cmd, struct volume_group
 	return y;
 }
 
+static int _format_host_id_keys(uint64_t *keys, int count, int host_id,
+				char *buf, int bufsize)
+{
+	int pos = 0, i;
+
+	for (i = 0; i < count; i++) {
+		if (PR_KEY_HOST_ID(keys[i]) != host_id)
+			continue;
+		if (pos)
+			pos += snprintf(buf + pos, bufsize - pos, ", ");
+		pos += snprintf(buf + pos, bufsize - pos, "0x%llx", (unsigned long long)keys[i]);
+	}
+	return pos;
+}
+
+static uint64_t _find_key_by_gen(uint64_t *keys, int count, int host_id,
+				 uint32_t gen)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (PR_KEY_HOST_ID(keys[i]) == host_id && PR_KEY_GEN(keys[i]) == gen)
+			return keys[i];
+	}
+	return 0;
+}
+
 static int _vg_is_registered_by_host_id(struct cmd_context *cmd, struct volume_group *vg, int host_id,
 					uint64_t *key, uint32_t *gen, int *partial,
 					uint32_t sanlock_gen)
@@ -765,31 +796,17 @@ static int _vg_is_registered_by_host_id(struct cmd_context *cmd, struct volume_g
 		if (found_keys && found_count > 1) {
 			host_id_match_count = 0;
 			for (i = 0; i < found_count; i++) {
-				if (host_id == (int)(found_keys[i] & 0xFFFF))
+				if (PR_KEY_HOST_ID(found_keys[i]) == host_id)
 					host_id_match_count++;
 			}
 			if (host_id_match_count > 1) {
 				char keybuf[256];
-				int pos = 0;
 				multi_key_devs++;
-				for (i = 0; i < found_count; i++) {
-					if (host_id != (int)(found_keys[i] & 0xFFFF))
-						continue;
-					if (pos)
-						pos += snprintf(keybuf + pos, sizeof(keybuf) - pos, ", ");
-					pos += snprintf(keybuf + pos, sizeof(keybuf) - pos, "0x%llx", (unsigned long long)found_keys[i]);
-				}
+				_format_host_id_keys(found_keys, found_count, host_id, keybuf, sizeof(keybuf));
 				log_warn("WARNING: Multiple keys registered for local host_id %d on %s: %s.",
 					 host_id, dev_name(dev), keybuf);
-				if (sanlock_gen) {
-					for (i = 0; i < found_count; i++) {
-						if (host_id == (int)(found_keys[i] & 0xFFFF) &&
-						    sanlock_gen == (uint32_t)((found_keys[i] & 0xFFFFFF0000) >> 16)) {
-							found_key = found_keys[i];
-							break;
-						}
-					}
-				}
+				if (sanlock_gen)
+					found_key = _find_key_by_gen(found_keys, found_count, host_id, sanlock_gen);
 			}
 		}
 
@@ -805,7 +822,7 @@ static int _vg_is_registered_by_host_id(struct cmd_context *cmd, struct volume_g
 
 		/* verify the generation number matches on all devices */
 
-		found_gen = (found_key & 0xFFFFFF0000) >> 16;
+		found_gen = PR_KEY_GEN(found_key);
 
 		if (!first_key) {
 			first_key = found_key;
@@ -1014,7 +1031,7 @@ int persist_is_started_gen(struct cmd_context *cmd, struct volume_group *vg, int
 
 	/* if the generation in the key isn't correct, then return 0 (not started) */
 
-	key_gen = (our_key_val & 0xFFFFFF0000) >> 16;
+	key_gen = PR_KEY_GEN(our_key_val);
 
 	if (key_gen != ls_generation) {
 		log_error("Persistent reservation key 0x%llx gen %llu vs %llu needs update (run vgchange --persist start)",
@@ -1326,7 +1343,7 @@ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_
 			return 1;
 		}
 
-		key_gen = (our_key_val & 0xFFFFFF0000) >> 16;
+		key_gen = PR_KEY_GEN(our_key_val);
 
 		log_debug("persist_key_update found local_host_id %d key 0x%llx gen %u.",
 			  local_host_id, (unsigned long long) our_key_val, key_gen);
@@ -1523,13 +1540,9 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 
 			if (found_key_val && have_sanlock_gen && current_sanlock_gen &&
 			    found_keys && found_key_count > 1) {
-				for (ki = 0; ki < found_key_count; ki++) {
-					if (local_host_id == (int)(found_keys[ki] & 0xFFFF) &&
-					    current_sanlock_gen == (uint32_t)((found_keys[ki] & 0xFFFFFF0000) >> 16)) {
-						found_key_val = found_keys[ki];
-						break;
-					}
-				}
+				uint64_t gen_key = _find_key_by_gen(found_keys, found_key_count, local_host_id, current_sanlock_gen);
+				if (gen_key)
+					found_key_val = gen_key;
 			}
 
 			if (!found_key_val) {
@@ -1544,7 +1557,7 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 					log_warn("WARNING: Unexpected local key 0x%llx (previous 0x%llx) on %s.",
 						 (unsigned long long) found_key_val, (unsigned long long) our_key_val, dev_name(dev));
 
-				found_key_gen = (found_key_val & 0xFFFFFF0000) >> 16;
+				found_key_gen = PR_KEY_GEN(found_key_val);
 				if (!our_key_gen)
 					our_key_gen = found_key_gen;
 				else if (found_key_gen != our_key_gen)
@@ -1571,28 +1584,21 @@ int persist_check(struct cmd_context *cmd, struct volume_group *vg)
 			/* Check for any host_id with multiple registered keys */
 			if (!local_key && found_keys && (found_key_count > 1)) {
 				for (ki = 0; ki < found_key_count; ki++) {
-					host_id_ki = (int)(found_keys[ki] & 0xFFFF);
+					host_id_ki = PR_KEY_HOST_ID(found_keys[ki]);
 					for (kj = 0; kj < ki; kj++) {
-						if (host_id_ki == (int)(found_keys[kj] & 0xFFFF))
+						if (host_id_ki == PR_KEY_HOST_ID(found_keys[kj]))
 							break;
 					}
 					if (kj < ki)
 						continue;
 					key_matches = 0;
 					for (kj = ki; kj < found_key_count; kj++) {
-						if (host_id_ki == (int)(found_keys[kj] & 0xFFFF))
+						if (host_id_ki == PR_KEY_HOST_ID(found_keys[kj]))
 							key_matches++;
 					}
 					if (key_matches > 1) {
 						char keybuf[256];
-						int pos = 0;
-						for (kj = 0; kj < found_key_count; kj++) {
-							if (host_id_ki != (int)(found_keys[kj] & 0xFFFF))
-								continue;
-							if (pos)
-								pos += snprintf(keybuf + pos, sizeof(keybuf) - pos, ", ");
-							pos += snprintf(keybuf + pos, sizeof(keybuf) - pos, "0x%llx", (unsigned long long)found_keys[kj]);
-						}
+						_format_host_id_keys(found_keys, found_key_count, host_id_ki, keybuf, sizeof(keybuf));
 						if (host_id_ki == local_host_id) {
 							log_warn("WARNING: Multiple keys registered for local host_id %d on %s: %s.",
 								 host_id_ki, dev_name(dev), keybuf);
