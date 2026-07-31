@@ -31,7 +31,7 @@ cleanup_mounted_and_teardown()
 	aux teardown
 }
 
-aux prepare_pvs 16 32
+aux prepare_pvs 16 128
 
 get_devs
 
@@ -40,7 +40,7 @@ vgcreate $SHARED -s 1M "$vg" "${DEVICES[@]}"
 trap 'cleanup_mounted_and_teardown' EXIT
 
 # Create 10-way striped raid5 (11 legs total)
-lvcreate --yes --type raid5_ls --stripesize 64K --stripes 10 -L4 -n$lv1 $vg
+lvcreate --yes --type raid5_ls --stripesize 64K --stripes 10 -L32 -n $lv1 $vg
 check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
 check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
 check lv_first_seg_field $vg/$lv1 data_stripes 10
@@ -55,30 +55,39 @@ mkdir -p "$mount_dir/1" "$mount_dir/2"
 
 
 echo 3 >/proc/sys/vm/drop_caches
-cp -r /usr/bin "$mount_dir/1" &>/dev/null &
-CP1_PID=$!
-cp -r /usr/bin "$mount_dir/2" &>/dev/null &
-CP2_PID=$!
-sync &
-SYNC_PID=$!
-
 aux wait_for_sync $vg $lv1
-aux delay_dev "$dev2" 0 100
+aux delay_dev "$dev2" 1 500 "$(( $(get first_extent_sector "$dev2") + 128 )):"
+
+lvs -ao+seg_pe_ranges $vg
+
+cp -r /usr/bin "$mount_dir/1" &>/dev/null &
+PIDS=( $! )
+cp -r /usr/bin "$mount_dir/2" &>/dev/null &
+PIDS+=( $! )
+#sync &
+#SYNC_PID=( $! )
+
+df
 
 # Reshape it to 15 data stripes
 lvconvert --yes --stripes 15 $vg/$lv1
-aux disable_dev $dev1
-aux delay_dev "$dev2" 0 50
+aux disable_dev "$dev1"
+
+kill "${PIDS[@]}" 2>/dev/null || true
+wait "${PIDS[@]}" || true
+
+aux enable_dev "$dev2"
+#aux delay_dev "$dev2" 10 40 "$(get first_extent_sector "$dev2")"
 check lv_first_seg_field $vg/$lv1 segtype "raid5_ls"
 check lv_first_seg_field $vg/$lv1 stripesize "64.00k"
 check lv_first_seg_field $vg/$lv1 data_stripes 15
 check lv_first_seg_field $vg/$lv1 stripes 16
 
-kill "$CP1_PID" "$CP2_PID" "$SYNC_PID" 2>/dev/null || true
-wait "$CP1_PID" "$CP2_PID" "$SYNC_PID" || true
+df
 rm -fr "$mount_dir/[12]"
 
 sync
+
 umount "$mount_dir"
 
 fsck -fn "$DM_DEV_DIR/$vg/$lv1"
