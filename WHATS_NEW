@@ -1,10 +1,13 @@
-Version 2.03.42 - 
-==================
+Version 2.03.42 - 06th August 2026
+==================================
+  Add `--lockopt retries=N` to lvmlockd.
+  Add `--lockopt removeretry=SECONDS` to lvmlockd to retry vgremove.
   Use lockd_lv lock probes for pvmove holder availability in shared VGs.
   Auto-revert metadata when initial pvmove mirror activation fails.
   Refuse activation of pvmove-locked LV when pvmove runs on another node.
   Allow pvmove --abort without args when using lvmlockd.
   Add cluster lock lifecycle for pvmove LV in shared VGs.
+  Add support for pvmove in a shared VG.
   Allow lvremove -f to remove pvmove-locked LVs after interrupted pvmove.
   Handle active pvmove during vgchange -an with force flags.
   Fix pvmove completion to use suspend+resume for DM table reload.
