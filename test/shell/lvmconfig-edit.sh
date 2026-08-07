@@ -250,3 +250,14 @@ grep 'verbose=1' existing6.conf
 grep 'indent=1' existing6.conf
 not grep 'syslog' existing6.conf
 
+# Removing a key from a nonexistent subsection should not insert the subsection
+cat > existing7.conf <<'EOF'
+log {
+	verbose=0
+}
+EOF
+lvmconfig --edit allocation/cache_settings/smq/migration_threshold=- --file existing7.conf
+not grep 'cache_settings' existing7.conf
+not grep 'migration_threshold' existing7.conf
+grep 'verbose=0' existing7.conf
+

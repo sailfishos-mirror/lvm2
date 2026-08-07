@@ -262,13 +262,14 @@ int config_file_check(struct dm_config_tree *cft, const char **filename, struct 
 
 typedef enum {
 	CONFIG_MERGE_TYPE_RAW,	/* always replace old config values with new config values when merging */
-	CONFIG_MERGE_TYPE_TAGS	/* apply some exceptions when merging tag configs:
+	CONFIG_MERGE_TYPE_TAGS,	/* apply some exceptions when merging tag configs:
 				     - skip tags section
 				     - do not replace, but merge values of these settings:
 					activation/volume_list
 					devices/filter
 					devices/types
 				 */
+	CONFIG_MERGE_TYPE_REMOVE /* remove matching nodes from the target tree */
 } config_merge_t;
 
 int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,

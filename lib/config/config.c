@@ -1622,15 +1622,24 @@ static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn
 
 		/* Subsection? */
 		if (!cn->v) {
-			if (!(oldn = dm_config_find_node(cn1->child, cn->key)))
-				_insert_config_node(&cn1->child, cn1, cn);
-			else
+			if (!(oldn = dm_config_find_node(cn1->child, cn->key))) {
+				if (merge_type != CONFIG_MERGE_TYPE_REMOVE)
+					_insert_config_node(&cn1->child, cn1, cn);
+			} else {
 				_merge_section(oldn, cn, merge_type);
+				if (merge_type == CONFIG_MERGE_TYPE_REMOVE && !oldn->child)
+					dm_config_remove_node(cn1, oldn);
+			}
 			continue;
 		}
 		/* Not already present? */
 		if (!(oldn = dm_config_find_node(cn1->child, cn->key))) {
-			_insert_config_node(&cn1->child, cn1, cn);
+			if (merge_type != CONFIG_MERGE_TYPE_REMOVE)
+				_insert_config_node(&cn1->child, cn1, cn);
+			continue;
+		}
+		if (merge_type == CONFIG_MERGE_TYPE_REMOVE) {
+			dm_config_remove_node(cn1, oldn);
 			continue;
 		}
 		if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
@@ -1691,6 +1700,11 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
 				if (!_match_host_tags(&cmd->tags, tn))
 					continue;
 			}
+		}
+		if (merge_type == CONFIG_MERGE_TYPE_REMOVE) {
+			if ((oldn = dm_config_find_node(root, cn->key)))
+				_merge_section(oldn, cn, merge_type);
+			continue;
 		}
 		if (!(oldn = dm_config_find_node(root, cn->key))) {
 			/* NULL parent: top-level sections have no parent node */

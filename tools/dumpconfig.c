@@ -19,12 +19,6 @@
 #include <fcntl.h>
 #include <dirent.h>
 
-struct removal_spec {
-	struct dm_list list;
-	char *section_path;
-	char *field;
-};
-
 static void _set_value_format_flags(struct dm_config_node *cn, uint32_t flags)
 {
 	while (cn) {
@@ -44,10 +38,11 @@ static void _set_value_format_flags(struct dm_config_node *cn, uint32_t flags)
  * Returns 1 for additive edit, 0 for removal (value is "-"), -1 on error.
  * Must only be called while a dm_pool_grow_object is in progress on mem.
  */
-static int _edit_to_config_string(struct dm_pool *mem, const char *spec_str)
+static int _edit_to_config_string(struct dm_pool *mem, const char *spec_str, int for_removal)
 {
 	char str[4096];
-	char *eq, *value, *slash, *p, *next;
+	char *eq, *slash, *p, *next;
+	const char *value;
 	char *parts[CFG_PATH_MAX_LEN];
 	int nparts = 0, i;
 
@@ -69,8 +64,13 @@ static int _edit_to_config_string(struct dm_pool *mem, const char *spec_str)
 		return -1;
 	}
 
-	if (!strcmp(value, "-"))
+	if (!strcmp(value, "-")) {
+		if (!for_removal)
+			return 0;
+		value = "0";
+	} else if (for_removal) {
 		return 0;
+	}
 
 	/* Split path into section components + field */
 	p = str;
@@ -104,37 +104,6 @@ static int _edit_to_config_string(struct dm_pool *mem, const char *spec_str)
 			return -1;
 	}
 
-	return 1;
-}
-
-static int _parse_removal(struct dm_pool *mem, const char *spec_str,
-			  struct dm_list *rm_list)
-{
-	char str[4096];
-	char *eq, *slash;
-	struct removal_spec *rm;
-
-	if (dm_snprintf(str, sizeof(str), "%s", spec_str) < 0)
-		return_0;
-
-	if (!(eq = strchr(str, '=')))
-		return_0;
-
-	*eq = '\0';
-
-	if (!(slash = strrchr(str, '/')))
-		return_0;
-
-	*slash = '\0';
-
-	if (!(rm = dm_pool_zalloc(mem, sizeof(*rm))))
-		return_0;
-	if (!(rm->section_path = dm_pool_strdup(mem, str)))
-		return_0;
-	if (!(rm->field = dm_pool_strdup(mem, slash + 1)))
-		return_0;
-
-	dm_list_add(rm_list, &rm->list);
 	return 1;
 }
 
@@ -219,24 +188,6 @@ static int _config_validate(struct cmd_context *cmd, struct dm_config_tree *cft)
 	handle->suppress_messages = 0;
 
 	return config_def_check(handle);
-}
-
-static int _apply_removals(struct dm_config_tree *cft, struct dm_list *removals)
-{
-	struct removal_spec *rm;
-	struct dm_config_node *parent, *cn;
-
-	dm_list_iterate_items(rm, removals) {
-		log_verbose("Removing: %s/%s", rm->section_path, rm->field);
-
-		if (!(parent = dm_config_find_node(cft->root, rm->section_path)))
-			continue;
-
-		if ((cn = dm_config_find_node(parent->child, rm->field)))
-			dm_config_remove_node(parent, cn);
-	}
-
-	return 1;
 }
 
 static int _file_has_comments(const char *path)
@@ -502,7 +453,7 @@ static int edit_args_to_config_add(struct cmd_context *cmd, struct dm_pool *edit
 		else
 			*has_nonlocal = 1;
 
-		ret = _edit_to_config_string(edit_mem, edit_str);
+		ret = _edit_to_config_string(edit_mem, edit_str, 0);
 		if (ret < 0) {
 			dm_pool_abandon_object(edit_mem);
 			return EINVALID_CMD_LINE;
@@ -522,10 +473,14 @@ fail:
 }
 
 static int edit_args_to_config_remove(struct cmd_context *cmd, struct dm_pool *edit_mem,
-				      int *has_remove, struct dm_list *config_remove_list)
+				      int *has_remove, const char **config_remove_string)
 {
 	struct arg_value_group_list *group;
 	const char *edit_str;
+	int ret;
+
+	if (!dm_pool_begin_object(edit_mem, 256))
+		return_ECMD_FAILED;
 
 	dm_list_iterate_items(group, &cmd->arg_value_groups) {
 		if (!grouped_arg_is_set(group->arg_values, edit_ARG))
@@ -535,14 +490,21 @@ static int edit_args_to_config_remove(struct cmd_context *cmd, struct dm_pool *e
 		if (!edit_str)
 			continue;
 
-		if (strchr(edit_str, '=') && !strcmp(strchr(edit_str, '=') + 1, "-")) {
-			if (!_parse_removal(edit_mem, edit_str, config_remove_list))
-				return EINVALID_CMD_LINE;
+		ret = _edit_to_config_string(edit_mem, edit_str, 1);
+		if (ret < 0)
+			goto fail;
+		if (ret > 0)
 			*has_remove = 1;
-		}
 	}
 
+	if (!dm_pool_grow_object(edit_mem, "\0", 1))
+		goto fail;
+	if (!(*config_remove_string = dm_pool_end_object(edit_mem)))
+		return_ECMD_FAILED;
 	return 0;
+fail:
+	dm_pool_abandon_object(edit_mem);
+	return EINVALID_CMD_LINE;
 }
 
 int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
@@ -553,10 +515,11 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 	struct config_def_tree_spec tree_spec = {0};
 	struct dm_config_tree *cft = NULL;
 	struct dm_config_tree *edits_add_cft = NULL;
+	struct dm_config_tree *edits_remove_cft = NULL;
 	struct cft_check_handle *cft_check_handle = NULL;
-	struct dm_list config_remove_list;
 	const char *config_file;
 	const char *config_add_string;
+	const char *config_remove_string;
 	struct dm_config_tree *long_cft = NULL;
 	struct dm_pool *edit_mem;
 	int has_local = 0, has_nonlocal = 0;
@@ -567,7 +530,6 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 	int ret;
 
 	tree_spec.cmd = cmd;
-	dm_list_init(&config_remove_list);
 
 	if (!(edit_mem = dm_pool_create("edit specs", 1024)))
 		return_ECMD_FAILED;
@@ -576,7 +538,7 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 	if (ret)
 		goto out;
 
-	ret = edit_args_to_config_remove(cmd, edit_mem, &has_remove, &config_remove_list);
+	ret = edit_args_to_config_remove(cmd, edit_mem, &has_remove, &config_remove_string);
 	if (ret)
 		goto out;
 
@@ -624,8 +586,13 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 	if (!config_set_source(cft, CONFIG_FILE))
 		goto out;
 
-	if (has_remove)
-		_apply_removals(cft, &config_remove_list);
+	if (has_remove) {
+		if (!(edits_remove_cft = dm_config_from_string(config_remove_string))) {
+			log_error("Failed to parse removal specifications");
+			goto out;
+		}
+		merge_config_tree(cmd, cft, edits_remove_cft, CONFIG_MERGE_TYPE_REMOVE);
+	}
 
 	if (dm_snprintf(lvm_conf_path, sizeof(lvm_conf_path), "%s/lvm.conf", cmd->system_dir) < 0)
 		goto out;
@@ -688,6 +655,8 @@ out:
 		dm_config_destroy(long_cft);
 	if (edits_add_cft)
 		dm_config_destroy(edits_add_cft);
+	if (edits_remove_cft)
+		dm_config_destroy(edits_remove_cft);
 	if (cft)
 		dm_config_destroy(cft);
 	return ret;
