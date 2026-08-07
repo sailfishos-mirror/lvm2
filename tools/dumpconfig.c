@@ -511,9 +511,14 @@ static int edit_args_to_config_add(struct cmd_context *cmd, struct dm_pool *edit
 			*has_add = 1;
 	}
 
-	dm_pool_grow_object(edit_mem, "\0", 1);
-	*config_add_string = dm_pool_end_object(edit_mem);
+	if (!dm_pool_grow_object(edit_mem, "\0", 1))
+		goto fail;
+	if (!(*config_add_string = dm_pool_end_object(edit_mem)))
+		return_ECMD_FAILED;
 	return 0;
+fail:
+	dm_pool_abandon_object(edit_mem);
+	return EINVALID_CMD_LINE;
 }
 
 static int edit_args_to_config_remove(struct cmd_context *cmd, struct dm_pool *edit_mem,
@@ -547,8 +552,7 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 	const char *output_file = arg_str_value(cmd, output_ARG, NULL);
 	struct config_def_tree_spec tree_spec = {0};
 	struct dm_config_tree *cft = NULL;
-	struct dm_config_tree *edits_cft = NULL;
-	struct dm_config_tree *result_cft = NULL;
+	struct dm_config_tree *edits_add_cft = NULL;
 	struct cft_check_handle *cft_check_handle = NULL;
 	struct dm_list config_remove_list;
 	const char *config_file;
@@ -603,25 +607,18 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 		}
 	}
 
-	/* combine existing (or new) cft with additions */
+	/*
+	 * Merge edit trees into cft. merge_config_tree moves nodes from
+	 * source into destination, so edits_add_cft and edits_remove_cft
+	 * must not be destroyed until cft is no longer needed.
+	 */
 	if (has_add) {
-		if (!(edits_cft = dm_config_from_string(config_add_string))) {
+		if (!(edits_add_cft = dm_config_from_string(config_add_string))) {
 			log_error("Failed to parse edit specifications");
 			goto out;
 		}
 
-		dm_config_insert_cascaded_tree(edits_cft, cft);
-		if (!(result_cft = dm_config_flatten(edits_cft))) {
-			log_error("Failed to merge edits into config");
-			dm_config_remove_cascaded_tree(edits_cft);
-			dm_config_destroy(edits_cft);
-			goto out;
-		}
-
-		dm_config_remove_cascaded_tree(edits_cft);
-		dm_config_destroy(edits_cft);
-		config_destroy(cft);
-		cft = result_cft;
+		merge_config_tree(cmd, cft, edits_add_cft, CONFIG_MERGE_TYPE_RAW);
 	}
 
 	if (!config_set_source(cft, CONFIG_FILE))
@@ -689,6 +686,8 @@ out:
 	dm_pool_destroy(edit_mem);
 	if (long_cft)
 		dm_config_destroy(long_cft);
+	if (edits_add_cft)
+		dm_config_destroy(edits_add_cft);
 	if (cft)
 		dm_config_destroy(cft);
 	return ret;
