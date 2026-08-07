@@ -334,6 +334,11 @@ out:
 	return 1;
 }
 
+int dev_cache_add_alias(struct device *dev, const char *name)
+{
+	return _add_alias(dev, name, NO_HASH);
+}
+
 int get_sysfs_binary(const char *path, char *buf, size_t buf_size, int *retlen)
 {
 	ssize_t ret;

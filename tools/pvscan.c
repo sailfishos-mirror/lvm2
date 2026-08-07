@@ -1538,14 +1538,28 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	if ((dm_list_size(&pvscan_devs) == 1) &&
 	    !cmd->enable_devices_file &&
 	    !cmd->enable_devices_list) {
-		char *env_str;
-		struct dm_list *env_aliases;
+		const char *env_str;
+		char *buf, *name, *end;
 		devl = dm_list_item(dm_list_first(&pvscan_devs), struct device_list);
 		if ((env_str = getenv("DEVLINKS"))) {
 			log_debug("Finding symlink names from DEVLINKS for filter regex.");
 			log_debug("DEVLINKS %s", env_str);
-			env_aliases = str_to_str_list(cmd->mem, env_str, " ", 0);
-			dm_list_splice(&devl->dev->aliases, env_aliases);
+			if ((buf = dm_pool_strdup(cmd->mem, env_str))) {
+				name = buf;
+				while (*name) {
+					while (*name == ' ')
+						name++;
+					if (!*name)
+						break;
+					end = name;
+					while (*end && *end != ' ')
+						end++;
+					if (*end)
+						*end++ = '\0';
+					dev_cache_add_alias(devl->dev, name);
+					name = end;
+				}
+			}
 		} else {
 			log_debug("Finding symlink names from /dev for filter regex.");
 			dev_cache_scan(cmd);

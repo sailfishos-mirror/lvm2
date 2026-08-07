@@ -78,6 +78,7 @@ struct device *dev_cache_get_existing(struct cmd_context *cmd, const char *name,
 struct device *dev_cache_get_by_devt(struct cmd_context *cmd, dev_t devt);
 struct device *dev_cache_get_by_pvid(struct cmd_context *cmd, const char *pvid);
 void dev_cache_verify_aliases(struct device *dev);
+int dev_cache_add_alias(struct device *dev, const char *name);
 
 struct device *dev_cache_get_dev_by_name(const char *name);
 
