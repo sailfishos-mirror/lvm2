@@ -46,3 +46,41 @@ flatten < lvmdumpconfig | grep 'log/verbose=1'
 lvm dumpconfig -f lvmdumpconfig
 flatten < lvmdumpconfig | grep 'log/indent=1'
 rm -f "$etc/lvm_foo.conf"
+
+# Test that subsections are correctly merged via --config + --mergedconfig.
+# This exercises the _merge_section code path for nested subsection
+# insertion and merging (nodes with v == NULL).
+
+# Subsection not present in base config - should be inserted whole
+lvm dumpconfig --mergedconfig \
+  --config 'allocation { cache_settings { smq { migration_threshold = 2048 } } }' \
+  -f lvmdumpconfig
+grep 'migration_threshold=2048' lvmdumpconfig
+
+# Subsection merged alongside a flat setting in the same top-level section
+lvm dumpconfig --mergedconfig \
+  --config 'allocation { maximise_cling = 0 cache_settings { smq { migration_threshold = 1024 } } }' \
+  -f lvmdumpconfig
+grep 'maximise_cling=0' lvmdumpconfig
+grep 'migration_threshold=1024' lvmdumpconfig
+
+# Existing base config settings in the same top-level section survive the merge
+grep 'zero_metadata=' lvmdumpconfig
+
+# Test --list output with unregistered subsection values.
+# --list uses _out_line_list and _cfg_node_make_path which walk the parent
+# chain, so these verify that parent pointers are correct throughout.
+
+# --type full --list: clones current config into def tree, exercises
+# dm_config_clone_node_with_mem parent pointer fix and _cfg_node_make_path
+lvm dumpconfig --type full --mergedconfig --list \
+  --config 'allocation { cache_settings { smq { migration_threshold = 2048 } } }' \
+  -f lvmdumpconfig
+grep 'allocation/cache_settings/smq/migration_threshold=2048' lvmdumpconfig
+
+# --type current --list: uses parsed tree directly, exercises the
+# _file() dangling parent pointer fix and _cfg_node_make_path
+lvm dumpconfig --type current --mergedconfig --list \
+  --config 'allocation { cache_settings { smq { migration_threshold = 2048 } } }' \
+  -f lvmdumpconfig
+grep 'allocation/cache_settings/smq/migration_threshold=2048' lvmdumpconfig
