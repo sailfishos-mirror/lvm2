@@ -1567,10 +1567,13 @@ const struct dm_config_node *find_config_tree_array(struct cmd_context *cmd, int
 	return cn;
 }
 
-/* Insert cn2 after cn1 */
 static void _insert_config_node(struct dm_config_node **cn1,
+				struct dm_config_node *parent,
 				struct dm_config_node *cn2)
 {
+	if (parent)
+		cn2->parent = parent;
+
 	if (!*cn1) {
 		*cn1 = cn2;
 		cn2->sib = NULL;
@@ -1600,12 +1603,16 @@ static void _merge_section(struct dm_config_node *cn1, struct dm_config_node *cn
 		}
 
 		/* Subsection? */
-		if (!cn->v)
-			/* Ignore - we don't have any of these yet */
+		if (!cn->v) {
+			if (!(oldn = dm_config_find_node(cn1->child, cn->key)))
+				_insert_config_node(&cn1->child, cn1, cn);
+			else
+				_merge_section(oldn, cn, merge_type);
 			continue;
+		}
 		/* Not already present? */
 		if (!(oldn = dm_config_find_node(cn1->child, cn->key))) {
-			_insert_config_node(&cn1->child, cn);
+			_insert_config_node(&cn1->child, cn1, cn);
 			continue;
 		}
 		if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
@@ -1668,7 +1675,8 @@ int merge_config_tree(struct cmd_context *cmd, struct dm_config_tree *cft,
 			}
 		}
 		if (!(oldn = dm_config_find_node(root, cn->key))) {
-			_insert_config_node(&cft->root, cn);
+			/* NULL parent: top-level sections have no parent node */
+			_insert_config_node(&cft->root, NULL, cn);
 			if (merge_type == CONFIG_MERGE_TYPE_TAGS) {
 				/* Remove any "tags" nodes */
 				for (cn2 = cn->child; cn2; cn2 = cn2->sib) {
