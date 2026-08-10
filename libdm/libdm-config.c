@@ -1458,6 +1458,12 @@ struct dm_config_node *dm_config_clone_node_with_mem(struct dm_pool *mem, const 
 	    (siblings && cn->sib && !(new_cn->sib = dm_config_clone_node_with_mem(mem, cn->sib, siblings))))
 		return_NULL; /* 'new_cn' released with mem pool */
 
+	if (new_cn->child) {
+		struct dm_config_node *c;
+		for (c = new_cn->child; c; c = c->sib)
+			c->parent = new_cn;
+	}
+
 	return new_cn;
 }
 
