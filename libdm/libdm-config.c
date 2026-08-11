@@ -524,11 +524,18 @@ static char *_dup_string_tok(struct parser *p)
 static struct dm_config_node *_file(struct parser *p)
 {
 	struct dm_config_node root = { 0 };
+	struct dm_config_node *cn;
+
 	root.key = "<root>";
 
 	while (p->t != TOK_EOF)
 		if (!_section(p, &root))
 			return_NULL;
+
+	/* Clear dangling parent pointers to stack variable */
+	for (cn = root.child; cn; cn = cn->sib)
+		cn->parent = NULL;
+
 	return root.child;
 }
 
