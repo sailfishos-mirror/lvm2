@@ -1855,29 +1855,49 @@ static int _should_print_cfg_with_undef_def_val(struct out_baton *out, const cfg
 	return out->tree_spec->check_status && (out->tree_spec->check_status[cn->id] & CFG_USED);
 }
 
+static int _cfg_node_make_path(char *buf, size_t buf_size, const struct dm_config_node *cn)
+{
+	int count = 0;
+	int n;
+
+	if (cn->parent) {
+		count = _cfg_node_make_path(buf, buf_size, cn->parent);
+		if (count < 0)
+			return -1;
+	}
+
+	if ((n = dm_snprintf(buf + count, buf_size - count, "%s%s",
+			     count ? "/" : "", cn->key)) < 0)
+		return -1;
+
+	return count + n;
+}
+
 static int _out_line_list(const struct dm_config_node *cn, const char *line, struct out_baton *out)
 {
 	char config_path[CFG_PATH_MAX_LEN];
 	char summary[MAX_COMMENT_LINE+1];
-	char version[9];
-	const struct cfg_def_item *cfg_def;
+	char version[9] = { 0 };
+	const struct cfg_def_item *cfg_def = NULL;
 	int pos = 0;
 	const char *val = NULL;
 
-	cfg_def = cfg_def_get_item_p(cn->id);
-
-	if (cfg_def->type & CFG_TYPE_SECTION)
+	if (!cn->v)
 		return 1;
 
-	if (!_cfg_def_make_path(config_path, CFG_PATH_MAX_LEN, cfg_def->id, cfg_def, 1))
-		return_0;
-
-	if (out->tree_spec->withversions && !_get_config_node_version(cfg_def->since_version, version))
+	if (_cfg_node_make_path(config_path, CFG_PATH_MAX_LEN, cn) < 0)
 		return_0;
 
 	summary[0] = '\0';
-	if (out->tree_spec->withsummary && cfg_def->comment)
-		_copy_one_line(cfg_def->comment, summary, &pos, strlen(cfg_def->comment));
+	if (cn->id > 0) {
+		cfg_def = cfg_def_get_item_p(cn->id);
+
+		if (out->tree_spec->withversions && !_get_config_node_version(cfg_def->since_version, version))
+			return_0;
+
+		if (out->tree_spec->withsummary && cfg_def->comment)
+			_copy_one_line(cfg_def->comment, summary, &pos, strlen(cfg_def->comment));
+	}
 
 	if (out->tree_spec->type != CFG_DEF_TREE_LIST) {
 		if (!(val = strrchr(line, '=')))
@@ -1897,14 +1917,15 @@ static int _out_line_list(const struct dm_config_node *cn, const char *line, str
 
 static int _out_line_tree(const struct dm_config_node *cn, const char *line, struct out_baton *out)
 {
-	const struct cfg_def_item *cfg_def;
+	const struct cfg_def_item *cfg_def = NULL;
 	int space_prefix_len = 0;
 	const char *p;
 	size_t len;
 
-	cfg_def = cfg_def_get_item_p(cn->id);
+	if (cn->id > 0)
+		cfg_def = cfg_def_get_item_p(cn->id);
 
-	if (out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
+	if (cfg_def && out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
 		if ((space_prefix_len = strspn(line, "\t "))) {
 			len = strlen(line);
 			p = line + space_prefix_len;
@@ -1926,7 +1947,8 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 			line++;
 	}
 
-	if ((out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
+	if (cfg_def &&
+	    (out->tree_spec->type != CFG_DEF_TREE_CURRENT) &&
 	    (out->tree_spec->type != CFG_DEF_TREE_DIFF) &&
 	    (out->tree_spec->type != CFG_DEF_TREE_FULL) &&
 	    !out->tree_spec->valuesonly &&
@@ -1941,10 +1963,10 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 	}
 
 	/* print the line as it is */
-	if (_should_print_cfg_with_undef_def_val(out, cfg_def, cn))
+	if (!cfg_def || _should_print_cfg_with_undef_def_val(out, cfg_def, cn))
 		fprintf(out->fp, "%s\n", line);
 
-	if (out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION) && space_prefix_len)
+	if (cfg_def && out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION) && space_prefix_len)
 		dm_pool_free(out->mem, (char *) line);
 
 	return 1;
@@ -1956,7 +1978,7 @@ static int _out_line_fn(const struct dm_config_node *cn, const char *line, void 
 	struct out_baton *out = baton;
 
 	if ((out->tree_spec->type == CFG_DEF_TREE_DIFF) &&
-	    (!(out->tree_spec->check_status[cn->id] & CFG_DIFF)))
+	    (cn->id <= 0 || !(out->tree_spec->check_status[cn->id] & CFG_DIFF)))
 		return 1;
 
 	if (out->tree_spec->listmode)
