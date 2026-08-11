@@ -2104,7 +2104,7 @@ static struct dm_config_node *_add_def_node(struct dm_config_tree *cft,
 		if (!parent->child)
 			parent->child = cn;
 	} else
-		cn->parent = cn;
+		cn->parent = NULL;
 
 	if (relay)
 		relay->sib = cn;
