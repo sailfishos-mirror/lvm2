@@ -268,7 +268,7 @@ static int lockd_lockargs_get_locklv(char *vg_args, char *lock_lv_name)
 	char args[MAX_ARGS+1] = {0};
 	char *p, *name;
 
-	strncpy(args, vg_args, MAX_ARGS);
+	dm_strncpy(args, vg_args, sizeof(args));
 
 	if (!(p = strchr(args, ':')))
 		return -1;
@@ -280,7 +280,7 @@ static int lockd_lockargs_get_locklv(char *vg_args, char *lock_lv_name)
 	if ((p = strchr(name, ':')))
 		*p = '\0';
 
-	strncpy(lock_lv_name, name, MAX_ARGS);
+	dm_strncpy(lock_lv_name, name, MAX_ARGS+1);
 	return 0;
 }
 
@@ -800,8 +800,8 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 	if (daemon_test) {
 		if (!gl_lsname_sanlock[0])
 			dm_strncpy(gl_lsname_sanlock, ls_name, sizeof(gl_lsname_sanlock));
-		rv = snprintf(vg_args, MAX_ARGS, "%s:%s", VG_LOCK_ARGS_V1, lock_lv_name);
-		if (rv >= MAX_ARGS)
+		rv = snprintf(vg_args, MAX_ARGS+1, "%s:%s", VG_LOCK_ARGS_V1, lock_lv_name);
+		if (rv >= MAX_ARGS+1)
 			log_debug("init_vg_san vg_args may be too long %d %s", rv, vg_args);
 		return 0;
 	}
@@ -1007,14 +1007,14 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
 		offset += align_size;
 	}
 
-	rv = snprintf(vg_args, MAX_ARGS, "%s:%s%s%s%s",
+	rv = snprintf(vg_args, MAX_ARGS+1, "%s:%s%s%s%s",
 		      (no_timeout || persist || no_watchdog) ? VG_LOCK_ARGS_V2 : VG_LOCK_ARGS_V1,
 		      lock_lv_name,
 		      no_timeout ? ":notimeout" : "",
 		      no_watchdog ? ":nowatchdog" : "",
 		      persist ? ":persist" : "");
 
-	if (rv >= MAX_ARGS) {
+	if (rv >= MAX_ARGS+1) {
 		log_error("S %s init_vg_san vg_args string too long %d %s", ls_name, rv, vg_args);
 		return -EINVAL;
 	}
@@ -1060,7 +1060,7 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char 
 
 	if (daemon_test) {
 		align_size = 1024 * 1024;
-		snprintf(lv_args, MAX_ARGS, "%s:%llu",
+		snprintf(lv_args, MAX_ARGS+1, "%s:%llu",
 			 LV_LOCK_ARGS_V1,
 			 (unsigned long long)((align_size * LV_LOCK_BEGIN) + (align_size * daemon_test_lv_count)));
 		daemon_test_lv_count++;
@@ -1164,7 +1164,7 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char 
 
 			rv = sanlock_write_resource(&rd.rs, 0, 0, write_rs_flags);
 			if (!rv) {
-				snprintf(lv_args, MAX_ARGS, "%s:%llu",
+				snprintf(lv_args, MAX_ARGS+1, "%s:%llu",
 				         LV_LOCK_ARGS_V1, (unsigned long long)offset);
 			} else {
 				log_error("S %s init_lv_san write error %d offset %llu",
@@ -3090,7 +3090,7 @@ int lm_setlockargs_vg_sanlock(char *ls_name, char *vg_name, struct action *act)
 
 	update_info_file(vg_name, no_timeout, no_watchdog);
 
-	rv = snprintf(act->vg_args, MAX_ARGS, "%s:%s%s%s%s",
+	rv = snprintf(act->vg_args, MAX_ARGS+1, "%s:%s%s%s%s",
 		      (no_timeout || persist || no_watchdog) ? VG_LOCK_ARGS_V2 : VG_LOCK_ARGS_V1,
 		      lock_lv_name,
 		      no_timeout ? ":notimeout" : "",
@@ -3099,7 +3099,7 @@ int lm_setlockargs_vg_sanlock(char *ls_name, char *vg_name, struct action *act)
 
 	log_debug("S %s setlockargs new args %s", ls_name, act->vg_args);
 
-	if (rv >= MAX_ARGS) {
+	if (rv >= MAX_ARGS+1) {
 		log_error("S %s setlockargs vg_args string too long %d %s", ls_name, rv, act->vg_args);
 		return -EINVAL;
 	}

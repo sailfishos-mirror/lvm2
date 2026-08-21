@@ -1040,7 +1040,7 @@ int last_string_from_args(char *args_in, char *last)
         }
 
 	if (str) {
-		snprintf(last, MAX_ARGS, "%s", str + 1);
+		snprintf(last, MAX_ARGS+1, "%s", str + 1);
 		return 0;
 	}
 	return -1;
@@ -1458,7 +1458,7 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
 		goto add_lk;
 
 	if (r->type == LD_RT_LV && act->lv_args[0])
-		memcpy(r->lv_args, act->lv_args, MAX_ARGS);
+		dm_strncpy(r->lv_args, act->lv_args, sizeof(r->lv_args));
 
 	rv = lm_lock(ls, r, act->mode, act, &vb, retry, owner,
 		     act->flags & LD_AF_ADOPT_ONLY ? 1 : 0,
@@ -3234,7 +3234,7 @@ static void *lockspace_thread_main(void *arg_in)
 						rv = -ENOMEM;
 					} else {
 						dm_strncpy(r->name, act->lv_uuid, sizeof(r->name));
-						memcpy(r->lv_args, act->lv_args, MAX_ARGS);
+						dm_strncpy(r->lv_args, act->lv_args, sizeof(r->lv_args));
 						r->type = LD_RT_LV;
 						r->mode = LD_LK_UN;
 						lm_add_resource(ls, r);
@@ -4369,7 +4369,7 @@ static int work_init_lv(struct action *act)
 		/* ls is NULL if the lockspace is not started, which happens
 		   for vgchange --locktype sanlock. */
 		rv = lm_init_lv_sanlock(ls, ls_name, act->vg_name, act->lv_uuid, vg_args, lv_args, act->other_args);
-		memcpy(act->lv_args, lv_args, MAX_ARGS);
+		dm_strncpy(act->lv_args, lv_args, sizeof(act->lv_args));
 		return rv;
 
 	} else if (act->lm_type == LD_LM_DLM) {
@@ -4394,7 +4394,7 @@ static int work_vg_status(struct action *act)
 	pthread_mutex_lock(&lockspaces_mutex);
 	ls = find_lockspace_name(ls_name);
 	if (ls) {
-		memcpy(act->vg_args, ls->vg_args, MAX_ARGS);
+		dm_strncpy(act->vg_args, ls->vg_args, sizeof(act->vg_args));
 		act->lm_type = ls->lm_type;
 		lm_vg_status(ls, act);
 	} else {
@@ -6057,19 +6057,19 @@ static void client_recv_action(struct client *cl)
 
 	str = daemon_request_str(req, "vg_lock_args", NULL);
 	if (str && strcmp(str, "none"))
-		strncpy(act->vg_args, str, MAX_ARGS);
+		dm_strncpy(act->vg_args, str, sizeof(act->vg_args));
 
 	str = daemon_request_str(req, "lv_lock_args", NULL);
 	if (str && strcmp(str, "none"))
-		strncpy(act->lv_args, str, MAX_ARGS);
+		dm_strncpy(act->lv_args, str, sizeof(act->lv_args));
 
 	str = daemon_request_str(req, "prev_lv_args", NULL);
 	if (str && strcmp(str, "none"))
-		strncpy(act->other_args, str, MAX_ARGS);
+		dm_strncpy(act->other_args, str, sizeof(act->other_args));
 
 	str = daemon_request_str(req, "set_lock_args", NULL);
 	if (str && strcmp(str, "none"))
-		strncpy(act->other_args, str, MAX_ARGS);
+		dm_strncpy(act->other_args, str, sizeof(act->other_args));
 
 	/* start_vg will include lvmlocal.conf local/host_id here */
 	val = daemon_request_int(req, "host_id", 0);
@@ -6710,7 +6710,7 @@ static void adopt_locks(void)
 		 	 */
 			log_debug("ls %s matches vg %s", ls1->name, ls2->vg_name);
 			memcpy(ls1->vg_uuid, ls2->vg_uuid, 64);
-			memcpy(ls1->vg_args, ls2->vg_args, MAX_ARGS);
+			dm_strncpy(ls1->vg_args, ls2->vg_args, sizeof(ls1->vg_args));
 			list_for_each_entry_safe(r, rsafe, &ls2->resources, list) {
 				list_del(&r->list);
 				list_add(&r->list, &ls1->resources);
@@ -6789,7 +6789,7 @@ static void adopt_locks(void)
 		act->client_id = INTERNAL_CLIENT_ID;
 		dm_strncpy(act->vg_name, ls->vg_name, sizeof(act->vg_name));
 		memcpy(act->vg_uuid, ls->vg_uuid, 64);
-		memcpy(act->vg_args, ls->vg_args, MAX_ARGS);
+		dm_strncpy(act->vg_args, ls->vg_args, sizeof(act->vg_args));
 		act->host_id = ls->host_id;
 
 		log_debug("adopt add %s vg lockspace %s", lm_str(act->lm_type), act->vg_name);
