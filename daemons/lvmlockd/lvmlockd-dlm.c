@@ -151,9 +151,9 @@ int lm_init_vg_dlm(char *ls_name, char *vg_name, uint32_t flags, char *vg_args)
 		return -EARGS;
 	}
 
-	rv = snprintf(vg_args, MAX_ARGS+1, "%s:%s", lock_args_version, clustername);
-	if (rv >= MAX_ARGS+1)
-		log_debug("init_vg_dlm vg_args may be too long %d %s", rv, vg_args);
+	rv = dm_snprintf(vg_args, MAX_ARGS+1, "%s:%s", lock_args_version, clustername);
+	if (rv < 0)
+		log_debug("init_vg_dlm vg_args may be too long %s", vg_args);
 	rv = 0;
 
 	log_debug("init_vg_dlm done %s vg_args %s", ls_name, vg_args);

@@ -1040,7 +1040,7 @@ int last_string_from_args(char *args_in, char *last)
         }
 
 	if (str) {
-		snprintf(last, MAX_ARGS+1, "%s", str + 1);
+		dm_strncpy(last, str + 1, MAX_ARGS+1);
 		return 0;
 	}
 	return -1;
