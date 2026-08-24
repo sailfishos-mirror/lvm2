@@ -1413,58 +1413,74 @@ __attribute__((nonnull(1, 2)))
 static struct dm_config_value *_clone_config_value(struct dm_pool *mem,
 						   const struct dm_config_value *v)
 {
-	struct dm_config_value *new_cv;
+	struct dm_config_value *head = NULL, *new_cv, *tail = NULL;
 
-	if (v->type == DM_CFG_STRING) {
-		if (!(new_cv = _create_str_value(mem, v->v.str, strlen(v->v.str)))) {
-			log_error("Failed to clone string config value.");
-			return NULL;
+	while (v) {
+		if (v->type == DM_CFG_STRING) {
+			if (!(new_cv = _create_str_value(mem, v->v.str, strlen(v->v.str)))) {
+				log_error("Failed to clone string config value.");
+				return NULL;
+			}
+		} else {
+			if (!(new_cv = _create_value(mem))) {
+				log_error("Failed to clone config value.");
+				return NULL;
+			}
+			new_cv->v = v->v;
 		}
-	} else {
-		if (!(new_cv = _create_value(mem))) {
-			log_error("Failed to clone config value.");
-			return NULL;
-		}
-		new_cv->v = v->v;
+
+		new_cv->type = v->type;
+		new_cv->format_flags = v->format_flags;
+
+		if (!head)
+			head = new_cv;
+		else
+			tail->next = new_cv;
+		tail = new_cv;
+
+		v = v->next;
 	}
 
-	new_cv->type = v->type;
-	new_cv->format_flags = v->format_flags;
-
-	if (v->next && !(new_cv->next = _clone_config_value(mem, v->next)))
-		return_NULL;
-
-	return new_cv;
+	return head;
 }
 
 struct dm_config_node *dm_config_clone_node_with_mem(struct dm_pool *mem, const struct dm_config_node *cn, int siblings)
 {
-	struct dm_config_node *new_cn;
+	struct dm_config_node *head = NULL, *new_cn, *tail = NULL;
 
 	if (!cn) {
 		log_error("Cannot clone NULL config node.");
 		return NULL;
 	}
 
-	if (!(new_cn = _create_node(mem, cn->key, cn->key ? strlen(cn->key) : 0))) {
-		log_error("Failed to clone config node.");
-		return NULL;
-	}
+	do {
+		if (!(new_cn = _create_node(mem, cn->key, cn->key ? strlen(cn->key) : 0))) {
+			log_error("Failed to clone config node.");
+			return NULL;
+		}
 
-	new_cn->id = cn->id;
+		new_cn->id = cn->id;
 
-	if ((cn->v && !(new_cn->v = _clone_config_value(mem, cn->v))) ||
-	    (cn->child && !(new_cn->child = dm_config_clone_node_with_mem(mem, cn->child, 1))) ||
-	    (siblings && cn->sib && !(new_cn->sib = dm_config_clone_node_with_mem(mem, cn->sib, siblings))))
-		return_NULL; /* 'new_cn' released with mem pool */
+		if ((cn->v && !(new_cn->v = _clone_config_value(mem, cn->v))) ||
+		    (cn->child && !(new_cn->child = dm_config_clone_node_with_mem(mem, cn->child, 1))))
+			return_NULL; /* 'new_cn' released with mem pool */
 
-	if (new_cn->child) {
-		struct dm_config_node *c;
-		for (c = new_cn->child; c; c = c->sib)
-			c->parent = new_cn;
-	}
+		if (new_cn->child) {
+			struct dm_config_node *c;
+			for (c = new_cn->child; c; c = c->sib)
+				c->parent = new_cn;
+		}
 
-	return new_cn;
+		if (!head)
+			head = new_cn;
+		else
+			tail->sib = new_cn;
+		tail = new_cn;
+
+		cn = cn->sib;
+	} while (siblings && cn);
+
+	return head;
 }
 
 struct dm_config_node *dm_config_clone_node(struct dm_config_tree *cft, const struct dm_config_node *cn, int siblings)
