@@ -1977,7 +1977,11 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
 
 	if (!vg_is_shared(vg) && !start_done) {
 		int yes = 0;
-		if (!persist_is_started_by_other_hosts(cmd, vg, &yes) || yes) {
+		if (!persist_is_started_by_other_hosts(cmd, vg, &yes)) {
+			log_error("Failed to check if other hosts have PR started.");
+			return ECMD_FAILED;
+		}
+		if (yes) {
 			log_error("Cannot change settings while other hosts have PR started.");
 			return ECMD_FAILED;
 		}
