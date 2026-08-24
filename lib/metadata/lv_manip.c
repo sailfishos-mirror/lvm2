@@ -1054,7 +1054,7 @@ struct lv_segment *alloc_lv_segment(const struct segment_type *segtype,
 {
 	struct lv_segment *seg;
 	struct dm_pool *mem = lv->vg->vgmem;
-	uint32_t areas_sz;
+	size_t areas_sz;
 
 	if (!segtype) {
 		log_error(INTERNAL_ERROR "alloc_lv_segment: Missing segtype.");
@@ -1375,7 +1375,7 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
 int add_lv_segment_areas(struct lv_segment *seg, uint32_t new_area_count)
 {
 	struct lv_segment_area *newareas;
-	uint32_t areas_sz;
+	size_t areas_sz;
 
 	if (!_validate_area_count(new_area_count))
 		return_0;
