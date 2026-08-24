@@ -1847,10 +1847,14 @@ int lockd_stop_vg(struct cmd_context *cmd, struct volume_group *vg)
 
 	if (!vg_is_shared(vg))
 		return 1;
-	if (!_use_lvmlockd)
+	if (!_use_lvmlockd) {
+		log_error("VG %s stop failed: lvmlockd is not enabled", vg->name);
 		return 0;
-	if (!_lvmlockd_connected)
+	}
+	if (!_lvmlockd_connected) {
+		log_error("VG %s stop failed: lvmlockd is not running", vg->name);
 		return 0;
+	}
 
 	log_debug("lockd stop VG %s lock_type %s",
 		  vg->name, vg->lock_type ? vg->lock_type : "empty");
