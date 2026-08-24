@@ -70,7 +70,7 @@ static unsigned _bits_per(unsigned n)
 
 static unsigned _delta_min_bits(unsigned mean_delta)
 {
-	unsigned incr_keys = (unsigned)round(log(2.0) * mean_delta);
+	unsigned incr_keys = (unsigned)lround(log(2.0) * mean_delta);
 
 	return _bits_per(incr_keys + 1);
 }
