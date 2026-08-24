@@ -604,6 +604,7 @@ int dev_get_partition_number(struct device *dev, int *num)
 #define PART_GPT_HEADER_OFFSET_LBA 0x01
 #define PART_GPT_MAGIC 0x5452415020494645UL /* "EFI PART" string */
 #define PART_GPT_ENTRIES_FIELDS_OFFSET UINT64_C(0x48)
+#define PART_GPT_MIN_ENTRY_SIZE 128
 
 struct partition {
 	uint8_t boot_ind;
@@ -673,6 +674,7 @@ static int _has_gpt_partition_table(struct device *dev)
 {
 	unsigned int pbs, lbs;
 	uint64_t entries_start;
+	uint64_t dev_size_sectors, table_end;
 	uint32_t nr_entries, sz_entry, i;
 
 	struct {
@@ -700,13 +702,37 @@ static int _has_gpt_partition_table(struct device *dev)
 	if (le64toh(gpt_header.magic) != PART_GPT_MAGIC)
 		return 0;
 
-	entries_start = le64toh(gpt_header.part_entries_lba) * lbs;
+	entries_start = le64toh(gpt_header.part_entries_lba);
+	if (!lbs || (entries_start > (UINT64_MAX / lbs))) {
+		log_debug("GPT partition table offset overflows on %s.", dev_name(dev));
+		return 0;
+	}
+	entries_start *= lbs;
 	nr_entries = le32toh(gpt_header.nr_part_entries);
 	sz_entry = le32toh(gpt_header.sz_part_entry);
 
-	if (sz_entry < sizeof(gpt_part_entry)) {
+	if (sz_entry < PART_GPT_MIN_ENTRY_SIZE) {
 		log_debug("GPT partition entry size %u too small on %s.",
 			  sz_entry, dev_name(dev));
+		return 0;
+	}
+
+	if (!nr_entries)
+		return 0;
+
+	if (!dev_get_size(dev, &dev_size_sectors))
+		return_0;
+
+	if ((dev_size_sectors > (UINT64_MAX >> SECTOR_SHIFT)) ||
+	    ((uint64_t) nr_entries > ((UINT64_MAX - entries_start) / sz_entry))) {
+		log_debug("GPT partition table size overflows on %s.", dev_name(dev));
+		return 0;
+	}
+
+	table_end = entries_start + (uint64_t) nr_entries * sz_entry;
+	if (table_end > (dev_size_sectors << SECTOR_SHIFT)) {
+		log_debug("GPT partition table extends beyond device %s.",
+			  dev_name(dev));
 		return 0;
 	}
 
@@ -1585,4 +1611,3 @@ int dev_is_pmem(struct dev_types *dt, struct device *dev)
 	return 0;
 }
 #endif
-
