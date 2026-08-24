@@ -4821,6 +4821,12 @@ static int _for_each_sub_lv(struct logical_volume *lv, int level,
 	if (!lv)
 		return 1;
 
+	if (level > MAX_LV_RECURSION) {
+		log_error("LV dependency graph cycle detected at %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
 	if (level++) {
 		if (!(r = fn(lv, data)))
 			return_0;

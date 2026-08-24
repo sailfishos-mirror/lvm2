@@ -29,6 +29,7 @@
 #include "lib/locking/lvmlockd.h"
 #include <stdbool.h>
 
+#define MAX_LV_RECURSION 1024
 #define MAX_STRIPES 128U
 #define SECTOR_SHIFT 9L
 #define SECTOR_SIZE ( 1L << SECTOR_SHIFT )

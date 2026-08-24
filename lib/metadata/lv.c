@@ -1874,13 +1874,26 @@ char *lv_lock_args_dup(struct dm_pool *mem, const struct logical_volume *lv)
 	return dm_pool_strdup(mem, lock_args);
 }
 
-/* For given LV find recursively the LV which holds lock for it */
-const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
+static const struct logical_volume *_lv_lock_holder(const struct logical_volume *lv,
+						    const struct logical_volume *fallback,
+						    int depth)
 {
 	const struct seg_list *sl;
 
+	if (depth > MAX_LV_RECURSION) {
+		log_error("LV dependency graph is too deep or contains a cycle at %s.",
+			  display_lvname(lv));
+		/*
+		 * Do not return an arbitrary LV reached through malformed metadata.
+		 * Falling back to the requested LV keeps any subsequent operation
+		 * scoped to that LV instead of suspending or reloading an unrelated
+		 * user reached through the malformed graph.
+		 */
+		return fallback;
+	}
+
 	if (lv_is_cow(lv))
-		return lv_lock_holder(origin_from_cow(lv));
+		return _lv_lock_holder(origin_from_cow(lv), fallback, depth + 1);
 
 	if (lv_is_thin_pool(lv) ||
 	    lv_is_external_origin(lv)) {
@@ -1917,10 +1930,16 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
 		if (lv_is_cache_pool(sl->seg->lv) &&
 		    !lv_is_used_cache_pool(sl->seg->lv))
 			continue; /* Skip unused cache-pool */
-		return lv_lock_holder(sl->seg->lv);
+		return _lv_lock_holder(sl->seg->lv, fallback, depth + 1);
 	}
 
 	return lv;
+}
+
+/* For given LV find recursively the LV which holds lock for it */
+const struct logical_volume *lv_lock_holder(const struct logical_volume *lv)
+{
+	return _lv_lock_holder(lv, lv, 0);
 }
 
 struct profile *lv_config_profile(const struct logical_volume *lv)
