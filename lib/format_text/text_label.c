@@ -38,12 +38,20 @@ static int _text_can_handle(struct labeller *l __attribute__((unused)),
 
 struct _dl_setup_baton {
 	struct disk_locn *pvh_dlocn_xl;
+	struct disk_locn *label_end;
 	struct device *dev;
 };
 
 static int _da_setup(struct disk_locn *da, void *baton)
 {
 	struct _dl_setup_baton *p = baton;
+
+	if (p->pvh_dlocn_xl + 1 > p->label_end) {
+		log_warn("WARNING: %s: area at offset " FMTu64 " does not fit in PV label.",
+			 dev_name(p->dev), da->offset);
+		return 0;
+	}
+
 	p->pvh_dlocn_xl->offset = htole64(da->offset);
 	p->pvh_dlocn_xl->size = htole64(da->size);
 	p->pvh_dlocn_xl++;
@@ -63,6 +71,12 @@ static int _mda_setup(struct metadata_area *mda, void *baton)
 	if (mdac->area.dev != p->dev)
 		return 1;
 
+	if (p->pvh_dlocn_xl + 1 > p->label_end) {
+		log_warn("WARNING: %s: metadata area at offset " FMTu64 " does not fit in PV label.",
+			 dev_name(p->dev), mdac->area.start);
+		return 0;
+	}
+
 	p->pvh_dlocn_xl->offset = htole64(mdac->area.start);
 	p->pvh_dlocn_xl->size = htole64(mdac->area.size);
 	p->pvh_dlocn_xl++;
@@ -73,6 +87,12 @@ static int _mda_setup(struct metadata_area *mda, void *baton)
 static int _dl_null_termination(void *baton)
 {
 	struct _dl_setup_baton *p = baton;
+
+	if (p->pvh_dlocn_xl + 1 > p->label_end) {
+		log_warn("WARNING: %s: no space for area list terminator in PV label.",
+			 dev_name(p->dev));
+		return 0;
+	}
 
 	p->pvh_dlocn_xl->offset = htole64(UINT64_C(0));
 	p->pvh_dlocn_xl->size = htole64(UINT64_C(0));
@@ -111,26 +131,36 @@ static int _text_write(struct label *label, void *buf)
 
 	baton.dev = lvmcache_device(info);
 	baton.pvh_dlocn_xl = &pvhdr->disk_areas_xl[0];
+	baton.label_end = (struct disk_locn *)((char *)buf + LABEL_SIZE);
 
 	/* List of data areas (holding PEs) */
-	lvmcache_foreach_da(info, _da_setup, &baton);
-	_dl_null_termination(&baton);
+	if (!lvmcache_foreach_da(info, _da_setup, &baton) ||
+	    !_dl_null_termination(&baton))
+		return_0;
 
 	/* List of metadata area header locations */
-	lvmcache_foreach_mda(info, _mda_setup, &baton);
-	_dl_null_termination(&baton);
+	if (!lvmcache_foreach_mda(info, _mda_setup, &baton) ||
+	    !_dl_null_termination(&baton))
+		return_0;
 
 	/*
 	 * PV header extension
 	 */
+	if ((char *)baton.pvh_dlocn_xl + sizeof(*pvhdr_ext) > (char *)baton.label_end) {
+		log_warn("WARNING: %s: no space for PV header extension in label.",
+			 dev_name(baton.dev));
+		return_0;
+	}
+
 	pvhdr_ext = (struct pv_header_extension *) ((char *) baton.pvh_dlocn_xl);
 	pvhdr_ext->version = htole32(PV_HEADER_EXTENSION_VSN);
 	pvhdr_ext->flags = htole32(lvmcache_ext_flags(info));
 
 	/* List of bootloader area locations */
 	baton.pvh_dlocn_xl = &pvhdr_ext->bootloader_areas_xl[0];
-	lvmcache_foreach_ba(info, _ba_setup, &baton);
-	_dl_null_termination(&baton);
+	if (!lvmcache_foreach_ba(info, _ba_setup, &baton) ||
+	    !_dl_null_termination(&baton))
+		return_0;
 
 	/* Create debug message with ba, da and mda locations */
 	ba1 = (htole64(pvhdr_ext->bootloader_areas_xl[0].offset) ||

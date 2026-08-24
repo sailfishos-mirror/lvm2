@@ -1774,7 +1774,7 @@ static int _text_pv_write(struct cmd_context *cmd, const struct format_type *fmt
 		return_0;
 
 	if (!label_write(pv->dev, label)) {
-		stack;
+		log_error("Failed to write PV label for %s.", dev_name(pv->dev));
 		return 0;
 	}
 
