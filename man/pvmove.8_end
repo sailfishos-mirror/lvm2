@@ -58,6 +58,9 @@ temporary LV to the second.  After a complete copy is made, the temporary
 LVs are removed, leaving behind the segments on the destination PV.  If an
 abort is issued during the move, all LVs being moved will remain on the
 source PV.
+.P
+\fBpvmove\fP is not allowed on RAID logical volumes that have integrity
+enabled. See \fBlvmraid\fP(7).
 .
 .SH EXAMPLES
 .
