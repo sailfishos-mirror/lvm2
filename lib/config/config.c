@@ -530,7 +530,7 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
 	if (!(dev->flags & DEV_REGULAR) || size2)
 		use_plain_read = 0;
 
-	if (size + size2 < size) {
+	if (size2 > SIZE_MAX - 1 || size > SIZE_MAX - 1 - size2) {
 		log_error("Metadata buffer size overflow %zu + %zu on %s.",
 			  size, size2, dev_name(dev));
 		return 0;
