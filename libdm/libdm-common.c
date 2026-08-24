@@ -1616,6 +1616,16 @@ static struct dm_thread_state *_get_thread_state(void)
 	return ts;
 }
 
+void dm_thread_state_exit(void)
+{
+	struct dm_thread_state *ts = _get_thread_state();
+
+	if (ts)
+		_destroy_thread_state(ts);
+
+	pthread_key_delete(_thread_state_key);
+}
+
 static struct dm_list *_get_node_ops_list(void)
 {
 	struct dm_thread_state *ts = _get_thread_state();

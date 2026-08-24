@@ -2842,6 +2842,7 @@ static void _do_lib_exit(void)
 
 	dm_lib_release();
 	selinux_release();
+	dm_thread_state_exit();
 	pthread_mutex_lock(&_control_fd_mutex);
 	if (_dm_bitset)
 		dm_bitset_destroy(_dm_bitset);

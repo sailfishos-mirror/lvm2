@@ -47,6 +47,7 @@ int set_dev_node_read_ahead(const char *dev_name, uint32_t major, uint32_t minor
 			    uint32_t read_ahead, uint32_t read_ahead_flags);
 void update_devs(void);
 void selinux_release(void);
+void dm_thread_state_exit(void);
 
 void inc_suspended(void);
 void dec_suspended(void);
