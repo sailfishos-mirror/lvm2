@@ -23,6 +23,7 @@ LVM_RULES=11-dm-lvm.rules 69-dm-lvm.rules
 DM_DIR=$(shell $(AWK) '/^.define DM_DIR/ {print $$3}' $(top_srcdir)/libdm/misc/dm-ioctl.h)
 
 SYSTEMDRUN=@SYSTEMD_RUN_CMD@
+RUN_DIR=@RUN_DIR@
 ifeq ("@UDEV_RULE_EXEC_DETECTION@", "yes")
 SBIN=\$$env{DM_SBIN_PATH}
 DM_EXEC_RULE=ENV{DM_SBIN_PATH}=\"\/sbin\"\\nTEST!=\"\$$env{DM_SBIN_PATH}\/dmsetup\", ENV{DM_SBIN_PATH}=\"\/usr\/sbin\"
@@ -44,7 +45,7 @@ BLKID_RULE=IMPORT{program}=\"${SBIN}\/blkid -o udev -p \$$tempnode\"
 endif
 
 %.rules: $(srcdir)/%.rules.in
-	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(SYSTEMDRUN)+$(SYSTEMDRUN)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;" $< >$@
+	$(Q) $(SED) -e "s+(DM_DIR)+$(DM_DIR)+;s+(SYSTEMDRUN)+$(SYSTEMDRUN)+;s+(BLKID_RULE)+$(BLKID_RULE)+;s+(DM_EXEC_RULE)+$(DM_EXEC_RULE)+;s+(DM_EXEC)+$(DM_EXEC)+;s+(LVM_EXEC_RULE)+$(LVM_EXEC_RULE)+;s+(LVM_EXEC)+$(LVM_EXEC)+;s+(RUN_DIR)+$(RUN_DIR)+;" $< >$@
 
 %_install: %.rules
 	$(SHOW) "    [INSTALL] $<"
