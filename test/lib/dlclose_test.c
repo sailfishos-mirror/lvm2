@@ -72,7 +72,7 @@ static void *worker(void *arg)
 	/*
 	 * Thread exit triggers glibc's __nptl_deallocate_tsd().
 	 * Before fix: calls unmapped _destroy_thread_state -> SIGSEGV.
-	 * After fix: key deleted by dm_lib_exit -> no destructor call.
+	 * After fix: key deleted by the dlclose destructor -> no destructor call.
 	 */
 	return NULL;
 }
