@@ -851,14 +851,14 @@ static int _process_config(struct cmd_context *cmd)
 	return 1;
 }
 
-static int _set_tag(struct cmd_context *cmd, const char *tag)
+static int _set_tag(struct cmd_context *cmd, struct dm_pool *mem, const char *tag)
 {
 	char *t;
 
 	log_very_verbose("Setting host tag: %s.", tag);
 
-	if (!(t = dm_pool_strdup(cmd->mem, tag)) ||
-	    !str_list_add(cmd->mem, &cmd->tags, t)) {
+	if (!(t = dm_pool_strdup(mem, tag)) ||
+	    !str_list_add(mem, &cmd->tags, t)) {
 		log_error("_set_tag: str_list_add %s failed.", tag);
 		return 0;
 	}
@@ -907,6 +907,13 @@ static int _init_tags(struct cmd_context *cmd, struct dm_config_tree *cft)
 	const struct dm_config_node *tn, *cn;
 	const char *tag;
 	int passes;
+	/*
+	 * Tag strings and their list nodes are allocated from the config
+	 * tree's own memory pool so they are released together with the tree
+	 * by config_destroy() in _destroy_config().  This gives host tags a
+	 * config lifetime without leaking on refresh_toolcontext() cycles.
+	 */
+	struct dm_pool *mem = dm_config_memory(cft);
 
 	/* Access tags section directly */
 	if (!(tn = find_config_node(cmd, cft, tags_CFG_SECTION)) || !tn->child)
@@ -915,7 +922,7 @@ static int _init_tags(struct cmd_context *cmd, struct dm_config_tree *cft)
 	/* NB hosttags 0 when already 1 intentionally does not delete the tag */
 	if (!cmd->hosttags && find_config_bool(cmd, cft, tags_hosttags_CFG)) {
 		/* FIXME Strip out invalid chars: only A-Za-z0-9_+.- */
-		if (!_set_tag(cmd, cmd->hostname))
+		if (!_set_tag(cmd, mem, cmd->hostname))
 			return_0;
 		cmd->hosttags = 1;
 	}
@@ -937,7 +944,7 @@ static int _init_tags(struct cmd_context *cmd, struct dm_config_tree *cft)
 			if (!passes)
 				continue;
 		}
-		if (!_set_tag(cmd, tag))
+		if (!_set_tag(cmd, mem, tag))
 			return_0;
 	}
 
