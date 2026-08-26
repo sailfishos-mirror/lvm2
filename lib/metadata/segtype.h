@@ -373,8 +373,6 @@ int init_integrity_segtypes(struct cmd_context *cmd, struct segtype_library *seg
 struct segment_type *init_snapshot_segtype(struct cmd_context *cmd);
 #endif
 
-#define MIRROR_LOG_CLUSTERED			(1U << 0)
-
 #ifdef MIRRORED_INTERNAL
 struct segment_type *init_mirrored_segtype(struct cmd_context *cmd);
 #endif

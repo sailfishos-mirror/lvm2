@@ -130,8 +130,7 @@ struct lv_segment *find_mirror_seg(struct lv_segment *seg)
  */
 uint32_t adjusted_mirror_region_size(struct cmd_context *cmd,
 				     uint32_t extent_size, uint32_t extents,
-				     uint32_t region_size, int internal,
-				     int clustered __attribute__((unused)))
+				     uint32_t region_size, int internal)
 {
 	uint64_t region_max;
 
@@ -1625,8 +1624,7 @@ static int _add_mirrors_that_preserve_segments(struct logical_volume *lv,
 	if (!(adjusted_region_size = adjusted_mirror_region_size(cmd,
 								lv->vg->extent_size,
 								lv->le_count,
-								region_size, 1,
-								vg_is_clustered(lv->vg))))
+								region_size, 1)))
 		return_0;
 
 	if (!(ah = allocate_extents(lv->vg, NULL, segtype, 1, mirrors, 0, 0,

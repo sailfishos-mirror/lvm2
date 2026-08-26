@@ -1244,7 +1244,7 @@ uint32_t lv_mirror_count(const struct logical_volume *lv);
 
 uint32_t adjusted_mirror_region_size(struct cmd_context *cmd,
 				     uint32_t extent_size, uint32_t extents,
-				     uint32_t region_size, int internal, int clustered);
+				     uint32_t region_size, int internal);
 
 int remove_mirror_images(struct logical_volume *lv, uint32_t num_mirrors,
 			 int (*is_removable)(struct logical_volume *, void *),

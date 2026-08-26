@@ -274,7 +274,6 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
 		    const struct lv_activate_opts *laopts,
 		    struct dm_tree_node *node, uint32_t area_count, uint32_t region_size)
 {
-	unsigned clustered = 0;
 	char *log_dlid = NULL;
 	uint32_t log_flags = 0;
 
@@ -308,7 +307,7 @@ static int _add_log(struct dm_pool *mem, struct lv_segment *seg,
 			log_flags |= DM_BLOCK_ON_ERROR;
 	}
 
-	return dm_tree_node_add_mirror_target_log(node, region_size, clustered, log_dlid, area_count, log_flags);
+	return dm_tree_node_add_mirror_target_log(node, region_size, log_dlid, area_count, log_flags);
 }
 
 static int _mirrored_add_target_line(struct dev_manager *dm, struct dm_pool *mem,
@@ -372,8 +371,7 @@ static int _mirrored_add_target_line(struct dev_manager *dm, struct dm_pool *mem
 	} else if (!(region_size = adjusted_mirror_region_size(cmd,
 							       seg->lv->vg->extent_size,
 							       seg->area_len,
-							       mirr_state->default_region_size, 1,
-							       vg_is_clustered(seg->lv->vg))))
+							       mirr_state->default_region_size, 1)))
 		return_0;
 
 	if (!dm_tree_node_add_mirror_target(node, len))
