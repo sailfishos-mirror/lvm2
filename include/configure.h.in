@@ -28,9 +28,6 @@
 /* Define to 1 if the 'closedir' function returns void instead of int. */
 #undef CLOSEDIR_VOID
 
-/* Path to cmirrord pidfile. */
-#undef CMIRRORD_PIDFILE
-
 /* Define to 1 if using 'alloca.c'. */
 #undef C_ALLOCA
 

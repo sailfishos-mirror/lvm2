@@ -398,7 +398,6 @@ SIMPLE_RECURSIVE_TARGETS = \
 	gccanalyze \
 	generate \
 	install \
-	install_cluster \
 	install_device-mapper \
 	install_lvm2 \
 	install_ocf \
@@ -443,7 +442,6 @@ $(SUBDIRS.device-mapper):
 	$(MAKE) -C $(@:.device-mapper=) device-mapper
 
 $(SUBDIRS.install): $(SUBDIRS)
-$(SUBDIRS.install_cluster): $(SUBDIRS)
 $(SUBDIRS.install_device-mapper): device-mapper
 $(SUBDIRS.install_lvm2): $(SUBDIRS)
 

@@ -280,11 +280,6 @@ Check the consistency of volume group(s)
 .
 .SH Daemons
 .PD 0
-.\" CONDITION_BEGIN cmirrord.8
-.TP 20
-.B cmirrord
-cluster mirror log daemon
-.\" CONDITION_END cmirrord.8
 .\" CONDITION_BEGIN dmeventd.8
 .TP 20
 .B dmeventd

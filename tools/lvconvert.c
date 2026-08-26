@@ -3844,8 +3844,8 @@ static int _lvconvert_repair_pvs_mirror(struct cmd_context *cmd, struct logical_
 	int ret;
 
 	/*
-	 * We want to allow cmirror active on multiple nodes to be repaired,
-	 * but normal mirror to only be repaired if active exclusively here.
+	 * We want to allow a clustered mirror active on multiple nodes to be
+	 * repaired, but normal mirror to only be repaired if active exclusively here.
 	 * If the LV is active it already has the necessary lock, but if not
 	 * active, then require ex since we cannot know the active state on
 	 * other hosts.

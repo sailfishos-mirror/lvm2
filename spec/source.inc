@@ -8,7 +8,6 @@
 %global enable_dbusd 1
 %global enable_udev 1
 %global enable_systemd 1
-%global enable_cmirror 1
 %global enable_lvmlockd 1
 %global enable_lvmpolld 1
 %global enable_dmfilemapd 1
@@ -21,17 +20,7 @@
 %service lvmpolld 1
 %endif
 
-########################################################
-# Normally clustering is maintained via resource agents
-#
-# enable service only if you know what you are doing
-#
-%if %{enable_cmirror}
-#service cmirrord 1
-%endif
-
 %global dlm_version 3.99.1-1
-%global corosync_version 1.99.9-1
 
 %with cache internal
 %with thin internal

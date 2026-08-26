@@ -299,7 +299,6 @@ if (( sysreport )); then
 						   lvm2-lvmpolld.socket lvm2-lvmpolld.service \
 						   lvm2-cluster-activation.service \
 						   lvm2-clvmd.service \
-						   lvm2-cmirrord.service \
 						   lvm2-activation-early.service \
 						   lvm2-activation.service \
 						   lvm2-activation-net.service \

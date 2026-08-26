@@ -29,7 +29,6 @@ DMEVENTDMAN = dmeventd.8
 DMFILEMAPDMAN = dmfilemapd.8
 LVMPOLLDMAN = lvmpolld.8
 LVMLOCKDMAN = lvmlockd.8 lvmlockctl.8
-CMIRRORDMAN = cmirrord.8
 LVMDBUSDMAN = lvmdbusd.8
 
 MAN5=lvm.conf.5
@@ -53,9 +52,8 @@ MAN8=lvm.8 lvmdump.8 lvm-fullreport.8 lvm-lvpoll.8 \
      lvmpersist.8
 MAN8SO=lvm-config.8 lvm-dumpconfig.8
 MAN8DM=dmsetup.8 dmstats.8 dmvdostats.8
-MAN8CLUSTER=
 
-MANALL = $(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER) $(MANBUILTIN)
+MANALL = $(MAN5) $(MAN7) $(MAN8) $(MAN8SO) $(MAN8DM) $(MANBUILTIN)
 # Build list of existing _meta files: append _meta suffix, prepend $(srcdir)/,
 # then filter to paths that exist on disk (e.g. lvm-config.8_meta doesn't).
 # Uses = (not :=) so expansion is deferred until use, after conditional += appends.
@@ -66,7 +64,6 @@ ifneq (,$(filter $(MAN_ALL_GOALS),$(MAKECMDGOALS)))
   MAN7 += lvmcache.7 lvmthin.7 lvmvdo.7
   MAN8+=$(FSADMMAN) $(LVMPOLLDMAN) $(LVMLOCKDMAN) $(LVMDBUSDMAN) $(LVMIMPORTVDOMAN)
   MAN8DM+=$(BLKDEACTIVATEMAN) $(DMEVENTDMAN) $(DMFILEMAPDMAN)
-  MAN8CLUSTER+=$(CMIRRORDMAN)
 else
   ifeq ("@FSADM@", "yes")
     MAN8+=$(FSADMMAN)
@@ -98,10 +95,6 @@ else
 
   ifeq ("@BUILD_DMFILEMAPD@", "yes")
     MAN8DM+=$(DMFILEMAPDMAN)
-  endif
-
-  ifeq ("@BUILD_CMIRRORD@", "yes")
-    MAN8CLUSTER+=$(CMIRRORDMAN)
   endif
 
   ifeq ("@CACHE@", "internal")
@@ -136,7 +129,7 @@ CLEAN_TARGETS+=$(MAN5) $(MAN7) \
 	$(MAN7CATEGORIES) $(MAN7CATEGORIES:%.7=%.7_gen) \
 	$(MAN7ARGS) $(MAN7ARGS:%.7=%.7_gen) \
 	$(MAN8) $(MAN8SO) \
-	$(MAN8:%.8=%.8_gen) $(MAN8CLUSTER) $(MAN8DM) $(TESTMAN)
+	$(MAN8:%.8=%.8_gen) $(MAN8DM) $(TESTMAN)
 
 all: man device-mapper
 
@@ -144,11 +137,11 @@ all: man device-mapper
 
 device-mapper: $(MAN8DM)
 
-man: $(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN7ARGS) $(MAN8) $(MAN8SO) $(MAN8CLUSTER)
+man: $(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN7ARGS) $(MAN8) $(MAN8SO)
 
 all_man: man
 
-$(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN7ARGS) $(MAN8) $(MAN8SO) $(MAN8DM) $(MAN8CLUSTER): Makefile
+$(MAN5) $(MAN7) $(MAN7INDEX) $(MAN7CATEGORIES) $(MAN7ARGS) $(MAN8) $(MAN8SO) $(MAN8DM): Makefile
 
 $(MANGENERATOR):
 	$(SHOW) "    [MAKE] $<"
@@ -313,19 +306,12 @@ install_man8: $(MAN8) $(MAN8SO)
 
 install_lvm2: install_man5 install_man7 install_man8
 
-install_cluster: $(MAN8CLUSTER)
-ifneq ($(MAN8CLUSTER),)
-	$(SHOW) "    [INSTALL] $^"
-	$(Q) $(INSTALL) -d $(MAN8DIR)
-	$(Q) $(INSTALL_DATA) $^ $(MAN8DIR)/
-endif
-
 install_device-mapper: $(MAN8DM)
 	$(SHOW) "    [INSTALL] $^"
 	$(Q) $(INSTALL) -d $(MAN8DIR)
 	$(Q) $(INSTALL_DATA) $^ $(MAN8DIR)/
 
-install: install_lvm2 install_device-mapper install_cluster
+install: install_lvm2 install_device-mapper
 
 install_all_man: install install_systemd_generators
 
