@@ -167,10 +167,9 @@ struct load_segment {
 	struct dm_tree_node *merge;	/* Snapshot */
 
 	struct dm_tree_node *log;	/* Mirror */
-	unsigned clustered;		/* Mirror */
 	unsigned mirror_area_count;	/* Mirror */
 	uint64_t flags;			/* Mirror + Raid + Cache */
-	char *uuid;			/* Clustered mirror log */
+	char *uuid;			/* Mirror log */
 
 	const char *policy_name;	/* Cache */
 	unsigned policy_argc;		/* Cache */
@@ -2389,7 +2388,6 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
 {
 	int block_on_error = 0;
 	int handle_errors = 0;
-	int dm_log_userspace = 0;
 	unsigned log_parm_count;
 	int pos = 0;
 	char logbuf[DM_FORMAT_DEV_BUFSIZE];
@@ -2416,23 +2414,6 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
 			block_on_error = 1;
 	}
 
-	if (seg->clustered) {
-		/* Cluster mirrors require a UUID */
-		if (!seg->uuid)
-			return_0;
-
-		/*
-		 * Cluster mirrors used to have their own log
-		 * types.  Now they are accessed through the
-		 * userspace log type.
-		 *
-		 * The dm-log-userspace module was added to the
-		 * 2.6.31 kernel.
-		 */
-		if (KERNEL_VERSION(kmaj, kmin, krel) >= KERNEL_VERSION(2, 6, 31))
-			dm_log_userspace = 1;
-	}
-
 	/* Region size */
 	log_parm_count = 1;
 
@@ -2447,16 +2428,6 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
 	if (seg->flags & DM_CORELOG)
 		log_parm_count--;
 
-	if (seg->clustered) {
-		log_parm_count++; /* For UUID */
-
-		if (!dm_log_userspace)
-			EMIT_PARAMS(pos, "clustered-");
-		else
-			/* For clustered-* type field inserted later */
-			log_parm_count++;
-	}
-
 	if (!seg->log)
 		logtype = "core";
 	else {
@@ -2466,19 +2437,12 @@ static int _mirror_emit_segment_line(struct dm_task *dmt, struct load_segment *s
 			return_0;
 	}
 
-	if (dm_log_userspace)
-		EMIT_PARAMS(pos, "userspace %u %s clustered-%s",
-			    log_parm_count, seg->uuid, logtype);
-	else
-		EMIT_PARAMS(pos, "%s %u", logtype, log_parm_count);
+	EMIT_PARAMS(pos, "%s %u", logtype, log_parm_count);
 
 	if (seg->log)
 		EMIT_PARAMS(pos, " %s", logbuf);
 
 	EMIT_PARAMS(pos, " %u", seg->region_size);
-
-	if (seg->clustered && !dm_log_userspace)
-		EMIT_PARAMS(pos, " %s", seg->uuid);
 
 	if ((seg->flags & DM_NOSYNC))
 		EMIT_PARAMS(pos, " nosync");
@@ -3820,7 +3784,6 @@ int dm_tree_node_add_crypt_target(struct dm_tree_node *node,
 
 int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
 				       uint32_t region_size,
-				       unsigned clustered,
 				       const char *log_uuid,
 				       unsigned area_count,
 				       uint32_t flags)
@@ -3846,9 +3809,6 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
 				return 0;
 			}
 
-			if (clustered)
-				log_node->props.immediate_dev_node = 1;
-
 			/* The kernel validates the size of disk logs. */
 			/* FIXME Propagate to any devices below */
 			log_node->props.delay_resume_if_new = 0;
@@ -3860,7 +3820,6 @@ int dm_tree_node_add_mirror_target_log(struct dm_tree_node *node,
 
 	seg->log = log_node;
 	seg->region_size = region_size;
-	seg->clustered = clustered;
 	seg->mirror_area_count = area_count;
 	seg->flags = flags;
 
