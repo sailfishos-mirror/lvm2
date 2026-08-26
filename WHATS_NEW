@@ -1,5 +1,6 @@
 Version 2.03.43 - 
 ==================
+  Respect /run/mdadm/creating-<md_dev_name> in 69-dm-lvm.rules.
   Add `lvmconfig --edit Section/Field=Value` to set an lvm.conf setting.
   Add `lvmconfig --edit Section/Field=-` to remove an lvm.conf setting.
   Fix use-after-free of host tag list on toolcontext refresh.
