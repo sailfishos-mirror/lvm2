@@ -607,12 +607,19 @@ static void format_info(void)
 	j = 0;
 
 	for (i = 0; i < dump_len; i++) {
+		if (j >= MAX_LINE - 1) {
+			/* line too long, skip to next newline/null */
+			while (i < dump_len && dump_buf[i] != '\n' && dump_buf[i] != '\0')
+				i++;
+			j = 0;
+			continue;
+		}
 		line[j++] = dump_buf[i];
 
 		if ((line[j-1] == '\n') || (line[j-1] == '\0')) {
+			line[j] = '\0';
 			format_info_line(line, r_name, r_type);
 			j = 0;
-			memset(line, 0, sizeof(line));
 		}
 	}
 }
