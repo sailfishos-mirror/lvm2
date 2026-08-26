@@ -956,6 +956,7 @@ static int _load_config_file(struct cmd_context *cmd, const char *tag, int local
 	static char config_file[PATH_MAX] = "";
 	const char *filler = "";
 	struct config_tree_list *cfl;
+	struct dm_config_tree *cft;
 
 	if (*tag)
 		filler = "_";
@@ -970,14 +971,22 @@ static int _load_config_file(struct cmd_context *cmd, const char *tag, int local
 		return 0;
 	}
 
-	if (!(cfl = dm_pool_alloc(cmd->libmem, sizeof(*cfl)))) {
+	if (!(cft = config_file_open_and_read(config_file, CONFIG_FILE, cmd)))
+		return_0;
+
+	/*
+	 * Allocate the tracking node from the config tree's own memory pool
+	 * rather than cmd->libmem.  The node is then released together with
+	 * its tree by config_destroy() in _destroy_config(), so repeated
+	 * refresh_toolcontext() cycles do not leak it into libmem.
+	 */
+	if (!(cfl = dm_pool_alloc(dm_config_memory(cft), sizeof(*cfl)))) {
 		log_error("config_tree_list allocation failed");
+		config_destroy(cft);
 		return 0;
 	}
 
-	if (!(cfl->cft = config_file_open_and_read(config_file, CONFIG_FILE, cmd)))
-		return_0;
-
+	cfl->cft = cft;
 	dm_list_add(&cmd->config_files, &cfl->list);
 
 	if (*tag) {
@@ -1092,7 +1101,7 @@ int config_files_changed(struct cmd_context *cmd)
 
 static void _destroy_config(struct cmd_context *cmd)
 {
-	struct config_tree_list *cfl;
+	struct config_tree_list *cfl, *tmp_cfl;
 	struct dm_config_tree *cft;
 	struct profile *profile, *tmp_profile;
 
@@ -1112,7 +1121,8 @@ static void _destroy_config(struct cmd_context *cmd)
 		config_destroy(cft);
 	}
 
-	dm_list_iterate_items(cfl, &cmd->config_files)
+	/* config_destroy() frees cfl itself (allocated from cfl->cft's pool). */
+	dm_list_iterate_items_safe(cfl, tmp_cfl, &cmd->config_files)
 		config_destroy(cfl->cft);
 	dm_list_init(&cmd->config_files);
 
