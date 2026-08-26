@@ -62,6 +62,7 @@ tools/man-generator
 
 test/.lib-dir-stamp
 test/.tests-stamp
+test/lib/dlclose_test
 test/lib/dmsecuretest
 test/lib/lvchange
 test/lib/lvconvert
