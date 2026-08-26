@@ -15,7 +15,6 @@
 %enableif 1 write_install
 
 %with udevdir %{_udevdir}
-%enableif %{enable_cmirror} cmirrord
 %enableif %{enable_udev} udev_sync
 %enableif %{enable_profiling} profiling
 %global enable_lvmpolld %(if echo %{services} | grep -q lvmpolld; then echo 1; else echo 0; fi)

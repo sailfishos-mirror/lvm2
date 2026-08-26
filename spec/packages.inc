@@ -304,46 +304,6 @@ fi
 %endif
 
 ##############################################################################
-# Cluster mirror subpackage
-##############################################################################
-%if %{enable_cmirror}
-
-%package -n cmirror
-Summary: Daemon for device-mapper-based clustered mirrors
-Requires(post): chkconfig
-Requires(preun): chkconfig
-Requires: corosync >= %{corosync_version}
-Requires: device-mapper >= %{device_mapper_version}-%{release}
-
-%description -n cmirror
-Daemon providing device-mapper-based mirrors in a shared-storage cluster.
-
-%post -n cmirror
-%daemon_reload
-%enable -s cmirrord -t service
-
-%preun -n cmirror
-%disable -s cmirrord -t service
-
-%postun -n cmirror
-%try_restart -s cmirrord -t service
-if [ $1 = 0 ]; then
-%daemon_reload
-fi
-
-%files -n cmirror
-%defattr(-,root,root,-)
-%attr(755,root,root) /usr/sbin/cmirrord
-%{_mandir}/man8/cmirrord.8.gz
-%if %{enable_systemd}
-  %{_unitdir}/lvm2-cmirrord.service
-%else
-  %{_sysconfdir}/rc.d/init.d/cmirrord
-%endif
-
-%endif
-
-##############################################################################
 # LVM D-Bus daemon
 ##############################################################################
 %if %{enable_dbusd}

@@ -648,7 +648,6 @@ Prepends source file name and code line number with libdm debugging.
 .BR lvmpolld (8),
 .BR lvmlockd (8),
 .BR lvmlockctl (8),
-.BR cmirrord (8),
 .BR lvmdbusd (8),
 .BR fsadm (8),
 .P

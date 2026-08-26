@@ -166,7 +166,6 @@ test-all:
       #   CONFIGURE: >
       #     --with-default-use-devices-file=0
       #     --with-cluster=internal
-      #     --enable-cmirrord
       #     --enable-lvmlockd-dlm
       - TAG: rhel9
         CONFIGURE: >

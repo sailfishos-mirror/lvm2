@@ -76,9 +76,6 @@ endif
 ifeq ("@BUILD_LVMPOLLD@", "yes")
 	$(Q) $(INSTALL_SCRIPT) lvm2_lvmpolld_init_red_hat $(initdir)/lvm2-lvmpolld
 endif
-ifeq ("@BUILD_CMIRRORD@", "yes")
-	$(Q) $(INSTALL_SCRIPT) cmirrord_init_red_hat $(initdir)/cmirrord
-endif
 ifeq ("@BLKDEACTIVATE@", "yes")
 	$(Q) $(INSTALL_SCRIPT) blk_availability_init_red_hat $(initdir)/blk-availability
 endif
@@ -101,9 +98,6 @@ endif
 ifeq ("@BUILD_LVMLOCKD@", "yes")
 	$(Q) $(INSTALL_DATA) lvmlockd.service $(systemd_unit_dir)/lvmlockd.service
 	$(Q) $(INSTALL_DATA) lvmlocks.service $(systemd_unit_dir)/lvmlocks.service
-endif
-ifeq ("@BUILD_CMIRRORD@", "yes")
-	$(Q) $(INSTALL_DATA) lvm2_cmirrord_systemd_red_hat.service $(systemd_unit_dir)/lvm2-cmirrord.service
 endif
 ifeq ("@BUILD_LVMDBUSD@", "yes")
 	$(Q) $(INSTALL_DATA) lvm2_lvmdbusd_systemd_red_hat.service $(systemd_unit_dir)/lvm2-lvmdbusd.service
@@ -135,7 +129,6 @@ DISTCLEAN_TARGETS += \
 	blk_availability_init_red_hat \
 	blk_availability_systemd_red_hat.service \
 	clvmd_init_red_hat \
-	cmirrord_init_red_hat \
 	com.redhat.lvmdbus1.service \
 	dm_event_systemd_red_hat.service \
 	dm_event_systemd_red_hat.socket \
@@ -144,7 +137,6 @@ DISTCLEAN_TARGETS += \
 	lvm2_cluster_activation_red_hat.sh \
 	lvm2_cluster_activation_systemd_red_hat.service \
 	lvm2_clvmd_systemd_red_hat.service \
-	lvm2_cmirrord_systemd_red_hat.service \
 	lvm2_lvmdbusd_systemd_red_hat.service \
 	lvm2_lvmpolld_init_red_hat \
 	lvm2_lvmpolld_systemd_red_hat.service \

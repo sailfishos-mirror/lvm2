@@ -728,7 +728,6 @@ DEFAULT_ARCHIVE_SUBDIR
 DEBUG
 COPTIMISE_FLAG
 CONFDIR
-CMIRRORD_PIDFILE
 CMDLIB
 CLDWHOLEARCHIVE
 CLDNOWHOLEARCHIVE
@@ -743,7 +742,6 @@ BUILD_LOCKDDLM_CONTROL
 BUILD_LOCKDDLM
 BUILD_DMFILEMAPD
 BUILD_DMEVENTD
-BUILD_CMIRRORD
 BLKID_STATIC_LIBS
 BLKID_PC
 BLKDEACTIVATE
@@ -797,8 +795,6 @@ LCOV
 HAVE_WSYNCNAND
 HAVE_WCLOBBERED
 HAVE_WJUMP
-CPG_LIBS
-CPG_CFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
@@ -945,8 +941,6 @@ with_ocfdir
 with_default_pid_dir
 with_default_dm_run_dir
 with_default_run_dir
-enable_cmirrord
-with_cmirrord_pidfile
 enable_debug
 with_optimisation
 with_symvers
@@ -1028,8 +1022,6 @@ CCC
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
-CPG_CFLAGS
-CPG_LIBS
 VALGRIND_CFLAGS
 VALGRIND_LIBS
 LIBSANLOCKCLIENT_CFLAGS
@@ -1695,7 +1687,6 @@ Optional Features:
   --disable-realtime      disable realtime clock support
   --enable-ocf            enable Open Cluster Framework (OCF) compliant
                           resource agents
-  --enable-cmirrord       enable the cluster mirror log daemon
   --enable-debug          enable debugging
   --enable-profiling      gather gcov profiling data
   --enable-asan           enable AddressSanitizer and
@@ -1794,8 +1785,6 @@ Optional Packages:
                           default DM run directory [autodetect]
   --with-default-run-dir=RUN_DIR
                           default LVM run directory [autodetect_run_dir/lvm]
-  --with-cmirrord-pidfile=PATH
-                          cmirrord pidfile [PID_DIR/cmirrord.pid]
   --with-optimisation=OPT C optimisation flag [OPT=-O2]
   --with-symvers=STYLE    use symbol versioning of the shared library
                           [default=gnu]
@@ -1861,8 +1850,6 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
-  CPG_CFLAGS  C compiler flags for CPG, overriding pkg-config
-  CPG_LIBS    linker flags for CPG, overriding pkg-config
   VALGRIND_CFLAGS
               C compiler flags for VALGRIND, overriding pkg-config
   VALGRIND_LIBS
@@ -11138,274 +11125,6 @@ printf '%s\n' "#define DEFAULT_RUN_DIR \"$DEFAULT_RUN_DIR\"" >>confdefs.h
 
 
 ################################################################################
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to build cluster mirror log daemon" >&5
-printf %s "checking whether to build cluster mirror log daemon... " >&6; }
-# Check whether --enable-cmirrord was given.
-if test ${enable_cmirrord+y}
-then :
-  enableval=$enable_cmirrord; BUILD_CMIRRORD=$enableval
-else case e in #(
-  e) BUILD_CMIRRORD="no" ;;
-esac
-fi
-
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $BUILD_CMIRRORD" >&5
-printf '%s\n' "$BUILD_CMIRRORD" >&6; }
-
-################################################################################
-if test "$BUILD_CMIRRORD" = "yes"
-then :
-
-
-# Check whether --with-cmirrord-pidfile was given.
-if test ${with_cmirrord_pidfile+y}
-then :
-  withval=$with_cmirrord_pidfile; CMIRRORD_PIDFILE=$withval
-else case e in #(
-  e) CMIRRORD_PIDFILE="$DEFAULT_PID_DIR/cmirrord.pid" ;;
-esac
-fi
-
-
-printf '%s\n' "#define CMIRRORD_PIDFILE \"$CMIRRORD_PIDFILE\"" >>confdefs.h
-
-
-fi
-
-################################################################################
-
-
-
-
-
-
-
-if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
-	if test -n "$ac_tool_prefix"; then
-  # Extract the first word of "${ac_tool_prefix}pkg-config", so it can be a program name with args.
-set dummy ${ac_tool_prefix}pkg-config; ac_word=$2
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_PKG_CONFIG+y}
-then :
-  printf %s "(cached) " >&6
-else case e in #(
-  e) case $PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_PKG_CONFIG="$PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
-    printf '%s\n' "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac ;;
-esac
-fi
-PKG_CONFIG=$ac_cv_path_PKG_CONFIG
-if test -n "$PKG_CONFIG"; then
-  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $PKG_CONFIG" >&5
-printf '%s\n' "$PKG_CONFIG" >&6; }
-else
-  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-fi
-
-
-fi
-if test -z "$ac_cv_path_PKG_CONFIG"; then
-  ac_pt_PKG_CONFIG=$PKG_CONFIG
-  # Extract the first word of "pkg-config", so it can be a program name with args.
-set dummy pkg-config; ac_word=$2
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
-printf %s "checking for $ac_word... " >&6; }
-if test ${ac_cv_path_ac_pt_PKG_CONFIG+y}
-then :
-  printf %s "(cached) " >&6
-else case e in #(
-  e) case $ac_pt_PKG_CONFIG in
-  [\\/]* | ?:[\\/]*)
-  ac_cv_path_ac_pt_PKG_CONFIG="$ac_pt_PKG_CONFIG" # Let the user override the test with a path.
-  ;;
-  *)
-  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-for as_dir in $PATH
-do
-  IFS=$as_save_IFS
-  case $as_dir in #(((
-    '') as_dir=./ ;;
-    */) ;;
-    *) as_dir=$as_dir/ ;;
-  esac
-    for ac_exec_ext in '' $ac_executable_extensions; do
-  if as_fn_executable_p "$as_dir$ac_word$ac_exec_ext"; then
-    ac_cv_path_ac_pt_PKG_CONFIG="$as_dir$ac_word$ac_exec_ext"
-    printf '%s\n' "$as_me:${as_lineno-$LINENO}: found $as_dir$ac_word$ac_exec_ext" >&5
-    break 2
-  fi
-done
-  done
-IFS=$as_save_IFS
-
-  ;;
-esac ;;
-esac
-fi
-ac_pt_PKG_CONFIG=$ac_cv_path_ac_pt_PKG_CONFIG
-if test -n "$ac_pt_PKG_CONFIG"; then
-  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_pt_PKG_CONFIG" >&5
-printf '%s\n' "$ac_pt_PKG_CONFIG" >&6; }
-else
-  { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-fi
-
-  if test "x$ac_pt_PKG_CONFIG" = x; then
-    PKG_CONFIG=""
-  else
-    case $cross_compiling:$ac_tool_warned in
-yes:)
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
-printf '%s\n' "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
-ac_tool_warned=yes ;;
-esac
-    PKG_CONFIG=$ac_pt_PKG_CONFIG
-  fi
-else
-  PKG_CONFIG="$ac_cv_path_PKG_CONFIG"
-fi
-
-fi
-if test -n "$PKG_CONFIG"; then
-	_pkg_min_version=0.9.0
-	{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking pkg-config is at least version $_pkg_min_version" >&5
-printf %s "checking pkg-config is at least version $_pkg_min_version... " >&6; }
-	if $PKG_CONFIG --atleast-pkgconfig-version $_pkg_min_version; then
-		{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf '%s\n' "yes" >&6; }
-	else
-		{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-		PKG_CONFIG=""
-	fi
-fi
-if test -z "$PKG_CONFIG"; then
-	as_fn_error $? "pkg-config not found" "$LINENO" 5
-fi
-if test "$BUILD_CMIRRORD" = "yes" && test "$HAVE_CPG" != "yes"
-then :
-
-
-pkg_failed=no
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for libcpg" >&5
-printf %s "checking for libcpg... " >&6; }
-
-if test -n "$CPG_CFLAGS"; then
-    pkg_cv_CPG_CFLAGS="$CPG_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
-  ac_status=$?
-  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_CPG_CFLAGS=`$PKG_CONFIG --cflags "libcpg" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$CPG_LIBS"; then
-    pkg_cv_CPG_LIBS="$CPG_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libcpg\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "libcpg") 2>&5
-  ac_status=$?
-  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_CPG_LIBS=`$PKG_CONFIG --libs "libcpg" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-                CPG_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libcpg" 2>&1`
-        else
-                CPG_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libcpg" 2>&1`
-        fi
-        # Put the nasty error message in config.log where it belongs
-        echo "$CPG_PKG_ERRORS" >&5
-
-        as_fn_error $? "Package requirements (libcpg) were not met:
-
-$CPG_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables CPG_CFLAGS
-and CPG_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
-elif test $pkg_failed = untried; then
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-        { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: error: in '$ac_pwd':" >&5
-printf '%s\n' "$as_me: error: in '$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables CPG_CFLAGS
-and CPG_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See 'config.log' for more details" "$LINENO" 5; }
-else
-        CPG_CFLAGS=$pkg_cv_CPG_CFLAGS
-        CPG_LIBS=$pkg_cv_CPG_LIBS
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf '%s\n' "yes" >&6; }
-
-fi
-
-fi
-
-################################################################################
 { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to enable debugging" >&5
 printf %s "checking whether to enable debugging... " >&6; }
 # Check whether --enable-debug was given.
@@ -16202,26 +15921,6 @@ printf %s "checking whether to enable editline... " >&6; }
 { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $EDITLINE" >&5
 printf '%s\n' "$EDITLINE" >&6; }
 
-if test "$BUILD_CMIRRORD" = "yes"
-then :
-
-
-  for ac_func in atexit
-do :
-  ac_fn_c_check_func "$LINENO" "atexit" "ac_cv_func_atexit"
-if test "x$ac_cv_func_atexit" = xyes
-then :
-  printf '%s\n' "#define HAVE_ATEXIT 1" >>confdefs.h
-
-else case e in #(
-  e) hard_bailout ;;
-esac
-fi
-
-done
-
-fi
-
 if test "$BUILD_LVMLOCKD" = "yes"
 then :
 
@@ -17060,7 +16759,7 @@ AIO_LIBS=${AIO_LIBS:--laio}
 
 
 ################################################################################
-ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/cmirrord/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmeventd/plugins/vdo/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/dm-tools/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/lvm2-pvscan.service scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/cmirrord_init_red_hat scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_cmirrord_systemd_red_hat.service scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvmlockd.service scripts/lvmlocks.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile tools/Makefile udev/Makefile"
+ac_config_files="$ac_config_files Makefile make.tmpl libdm/make.tmpl daemons/Makefile daemons/dmeventd/Makefile daemons/dmeventd/libdevmapper-event.pc daemons/dmeventd/plugins/Makefile daemons/dmeventd/plugins/lvm2/Makefile daemons/dmeventd/plugins/raid/Makefile daemons/dmeventd/plugins/mirror/Makefile daemons/dmeventd/plugins/snapshot/Makefile daemons/dmeventd/plugins/thin/Makefile daemons/dmeventd/plugins/vdo/Makefile daemons/lvmdbusd/Makefile daemons/lvmdbusd/lvmdbusd daemons/lvmdbusd/lvmdb.py daemons/lvmdbusd/lvm_shell_proxy.py daemons/lvmdbusd/path.py daemons/lvmpolld/Makefile daemons/lvmlockd/Makefile conf/Makefile conf/example.conf conf/lvmlocal.conf conf/command_profile_template.profile conf/metadata_profile_template.profile include/Makefile lib/Makefile include/lvm-version.h libdaemon/Makefile libdaemon/client/Makefile libdaemon/server/Makefile libdm/Makefile libdm/dm-tools/Makefile libdm/libdevmapper.pc man/Makefile po/Makefile scripts/lvm2-pvscan.service scripts/blkdeactivate.sh scripts/blk_availability_init_red_hat scripts/blk_availability_systemd_red_hat.service scripts/com.redhat.lvmdbus1.service scripts/dm_event_systemd_red_hat.service scripts/dm_event_systemd_red_hat.socket scripts/lvm2_lvmdbusd_systemd_red_hat.service scripts/lvm2_lvmpolld_init_red_hat scripts/lvm2_lvmpolld_systemd_red_hat.service scripts/lvm2_lvmpolld_systemd_red_hat.socket scripts/lvmlockd.service scripts/lvmlocks.service scripts/lvm2_monitoring_init_red_hat scripts/lvm2_monitoring_systemd_red_hat.service scripts/lvm2_tmpfiles_red_hat.conf scripts/lvmdump.sh scripts/Makefile test/Makefile tools/Makefile udev/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -17709,7 +17408,6 @@ do
     "make.tmpl") CONFIG_FILES="$CONFIG_FILES make.tmpl" ;;
     "libdm/make.tmpl") CONFIG_FILES="$CONFIG_FILES libdm/make.tmpl" ;;
     "daemons/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/Makefile" ;;
-    "daemons/cmirrord/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/cmirrord/Makefile" ;;
     "daemons/dmeventd/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/Makefile" ;;
     "daemons/dmeventd/libdevmapper-event.pc") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/libdevmapper-event.pc" ;;
     "daemons/dmeventd/plugins/Makefile") CONFIG_FILES="$CONFIG_FILES daemons/dmeventd/plugins/Makefile" ;;
@@ -17746,11 +17444,9 @@ do
     "scripts/blkdeactivate.sh") CONFIG_FILES="$CONFIG_FILES scripts/blkdeactivate.sh" ;;
     "scripts/blk_availability_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_init_red_hat" ;;
     "scripts/blk_availability_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/blk_availability_systemd_red_hat.service" ;;
-    "scripts/cmirrord_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/cmirrord_init_red_hat" ;;
     "scripts/com.redhat.lvmdbus1.service") CONFIG_FILES="$CONFIG_FILES scripts/com.redhat.lvmdbus1.service" ;;
     "scripts/dm_event_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.service" ;;
     "scripts/dm_event_systemd_red_hat.socket") CONFIG_FILES="$CONFIG_FILES scripts/dm_event_systemd_red_hat.socket" ;;
-    "scripts/lvm2_cmirrord_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_cmirrord_systemd_red_hat.service" ;;
     "scripts/lvm2_lvmdbusd_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmdbusd_systemd_red_hat.service" ;;
     "scripts/lvm2_lvmpolld_init_red_hat") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmpolld_init_red_hat" ;;
     "scripts/lvm2_lvmpolld_systemd_red_hat.service") CONFIG_FILES="$CONFIG_FILES scripts/lvm2_lvmpolld_systemd_red_hat.service" ;;

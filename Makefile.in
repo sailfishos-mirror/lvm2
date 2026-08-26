@@ -168,7 +168,6 @@ help:
 	@echo "  help			Display callable targets."
 	@echo "  install		Install all files."
 	@echo "  install_all_man	Install all man pages."
-	@echo "  install_cluster	Install cmirrord."
 	@echo "  install_device-mapper	Install device mapper files."
 	@echo "  install_initscripts	Install initialization scripts."
 	@echo "  install_lvm2		Install lvm2 files."
