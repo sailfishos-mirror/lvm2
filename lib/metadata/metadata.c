@@ -4834,7 +4834,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 		}
 	}
 
-	if (found_old_metadata) {
+	if (found_old_metadata && (cmd->command_enum != vgck_update_metadata_CMD)) {
 		log_warn("WARNING: Inconsistent metadata found for VG %s.", vgname);
 		log_warn("See vgck --updatemetadata to correct inconsistency.");
 	}
