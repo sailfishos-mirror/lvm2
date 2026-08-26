@@ -347,6 +347,9 @@
 /* Define to 1 if you have the 'realpath' function. */
 #undef HAVE_REALPATH
 
+/* Define to 1 if you have the 'renameat2' function. */
+#undef HAVE_RENAMEAT2
+
 /* Define to 1 to include support for realtime clock. */
 #undef HAVE_REALTIME
 

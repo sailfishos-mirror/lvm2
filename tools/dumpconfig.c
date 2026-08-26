@@ -335,6 +335,23 @@ static int _move_to_backup(struct cmd_context *cmd, const char *source_path, con
 }
 
 /*
+ * Fallback used when RENAME_EXCHANGE is not available (either at build time or
+ * at runtime): back up the existing destination before overwriting it.
+ */
+static int _rename_with_backup(struct cmd_context *cmd, const char *temp_path,
+			       const char *dest_path)
+{
+	if (!_move_to_backup(cmd, dest_path, dest_path))
+		log_warn("Failed to create backup of %s", dest_path);
+	if (rename(temp_path, dest_path) < 0) {
+		log_sys_error("rename", temp_path);
+		unlink(temp_path);
+		return 0;
+	}
+	return 1;
+}
+
+/*
  * Atomically write config to destination file using RENAME_EXCHANGE.
  * This ensures the file is never left in a partially written state.
  */
@@ -390,18 +407,14 @@ static int _atomic_write_config(struct cmd_context *cmd,
 	}
 
 	if (exists) {
+#ifdef HAVE_RENAMEAT2
 		/* Atomically exchange temp file with destination */
 		if (renameat2(AT_FDCWD, temp_path, AT_FDCWD, dest_path, RENAME_EXCHANGE) < 0) {
 			if (errno == ENOSYS || errno == EINVAL) {
 				/* renameat2 not supported; back up dest before overwriting */
 				log_warn("renameat2 not supported, using rename fallback");
-				if (!_move_to_backup(cmd, dest_path, dest_path))
-					log_warn("Failed to create backup of %s", dest_path);
-				if (rename(temp_path, dest_path) < 0) {
-					log_sys_error("rename", temp_path);
-					unlink(temp_path);
+				if (!_rename_with_backup(cmd, temp_path, dest_path))
 					return 0;
-				}
 			} else {
 				log_sys_error("renameat2", temp_path);
 				unlink(temp_path);
@@ -414,6 +427,11 @@ static int _atomic_write_config(struct cmd_context *cmd,
 				unlink(temp_path);
 			}
 		}
+#else
+		/* renameat2 not available at build time; back up dest before overwriting */
+		if (!_rename_with_backup(cmd, temp_path, dest_path))
+			return 0;
+#endif
 	} else {
 		/* Destination doesn't exist, just rename temp to dest */
 		if (rename(temp_path, dest_path) < 0) {
