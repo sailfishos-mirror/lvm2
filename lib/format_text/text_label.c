@@ -526,6 +526,12 @@ static int _text_read(struct cmd_context *cmd, struct labeller *labeller, struct
 		return_0;
 
 	memcpy(pvid, &pvhdr->pv_uuid, ID_LEN);
+
+	if (!id_valid((const struct id *)pvid)) {
+		log_error("Invalid PV UUID on %s.", dev_name(dev));
+		return 0;
+	}
+
 	strncpy(vgid, FMT_TEXT_ORPHAN_VG_NAME, ID_LEN);
 
 	/*

@@ -1551,6 +1551,16 @@ int label_read_pvid(struct device *dev, int *has_pvid)
 
 	pvh = (struct pv_header *)(buf + SECTOR_SIZE + sizeof(struct label_header));
 	memcpy(dev->pvid, pvh->pv_uuid, ID_LEN);
+
+	if (!id_valid((const struct id *)dev->pvid)) {
+		log_warn("WARNING: Ignoring PV with invalid UUID on %s.", dev_name(dev));
+		memset(dev->pvid, 0, sizeof(dev->pvid));
+		if (has_pvid)
+			*has_pvid = 0;
+		label_scan_invalidate(dev);
+		return 1;
+	}
+
 	return 1;
 }
 
