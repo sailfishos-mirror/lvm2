@@ -166,9 +166,6 @@
 /* Define to 1 if you have the <assert.h> header file. */
 #undef HAVE_ASSERT_H
 
-/* Define to 1 if you have the 'atexit' function. */
-#undef HAVE_ATEXIT
-
 /* Define if blkid.h has BLKID_SUBLKS_FSINFO */
 #undef HAVE_BLKID_SUBLKS_FSINFO
 
@@ -344,11 +341,11 @@
 /* Define to 1 if you have the 'realpath' function. */
 #undef HAVE_REALPATH
 
-/* Define to 1 if you have the 'renameat2' function. */
-#undef HAVE_RENAMEAT2
-
 /* Define to 1 to include support for realtime clock. */
 #undef HAVE_REALTIME
+
+/* Define to 1 if you have the 'renameat2' function. */
+#undef HAVE_RENAMEAT2
 
 /* Define to 1 if you have the 'rl_completion_matches' function. */
 #undef HAVE_RL_COMPLETION_MATCHES
