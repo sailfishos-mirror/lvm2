@@ -41,10 +41,12 @@ static int _snap_text_import(struct lv_segment *seg, const struct dm_config_node
 	const char *org_name = NULL, *cow_name = NULL;
 	int merge = 0;
 
-	if (!dm_config_get_uint32(sn, "chunk_size", &chunk_size)) {
-		log_error("Couldn't read chunk size for snapshot.");
-		return 0;
-	}
+	if (!dm_config_get_uint32(sn, "chunk_size", &chunk_size))
+		return SEG_LOG_ERROR("Snapshot chunk size is missing in");
+
+	if (!validate_snapshot_chunk_size(chunk_size))
+		return SEG_LOG_ERROR("Invalid chunk size %u for snapshot in",
+				     chunk_size);
 
 	if (dm_config_has_node(sn, "merging_store")) {
 		if (!(cow_name = dm_config_find_str(sn, "merging_store", NULL)))

@@ -23,6 +23,15 @@
 #include "lib/display/display.h"
 
 #define SNAPSHOT_MIN_CHUNKS	3       /* Minimum number of chunks in snapshot */
+#define SNAPSHOT_MIN_CHUNK_SIZE	8       /* 4KiB in sectors */
+#define SNAPSHOT_MAX_CHUNK_SIZE	1024    /* 512KiB in sectors */
+
+int validate_snapshot_chunk_size(uint32_t chunk_size)
+{
+	return chunk_size >= SNAPSHOT_MIN_CHUNK_SIZE &&
+	       chunk_size <= SNAPSHOT_MAX_CHUNK_SIZE &&
+	       is_power_of_2(chunk_size);
+}
 
 int lv_is_origin(const struct logical_volume *lv)
 {
@@ -67,6 +76,12 @@ static uint64_t _cow_max_size(struct cmd_context *cmd, uint64_t origin_size, uin
 	 *        2nd. chunk is the 1st. metadata chunk
 	 *        3rd. chunk is the 1st. data chunk
 	 */
+
+	if (!validate_snapshot_chunk_size(chunk_size)) {
+		log_error(INTERNAL_ERROR "Snapshot chunk size %u is invalid.",
+			  chunk_size);
+		return 0;
+	}
 
 	uint64_t origin_chunks = (origin_size + chunk_size - 1) / chunk_size;
 	uint64_t chunks_per_metadata_area = (uint64_t)chunk_size << (SECTOR_SHIFT - 4);

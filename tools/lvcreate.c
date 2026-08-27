@@ -1270,8 +1270,7 @@ static int _lvcreate_params(struct cmd_context *cmd,
 
 	if (lp->snapshot && (lp->extents || lcp->size)) {
 		lp->chunk_size = arg_uint_value(cmd, chunksize_ARG, 8);
-		if (lp->chunk_size < 8 || lp->chunk_size > 1024 ||
-		    !is_power_of_2(lp->chunk_size)) {
+		if (!validate_snapshot_chunk_size(lp->chunk_size)) {
 			log_error("Chunk size must be a power of 2 in the "
 				  "range 4K to 512K.");
 			return 0;

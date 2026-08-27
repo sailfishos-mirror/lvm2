@@ -1171,6 +1171,7 @@ int lv_is_integrity_origin(const struct logical_volume *lv);
 int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struct dm_list *result, struct dm_pool *mem);
 
 int lv_is_merging_cow(const struct logical_volume *cow);
+int validate_snapshot_chunk_size(uint32_t chunk_size);
 uint32_t cow_max_extents(const struct logical_volume *origin, uint32_t chunk_size);
 int cow_has_min_chunks(const struct volume_group *vg, uint32_t cow_extents, uint32_t chunk_size);
 int lv_is_cow_covering_origin(const struct logical_volume *lv);

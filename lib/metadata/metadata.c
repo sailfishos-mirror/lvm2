@@ -2452,6 +2452,14 @@ int vg_validate(struct volume_group *vg)
 		else		/* count other non-snapshot invisible volumes */
 			hidden_lv_count++;
 
+		if (lv_is_cow(lvl->lv) &&
+		    lvl->lv->snapshot &&
+		    !validate_snapshot_chunk_size(lvl->lv->snapshot->chunk_size)) {
+			log_error(INTERNAL_ERROR "Snapshot %s has invalid chunk size %u.",
+				  lvl->lv->name, lvl->lv->snapshot->chunk_size);
+			r = 0;
+		}
+
 		/*
 		 *  FIXME: add check for unreferenced invisible LVs
 		 *   - snapshot cow & origin
