@@ -107,6 +107,14 @@ else
 fi
 
 if test -d "$dir" ; then
+	test -L "$dir" && die 5 "Fatal: directory $dir is a symlink"
+
+	dir_owner=$(stat -Lc '%u' "$dir" 2>/dev/null) || die 5 "Fatal: cannot stat $dir"
+	test "$dir_owner" = "0" || die 5 "Fatal: directory $dir is not owned by root"
+
+	dir_perms=$(stat -Lc '%a' "$dir" 2>/dev/null) || die 5 "Fatal: cannot stat $dir"
+	test $((8#$dir_perms & 8#022)) -eq 0 || die 5 "Fatal: directory $dir is writable by group or others"
+
 	# Check if directory is accessible and empty
 	if ! test -r "$dir" || ! test -w "$dir" || ! test -x "$dir"; then
 		die 5 "Fatal: directory $dir already exists and is not accessible"
