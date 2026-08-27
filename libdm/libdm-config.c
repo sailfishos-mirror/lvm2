@@ -41,6 +41,8 @@ enum {
 	TOK_EOF
 };
 
+#define MAX_SECTION_DEPTH 128
+
 struct parser {
 	const char *fb, *fe;		/* file limits */
 
@@ -54,6 +56,7 @@ struct parser {
 	const char *key;        /* last obtained key */
 	unsigned ignored_creation_time;
 	unsigned section_indent;
+	unsigned depth;
 	const char *stop_after_section;
 };
 
@@ -655,13 +658,23 @@ static struct dm_config_node *_section(struct parser *p, struct dm_config_node *
 		return_NULL;
 
 	if (p->t == TOK_SECTION_B) {
+		if (p->depth >= MAX_SECTION_DEPTH) {
+			log_error("Parse error at byte %" PRIptrdiff_t " (line %d): "
+				  "maximum section nesting depth exceeded.",
+				  p->tb - p->fb + 1, p->line);
+			return NULL;
+		}
 		if (p->stop_after_section)
 			++p->section_indent;
 		match(TOK_SECTION_B);
+		p->depth++;
 		while (p->t != TOK_SECTION_E) {
-			if (!(_section(p, root)))
+			if (!(_section(p, root))) {
+				p->depth--;
 				return_NULL;
+			}
 		}
+		p->depth--;
 		match(TOK_SECTION_E);
 		if (p->stop_after_section && (--p->section_indent == 1)) {
 			if (!strcmp(str, p->stop_after_section)) {
