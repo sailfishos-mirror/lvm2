@@ -3445,9 +3445,20 @@ static int _allocate(struct alloc_handle *ah,
 	if (prev_lvseg)
 		alloc_state.areas_size += _stripes_per_mimage(prev_lvseg) * prev_lvseg->area_count;
 
+	/*
+	 * No candidate PVs means every usable device was either full or
+	 * excluded from allocation (e.g. it already holds a sibling RAID/mirror
+	 * image of the LV being moved).  Report that as an out-of-space
+	 * condition rather than the misleading malloc-failure message below.
+	 */
+	if (!alloc_state.areas_size) {
+		log_error("No free space available on usable device%s for the allocation.",
+			  dm_list_size(allocatable_pvs) == 1 ? "" : "s");
+		return 0;
+	}
+
 	/* Allocate an array of pv_areas to hold the largest space on each PV */
-	if (!alloc_state.areas_size ||
-	    !(alloc_state.areas = malloc(sizeof(*alloc_state.areas) * alloc_state.areas_size))) {
+	if (!(alloc_state.areas = malloc(sizeof(*alloc_state.areas) * alloc_state.areas_size))) {
 		log_error("Couldn't allocate areas array.");
 		return 0;
 	}
