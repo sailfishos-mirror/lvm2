@@ -55,6 +55,10 @@
 .OPA driverloaded
 \fBy\fP|\fBn\fP
 ..
+.de O_edit
+.OPA edit
+\fIString\fP
+..
 .de O_file
 .OPA f file
 \fIString\fP
@@ -70,6 +74,10 @@
 ..
 .de O_ignoreunsupported
 .OPS ignoreunsupported
+..
+.de O_input
+.OPA input
+\fIString\fP
 ..
 .de O_journal
 .OPA journal
@@ -97,6 +105,10 @@
 ..
 .de O_nolocking
 .OPS nolocking
+..
+.de O_output
+.OPA output
+\fIString\fP
 ..
 .de O_profile
 .OPA profile
@@ -178,10 +190,102 @@ lvmconfig \(em Display and manipulate configuration information
 .
 .nh
 .TP
-\fBlvmconfig\fP
+\fBlvmconfig\fP \fIoption_args\fP
 [ \fIoption_args\fP ]
 .br
 [ \fIposition_args\fP ]
+.P
+.na
+.RS 5
+.if t .ta 3nR +1uL \" PostScript/PDF
+.PD 0
+.O_atversion
+.br
+.O_commandprofile
+.br
+.O_config
+.br
+.O_debug
+.br
+.O_devices
+.br
+.O_devicesfile
+.br
+.O_driverloaded
+.br
+.O_edit
+.br
+.O_file
+.br
+.O_help
+.br
+.O_ignoreadvanced
+.br
+.O_ignorelocal
+.br
+.O_ignoreunsupported
+.br
+.O_input
+.br
+.O_journal
+.br
+.O_list
+.br
+.O_lockopt
+.br
+.O_longhelp
+.br
+.O_mergedconfig
+.br
+.O_metadataprofile
+.br
+.O_nohints
+.br
+.O_nolocking
+.br
+.O_output
+.br
+.O_profile
+.br
+.O_quiet
+.br
+.O_showdeprecated
+.br
+.O_showunsupported
+.br
+.O_sinceversion
+.br
+.O_test
+.br
+.O_typeconfig
+.br
+.O_unconfigured
+.br
+.O_validate
+.br
+.O_valuesonly
+.br
+.O_verbose
+.br
+.O_version
+.br
+.O_withcomments
+.br
+.O_withgeneralpreamble
+.br
+.O_withlocalpreamble
+.br
+.O_withspaces
+.br
+.O_withsummary
+.br
+.O_withversions
+.br
+.O_yes
+.PD
+.if t .ta
+.RE
+.ad
 .hy
 .
 .ds TT \&
@@ -262,19 +366,11 @@ line settings from --config.
 ]
 .br
 [
-.O_withcomments
-]
-.br
-[
 .O_withgeneralpreamble
 ]
 .br
 [
 .O_withlocalpreamble
-]
-.br
-[
-.O_withspaces
 ]
 .br
 [
@@ -289,8 +385,59 @@ line settings from --config.
 .br
 [ \fIString\fP\ .\|.\|.\& ]
 .RE
+.
 .P
 \(em
+.P
+.
+Edit settings in lvm config file.
+.P
+.B lvmconfig
+.O_edit
+.RS
+[
+.O_file
+]
+.br
+[
+.O_edit
+]
+.br
+[ COMMON_OPTIONS ]
+.RE
+.
+.P
+\(em
+.P
+.
+Read a config file and write to output file or stdout.
+.P
+.B lvmconfig
+.O_input
+.RS
+[
+.O_edit
+]
+.br
+[
+.O_output
+]
+.br
+[ COMMON_OPTIONS ]
+.RE
+.P
+\(em
+.P
+Common options for command:
+.RS
+[
+.O_withcomments
+]
+.br
+[
+.O_withspaces
+]
+.RE
 .P
 Common options for lvm:
 .RS
@@ -419,6 +566,13 @@ If set to no, the command will not attempt to use device-mapper.
 For testing and debugging.
 .
 .TP
+.O_edit
+Edit or remove a setting in an lvm config file.
+The setting is specified as Section/Field=Value.
+To remove a setting, use Section/Field=-.
+Repeat this option to edit multiple settings.
+.
+.TP
 .O_file
 Write output to the named file.
 .
@@ -444,6 +598,10 @@ either used for debugging and development purposes only or their support is not
 yet complete and they are not meant to be used in production. The \fBcurrent\fP
 and \fBdiff\fP types include unsupported settings in their output by default,
 all the other types ignore unsupported settings.
+.
+.TP
+.O_input
+Read configuration from the specified input file.
 .
 .TP
 .O_journal
@@ -493,6 +651,13 @@ perform standard hint file invalidation where appropriate.
 .O_nolocking
 Disable locking. Use with caution, concurrent commands may produce
 incorrect results.
+.
+.TP
+.O_output
+Write lvm configuration to the specified output file.
+Used with --input to read configuration from one file,
+optionally apply edits, and write the configuration to
+another file.
 .
 .TP
 .O_profile

@@ -564,8 +564,8 @@ allocation {
 	# Settings for the cache policy.
 	# See documentation for individual cache policies for more info.
 	# This configuration section has an automatic default value.
-	# cache_settings {
-	# }
+	cache_settings {
+	}
 
 	# Configuration option allocation/cache_pool_chunk_size.
 	# The minimal chunk size in KiB for cache pool volumes.
@@ -991,6 +991,15 @@ backup {
 	# Minimum number of days to keep archive files.
 	# This configuration option has an automatic default value.
 	# retain_days = 30
+
+	# Configuration option backup/config_file_backup_limit.
+	# The max number of backup files to keep in /etc/lvm/old_conf.
+	# LVM creates a backup of the config file each time
+	# lvmconfig --edit modifies lvm.conf or lvmlocal.conf.
+	# When the max number of backups is reached, the oldest are
+	# removed to remain at the limit. Set to 0 to disable backups.
+	# This configuration option has an automatic default value.
+	# config_file_backup_limit = 50
 }
 
 # Configuration section shell.
@@ -1213,10 +1222,20 @@ global {
 	# use_lvmlockd = 0
 
 	# Configuration option global/lvmlockd_lock_retries.
-	# Retry lvmlockd lock requests this many times.
-	# Applicable only if LVM is compiled with lockd support
+	# Retry global and VG lock requests this many times per owner.
+	# When a global or VG lock request fails because the lock is
+	# held by another host, the lock request is retried after a
+	# one second delay, up to this many times.  If the lock owner
+	# changes between retries, the per-owner retry count resets,
+	# allowing the command to wait through multiple owners in a
+	# busy cluster.  A ceiling of retries*10 total attempts
+	# prevents indefinite delays.  LV lock requests are not
+	# retried by default.  The --lockopt retries=N option
+	# overrides this setting for a single command, and applies to
+	# LV locks as well as global and VG locks.
+	# Applicable only if LVM is compiled with lockd support.
 	# This configuration option has an automatic default value.
-	# lvmlockd_lock_retries = 3
+	# lvmlockd_lock_retries = 6
 
 	# Configuration option global/sanlock_lv_extend.
 	# Size in MiB to extend the internal LV holding sanlock locks.
@@ -1929,7 +1948,7 @@ activation {
 
 # Configuration section metadata.
 # This configuration section has an automatic default value.
-# metadata {
+metadata {
 
 	# Configuration option metadata/check_pv_device_sizes.
 	# Check device sizes are not smaller than corresponding PV sizes.
@@ -2017,7 +2036,7 @@ activation {
 	# This configuration option is advanced.
 	# This configuration option has an automatic default value.
 	# stripesize = 64
-# }
+}
 
 # Configuration section report.
 # LVM report command output formatting.
@@ -2506,7 +2525,7 @@ dmeventd {
 # Configuration section tags.
 # Host tag settings.
 # This configuration section has an automatic default value.
-# tags {
+tags {
 
 	# Configuration option tags/hosttags.
 	# Create a host tag using the machine name.
@@ -2531,7 +2550,7 @@ dmeventd {
 	#
 	# This configuration section has variable name.
 	# This configuration section has an automatic default value.
-	# tag {
+	tag {
 
 		# Configuration option tags/<tag>/host_list.
 		# A list of machine names.
@@ -2540,5 +2559,5 @@ dmeventd {
 		# this list, the name of the subsection is applied to the
 		# machine as a 'host tag'.
 		# This configuration option does not have a default value defined.
-	# }
-# }
+	}
+}

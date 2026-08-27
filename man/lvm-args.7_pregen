@@ -544,6 +544,15 @@ searching standard locations in case of damaged headers,
 Used by: \fBpvck\fP
 .
 .TP
+\fB--edit\fP \fIString\fP
+Edit or remove a setting in an lvm config file.
+The setting is specified as Section/Field=Value.
+To remove a setting, use Section/Field=-.
+Repeat this option to edit multiple settings.
+.br
+Used by: \fBdumpconfig\fP, \fBlvmconfig\fP
+.
+.TP
 \fB--errorwhenfull\fP \fBy\fP|\fBn\fP
 Specifies thin pool behavior when data space is exhausted.
 When yes, device-mapper will immediately return an error
@@ -734,6 +743,12 @@ Used by: \fBvgimportclone\fP
 Add devices to the devices file.
 .br
 Used by: \fBvgimportclone\fP
+.
+.TP
+\fB--input\fP \fIString\fP
+Read configuration from the specified input file.
+.br
+Used by: \fBdumpconfig\fP, \fBlvmconfig\fP
 .
 .TP
 \fB--integritysettings\fP \fIString\fP
@@ -1162,6 +1177,15 @@ with this name.
 Used by: \fBlvconvert\fP
 .
 .TP
+\fB--output\fP \fIString\fP
+Write lvm configuration to the specified output file.
+Used with --input to read configuration from one file,
+optionally apply edits, and write the configuration to
+another file.
+.br
+Used by: \fBdumpconfig\fP, \fBlvmconfig\fP
+.
+.TP
 \fB-P\fP|\fB--partial\fP
 Commands will do their best to activate LVs with missing PV extents.
 Missing extents may be replaced with error or zero segments
@@ -1529,7 +1553,12 @@ In this case, a lock owned by a failed host can only be acquired
 using the persist feature.
 nopersist: do not use the persist feature.
 timeout: do not use the notimeout feature.
-The default behavior with no settings configured is: nopersist and timeout.
+nowatchdog: do not connect to wdmd/watchdog when starting the VG lockspace.
+Requires notimeout. Without timeout-based recovery, the watchdog is not needed.
+watchdog: when starting a VG lockspace, sanlock/wdmd connect the lockspace to /dev/watchdog.
+If VG lockspace renewals fail (e.g. due to a storage outage, or a sanlock daemon failure),
+then the watchdog resets the host if locks are held in the VG.
+The default behavior with no settings configured is: nopersist, timeout, watchdog.
 .br
 Used by: \fBvgchange\fP, \fBvgcreate\fP
 .

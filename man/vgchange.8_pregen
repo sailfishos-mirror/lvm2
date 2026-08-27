@@ -1291,7 +1291,12 @@ In this case, a lock owned by a failed host can only be acquired
 using the persist feature.
 nopersist: do not use the persist feature.
 timeout: do not use the notimeout feature.
-The default behavior with no settings configured is: nopersist and timeout.
+nowatchdog: do not connect to wdmd/watchdog when starting the VG lockspace.
+Requires notimeout. Without timeout-based recovery, the watchdog is not needed.
+watchdog: when starting a VG lockspace, sanlock/wdmd connect the lockspace to /dev/watchdog.
+If VG lockspace renewals fail (e.g. due to a storage outage, or a sanlock daemon failure),
+then the watchdog resets the host if locks are held in the VG.
+The default behavior with no settings configured is: nopersist, timeout, watchdog.
 .
 .TP
 .O_setpersist
