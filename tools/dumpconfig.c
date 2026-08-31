@@ -598,7 +598,10 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 			goto out;
 		}
 
-		merge_config_tree(cmd, cft, edits_add_cft, CONFIG_MERGE_TYPE_RAW);
+		if (!merge_config_tree(cmd, cft, edits_add_cft, CONFIG_MERGE_TYPE_RAW)) {
+			log_error("Failed to apply configuration edits");
+			goto out;
+		}
 	}
 
 	if (!config_set_source(cft, CONFIG_FILE))
@@ -609,7 +612,10 @@ int editconfig_cmd(struct cmd_context *cmd, int argc, char **argv)
 			log_error("Failed to parse removal specifications");
 			goto out;
 		}
-		merge_config_tree(cmd, cft, edits_remove_cft, CONFIG_MERGE_TYPE_REMOVE);
+		if (!merge_config_tree(cmd, cft, edits_remove_cft, CONFIG_MERGE_TYPE_REMOVE)) {
+			log_error("Failed to apply configuration removals");
+			goto out;
+		}
 	}
 
 	if (dm_snprintf(lvm_conf_path, sizeof(lvm_conf_path), "%s/lvm.conf", cmd->system_dir) < 0)
