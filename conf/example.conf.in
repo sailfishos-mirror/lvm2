@@ -564,8 +564,8 @@ allocation {
 	# Settings for the cache policy.
 	# See documentation for individual cache policies for more info.
 	# This configuration section has an automatic default value.
-	cache_settings {
-	}
+	# cache_settings {
+	# }
 
 	# Configuration option allocation/cache_pool_chunk_size.
 	# The minimal chunk size in KiB for cache pool volumes.
@@ -1948,7 +1948,7 @@ activation {
 
 # Configuration section metadata.
 # This configuration section has an automatic default value.
-metadata {
+# metadata {
 
 	# Configuration option metadata/check_pv_device_sizes.
 	# Check device sizes are not smaller than corresponding PV sizes.
@@ -2036,7 +2036,7 @@ metadata {
 	# This configuration option is advanced.
 	# This configuration option has an automatic default value.
 	# stripesize = 64
-}
+# }
 
 # Configuration section report.
 # LVM report command output formatting.
@@ -2525,7 +2525,7 @@ dmeventd {
 # Configuration section tags.
 # Host tag settings.
 # This configuration section has an automatic default value.
-tags {
+# tags {
 
 	# Configuration option tags/hosttags.
 	# Create a host tag using the machine name.
@@ -2550,7 +2550,7 @@ tags {
 	#
 	# This configuration section has variable name.
 	# This configuration section has an automatic default value.
-	tag {
+	# tag {
 
 		# Configuration option tags/<tag>/host_list.
 		# A list of machine names.
@@ -2559,5 +2559,5 @@ tags {
 		# this list, the name of the subsection is applied to the
 		# machine as a 'host tag'.
 		# This configuration option does not have a default value defined.
-	}
-}
+	# }
+# }
