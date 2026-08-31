@@ -84,3 +84,23 @@ lvm dumpconfig --type current --mergedconfig --list \
   --config 'allocation { cache_settings { smq { migration_threshold = 2048 } } }' \
   -f lvmdumpconfig
 grep 'allocation/cache_settings/smq/migration_threshold=2048' lvmdumpconfig
+
+# The CFG_DEFAULT_COMMENTED flag is what decides whether a section's
+# braces are commented out in "--type default" output - not the nesting
+# depth. Flagged sections are commented out at every level, while
+# unflagged sections stay uncommented regardless of depth.
+lvm dumpconfig --type default -f lvmdumpconfig
+
+# CFG_DEFAULT_COMMENTED at the top level: braces commented out
+grep -E '^# metadata \{' lvmdumpconfig
+grep -E '^# tags \{' lvmdumpconfig
+
+# CFG_DEFAULT_COMMENTED when nested: braces commented out just the same
+grep -E '^[[:space:]]+# cache_settings \{' lvmdumpconfig
+grep -E '^[[:space:]]+# tag \{' lvmdumpconfig
+
+# No CFG_DEFAULT_COMMENTED flag: braces stay uncommented
+grep -E '^global \{' lvmdumpconfig
+grep -E '^activation \{' lvmdumpconfig
+grep -E '^report \{' lvmdumpconfig
+not grep -E '^# (global|activation|report) \{' lvmdumpconfig

@@ -163,6 +163,40 @@ grep 'verbose=1' comments.conf
 # --withcomments should include comment lines
 grep '^[[:space:]]*#' comments.conf
 
+# --withcomments emits the full config with edits applied. A setting or
+# section left at its default follows its CFG_DEFAULT_COMMENTED flag -
+# commented out when flagged, shown uncommented when not. A setting or
+# section that ends up holding a non-default value always stays
+# uncommented.
+rm -f fulldiff.conf
+lvmconfig --edit metadata/check_pv_device_sizes=0 --withcomments --file fulldiff.conf
+
+# The edited setting is active (uncommented)
+grep -E '^[[:space:]]*check_pv_device_sizes=0' fulldiff.conf
+
+# Settings left at a flagged default are commented out
+grep -E '^[[:space:]]*# [a-z_]+=' fulldiff.conf
+
+# The edited section stays uncommented - it now holds a non-default value
+grep -E '^metadata \{' fulldiff.conf
+
+# A default section carrying the CFG_DEFAULT_COMMENTED flag is commented out
+grep -E '^# tags \{' fulldiff.conf
+
+# A default section without the CFG_DEFAULT_COMMENTED flag stays uncommented
+grep -E '^report \{' fulldiff.conf
+not grep -E '^# report \{' fulldiff.conf
+
+# A non-default value inside a NO_CHECK policy subsection keeps the whole
+# enclosing chain of braces uncommented so the value is not orphaned
+# inside commented-out sections
+rm -f fulldiff2.conf
+lvmconfig --edit allocation/cache_settings/smq/migration_threshold=2048 --withcomments --file fulldiff2.conf
+grep -E '^allocation \{' fulldiff2.conf
+grep -E '^[[:space:]]+cache_settings \{' fulldiff2.conf
+grep -E '^[[:space:]]+smq \{' fulldiff2.conf
+grep -E '^[[:space:]]+migration_threshold=2048' fulldiff2.conf
+
 #
 # Test --withspaces
 #
