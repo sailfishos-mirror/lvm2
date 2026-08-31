@@ -1143,12 +1143,26 @@ static int _config_def_check_tree(struct cft_check_handle *handle,
 {
 	struct dm_config_node *cn;
 	const cfg_def_item_t *def;
-	int valid, r = 1;
+	int valid, r = 1, id;
 	size_t len;
 
 	def = cfg_def_get_item_p(root->id);
-	if (def->flags & CFG_SECTION_NO_CHECK)
+	if (def->flags & CFG_SECTION_NO_CHECK) {
+		/*
+		 * Contents of a NO_CHECK section (e.g. cache policy_settings)
+		 * are not registered, so no per-item diff is computed for them.
+		 * Any setting present here is user-supplied and differs from
+		 * the empty default, so mark this section and its registered
+		 * ancestors with CFG_DIFF. Otherwise FULL_DIFF output would
+		 * comment out the enclosing braces while leaving the settings
+		 * active, which is invalid.
+		 */
+		if (root->child) {
+			for (id = root->id; id && !(handle->status[id] & CFG_DIFF); id = _cfg_def_items[id].parent)
+				handle->status[id] |= CFG_DIFF;
+		}
 		return 1;
+	}
 
 	for (cn = root->child; cn; cn = cn->sib) {
 		if ((valid = _config_def_check_node(handle, vp, pvp, rp, prp,
@@ -1981,13 +1995,21 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 	}
 
 	/* Determine if this value should be commented out */
-	if (cfg_def && !out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
+	if (cfg_def && !out->tree_spec->valuesonly) {
 		int should_comment = 0;
 
-		/* For FULL_DIFF tree: comment if value is at default (no CFG_DIFF) */
+		/*
+		 * For FULL_DIFF tree: a setting or section left at its default
+		 * (no CFG_DIFF) follows its CFG_DEFAULT_COMMENTED flag, exactly
+		 * as in default config output - a flagged default is commented
+		 * out, an unflagged one stays uncommented. A setting or section
+		 * carrying a diff (CFG_DIFF propagated up from a non-default
+		 * value it contains) always stays uncommented.
+		 */
 		if ((out->tree_spec->type == CFG_DEF_TREE_FULL_DIFF) &&
 		    out->tree_spec->check_status &&
-		    !(out->tree_spec->check_status[cn->id] & CFG_DIFF)) {
+		    !(out->tree_spec->check_status[cn->id] & CFG_DIFF) &&
+		    (cfg_def->flags & (CFG_DEFAULT_UNDEFINED | CFG_DEFAULT_COMMENTED))) {
 			should_comment = 1;
 		}
 		/* For DEFAULT/MISSING/etc trees: comment if CFG_DEFAULT_COMMENTED flag set */
