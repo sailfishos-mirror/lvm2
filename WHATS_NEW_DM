@@ -1,5 +1,6 @@
 Version 1.02.217 - 
 ===================
+  Resolve dmsetup vdostats through device tree and try -vpool name suffix.
   Make library initialization and finalization safe with dlopen and dlclose.
   Disable LeakSanitizer for the dmsetup udevcomplete udev rule.
   Hard limit config parser to 128 section nesting.
