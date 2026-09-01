@@ -47,6 +47,19 @@ argument is given,
 enumerates all device-mapper devices and reports statistics for every
 VDO target found.
 .P
+A
+.I device
+argument may name a VDO device directly, or any device-mapper device
+layered above one (for example an LVM VDO logical volume, or a thin
+logical volume whose pool data is a VDO).  In that case
+.B dmvdostats
+descends the device dependency tree and reports statistics for every
+underlying VDO device found.  As a convenience, a name that does not
+resolve to any device is retried with the LVM
+.B \-vpool
+suffix appended, so the hidden VDO pool device can be named by its pool
+logical volume name.
+.P
 .B dmvdostats
 is installed as a symlink to
 .BR dmsetup (8)

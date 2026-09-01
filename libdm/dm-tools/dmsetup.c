@@ -6054,9 +6054,119 @@ out:
 	return r;
 }
 
+/* Resolve a device name to its (major, minor) without emitting ioctl noise. */
+static int _vdo_device_info(const char *name, int *major, int *minor)
+{
+	struct dm_task *dmt;
+	struct dm_info info;
+	int r = 0;
+
+	if (!(dmt = dm_task_create(DM_DEVICE_INFO)))
+		return_0;
+	if (!dm_task_set_name(dmt, name))
+		goto_out;
+	if (!dm_task_no_open_count(dmt))
+		goto_out;
+	if (!_task_run(dmt))
+		goto_out;
+	if (dm_task_get_info(dmt, &info) && info.exists) {
+		*major = info.major;
+		*minor = info.minor;
+		r = 1;
+	}
+out:
+	dm_task_destroy(dmt);
+	return r;
+}
+
+#define VDO_WALK_MAX_DEPTH 64
+#define VDO_WALK_MAX_SEEN 256
+
+/* State threaded through the recursive dependency-tree descent below. */
+struct vdo_walk {
+	unsigned depth;			/* current recursion depth */
+	unsigned nseen;			/* number of visited devices */
+	int found;			/* any VDO device reported yet? */
+	uint64_t seen[VDO_WALK_MAX_SEEN]; /* visited devt set (diamond deps) */
+};
+
+/*
+ * Descend the dependency tree below a (major, minor) device and report every
+ * underlying VDO device found.  This lets 'vdostats' accept a device layered
+ * above a VDO (e.g. an LVM VDO LV, or a thin LV whose pool data is a VDO)
+ * instead of requiring the exact name of the hidden VDO pool device.
+ */
+static int _vdostats_walk(int major, int minor, struct vdo_walk *w)
+{
+	struct dm_task *dmt;
+	struct dm_deps *deps;
+	char dev_name[PATH_MAX];
+	unsigned i, j;
+	int cmajor, cminor;
+	int r = 0;
+
+	if (w->depth >= VDO_WALK_MAX_DEPTH) {
+		log_debug("Descended VDO_WALK_MAX_DEPTH (%u).", VDO_WALK_MAX_DEPTH);
+		return 1;
+	}
+
+	if (!(dmt = _get_deps_task(major, minor)))
+		return 1; /* no dependencies to descend into */
+
+	if (!(deps = dm_task_get_deps(dmt)))
+		goto_out;
+
+	for (i = 0; i < deps->count; i++) {
+		cmajor = (int) MAJOR(deps->device[i]);
+		cminor = (int) MINOR(deps->device[i]);
+
+		/* Only device-mapper devices can be a VDO or stack above one */
+		if (!dm_is_dm_major((uint32_t) cmajor))
+			continue;
+
+		/* Skip already visited devices (diamond dependencies) */
+		for (j = 0; j < w->nseen; j++)
+			if (w->seen[j] == deps->device[i])
+				break;
+
+		if (j < w->nseen)
+			continue;
+
+		if (w->nseen < VDO_WALK_MAX_SEEN)
+			w->seen[w->nseen++] = deps->device[i];
+
+		if (!dm_device_get_name((uint32_t) cmajor, (uint32_t) cminor, 0,
+					dev_name, sizeof(dev_name)))
+			continue;
+
+		if (_vdo_check_device(dev_name)) {
+			/* Separate multiple verbose reports for readability */
+			if (w->found && _switches[VERBOSE_ARG])
+				putchar('\n');
+			if (!_vdostats_process_device(dev_name))
+				goto_out;
+			w->found = 1;
+		} else {
+			w->depth++;
+			r = _vdostats_walk(cmajor, cminor, w);
+			w->depth--;
+			if (!r)
+				goto_out;
+		}
+	}
+
+	r = 1;
+out:
+	dm_task_destroy(dmt);
+	return r;
+}
+
 static int _vdostats(CMD_ARGS)
 {
 	const char *name = NULL;
+	char vpool_name[PATH_MAX];
+	struct vdo_walk walk = { 0 };
+	int major, minor;
 
 	if (names)
 		name = names->name;
@@ -6067,13 +6177,47 @@ static int _vdostats(CMD_ARGS)
 		name = argv[0];
 	}
 
-	if (!_vdo_check_device(name)) {
-		if (!names)
-			log_error("Device %s is not a VDO device.", name);
-		return names ? 1 : 0;
+	/*
+	 * Enumeration over all existing devices (no device argument):
+	 * report VDO devices and silently skip everything else.
+	 */
+	if (names)
+		return _vdo_check_device(name) ?
+			_vdostats_process_device(name) : 1;
+
+	/* Explicitly named device */
+	if (!_vdo_device_info(name, &major, &minor)) {
+		/*
+		 * Name does not resolve to any device - try the LVM naming
+		 * convention for the hidden VDO pool device '<name>-vpool'.
+		 *
+		 * This is a purely LVM2-specific shortcut: '<name>-vpool' is by
+		 * definition the VDO layer itself, so we only check it directly
+		 * and deliberately do not descend its dependency tree.
+		 */
+		if ((dm_snprintf(vpool_name, sizeof(vpool_name), "%s-vpool",
+				 name) >= 0) &&
+		    _vdo_device_info(vpool_name, &major, &minor) &&
+		    _vdo_check_device(vpool_name))
+			return _vdostats_process_device(vpool_name);
+
+		log_error("Device %s not found.", name);
+		return 0;
 	}
 
-	return _vdostats_process_device(name);
+	/* The named device is itself a VDO device */
+	if (_vdo_check_device(name))
+		return _vdostats_process_device(name);
+
+	/* Otherwise descend to the underlying VDO device(s) */
+	if (!_vdostats_walk(major, minor, &walk))
+		return_0;
+
+	if (walk.found)
+		return 1;
+
+	log_error("Device %s is not a VDO device.", name);
+	return 0;
 }
 
 static const struct command _dmsetup_commands[] = {
