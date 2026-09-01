@@ -7,6 +7,7 @@
 #
 # Commands:
 #   makeconfig      - Create configuration file interactively
+#   image-prep      - Make a non-cloud-ready OS image cloud-init capable
 #   create          - Create a new cluster
 #   destroy         - Destroy an existing cluster
 #   stop            - Stop cluster (hibernate VMs to disk)
@@ -71,6 +72,8 @@ Usage: $0 [-c config] [-i cluster_id] [-o os_image] [-R] <command>
 
 Commands:
   makeconfig         - Create configuration file interactively
+  image-prep -s <image>
+                     - Make a non-cloud-ready OS image cloud-init capable
   create             - Create a new cluster (auto-creates 'new' snapshot)
   destroy            - Destroy an existing cluster
   pause              - Pause cluster (save VMs to disk)
@@ -104,6 +107,14 @@ Command-Specific Options:
   makeconfig [-c output_file]
                  -c: Output file (default: configs/generated-cluster.conf)
                      Names auto-expand like global -c option
+  image-prep -s source_image [-d dest_image] [-f]
+                 -s: Path to the source OS image (required)
+                 -d: Path for the prepared image
+                     (default: <source>-cloudready.<ext>, next to the source)
+                 -f: Overwrite dest_image if it already exists
+                     The source image is never modified.
+                     (-i/-o are reserved globally for cluster_id/os_image,
+                     so this command uses -s/-d instead)
   snapshot -n snapshot_name
                  -n: Snapshot name (required)
   snapshot-delete -n snapshot_name
@@ -601,6 +612,83 @@ cluster_auto_detect_id() {
 #
 # Command implementations
 #
+
+cmd_image_prep() {
+    local input_image=""
+    local output_image=""
+    local force=0
+
+    # Parse command-specific options.
+    # -i/-o are NOT used here: main() strips any -i/-o appearing after the
+    # command as the global cluster_id/os_image options before this ever
+    # sees argv, so this command uses -s (source) / -d (dest) instead.
+    local OPTIND=2  # Start after command name
+    while getopts "s:d:f" opt; do
+        case $opt in
+            s)
+                input_image="$OPTARG"
+                ;;
+            d)
+                output_image="$OPTARG"
+                ;;
+            f)
+                force=1
+                ;;
+            *)
+                cluster_error "Invalid option for image-prep command"
+                usage
+                ;;
+        esac
+    done
+
+    if [ -z "$input_image" ]; then
+        cluster_error "No source image specified. Use: -s <path-to-image>"
+        echo ""
+        echo "Usage: $0 image-prep -s <source-image> [-d <dest-image>] [-f]"
+        echo ""
+        echo "Example:"
+        echo "  $0 image-prep -s ~/images/fedora-server.qcow2"
+        echo ""
+        return 1
+    fi
+
+    if [ ! -f "$input_image" ]; then
+        cluster_error "Source image not found: $input_image"
+        return 1
+    fi
+
+    if [ -z "$output_image" ]; then
+        local dir base ext
+        dir="$(dirname "$input_image")"
+        base="$(basename "$input_image")"
+        case "$base" in
+            *.*) ext=".${base##*.}"; base="${base%.*}" ;;
+            *)   ext="" ;;
+        esac
+        output_image="${dir}/${base}-cloudready${ext}"
+    fi
+
+    if [ -e "$output_image" ]; then
+        if [ "$force" -eq 1 ]; then
+            rm -f "$output_image"
+        else
+            cluster_error "Dest image already exists: $output_image"
+            echo "Use -f to overwrite it, or -d to choose a different path"
+            return 1
+        fi
+    fi
+
+    cluster_log "Preparing cloud-ready image from: $input_image"
+    cluster_image_prep "$input_image" "$output_image" || return 1
+
+    echo ""
+    echo "Cloud-ready image created: $output_image"
+    echo ""
+    echo "Use it with:"
+    echo "  $0 -o $output_image create"
+    echo "or set CLUSTER_NODE_OS_IMAGE=\"$output_image\" in your cluster config."
+    echo ""
+}
 
 cmd_create() {
     cluster_log "Creating new cluster"
@@ -2131,8 +2219,13 @@ main() {
     cluster_init_privileges
     cluster_log "Libvirt mode: $CLUSTER_PRIVILEGE_MODE ($LIBVIRT_DEFAULT_URI)"
 
-    # Check dependencies
-    cluster_check_deps
+    # Check dependencies. image-prep works directly on a qcow2 file and
+    # needs neither virt-install nor a live libvirt connection.
+    if [[ " $* " == *" image-prep "* ]]; then
+        cluster_check_image_prep_deps
+    else
+        cluster_check_deps
+    fi
 
     # Ensure state directory exists
     mkdir -p "$CLUSTER_STATE_DIR" 2>/dev/null || true
@@ -2269,6 +2362,9 @@ main() {
             else
                 cmd_makeconfig "$@"
             fi
+            ;;
+        image-prep)
+            cmd_image_prep "$@"
             ;;
         create)
             cmd_create

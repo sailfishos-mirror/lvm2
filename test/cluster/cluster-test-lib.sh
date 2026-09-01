@@ -800,6 +800,24 @@ cluster_get_cloudinit_dir() {
     echo "${CLUSTER_CLOUDINIT_DIR:-${TMPDIR:-/tmp}}/cloudinit-${vm_name}"
 }
 
+# Ensures the cluster test SSH keypair exists, generating it if needed.
+# Prints the public key file path and returns 0, or returns 1 on failure.
+# Callers capture this via command substitution, which runs it in a
+# subshell - so failures are reported via return status, not cluster_die
+# (an exit here would only terminate the subshell, not the caller).
+cluster_ensure_ssh_keypair() {
+    local key_dir="${CLUSTER_SSH_KEY_DIR:-$HOME/.ssh}"
+    local key_file="${key_dir}/cluster_test_rsa"
+
+    if [ ! -f "${key_file}.pub" ]; then
+        cluster_log "Generating SSH key for cluster testing"
+        mkdir -p "$key_dir" || return 1
+        ssh-keygen -t rsa -b 4096 -f "$key_file" -N "" -C "cluster-test" || return 1
+    fi
+
+    echo "${key_file}.pub"
+}
+
 cluster_virsh() {
     virsh "$@"
 }
@@ -915,6 +933,31 @@ cluster_check_deps() {
     if ! cluster_virsh list &>/dev/null; then
         cluster_error "Cannot connect to libvirt at ${LIBVIRT_DEFAULT_URI}"
         cluster_die "Ensure libvirtd is installed and running: sudo dnf install libvirt && sudo systemctl start libvirtd"
+    fi
+}
+
+# image-prep works directly on a qcow2 file and needs neither virt-install
+# nor a live libvirt connection, so it gets its own, lighter dependency check.
+cluster_check_image_prep_deps() {
+    local -A dep_pkg=(
+        [qemu-img]=qemu-img
+        [ssh-keygen]=openssh-clients
+        [virt-customize]=guestfs-tools
+    )
+    local deps=(qemu-img ssh-keygen virt-customize)
+    local missing=()
+    local missing_pkgs=()
+
+    for dep in "${deps[@]}"; do
+        if ! command -v "$dep" &>/dev/null; then
+            missing+=("$dep")
+            missing_pkgs+=("${dep_pkg[$dep]}")
+        fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        cluster_error "Missing required dependencies: ${missing[*]}"
+        cluster_die "Install the missing packages: sudo dnf install ${missing_pkgs[*]} (Debian/Ubuntu: apt install qemu-utils openssh-client libguestfs-tools)"
     fi
 }
 
@@ -1149,9 +1192,10 @@ export -f cluster_state_add_snapshot cluster_state_remove_snapshot cluster_state
 export -f cluster_state_snapshot_exists cluster_state_get_snapshot_paused_state
 export -f cluster_state_migrate_old_format
 export -f cluster_user_in_group cluster_get_image_dir cluster_get_cloudinit_dir
+export -f cluster_ensure_ssh_keypair
 export -f cluster_virsh cluster_virt_install cluster_init_privileges
 export -f cluster_check_host_prerequisites cluster_session_prepare
-export -f cluster_check_root cluster_check_deps
+export -f cluster_check_root cluster_check_deps cluster_check_image_prep_deps
 export -f cluster_wait_with_timeout
 export -f cluster_parse_group_file
 export -f cluster_version_lt cluster_is_known_failure cluster_load_known_failures

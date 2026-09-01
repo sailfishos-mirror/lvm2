@@ -28,6 +28,51 @@ cluster_vm_get_name() {
 }
 
 #
+# Image preparation
+#
+
+# Makes a copy of a non-cloud-ready OS image cloud-init capable, so it can
+# be used as CLUSTER_NODE_OS_IMAGE. Leaves input_image untouched.
+cluster_image_prep() {
+    local input_image="$1"
+    local output_image="$2"
+
+    cluster_check_image_prep_deps
+
+    if [ ! -r "$input_image" ]; then
+        cluster_die "Image not readable: $input_image"
+    fi
+
+    cluster_log "Copying $input_image -> $output_image"
+    cp --reflink=auto -- "$input_image" "$output_image" || \
+        cluster_die "Failed to copy image to $output_image"
+
+    local ssh_pubkey_file
+    if ! ssh_pubkey_file=$(cluster_ensure_ssh_keypair); then
+        rm -f "$output_image"
+        cluster_die "Failed to prepare SSH key for image-prep"
+    fi
+
+    local ssh_user="${CLUSTER_SSH_USER:-root}"
+    local root_password="${CLUSTER_ROOT_PASSWORD:-cluster123}"
+    local packages="${CLUSTER_IMAGE_PREP_PACKAGES:-cloud-init,cloud-utils-growpart}"
+
+    cluster_log "Running virt-customize on $output_image (this can take a few minutes)"
+    virt-customize -a "$output_image" \
+        --install "$packages" \
+        --root-password "password:${root_password}" \
+        --ssh-inject "${ssh_user}:file:${ssh_pubkey_file}" \
+        --run-command 'systemctl enable cloud-init-local.service cloud-config.service cloud-final.service && (systemctl enable cloud-init.service || systemctl enable cloud-init-network.service)' \
+        --run-command "systemctl enable sshd" \
+        --selinux-relabel || {
+            rm -f "$output_image"
+            cluster_die "virt-customize failed (see output above); $output_image was removed and $input_image is untouched"
+        }
+
+    cluster_log "Image prepared successfully: $output_image"
+}
+
+#
 # VM creation
 #
 
@@ -75,13 +120,10 @@ local-hostname: ${vm_name}
 EOF
 
     # Create user-data with SSH key
-    local ssh_key_file="${CLUSTER_SSH_KEY_DIR}/cluster_test_rsa.pub"
-    if [ ! -f "$ssh_key_file" ]; then
-        cluster_log "Generating SSH key for cluster testing"
-        ssh-keygen -t rsa -b 4096 -f "${CLUSTER_SSH_KEY_DIR}/cluster_test_rsa" -N "" -C "cluster-test" || \
-            cluster_die "Failed to generate SSH key"
+    local ssh_key_file
+    if ! ssh_key_file=$(cluster_ensure_ssh_keypair); then
+        cluster_die "Failed to prepare SSH key for VM creation"
     fi
-
     local ssh_pubkey=$(cat "$ssh_key_file")
 
     cat > "$cloudinit_dir/user-data" <<EOF
@@ -101,7 +143,7 @@ disable_root: false
 chpasswd:
   expire: false
   list: |
-    root:cluster123
+    root:${CLUSTER_ROOT_PASSWORD:-cluster123}
 
 # Expand root filesystem
 growpart:
@@ -249,8 +291,9 @@ cluster_vm_setup_ssh() {
     cluster_log "Waiting for SSH to become available on $vm_ip"
 
     local elapsed=0
+    local last_err=""
     while [ $elapsed -lt "$timeout" ]; do
-        if ssh $ssh_opts -i "$ssh_key" "${CLUSTER_SSH_USER}@${vm_ip}" "true" 2>/dev/null; then
+        if last_err=$(ssh $ssh_opts -i "$ssh_key" "${CLUSTER_SSH_USER}@${vm_ip}" "true" 2>&1); then
             cluster_log "SSH is ready on $vm_ip"
             return 0
         fi
@@ -264,6 +307,19 @@ cluster_vm_setup_ssh() {
     done
 
     cluster_error "SSH not available on $vm_ip after ${timeout}s"
+    if echo "$last_err" | grep -qi "Permission denied"; then
+        cluster_error "SSH reached the VM but key authentication failed."
+        cluster_error "This is the typical symptom of a non-cloud-init OS image:"
+        cluster_error "cloud-init never applied the SSH key from the cidata ISO."
+        cluster_error "Use a cloud-ready image (e.g. an official Fedora/Ubuntu/CentOS Cloud qcow2),"
+        cluster_error "or run: lvmtest image-prep -s <image> to make one cloud-ready."
+    elif echo "$last_err" | grep -qiE "Connection refused|No route to host"; then
+        cluster_error "SSH connection was refused or unreachable."
+        cluster_error "If this OS image is not cloud-init enabled, sshd may never have"
+        cluster_error "been started and the injected SSH key was never authorized."
+        cluster_error "Use a cloud-ready image (e.g. an official Fedora/Ubuntu/CentOS Cloud qcow2),"
+        cluster_error "or run: lvmtest image-prep -s <image> to make one cloud-ready."
+    fi
     return 1
 }
 
@@ -2310,6 +2366,7 @@ cluster_vms_reconnect_iscsi() {
 
 # Export functions
 export -f cluster_vm_get_name
+export -f cluster_image_prep
 export -f cluster_vm_create cluster_vm_destroy
 export -f cluster_vm_get_ip cluster_vm_wait_boot
 export -f cluster_vm_setup_ssh cluster_vm_ssh cluster_vm_scp
