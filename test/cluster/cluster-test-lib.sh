@@ -884,27 +884,37 @@ cluster_session_prepare() {
 }
 
 cluster_check_deps() {
+    # Maps each required binary to the package that provides it (Fedora/RHEL naming)
+    local -A dep_pkg=(
+        [virsh]=libvirt-client
+        [virt-install]=virt-install
+        [qemu-img]=qemu-img
+        [ssh-keygen]=openssh-clients
+    )
     local deps=(virsh virt-install qemu-img ssh-keygen)
     local missing=()
+    local missing_pkgs=()
 
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
             missing+=("$dep")
+            missing_pkgs+=("${dep_pkg[$dep]}")
         fi
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
         cluster_error "Missing required dependencies: ${missing[*]}"
-        cluster_die "Please install the required packages"
+        cluster_die "Install the missing packages: sudo dnf install ${missing_pkgs[*]}"
     fi
 
     if ! command -v genisoimage &>/dev/null && ! command -v mkisofs &>/dev/null; then
         cluster_error "Missing required dependency: genisoimage or mkisofs"
-        cluster_die "Please install the required packages"
+        cluster_die "Install the missing package: sudo dnf install genisoimage"
     fi
 
     if ! cluster_virsh list &>/dev/null; then
-        cluster_die "Cannot connect to libvirt at ${LIBVIRT_DEFAULT_URI}"
+        cluster_error "Cannot connect to libvirt at ${LIBVIRT_DEFAULT_URI}"
+        cluster_die "Ensure libvirtd is installed and running: sudo dnf install libvirt && sudo systemctl start libvirtd"
     fi
 }
 
