@@ -18,7 +18,8 @@ aux have_vdo 9 0 0 || skip
 
 aux lvmconf 'allocation/vdo_slab_size_mb = 128'
 
-aux prepare_vg 1 7000
+aux prepare_vg 1 12000
+
 lvcreate --vdo -V3G -L4G -n $lv1 $vg/$lv2
 
 VPOOL_DM="$vg-${lv2}-vpool"
@@ -29,7 +30,7 @@ dmvdostats
 # Single named device
 dmvdostats "$VPOOL_DM"
 
-# Verbose output — check key fields are present
+# Verbose output - check key fields are present
 dmvdostats -v "$VPOOL_DM" | tee verbose.out
 grep -q "operating mode" verbose.out
 grep -q "1K-blocks" verbose.out
@@ -46,7 +47,37 @@ grep -q "$VPOOL_DM" select.out
 # Via dmsetup subcommand
 dmsetup vdostats "$VPOOL_DM"
 
-# Non-VDO device should be rejected
-not dmvdostats "$vg-$lv1"
+# A VDO LV layered above the pool resolves down to the VDO pool device
+dmvdostats "$vg-$lv1" | tee lv.out
+grep -q "$VPOOL_DM" lv.out
+
+# ...and it works through the /dev path as well
+dmvdostats "$DM_DEV_DIR/$vg/$lv1" | tee lvpath.out
+grep -q "$VPOOL_DM" lvpath.out
+
+# Naming the VDO pool LV without the -vpool suffix falls back to the pool device
+dmvdostats "$vg-$lv2" | tee vpool.out
+grep -q "$VPOOL_DM" vpool.out
+
+# A plain LV with no underlying VDO device is rejected
+lvcreate -L1 -n $lv3 $vg
+not dmvdostats "$vg-$lv3"
+
+# A non-existent device is reported as not found
+not dmvdostats "${PREFIX}nosuchdevice"
+
+lvremove -ff $vg
+
+# Check if multiple vdopool are found and lists in stack
+lvcreate -T --pooldatavdo y -L5G -V1G $vg/pool1 -n $lv1
+# Make $lv1  read-only inactive LV for external origin
+lvchange -p r $vg/$lv1
+lvchange -an $vg/$lv1
+lvcreate -T --pooldatavdo y -L5G $vg/pool2
+lvcreate --snapshot -n $lv2 --thinpool $vg/pool2 $vg/$lv1
+
+dmvdostats "$vg-$lv2" | tee vpool.out
+grep -q "pool1_vpool" vpool.out
+grep -q "pool2_vpool" vpool.out
 
 vgremove -ff $vg
