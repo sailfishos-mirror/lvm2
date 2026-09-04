@@ -22,7 +22,7 @@
  * unmapped but the pointer remains.  Thread exit calls the dangling
  * pointer and crashes.
  *
- * The fix: dm_lib_exit() (the library destructor) now calls
+ * The fix: the private library destructor now calls
  * pthread_key_delete() to deregister the TSD key before the library
  * is unmapped.
  */
@@ -35,12 +35,16 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 static void *lib_handle;
 static int (*fn_set_uuid_prefix)(const char *);
+static const char *(*fn_uuid_prefix)(void);
+static void (*fn_lib_exit)(void);
 static pthread_barrier_t barrier;
+static int worker_failed;
 
 static void *worker(void *arg)
 {
@@ -49,6 +53,17 @@ static void *worker(void *arg)
 	fn_set_uuid_prefix("TEST");
 
 	/* Tell main thread TSD is allocated */
+	pthread_barrier_wait(&barrier);
+
+	/* Wait for main thread to call the legacy dm_lib_exit(). */
+	pthread_barrier_wait(&barrier);
+
+	/* Legacy dm_lib_exit() must not invalidate state in this thread. */
+	if (!fn_set_uuid_prefix("TEST2") ||
+	    !fn_uuid_prefix() || strcmp(fn_uuid_prefix(), "TEST2"))
+		worker_failed = 1;
+
+	/* Tell main thread libdevmapper can now be unloaded. */
 	pthread_barrier_wait(&barrier);
 
 	/* Wait for main thread to dlclose */
@@ -73,8 +88,10 @@ static int run_test(const char *soname)
 	}
 
 	fn_set_uuid_prefix = dlsym(lib_handle, "dm_set_uuid_prefix");
-	if (!fn_set_uuid_prefix) {
-		fprintf(stderr, "dlsym(dm_set_uuid_prefix): %s\n", dlerror());
+	fn_uuid_prefix = dlsym(lib_handle, "dm_uuid_prefix");
+	fn_lib_exit = dlsym(lib_handle, "dm_lib_exit");
+	if (!fn_set_uuid_prefix || !fn_uuid_prefix || !fn_lib_exit) {
+		fprintf(stderr, "dlsym: %s\n", dlerror());
 		dlclose(lib_handle);
 		return 2;
 	}
@@ -91,6 +108,13 @@ static int run_test(const char *soname)
 	/* Wait for worker to have TSD allocated */
 	pthread_barrier_wait(&barrier);
 
+	/* This must not tear down state while the DSO remains loaded. */
+	fn_lib_exit();
+
+	/* Let worker verify it can still use its thread state. */
+	pthread_barrier_wait(&barrier);
+	pthread_barrier_wait(&barrier);
+
 	/* Unload library -- unmaps _destroy_thread_state code */
 	dlclose(lib_handle);
 	lib_handle = NULL;
@@ -103,7 +127,7 @@ static int run_test(const char *soname)
 
 	pthread_barrier_destroy(&barrier);
 
-	return 0;
+	return worker_failed ? 1 : 0;
 }
 
 int main(int argc, char **argv)
