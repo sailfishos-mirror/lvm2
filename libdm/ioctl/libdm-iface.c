@@ -2852,9 +2852,16 @@ static void _do_lib_exit(void)
 	dm_dump_memory();
 }
 
-void dm_lib_exit(void)
+static void _dm_lib_exit(void) __attribute__((destructor));
+
+static void _dm_lib_exit(void)
 {
 	pthread_once(&_exit_once, _do_lib_exit);
+}
+
+void dm_lib_exit(void)
+{
+	dm_lib_release();
 }
 
 #if defined(GNU_SYMVER)

@@ -40,7 +40,6 @@ struct dev_manager *dev_manager_create(struct cmd_context *cmd,
 				       unsigned track_pvmove_deps);
 void dev_manager_destroy(struct dev_manager *dm);
 void dev_manager_release(void);
-void dev_manager_exit(void);
 
 /*
  * The device handler is responsible for creating all the layered

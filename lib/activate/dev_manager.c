@@ -1689,11 +1689,6 @@ void dev_manager_release(void)
 	dm_lib_release();
 }
 
-void dev_manager_exit(void)
-{
-	dm_lib_exit();
-}
-
 int dev_manager_snapshot_percent(struct dev_manager *dm,
 				 const struct logical_volume *lv,
 				 dm_percent_t *percent)

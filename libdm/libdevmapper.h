@@ -1582,15 +1582,19 @@ typedef int (*dm_mountinfo_line_callback_fn) (char *line, unsigned maj, unsigned
 int dm_mountinfo_read(dm_mountinfo_line_callback_fn read_fn, void *cb_data);
 
 /*
- * Initialise library
+ * Initialise library.  This is normally done automatically when the
+ * library is loaded.
  */
-void dm_lib_init(void) __attribute__((constructor));
+void dm_lib_init(void);
+
+/* Release reusable library resources. */
+void dm_lib_release(void);
 
 /*
- * Release library resources
+ * Compatibility wrapper for dm_lib_release().  Final library teardown is
+ * performed automatically when the library is unloaded.
  */
-void dm_lib_release(void);
-void dm_lib_exit(void) __attribute__((destructor));
+void dm_lib_exit(void);
 
 /* An optimisation for clients making repeated calls involving dm ioctls */
 void dm_hold_control_dev(int hold_open);

@@ -984,7 +984,6 @@ static int _get_parameters(struct message_data *message_data)
 static void _exit_dm_lib(void)
 {
 	dm_lib_release();
-	dm_lib_exit();
 }
 
 static void _exit_timeout(void *unused __attribute__((unused)))

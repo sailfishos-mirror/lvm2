@@ -2823,7 +2823,6 @@ void activation_release(void)
 void activation_exit(void)
 {
 	activation_release();
-	dev_manager_exit();
 }
 #endif
 

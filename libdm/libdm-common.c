@@ -109,7 +109,9 @@ static int _semaphore_supported = 0;
 static int _udev_running = 0;
 #endif
 
-void dm_lib_init(void)
+static pthread_once_t _lib_init_once = PTHREAD_ONCE_INIT;
+
+static void _do_lib_init(void)
 {
 	const char *env;
 
@@ -127,6 +129,18 @@ void dm_lib_init(void)
 		else if (!strcasecmp(env, "hex"))
 			_name_mangling_mode = DM_STRING_MANGLING_HEX;
 	}
+}
+
+void dm_lib_init(void)
+{
+	pthread_once(&_lib_init_once, _do_lib_init);
+}
+
+static void _dm_lib_init(void) __attribute__((constructor));
+
+static void _dm_lib_init(void)
+{
+	dm_lib_init();
 }
 
 /*
