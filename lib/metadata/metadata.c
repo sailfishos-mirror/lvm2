@@ -552,9 +552,13 @@ int validate_new_vg_name(struct cmd_context *cmd, const char *vg_name)
 		return 0;
 	}
 
-	snprintf(vg_path, sizeof(vg_path), "%s%s", cmd->dev_dir, vg_name);
+	if (dm_snprintf(vg_path, sizeof(vg_path), "%s%s", cmd->dev_dir, vg_name) < 0) {
+		log_error("%s%s: new vg name is too long.", cmd->dev_dir, vg_name);
+		return 0;
+	}
+
 	if (path_exists(vg_path)) {
-		log_error("%s: already exists in filesystem", vg_path);
+		log_error("%s: already exists in filesystem.", vg_path);
 		return 0;
 	}
 
