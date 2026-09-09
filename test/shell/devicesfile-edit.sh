@@ -112,11 +112,11 @@ touch "$DF"
 pvcreate "$LOOP1"
 pvcreate "$LOOP2"
 # PVID without dashes for matching devices file fields
-PVID1=$(pvs "$LOOP1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$LOOP2" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$LOOP1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$LOOP2" --noheadings -o uuid | tr -d - | awk '{print $1}')
 # PVID with dashes for matching pvs -o+uuid output
-OPVID1=$(pvs "$LOOP1" --noheading -o uuid | awk '{print $1}')
-OPVID2=$(pvs "$LOOP2" --noheading -o uuid | awk '{print $1}')
+OPVID1=$(pvs "$LOOP1" --noheadings -o uuid | awk '{print $1}')
+OPVID2=$(pvs "$LOOP2" --noheadings -o uuid | awk '{print $1}')
 grep "$LOOP1" "$DF"
 grep "$LOOP2" "$DF"
 grep "$PVID1" "$DF"
@@ -142,8 +142,8 @@ rm "$DF"
 lvmdevices --adddev "$LOOP1"
 lvmdevices --adddev "$LOOP2"
 vgcreate $vg "$LOOP1" "$LOOP2"
-IDNAME1=$(pvs "$LOOP1" --noheading -o deviceid | awk '{print $1}')
-IDNAME2=$(pvs "$LOOP2" --noheading -o deviceid | awk '{print $1}')
+IDNAME1=$(pvs "$LOOP1" --noheadings -o deviceid | awk '{print $1}')
+IDNAME2=$(pvs "$LOOP2" --noheadings -o deviceid | awk '{print $1}')
 lvmdevices --deldev "$IDNAME2" --deviceidtype loop_file
 not grep "$IDNAME2" "$DF"
 not grep "$LOOP2" "$DF"

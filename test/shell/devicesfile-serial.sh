@@ -87,28 +87,28 @@ touch "$DF"
 aux wipefs_a "${devs[@]}"
 
 vgcreate $vg1 "$dev1"
-eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$dev1")"
+eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid "$dev1")"
 MAJOR1=$LVM2_PV_MAJOR
 MINOR1=$LVM2_PV_MINOR
 OPVID1=$LVM2_PV_UUID
 PVID1=${OPVID1//-/}
 
 vgcreate $vg2 "$dev2"
-eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$dev2")"
+eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid "$dev2")"
 MAJOR2=$LVM2_PV_MAJOR
 MINOR2=$LVM2_PV_MINOR
 OPVID2=$LVM2_PV_UUID
 PVID2=${OPVID2//-/}
 
 vgcreate $vg3 "$dev3"
-eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$dev3")"
+eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid "$dev3")"
 MAJOR3=$LVM2_PV_MAJOR
 MINOR3=$LVM2_PV_MINOR
 OPVID3=$LVM2_PV_UUID
 PVID3=${OPVID3//-/}
 
 vgcreate $vg4 "$dev4"
-eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$dev4")"
+eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid "$dev4")"
 MAJOR4=$LVM2_PV_MAJOR
 MINOR4=$LVM2_PV_MINOR
 OPVID4=$LVM2_PV_UUID
@@ -195,10 +195,10 @@ vgcreate $vg2 "$dev2"
 vgcreate $vg3 "$dev3"
 vgcreate $vg4 "$dev4"
 cp "$DF" "$ORIG"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -344,10 +344,10 @@ vgcreate $vg2 "$dev2"
 vgcreate $vg3 "$dev3"
 vgcreate $vg4 "$dev4"
 cp "$DF" "$ORIG"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -471,8 +471,8 @@ touch "$DF"
 vgcreate $vg1 "$dev1"
 vgcreate $vg4 "$dev4"
 cp "$DF" "$ORIG"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID4=${OPVID4//-/}
 
@@ -550,7 +550,7 @@ rm "$DF"
 touch "$DF"
 vgcreate $vg2 "$dev2"
 cp "$DF" "$ORIG"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
 PVID2=${OPVID2//-/}
 
 grep "$PVID2" "$DF" |tee out
@@ -600,10 +600,10 @@ grep "$SERIAL1" "$DF"
 grep "$SERIAL2" "$DF"
 grep "$SERIAL3" "$DF"
 grep "$SERIAL4" "$DF"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -664,10 +664,10 @@ vgcreate $vg2 "$dev2"
 vgcreate $vg3 "$dev3"
 vgcreate $vg4 "$dev4"
 cp "$DF" "$ORIG"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -729,9 +729,9 @@ vgcreate $vg1 "$dev1"
 vgcreate $vg2 "$dev2"
 vgcreate $vg3 "$dev3"
 cp "$DF" "$ORIG"
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -829,10 +829,10 @@ grep "$dev4" out
 grep "$dev2" out
 grep "$dev3" out
 
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
-OPVID3="$(echo $(pvs --noheading -o uuid "$dev3") )"
-OPVID4="$(echo $(pvs --noheading -o uuid "$dev4") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
+OPVID3="$(echo $(pvs --noheadings -o uuid "$dev3") )"
+OPVID4="$(echo $(pvs --noheadings -o uuid "$dev4") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 PVID3=${OPVID3//-/}
@@ -866,8 +866,8 @@ lvmdevices --adddev "$dev3"
 cat "$DF"
 cp "$DF" "$ORIG"
 
-OPVID1="$(echo $(pvs --noheading -o uuid "$dev1") )"
-OPVID2="$(echo $(pvs --noheading -o uuid "$dev2") )"
+OPVID1="$(echo $(pvs --noheadings -o uuid "$dev1") )"
+OPVID2="$(echo $(pvs --noheadings -o uuid "$dev2") )"
 PVID1=${OPVID1//-/}
 PVID2=${OPVID2//-/}
 

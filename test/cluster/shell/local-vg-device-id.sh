@@ -39,9 +39,9 @@ node1 "touch $DF"
 for dev in $d1 $d2 ${d3:+$d3}; do
     node1 pvcreate $dev
 
-    pvid=$(node1 "pvs $dev --noheading -o uuid | tr -d - | awk '{print \$1}'")
-    maj=$(node1 "pvs $dev --noheading -o major | awk '{print \$1}'")
-    min=$(node1 "pvs $dev --noheading -o minor | awk '{print \$1}'")
+    pvid=$(node1 "pvs $dev --noheadings -o uuid | tr -d - | awk '{print \$1}'")
+    maj=$(node1 "pvs $dev --noheadings -o major | awk '{print \$1}'")
+    min=$(node1 "pvs $dev --noheadings -o minor | awk '{print \$1}'")
 
     node1 "grep PVID=$pvid $DF"
     node1 "grep DEVNAME=$dev $DF"
@@ -79,8 +79,8 @@ echo "== Section 3: device id metadata fields =="
 
 for dev in $d1 $d2 ${d3:+$d3}; do
     node1 "grep $dev $DF"
-    deviceid=$(node1 "pvs $dev --noheading -o deviceid | awk '{print \$1}'")
-    deviceidtype=$(node1 "pvs $dev --noheading -o deviceidtype | awk '{print \$1}'")
+    deviceid=$(node1 "pvs $dev --noheadings -o deviceid | awk '{print \$1}'")
+    deviceidtype=$(node1 "pvs $dev --noheadings -o deviceidtype | awk '{print \$1}'")
     node1 "grep $dev $DF | grep $deviceid"
     node1 "grep $dev $DF | grep $deviceidtype"
     node1 lvcreate -l1 testvg $dev
@@ -102,7 +102,7 @@ for dev in $d1 $d2 ${d3:+$d3}; do
 done
 
 for dev in $d1 $d2 ${d3:+$d3}; do
-    pvid=$(node1 "pvs $dev --noheading -o uuid | tr -d - | awk '{print \$1}'")
+    pvid=$(node1 "pvs $dev --noheadings -o uuid | tr -d - | awk '{print \$1}'")
     node1 pvremove $dev
     node1 "grep $dev $DF"
     node1 "not grep $pvid $DF"
@@ -124,8 +124,8 @@ node1 vgcreate testvg $d1
 node1 vgextend testvg $d2
 node1 "grep $d1 $DF"
 node1 "grep $d2 $DF"
-id1=$(node1 "pvs $d1 --noheading -o deviceid | awk '{print \$1}'")
-id2=$(node1 "pvs $d2 --noheading -o deviceid | awk '{print \$1}'")
+id1=$(node1 "pvs $d1 --noheadings -o deviceid | awk '{print \$1}'")
+id2=$(node1 "pvs $d2 --noheadings -o deviceid | awk '{print \$1}'")
 node1 "grep $id1 $DF"
 node1 "grep $id2 $DF"
 node1 vgreduce testvg $d2
@@ -248,12 +248,12 @@ node1 "not grep $d2 $DF"
 
 node1 vgimportclone --basevgname testvg2 --importdevices $d2
 
-pvid1=$(node1 "pvs $d1 --noheading -o uuid | tr -d - | awk '{print \$1}'")
-pvid2=$(node1 "pvs $d2 --noheading -o uuid | tr -d - | awk '{print \$1}'")
+pvid1=$(node1 "pvs $d1 --noheadings -o uuid | tr -d - | awk '{print \$1}'")
+pvid2=$(node1 "pvs $d2 --noheadings -o uuid | tr -d - | awk '{print \$1}'")
 test "$pvid1" != "$pvid2"
 
-id1=$(node1 "pvs $d1 --noheading -o deviceid | awk '{print \$1}'")
-id2=$(node1 "pvs $d2 --noheading -o deviceid | awk '{print \$1}'")
+id1=$(node1 "pvs $d1 --noheadings -o deviceid | awk '{print \$1}'")
+id2=$(node1 "pvs $d2 --noheadings -o deviceid | awk '{print \$1}'")
 test "$id1" != "$id2"
 
 node1 "grep $d1 $DF"
