@@ -93,12 +93,12 @@ not grep "$dev3" "$DFDIR/test.devices"
 not grep "$dev5" "$DFDIR/test.devices"
 not ls "$DFDIR/system.devices"
 
-PVID1=$(pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID3=$(pvs "$dev3" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID4=$(pvs "$dev4" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID5=$(pvs "$dev5" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID6=$(pvs "$dev6" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$dev1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$dev2" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID3=$(pvs "$dev3" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID4=$(pvs "$dev4" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID5=$(pvs "$dev5" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID6=$(pvs "$dev6" --noheadings -o uuid | tr -d - | awk '{print $1}')
 
 lvcreate -l4 -an -i2 -n $lv1 $vg1
 lvcreate -l4 -an -i2 -n $lv2 $vg2

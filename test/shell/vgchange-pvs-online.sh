@@ -213,9 +213,9 @@ vgchange -an $vg2
 
 # vgremove clears online files
 
-PVID1=$(pvs "$bd1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$bd2" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID3=$(pvs "$bd3" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$bd1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$bd2" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID3=$(pvs "$bd3" --noheadings -o uuid | tr -d - | awk '{print $1}')
 
 _clear_online_files
 

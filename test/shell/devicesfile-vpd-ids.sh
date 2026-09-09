@@ -87,7 +87,7 @@ touch "$DF"
 
 pvcreate "$DEV1"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o major,minor,uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid "$DEV1")"
 MAJOR1=$LVM2_PV_MAJOR
 MINOR1=$LVM2_PV_MINOR
 PVID1=${LVM2_PV_UUID//-/}
@@ -289,7 +289,7 @@ cat "$SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/wwid"
 lvmdevices --adddev "$DEV1"
 cat "$DF"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o uuid "$DEV1")"
 PVID1=${LVM2_PV_UUID//-/}
 T10_WWID_RHEL91="t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-188d9ebc_"
 lvcreate -l1 -an $vg
@@ -343,7 +343,7 @@ T10_WWID_RHEL92="t10.ATA_____VBOX_HARDDISK___________________________VB9c10d318-
 lvmdevices --adddev "$DEV1"
 cat "$DF"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o uuid "$DEV1")"
 PVID1=${LVM2_PV_UUID//-/}
 lvcreate -l1 -an $vg
 cat "$DF"
@@ -380,7 +380,7 @@ lvmdevices --adddev "$DEV1"
 cat "$DF"
 grep "IDNAME=s123__456 DEVNAME" "$DF"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o uuid "$DEV1")"
 PVID1=${LVM2_PV_UUID//-/}
 cat "$DF" | grep -v IDNAME > "$DFTMP"
 cat "$DFTMP"
@@ -402,7 +402,7 @@ lvmdevices --adddev "$DEV1"
 cat "$DF"
 grep "IDNAME=t10.123_456 DEVNAME" "$DF"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o uuid "$DEV1")"
 PVID1=${LVM2_PV_UUID//-/}
 cat "$DF" | grep -v IDNAME > "$DFTMP"
 cat "$DFTMP"
@@ -424,7 +424,7 @@ lvmdevices --adddev "$DEV1"
 cat "$DF"
 grep "IDNAME=naa.123__456 DEVNAME" "$DF"
 vgcreate $vg "$DEV1"
-eval "$(pvs --noheading --nameprefixes -o uuid "$DEV1")"
+eval "$(pvs --noheadings --nameprefixes -o uuid "$DEV1")"
 PVID1=${LVM2_PV_UUID//-/}
 cat "$DF" | grep -v IDNAME > "$DFTMP"
 cat "$DFTMP"
