@@ -15,7 +15,7 @@ aux prepare_devs 4
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other" $vg1
 
 not vgrename $vg1 $vg2
@@ -33,12 +33,12 @@ aux wipefs_a "$dev1"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other" $vg1
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other2" $vg1
 aux enable_dev "$dev1"
 
@@ -65,11 +65,11 @@ aux wipefs_a "$dev1" "$dev2"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other" $vg1
 aux enable_dev "$dev1"
 
@@ -96,16 +96,16 @@ aux wipefs_a "$dev1" "$dev2"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other" $vg1
 aux disable_dev "$dev2"
 vgcreate $vg1 "$dev3"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID3=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other2" $vg1
 aux enable_dev "$dev1" "$dev2"
 
@@ -134,11 +134,11 @@ aux wipefs_a "$dev1" "$dev2" "$dev3"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n ${lv1}_b -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux enable_dev "$dev1"
 
 not vgrename $vg1 $vg2
@@ -171,15 +171,15 @@ aux wipefs_a "$dev1" "$dev2"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n ${lv1}_b -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev2"
 vgcreate $vg1 "$dev3"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID3=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 vgchange -y --systemid "other" $vg1
 aux enable_dev "$dev1" "$dev2"
 lvs --foreign
@@ -236,15 +236,15 @@ aux wipefs_a "$dev1" "$dev2" "$dev3"
 # setup
 vgcreate $vg1 "$dev1"
 lvcreate -n $lv1 -l1 -ky -an $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
 lvcreate -n ${lv1}_b -l1 -ky -an $vg1
-UUID2=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID2=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux disable_dev "$dev2"
 vgcreate $vg1 "$dev3"
 lvcreate -n ${lv1}_c -l1 -ky -an $vg1
-UUID3=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID3=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 aux enable_dev "$dev1" "$dev2"
 
 not vgrename $vg1 $vg2

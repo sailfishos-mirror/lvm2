@@ -76,13 +76,13 @@ create_pvs() {
 	pvcreate --devices "$LOOP1" "$LOOP1"
 	pvcreate --devices "$LOOP2" "$LOOP2"
 
-	eval "$(pvs --noheading --nameprefixes -o major,minor,uuid --devices "$LOOP1" "$LOOP1")"
+	eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid --devices "$LOOP1" "$LOOP1")"
 	MAJOR1=$LVM2_PV_MAJOR
 	MINOR1=$LVM2_PV_MINOR
 	OPVID1=$LVM2_PV_UUID
 	PVID1=${OPVID1//-/}
 
-	eval "$(pvs --noheading --nameprefixes -o major,minor,uuid --devices "$LOOP2" "$LOOP2")"
+	eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid --devices "$LOOP2" "$LOOP2")"
 	MAJOR2=$LVM2_PV_MAJOR
 	MINOR2=$LVM2_PV_MINOR
 	OPVID2=$LVM2_PV_UUID
@@ -95,11 +95,11 @@ create_pvs() {
 	pvcreate --devices "$LOOP3" "$LOOP3"
 	pvcreate --devices "$LOOP4" "$LOOP4"
 
-	eval "$(pvs --noheading --nameprefixes -o major,minor,uuid --devices "$LOOP3" "$LOOP3")"
+	eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid --devices "$LOOP3" "$LOOP3")"
 	MAJOR3=$LVM2_PV_MAJOR
 	MINOR3=$LVM2_PV_MINOR
 
-	eval "$(pvs --noheading --nameprefixes -o major,minor,uuid --devices "$LOOP4" "$LOOP4")"
+	eval "$(pvs --noheadings --nameprefixes -o major,minor,uuid --devices "$LOOP4" "$LOOP4")"
 	MAJOR4=$LVM2_PV_MAJOR
 	MINOR4=$LVM2_PV_MINOR
 

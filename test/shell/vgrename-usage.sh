@@ -29,7 +29,7 @@ vgremove $vg1
 
 # vgrename by uuid (bz231187)
 vgcreate $vg1 "$dev1" "$dev3"
-UUID=$(vgs --noheading -o vg_uuid $vg1)
+UUID=$(vgs --noheadings -o vg_uuid $vg1)
 check vg_field $vg1 vg_uuid $UUID
 vgrename $UUID $vg2
 check vg_field $vg2 vg_name $vg2
@@ -45,7 +45,7 @@ vgremove $vg1 $vg2
 vgcreate $vg1 "$dev1"
 aux disable_dev "$dev1"
 vgcreate $vg1 "$dev2"
-UUID=$(vgs --noheading -o vg_uuid $vg1)
+UUID=$(vgs --noheadings -o vg_uuid $vg1)
 aux enable_dev "$dev1"
 
 not vgrename $vg1 $vg2

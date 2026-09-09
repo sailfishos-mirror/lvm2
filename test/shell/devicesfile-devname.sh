@@ -53,14 +53,14 @@ grep "$dev3" "$DF"
 vgcreate $vg1 "$dev1" "$dev2"
 
 # PVID with dashes for matching pvs -o+uuid output
-OPVID1=$(pvs "$dev1" --noheading -o uuid | awk '{print $1}')
-OPVID2=$(pvs "$dev2" --noheading -o uuid | awk '{print $1}')
-OPVID3=$(pvs "$dev3" --noheading -o uuid | awk '{print $1}')
+OPVID1=$(pvs "$dev1" --noheadings -o uuid | awk '{print $1}')
+OPVID2=$(pvs "$dev2" --noheadings -o uuid | awk '{print $1}')
+OPVID3=$(pvs "$dev3" --noheadings -o uuid | awk '{print $1}')
 
 # PVID without dashes for matching devices file fields
-PVID1=$(pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID3=$(pvs "$dev3" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$dev1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$dev2" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID3=$(pvs "$dev3" --noheadings -o uuid | tr -d - | awk '{print $1}')
 
 lvmdevices --deldev "$dev3"
 
@@ -560,11 +560,11 @@ vgcreate $vg1 "$dev1"
 vgcreate $vg2 "$dev2"
 
 # PVID with dashes for matching pvs -o+uuid output
-OPVID1=$(pvs "$dev1" --noheading -o uuid | awk '{print $1}')
-OPVID2=$(pvs "$dev2" --noheading -o uuid | awk '{print $1}')
+OPVID1=$(pvs "$dev1" --noheadings -o uuid | awk '{print $1}')
+OPVID2=$(pvs "$dev2" --noheadings -o uuid | awk '{print $1}')
 # PVID without dashes for matching devices file fields
-PVID1=$(pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$dev1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$dev2" --noheadings -o uuid | tr -d - | awk '{print $1}')
 
 NODEV=${dev1}12345
 
@@ -640,12 +640,12 @@ cat "$DF"
 cp "$DF" "$ORIG"
 
 # PVID with dashes for matching pvs -o+uuid output
-OPVID1=$(pvs "$dev1" --noheading -o uuid | awk '{print $1}')
-OPVID2=$(pvs "$dev2" --noheading -o uuid | awk '{print $1}')
+OPVID1=$(pvs "$dev1" --noheadings -o uuid | awk '{print $1}')
+OPVID2=$(pvs "$dev2" --noheadings -o uuid | awk '{print $1}')
 
 # PVID without dashes for matching devices file fields
-PVID1=$(pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}')
-PVID2=$(pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}')
+PVID1=$(pvs "$dev1" --noheadings -o uuid | tr -d - | awk '{print $1}')
+PVID2=$(pvs "$dev2" --noheadings -o uuid | tr -d - | awk '{print $1}')
 
 aux mdadm_create --metadata=1.0 --level 1 --raid-devices=2 "$dev3" "$dev4"
 mddev=$(< MD_DEV)

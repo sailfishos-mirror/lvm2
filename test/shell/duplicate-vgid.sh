@@ -13,7 +13,7 @@ aux prepare_devs 2
 
 vgcreate $vg1 "$dev1"
 vgchange --setautoactivation n $vg1
-UUID1=$(vgs --noheading -o vg_uuid $vg1 | xargs)
+UUID1=$(vgs --noheadings -o vg_uuid $vg1 | xargs)
 lvcreate -l1 -an -n $lv1 $vg1
 dd if="$dev1" of="$dev2" bs=1M count=1
 aux disable_dev "$dev1"
