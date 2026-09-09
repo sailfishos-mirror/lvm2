@@ -132,7 +132,7 @@ device.
 .TP
 .BR -u | --umount
 Unmount a mounted device before trying to deactivate it.
-Without this option used, a device that is mounted is not deactivated.
+Without this option, a device that is mounted is not deactivated.
 .
 .TP
 \fB-o\fP|\fB--vdooptions\fP \fIvdo_options\fP

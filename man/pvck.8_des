@@ -63,7 +63,7 @@ specify it in --settings.  Otherwise, the wrong PV UUID could be used if
 device names have been swapped since the metadata was last written.
 .P
 If a PV has no metadata areas and the pv_header is damaged, then the
-repair will not know to create no metadata areas during repair.  It will
+repair will not know that no metadata areas should be created.  It will
 by default repair metadata in mda1.  To repair with no metadata areas, use
 --settings "mda_offset=0 mda_size=0".
 .P
@@ -111,7 +111,7 @@ print/save one instance of metadata text.
 .br
 Refers to a metadata area (mda) location and size.  An mda includes an
 mda_header and circular metadata text buffer.  Setting this forces
-metadata_search look for metadata in the given area instead of the
+metadata_search to look for metadata in the given area instead of the
 standard locations.  When set to zero with repair, it indicates no
 metadata areas should exist.
 .P

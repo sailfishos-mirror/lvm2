@@ -358,7 +358,7 @@ An optional suffix selects units of:
 \fB--bounds\fP\ \fIhistogram_boundaries\fP\c
 .RB [ ns | us | ms | s ]
 Specify the boundaries of a latency histogram to be tracked for the
-region as a comma separated list of latency values. Latency values are
+region as a comma-separated list of latency values. Latency values are
 given in nanoseconds. An optional unit suffix of
 .BR ns ,
 .BR us ,
@@ -395,11 +395,11 @@ file following mode.
 The file map monitoring daemon can monitor files in two distinct ways:
 the mode affects the behaviour of the daemon
 when a file under monitoring is renamed or unlinked,
-and the conditions which cause the daemon to terminate.
+and the conditions that cause the daemon to terminate.
 .NSP
 The \fIfollow_mode\fP argument is either "\fBinode\fP",
 for follow-inode mode,
-or "\fBpath\fP", for follow-path.
+or "\fBpath\fP", for follow-path mode.
 .NSP
 If follow-inode mode is used, the daemon will hold the file open,
 and continue to update regions from the same file descriptor.
@@ -409,7 +409,7 @@ This mode is useful if the file is expected to be moved,
 renamed, or unlinked while it is being monitored.
 .NSP
 In follow-inode mode, the daemon will exit once it detects that the
-file has been unlinked and it is the last holder of a reference to it.
+file has been unlinked and the daemon is the last holder of a reference to it.
 .NSP
 If follow-path is used, the daemon will re-open the provided path on
 each monitoring iteration. This means that the group will be updated
@@ -475,7 +475,7 @@ daemon when creating new file mapped groups.
 Normally the device-mapper filemap monitoring daemon
 .BR dmfilemapd (8),
 is started for each file mapped group to update the
-set of regions as the file changes on-disk: use of this option
+set of regions as the file changes on disk: use of this option
 disables this behaviour.
 .NSP
 Regions in the group may still be updated with the
@@ -520,7 +520,7 @@ Specify the region to operate on.
 \fB--regions\fP \fIregion_list\fP
 Specify a list of regions to group. The group list is a comma-separated
 list of region identifiers. Continuous sequences of identifiers may be
-expressed as a hyphen separated range, for example: '1\(en10'.
+expressed as a hyphen-separated range, for example: '1\(en10'.
 .
 .TP
 .B --relative
@@ -539,9 +539,9 @@ alias may be specified using the \fB--alias\fP option.
 .
 .TP
 \fB-S\fP|\fB--select\fP \fIselection\fP
-Display only rows that match \fIselection\fP criteria. All rows with the
-additional "selected" column (\fB-o selected\fP) showing 1 if the row matches
-the \fIselection\fP and 0 otherwise. The selection criteria are defined by
+Display only rows that match \fIselection\fP criteria; all rows then include
+the additional "selected" column (\fB-o selected\fP), showing 1 if the row
+matches the \fIselection\fP and 0 otherwise. The selection criteria are defined by
 specifying column names and their valid values while making use of
 supported comparison operators.
 .
@@ -575,7 +575,7 @@ by the kernel. Whitespace is not permitted.
 .
 .TP
 .BR -u | --uuid
-Specify the uuid.
+Specify the UUID.
 .
 .TP
 .BR -v | --verbose \ [ -v | --verbose ]
@@ -594,7 +594,7 @@ regions (with the exception of in-flight IO counters).
 Creates one or more new statistics regions on the specified device(s).
 .NSP
 The region will span the entire device unless \fB--start\fP and
-\fB--length\fP or \fB--segments\fP are given. The \fB--start\fP an
+\fB--length\fP or \fB--segments\fP are given. The \fB--start\fP and
 \fB--length\fP options allow a region of arbitrary length to be placed
 at an arbitrary offset into the device. The \fB--segments\fP option
 causes a new region to be created for each target in the corresponding
@@ -603,16 +603,16 @@ device-mapper device's table.
 If the \fB--precise\fP option is used the command will attempt to
 create a region using nanosecond precision counters.
 .NSP
-If \fB--bounds\fP is given a latency histogram will be tracked for
+If \fB--bounds\fP is given, a latency histogram will be tracked for
 the new region. The boundaries of the histogram bins are given as a
-comma separated list of latency values. There is an implicit lower bound
+comma-separated list of latency values. There is an implicit lower bound
 of zero on the first bin and an implicit upper bound of infinity (or the
 configured interval duration) on the final bin.
 .NSP
 Latencies are given in nanoseconds. An optional unit suffix of ns, us,
 ms, or s may be given after each value to specify units of nanoseconds,
 microseconds, milliseconds or seconds respectively, so for example,
-10\~ms is equivalent to 10,000,000.
+10\~ms is equivalent to 10,000,000\~ns.
 Latency values with a precision of less than
 one millisecond can only be used when precise timestamps are enabled: if
 \fB--precise\fP is not given and values less than one millisecond are
@@ -647,12 +647,12 @@ group alias is set to the basename of the file. This behaviour can be
 overridden with the \fB--alias\fP and \fB--nogroup\fP options.
 .NSP
 Creating a group that maps a file automatically starts a daemon,
-.BR dmfilemapd (8)
+.BR dmfilemapd (8),
 to monitor the file and update the mapping as the
 extents allocated to the file change. This behaviour can be disabled
 using the \fB--nomonitor\fP option.
 .NSP
-Use the \fB--group\fP option to only display information for groups
+Use the \fB--group\fP option to display information only for groups
 when listing and reporting.
 .
 .NTP
@@ -736,10 +736,10 @@ one second.
 If the \fB--allprograms\fP switch is given, all regions will be
 listed, regardless of region program ID values.
 .NSP
-If the \fB--histogram\fP is given the report will include the histogram
+If \fB--histogram\fP is given the report will include the histogram
 values and latency boundaries.
 .NSP
-If the \fB--relative\fP is used the default histogram field displays
+If \fB--relative\fP is used, the default histogram field displays
 bin values as a percentage of the total number of I/Os.
 .NSP
 Object types (areas, regions and groups) to include in the report are
@@ -761,8 +761,7 @@ or by starting the monitoring daemon
 .BR dmfilemapd (8).
 .NSP
 This will add and remove regions to reflect changes in the allocated
-extents of the file on-disk, since the time that it was created or last
-updated.
+extents of the file on disk since it was created or last updated.
 .NSP
 Use of this command is not normally needed since the
 .BR dmfilemapd (8)
@@ -798,7 +797,7 @@ the group and other group members will be returned to their prior
 state.
 .P
 By default new regions span the entire device. The \fB--start\fP and
-\fB--length\fP options allows a region of any size to be placed at any
+\fB--length\fP options allow a region of any size to be placed at any
 location on the device.
 .P
 Using offsets it is possible to create regions that map individual
@@ -843,10 +842,10 @@ IO statistics to be monitored on a per-file basis, for example to
 observe large database files, virtual machine images, or other files
 of interest.
 .P
-To be able to use file mapping, the file must be backed by a
-device-mapper device, and in a file system that supports the FIEMAP
-ioctl (and which returns data describing the physical location of
-extents). This currently includes \fBxfs\fP(5) and \fBext4\fP(5).
+To use file mapping, the file must be on a file system backed by a
+device-mapper device that supports the FIEMAP ioctl and returns data
+describing the physical location of extents. This currently includes
+\fBxfs\fP(5) and \fBext4\fP(5).
 .P
 By default the regions making up a file are placed together in a
 group, and the group alias is set to the \fBbasename(3)\fP of the
@@ -867,7 +866,7 @@ The file map monitoring daemon can monitor files in two distinct ways:
 follow-inode mode, and follow-path mode.
 .P
 The mode affects the behaviour of the daemon when a file under
-monitoring is renamed or unlinked, and the conditions which cause the
+monitoring is renamed or unlinked, and the conditions that cause the
 daemon to terminate.
 .P
 If follow-inode mode is used, the daemon will hold the file open, and
@@ -878,7 +877,7 @@ expected to be moved, renamed, or unlinked while it is being
 monitored.
 .P
 In follow-inode mode, the daemon will exit once it detects that the
-file has been unlinked and it is the last holder of a reference to it.
+file has been unlinked and the daemon is the last holder of a reference to it.
 .P
 If follow-path is used, the daemon will re-open the provided path on
 each monitoring iteration. This means that the group will be updated
@@ -892,11 +891,11 @@ not replaced within a brief tolerance interval (one second).
 To stop the daemon, delete the group containing the mapped regions:
 the daemon will automatically shut down.
 .P
-The daemon can also be safely killed at any time and the group kept:
-if the file is still being allocated the mapping will become
-progressively out-of-date as extents are added and removed (in this
-case the daemon can be re-started or the group updated manually with
-the \fBupdate_filemap\fP command).
+The daemon can also be safely killed at any time and the group kept.
+If the file is still being allocated, the mapping will become
+progressively out-of-date as extents are added and removed. In this
+case, the daemon can be restarted or the group updated manually with
+the \fBupdate_filemap\fP command.
 .P
 See the \fBcreate\fP command and \fB--filemap\fP, \fB--follow\fP,
 and \fB--nomonitor\fP options for further information.
@@ -906,13 +905,13 @@ and \fB--nomonitor\fP options for further information.
 The daemon attempts to maintain good synchronization between the file
 extents and the regions contained in the group, however, since it can
 only react to new allocations once they have been written, there are
-inevitably some IO events that cannot be counted when a file is
+inevitably some I/O events that cannot be counted when a file is
 growing, particularly if the file is being extended by a single thread
 writing beyond end-of-file (for example, the
 .BR dd (1)
 program).
 .P
-There is a further loss of events in that there is currently no way
+Events may also be lost because there is currently no way
 to atomically resize a \fBdmstats\fP region and preserve its current
 counter values. This affects files when they grow by extending the
 final extent, rather than allocating a new extent: any events that
@@ -920,7 +919,7 @@ had accumulated in the region between any prior operation and the
 resize are lost.
 .P
 File mapping is currently most effective in cases where the majority
-of IO does not trigger extent allocation. Future updates may address
+of I/O does not trigger extent allocation. Future updates may address
 these limitations when kernel support is available.
 .
 .SH REPORT FIELDS
@@ -978,7 +977,7 @@ The average service time (in milliseconds) for operations issued
 to the device.
 .TP
 .B util
-Percentage of CPU time during which I/O requests were issued to the
+Percentage of elapsed time during which I/O requests were issued to the
 device (bandwidth utilization for the device). Device saturation occurs
 when this value is close to 100%.
 .
@@ -1048,7 +1047,7 @@ allowing further processing to be carried out by another program.
 .P
 The kernel provides thirteen separate counters for each statistics
 area. The first eleven of these match the counters provided in
-/proc/diskstats or /sys/block/*/*/stat. The final pair provide separate
+/proc/diskstats or /sys/block/*/*/stat. The final pair provides separate
 counters for read and write time.
 .TP
 .B read_count
@@ -1058,7 +1057,7 @@ Count of reads completed this interval.
 Count of reads merged this interval.
 .TP
 .B read_sector_count
-Count of 512 byte sectors read this interval.
+Count of 512-byte sectors read this interval.
 .TP
 .B read_time
 Accumulated duration of all read requests (ns).
@@ -1070,7 +1069,7 @@ Count of writes completed this interval.
 Count of writes merged this interval.
 .TP
 .B write_sector_count
-Count of 512 byte sectors written this interval.
+Count of 512-byte sectors written this interval.
 .TP
 .B write_time
 Accumulated duration of all write requests (ns).
@@ -1249,7 +1248,7 @@ vg00\-lvol1   2    0  80.20g  2.14g  0.00   0.00  0.00
 .EE
 .
 .P
-Create one region for reach target contained in device vg00/lvol1
+Create one region for each target contained in device vg00/lvol1
 .br
 #
 .B dmstats create --segments vg00/lvol1

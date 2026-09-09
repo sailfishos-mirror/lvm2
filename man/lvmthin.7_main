@@ -103,9 +103,9 @@ Unwritten portions of the thin LVs are read from the external origin.
 .
 A thin pool can be created with the lvcreate command.  The data and
 metadata component LVs are each allocated from the VG, and combined into a
-thin pool.  The lvcreate -L|--size will be the size of the thin pool data
-LV, and the size of the metadata LV will be calculated automatically (or,
-can be optionally specified with --poolmetadatasize.)
+thin pool.  The \fBlvcreate\fP -L|--size option sets the size of the thin pool data
+LV, and the size of the metadata LV is calculated automatically, or can
+optionally be specified with --poolmetadatasize.
 .P
 .EX
 # lvcreate --type thin-pool -n ThinPool -L Size VG
@@ -144,7 +144,7 @@ the physical space available in the thin pool.
 .
 Snapshots of thin LVs are thin LVs themselves, but the snapshot LV
 initially refers to the same blocks as the origin thin LV.  The origin
-thin LV and its snapshot thin LVs will diverge as either are written.  The
+thin LV and its snapshot thin LVs will diverge as either is written to.  The
 origin thin LV can be removed without affecting snapshots that reference
 it.  Snapshots can be taken of thin LVs that were themselves created as
 snapshots.  (A size option must not be used when creating a thin snapshot,
@@ -161,7 +161,7 @@ data_percent) and "Meta%" (-o metadata_percent).  Data percent is the
 percent of space in the data LV that is currently used by thin LVs.
 Metadata percent is the percent of space in the metadata LV that is
 currently used by the "\fIdm_thin_pool\fP" module.
-The thin pool should be extended before either of these values reach 100%.
+The thin pool should be extended before either of these values reaches 100%.
 .P
 .EX
 # lvs -o data_percent VG/ThinPool
@@ -678,7 +678,7 @@ file1  file2  file3  file4  file5  file6
 .SS Physical Devices for Thin Pool Data and Metadata
 .
 Placing the thin pool data LV and metadata LV on separate physical devices
-will improve performance.  Faster, redundant devices for metadata is also
+will improve performance.  Faster, redundant devices for metadata are also
 recommended.  To best customize the data and metadata LVs, create them
 separately and then combine them into a thin pool with lvconvert.
 .P
@@ -716,7 +716,8 @@ thin pool metadata can have extra value.
 When a thin pool LV is activated, lvm runs the
 .BR thin_check (8)
 command to check the correctness of the metadata on the pool metadata LV.
-To configure thin_check use, location or options used by lvm, set
+To configure the thin_check executable, its location, or the options
+used by lvm, set
 .BR lvm.conf (5)
 .B global/thin_check_executable
 .br
@@ -768,7 +769,7 @@ successfully activated, and then verify the integrity of the file system
 on each thin LV (e.g. using fsck or other tools.)
 Once the thin pool is considered fully recovered, the ThinPool_metaN LV
 containing the original, damaged metadata can be manually removed to
-recovery the space.
+recover the space.
 .P
 If the repair fails, the original, unmodified ThinPool_metaN LV should be
 preserved for support, or more advanced recovery methods.  Data from thin
@@ -885,8 +886,8 @@ To configure the value that will be assigned to new thin pools, set
 .BR lvm.conf (5)
 .B activation/error_when_full
 .P
-The whenfull setting does not effect the monitoring and autoextend
-settings, and the monitoring/autoextend settings do not effect the
+The whenfull setting does not affect the monitoring and autoextend
+settings, and the monitoring/autoextend settings do not affect the
 whenfull setting.  It is only when monitoring/autoextend are not effective
 that the thin pool becomes full and the whenfull setting is applied.
 .P
@@ -921,7 +922,7 @@ This can result in file system damage that requires repair.
 \(em data percent \(em
 .P
 When data space is exhausted, the lvs command displays 100 under Data%
-and letter D in 9th. column for the thin pool LV:
+and letter D in the 9th column for the thin pool LV:
 .P
 .EX
 # lvs -o name,data_percent,attr  vg/pool0
@@ -960,7 +961,7 @@ The VG does not have enough free blocks to extend the thin pool.
 .SS Thin Pool Metadata Exhaustion
 .
 If thin pool metadata space is exhausted (or a thin pool metadata
-operation fails), errors will be returned for IO operations on thin LVs.
+operation fails), errors will be returned for I/O operations on thin LVs.
 .P
 When metadata space is exhausted, the lvs command displays 100 under Meta%
 for the thin pool LV:
@@ -1074,7 +1075,7 @@ Remove a profile from an LV using the command:
 .
 .IP \[bu]
 Commands can also have profiles applied to them.  The settings that can be
-applied to a command are different than the settings that can be applied
+applied to a command are different from the settings that can be applied
 to a VG or LV.  See lvmconfig --type profilable-command.  To apply a
 profile to a command, write a profile, save it in the profile directory,
 and run the command using the option: --commandprofile ProfileName.
@@ -1178,7 +1179,7 @@ The default value is shown by:
 .
 .SS Thin Pool Metadata Size
 .
-The amount of thin pool metadata depends on how many blocks are shared
+The amount of thin pool metadata space depends on how many blocks are shared
 between thin LVs (i.e. through snapshots).  A thin pool with many
 snapshots may need a larger metadata LV.  Thin pool metadata LV sizes can
 be from 2\ MiB to approximately 16\ GiB.
@@ -1205,12 +1206,12 @@ Cropping should be enabled only when compatibility is required.)
 .SS XFS on snapshots
 .
 Mounting an XFS file system on a new snapshot LV requires attention to the
-file system's log state and uuid.  On the snapshot LV, the xfs log will
-contain a dummy transaction, and the xfs uuid will match the uuid from the
+file system's log state and UUID.  On the snapshot LV, the XFS log will
+contain a dummy transaction, and the XFS UUID will match the UUID from the
 file system on the origin LV.
 .P
 If the snapshot LV is writable, mounting will recover the log to clear the
-dummy transaction, but will require skipping the uuid check:
+dummy transaction, but will require skipping the UUID check:
 .P
 .EX
 # mount /dev/VG/SnapLV /mnt -o nouuid
@@ -1227,8 +1228,8 @@ changed using:
 Once the UUID has been changed, the mount command will no longer require
 the nouuid option.
 .br
-If the snapshot LV is readonly, the log recovery and uuid check need to be
-skipped while mounting readonly:
+If the snapshot LV is read-only, the log recovery and UUID check need to be
+skipped while mounting read-only:
 .P
 .EX
 # mount /dev/VG/SnapLV /mnt -o ro,nouuid,norecovery

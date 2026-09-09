@@ -1,6 +1,6 @@
 vgsplit moves one or more PVs from a source VG (the first VG arg) to a
-destination VG (the second VG arg).  The PV(s) to move are named after the
-source and destination VGs, or an LV is named, in which case the PVs
+destination VG (the second VG arg).  The PVs to move are those listed after
+the source and destination VGs, or an LV may be named, in which case the PVs
 underlying the LV are moved.
 .P
 If the destination VG does not exist, a new VG is created (command options

@@ -597,7 +597,7 @@ Displays the device ID for PVs included in the devices file.
 .
 .TP
 .O_autoactivation
-Specify if autoactivation is being used from an event.
+Specify whether autoactivation is being used from an event.
 This allows the command to apply settings that are specific
 to event activation, such as device scanning optimizations
 using pvs_online files created by event-based pvscans.

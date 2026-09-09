@@ -82,7 +82,7 @@ Remove a device by referencing its device ID:
 LVM identifies devices in the devices file using hardware-specific IDs,
 such as the WWID or serial number.  Subsystem-specific IDs are used for
 virtual device types, which also aim to be unique and stable.
-When no hardware or subsystem ID is available, lvm falls back using the
+When no hardware or subsystem ID is available, lvm falls back to using the
 device name as the device ID.  Using device names as IDs is not optimal
 because they are not stable, and will often change after reboot.  When
 device names are used as IDs, lvm must perform extra device scanning
@@ -146,7 +146,7 @@ is used for dm crypt devices, reported by sysfs.
 is used for md devices, reported by sysfs.
 .IP \[bu]
 .B lvmlv_uuid
-is used if a PV is placed on top of an lvm LV, reported by sysfs.
+is used if a PV is placed on top of an LVM LV, reported by sysfs.
 .IP \[bu]
 .B loop_file
 is used for loop devices, the backing file name reported by sysfs.
@@ -233,7 +233,7 @@ search for the missing PVIDs in system.devices.  If a PVID is found on a
 new device, the system.devices entry is updated with a new device ID matching
 the new device on which the PVID was found.  The refresh mode can be configured
 to run once, when the machine change is first detected, or can be enabled
-for period of time following the first refresh, or can be disabled
+for a period of time following the first refresh, or can be disabled
 entirely.
 .P
 .B device_ids_refresh = 0
@@ -281,7 +281,7 @@ allows lvm to be used with different sets of devices.  For example, a
 given application may not need to access the system's devices, and the
 system may not need to access the application's devices.  In this case,
 system.devices could list only the system's devices and
-<application>.devices file could list only the application's devices.  The
+the <application>.devices file could list only the application's devices.  The
 option --devicesfile <filename> is used to select the devices file to use
 with the command.  Without the option set, the default system.devices file
 is used.

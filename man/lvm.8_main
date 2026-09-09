@@ -17,7 +17,7 @@ than physical devices, and can have capabilities beyond what the physical
 devices provide themselves.  A Volume Group (VG) is a collection of one or
 more physical devices, each called a Physical Volume (PV).  A Logical
 Volume (LV) is a virtual block device that can be used by the system or
-applications.  Each block of data in an LV is stored on one or more PV in
+applications.  Each block of data in an LV is stored on one or more PVs in
 the VG, according to algorithms implemented by Device Mapper (DM) in the
 kernel.
 .P
@@ -35,8 +35,8 @@ LVM command (for example by using a hard or soft link) it acts as
 that command.
 .P
 On invocation, \fBlvm\fP requires that only the standard file descriptors
-stdin, stdout and stderr are available.  If others are found, they
-get closed and messages are issued warning about the leak.
+stdin, stdout and stderr are available.  If others are found, they are
+closed and a warning about the leak is issued.
 This warning can be suppressed by setting the environment variable
 .BR LVM_SUPPRESS_FD_WARNINGS .
 .P
@@ -193,7 +193,7 @@ Make exported Volume Groups known to the system.
 .
 .TP
 .B vgimportclone
-Import and rename duplicated Volume Group (e.g. a hardware snapshot).
+Import and rename a duplicated Volume Group (e.g. a hardware snapshot).
 .
 .TP
 .B vgimportdevices
@@ -205,7 +205,7 @@ Merge two Volume Groups.
 .
 .TP
 .B vgmknodes
-Recreate Volume Group directory and Logical Volume special files
+Recreate Volume Group directory and Logical Volume special files.
 .
 .TP
 .B vgreduce
@@ -239,7 +239,7 @@ Change attributes of a Logical Volume.
 .
 .TP
 .B lvconvert
-Convert a Logical Volume from linear to mirror or snapshot.
+Convert a Logical Volume between different types.
 .
 .TP
 .B lvcreate
@@ -295,7 +295,7 @@ Report information about Logical Volumes.
 List Logical Volumes.
 .PD
 .P
-For performance metrics, use \fBdmstats\fP(8) or to manipulate the kernel
+For performance metrics, use \fBdmstats\fP(8), or to manipulate the kernel
 device-mapper driver used by LVM directly, use \fBdmsetup\fP(8).
 .
 .SH VALID NAMES
@@ -370,7 +370,7 @@ include all of the VGs with the same name.  If the ambiguous VG name is
 specified on the command line, the command will produce an error.  The
 error states that multiple VGs exist with the specified name.  To process
 one of the VGs specifically, the --select option should be used with the
-UUID of the intended VG: --select vg_uuid=<uuid>
+UUID of the intended VG: --select vg_uuid=<uuid>.
 .P
 An exception is if all but one of the VGs with the shared name is foreign
 (see
@@ -378,7 +378,7 @@ An exception is if all but one of the VGs with the shared name is foreign
 In this case, the one VG that is not foreign is assumed to be the intended
 VG and is processed.
 .P
-LV names are unique within a VG.  The name of an historical LV cannot be
+LV names are unique within a VG.  The name of a historical LV cannot be
 reused until the historical LV has itself been removed or renamed.
 .
 .SH TAGS
@@ -458,7 +458,7 @@ they are listed, but there is no guarantee that future releases will
 maintain that property.  If it is important to obtain a specific layout
 for a particular Logical Volume, then you should build it up through a
 sequence of \fBlvcreate\fP(8) and \fBlvconvert\fP(8) steps such that the
-restrictions described above applied to each step leave the tools no
+restrictions described above, applied to each step, leave the tools no
 discretion over the layout.
 .P
 To view the way the allocation process currently works in any specific
@@ -469,7 +469,7 @@ a command.
 .
 Some logical volume types are simple to create and can be done with a
 single \fBlvcreate\fP(8) command.  The linear and striped logical
-volume types are an example of this.  Other logical volume types may
+volume types are examples of this.  Other logical volume types may
 require more than one command to create.  The cache (\fBlvmcache\fP(7))
 and thin provisioning (\fBlvmthin\fP(7)) types are examples of this.
 .
@@ -508,8 +508,8 @@ is overridden by direct use of \fB--commandprofile\fP command line option.
 .
 .TP
 .B LVM_RUN_BY_DMEVENTD
-This variable is normally set by dmeventd plugin to inform lvm command
-it is running from dmeventd plugin so lvm takes some extra action
+This variable is normally set by the dmeventd plugin to inform the lvm command
+that it was invoked by the dmeventd plugin, so that lvm takes extra action
 to avoid communication and deadlocks with dmeventd.
 .
 .TP
@@ -537,7 +537,7 @@ Path to the file that stores the lvmpolld process ID.
 .
 .TP
 .B LVM_LVMPOLLD_SOCKET
-Path to the socket used to communicate with lvmpolld..
+Path to the socket used to communicate with lvmpolld.
 .
 .TP
 .B LVM_LOG_FILE_EPOCH
@@ -555,7 +555,7 @@ aborted.  Automated tests use this to terminate looping commands.
 .B LVM_EXPECTED_EXIT_STATUS
 The status anticipated when the process exits.  Use ">N" to match any
 status greater than N.  If the actual exit status matches and a log
-file got produced, it is deleted.
+file was produced, that file is deleted.
 .B LVM_LOG_FILE_EPOCH
 and
 .B LVM_EXPECTED_EXIT_STATUS
@@ -577,7 +577,7 @@ directly.
 .
 .TP
 .B DM_DEBUG_WITH_LINE_NUMBERS
-Prepends source file name and code line number with libdm debugging.
+Prepends the source file name and line number to libdm debug messages.
 .
 .SH FILES
 .

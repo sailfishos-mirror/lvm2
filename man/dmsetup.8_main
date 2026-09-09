@@ -502,16 +502,16 @@ The default interval is one second.
 .
 .TP
 .BR -f | --force
-Try harder to complete operation.
+Try harder to complete the operation.
 .
 .TP
 .BR -h | --help
 Outputs a summary of the commands available, optionally including
-the list of report fields (synonym with \fBhelp\fP command).
+the list of report fields (synonymous with the \fBhelp\fP command).
 .
 .TP
 .B --inactive
-When returning any table information from the kernel report
+When returning any table information from the kernel, report
 on the inactive table instead of the live table.
 Requires kernel driver version 4.16.0 or above.
 .
@@ -540,9 +540,9 @@ Character whitelist:
 .BR a \(en z ,
 .BR #+\-.:=@_ .
 This whitelist is also supported by udev.
-Any character not on a whitelist is replaced
+Any character not on the whitelist is replaced
 with its hex value (two digits) prefixed by \ex.
-Mangling mode could be also set through
+Mangling mode can also be set using
 .B DM_DEFAULT_NAME_MAN\%GLING_MODE
 environment variable.
 .
@@ -644,11 +644,11 @@ See below for more information on the table format.
 .
 .TP
 \fB--udevcookie\fP \fIcookie\fP
-Use cookie for udev synchronization.
+Use a cookie for udev synchronization.
 .br
-Note: Same cookie should be used for same type of operations
-i.e.\& creation of multiple different devices.
-It's not advised to combine different operations on the single device.
+Note: the same cookie should be used for the same type of operations,
+i.e.\& the creation of multiple different devices.
+It is not advised to combine different operations on a single device.
 .
 .TP
 \fB-u\fP|\fB--uuid\fP \fIuuid\fP
@@ -690,8 +690,8 @@ the table is loaded and made live.
 Otherwise a table is read from standard input unless \fB--notable\fP is used.
 The optional \fIuuid\fP can be used in place of
 device_name in subsequent dmsetup commands.
-If successful the device will appear in table and for the live
-device the node
+If successful, the device will appear in the table, and for the live
+device, the node
 .na
 .I /dev/mapper/device_name
 is created.
@@ -704,7 +704,7 @@ Creates one or more devices from a concise device specification.
 Each device is specified by a comma-separated list:
 .IR name ", " uuid ", " "minor number" ", " flags ,
 .IR "comma-separated table lines" .
-Flags defaults to read-write (rw) or may be read-only (ro).
+Flags default to read-write (rw) or may be read-only (ro).
 Uuid, minor number and flags are optional so those fields may be empty.
 A semi-colon separates specifications of different devices.
 Use a backslash to escape the following character,
@@ -753,7 +753,7 @@ UUID
 .
 .NTP
 .CMD_INFOLONG
-Output you can customise.
+Output that can be customised.
 Fields are comma-separated and chosen from the following list:
 .BR name ,
 .BR major ,
@@ -807,7 +807,7 @@ If neither is supplied, reads a table from standard input.
 .
 .NTP
 .CMD_MANGLE
-Ensure existing device-mapper \fIdevice_name\fP and UUID is in the correct
+Ensure existing device-mapper \fIdevice_name\fP and UUID are in the correct
 mangled form containing only whitelisted characters (supported by udev)
 and do a rename if necessary.
 Any character not on the whitelist will be mangled based on
@@ -815,7 +815,7 @@ the \fB--manglename\fP setting. Automatic rename works only for device
 names and not for device UUIDs because the kernel does not allow changing
 the UUID of active devices. Any incorrect UUIDs are reported only and they
 must be manually corrected by deactivating the device first and then
-reactivating it with proper mangling mode used (see also \fB--manglename\fP).
+reactivating it with the proper mangling mode (see also \fB--manglename\fP).
 .
 .NTP
 .CMD_MEASURE
@@ -825,7 +825,8 @@ This is for debugging and does not actually trigger a measurement.
 .
 .NTP
 .CMD_MESSAGE
-Send message to target. If sector not needed use 0.
+\fBmessage\fP
+Send a message to the target. If no sector is needed, use 0.
 .
 .NTP
 .CMD_MKNODES
@@ -851,7 +852,7 @@ the \fB--retry\fP option will cause the operation to be retried
 for a few seconds before failing.
 Do NOT combine \fB--force\fP and \fB--udevcookie\fP,
 as udev may start to process udev rules in the middle of error target
-replacement and result in nondeterministic result.
+replacement and result in nondeterministic behavior.
 .
 .NTP
 .CMD_REMOVE_ALL
@@ -871,8 +872,8 @@ Renames a device.
 .
 .NTP
 .CMD_RENAME_UUID
-Sets the uuid of a device that was created without a uuid.
-After a uuid has been set it cannot be changed.
+Sets the UUID of a device that was created without a UUID.
+After a UUID has been set it cannot be changed.
 .
 .NTP
 .CMD_RESUME
@@ -886,10 +887,10 @@ Sets the device geometry to C/H/S.
 .
 .NTP
 .CMD_SPLITNAME
-Splits given \fIdevice name\fP into \fIsubsystem\fP constituents.
+Splits the given \fIdevice name\fP into \fIsubsystem\fP constituents.
 The default subsystem is LVM.
 LVM currently generates device names by concatenating the names of the Volume
-Group, Logical Volume and any internal Layer with a hyphen as separator.
+Group, Logical Volume and any internal layer with a hyphen as separator.
 Any hyphens within the names are doubled to escape them.
 The precise encoding might change without notice in any future
 release, so we recommend you always decode using the current version of
@@ -906,7 +907,7 @@ for more details.
 .CMD_STATUS
 Outputs status information for each of the device's targets.
 With \fB--target\fP, only information relating
-to the specified target type any is displayed.
+to the specified target type is displayed.
 With \fB--noflush\fP, the thin target (from version 1.3.0)
 doesn't commit any outstanding changes to disk
 before reporting its statistics.
@@ -930,10 +931,10 @@ With \fB--target\fP, only information relating to the specified target type
 is displayed.
 Real encryption keys are suppressed in the table output for crypt and integrity
 targets unless the \fB--showkeys\fP parameter is supplied. Kernel key
-references prefixed with \fB:\fP are not affected by the parameter and get
-displayed always (crypt target only).
+references prefixed with \fB:\fP are not affected by the parameter and are
+always displayed (crypt target only).
 With \fB--concise\fP, the output is presented concisely on a single line.
-Commas then separate the name, uuid, minor device number, flags ('ro' or 'rw')
+Commas separate the name, uuid, minor device number, flags ('ro' or 'rw')
 and the table (if present). Semi-colons separate devices.
 Backslashes escape any commas, semi-colons or backslashes.
 See
@@ -967,16 +968,16 @@ dmsetup creates and destroys them for each action automatically.
 However, we can generate one explicitly to group several actions together
 and use only one cookie instead.
 We can define a cookie to use for each relevant command by using
-\fB--udevcookie\fP option.
+the \fB--udevcookie\fP option.
 Alternatively, we can export this value into the environment
 of the dmsetup process as \fBDM_UDEV_COOKIE\fP variable and it will be used
 automatically with all subsequent commands until it is unset.
-Invoking this command will create system-wide semaphore that needs to be cleaned
+Invoking this command will create a system-wide semaphore that needs to be cleaned
 up explicitly by calling udevreleasecookie command.
 .
 .NTP
 .CMD_UDEVFLAGS
-Parses given \fIcookie\fP value and extracts any udev control flags encoded.
+Parses the given \fIcookie\fP value and extracts any encoded udev control flags.
 The output is in environment key format that is suitable for use in udev
 rules. If the flag has its symbolic name assigned then the output is
 .na
@@ -984,7 +985,7 @@ DM_UDEV_FLAG_\:<flag_\:name> =\ '1',
 DM_UDEV_FLAG\:<flag_\:position> =\ '1'
 .ad
 otherwise.
-Subsystem udev flags don't have symbolic names assigned and these ones are
+Subsystem udev flags don't have symbolic names assigned and they are
 always reported as
 .na
 DM_SUBSYSTEM_\:UDEV_\:FLAG\:<flag_\:position> =\ '1'.
@@ -993,8 +994,8 @@ There are 16 udev flags altogether.
 .
 .NTP
 .CMD_UDEVRELEASECOOKIE
-Waits for all pending udev processing bound to given cookie value and clean up
-the cookie with underlying semaphore. If the cookie is not given directly,
+Waits for all pending udev processing bound to the given cookie value and
+releases the underlying semaphore. If the cookie is not given directly,
 the command will try to use a value defined by \fBDM_UDEV_COOKIE\fP
 environment variable.
 .
@@ -1119,7 +1120,7 @@ Supports snapshots of devices.
 .TP
 .BR thin ", " thin-pool
 Supports thin provisioning of devices and also provides
-a better snapshot support.
+better snapshot support.
 .P
 To find out more about the various targets and their table formats
 and status lines, please read the files in
@@ -1144,7 +1145,7 @@ documentation directory for the device-mapper package.)
 .
 .SH CONCISE FORMAT
 .
-A concise representation of one of more devices:
+A concise representation of one or more devices:
 .
 .PD 0
 .
@@ -1234,13 +1235,13 @@ Defaults to "\fI/dev\fP" and must be an absolute path.
 .TP
 .B DM_UDEV_COOKIE
 A cookie to use for all relevant commands to synchronize with udev processing.
-It is an alternative to using \fB--udevcookie\fP option.
+It is an alternative to using the \fB--udevcookie\fP option.
 .
 .TP
 .B DM_DEFAULT_NAME_MANGLING_MODE
 A default mangling mode.
-Defaults to "\fB#DEFAULT_MANGLING#\fP"
-and it is an alternative to using \fB--manglename\fP option.
+Defaults to "\fB#DEFAULT_MANGLING#\fP".
+It is an alternative to using the \fB--manglename\fP option.
 .
 .TP
 .B DM_DEBUG_WITH_LINE_NUMBERS

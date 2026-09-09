@@ -17,14 +17,14 @@ lvmsystemid \(em LVM system ID
 .
 The \fBlvm\fP(8) system ID restricts Volume Group (VG) access to one host.
 This is useful when a VG is placed on shared storage devices, or when
-local devices are visible to both host and guest operating systems.  In
+local devices are visible to both the host and guest operating systems.  In
 cases like these, a VG can be visible to multiple hosts at once, and some
 mechanism is needed to protect it from being used by more than one host at
 a time.
 .P
 A VG's system ID identifies one host as the VG owner.  The host with a
 matching system ID can use the VG and its LVs, while LVM on other hosts
-will ignore it.  This protects the VG from being accidentally used from
+will ignore it.  This protects the VG from being accidentally used by
 other hosts.
 .P
 The system ID is a string that uniquely identifies a host.  It can be
@@ -45,7 +45,7 @@ host.
 .P
 A
 .B foreign VG
-is a VG seen by a host with an unmatching system ID, i.e., the system ID
+is a VG seen by a host with a mismatching system ID, i.e., the system ID
 in the VG metadata does not match the system ID configured on the host.
 If the host has no system ID, and the VG does, the VG is foreign and LVM
 will ignore it.  If the VG has no system ID, access is unrestricted, and
@@ -77,7 +77,7 @@ Print the system ID of the local host to check if it is configured:
 .
 To benefit fully from system ID, all hosts should have a system ID
 configured, and all VGs should have a system ID set.  Without any method
-to restrict access, e.g. system ID or device filters, a VG that is visible
+to restrict access, such as a system ID or device filters, a VG that is visible
 to multiple hosts can be accidentally damaged or destroyed.
 .
 .IP \[bu] 2
@@ -137,15 +137,15 @@ matching system ID (the owner).  This VG type is accessible to the host.
 .
 .TP
 .B Foreign:
-A local VG that has a system ID set, as viewed from any host with an
-unmatching system ID (or no system ID).  It is owned by another host.
+A local VG that has a system ID set, as viewed from any host with a
+mismatching system ID (or no system ID).  It is owned by another host.
 This VG type is not accessible to the host.
 .
 .TP
 .B Exported:
 A local VG that has been exported with vgexport and has no system ID.
-This VG type can only be accessed by vgimport which will change it to
-owned.
+This VG type can only be accessed by vgimport, which will change it to
+Owned.
 .
 .TP
 .B Shared:
@@ -212,7 +212,7 @@ global {
 The string utsname.nodename from
 .BR uname (2)
 is used as the system ID.  A uname beginning with "localhost"
-is ignored and equivalent to none.
+is ignored and is equivalent to none.
 .sp
 .I lvm.conf
 .EX
@@ -350,7 +350,7 @@ system ID.  Applicable only if LVM is compiled with lvmlockd support.
 .
 A clustered/clvm VG has no system ID set, allowing multiple hosts to use
 it via clvmd.  Changing a VG to clustered will clear the existing system
-ID.  Changing a VG to not clustered will set the system ID to the host
+ID.  Changing a VG to a non-clustered VG will set the system ID to the host
 running the vgchange command.
 .
 .SS creation_host

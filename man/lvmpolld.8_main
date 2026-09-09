@@ -43,19 +43,19 @@ lvmpolld \(em LVM poll daemon
 .
 .SH DESCRIPTION
 .
-lvmpolld is polling daemon for LVM. The daemon receives requests for polling
-of already initialised operations originating in LVM2 command line tool.
-The requests for polling originate in the \fBlvconvert\fP, \fBpvmove\fP,
+lvmpolld is a polling daemon for LVM. The daemon receives requests for polling
+of already initialised operations originating from the LVM2 command line tool.
+The requests for polling originate from the \fBlvconvert\fP, \fBpvmove\fP,
 \fBlvchange\fP or \fBvgchange\fP LVM2 commands.
 .P
 The purpose of lvmpolld is to reduce the number of spawned background processes
 per otherwise unique polling operation. There should be only one. It also
-eliminates the possibility of unsolicited termination of background process by
+eliminates the possibility of unsolicited termination of a background process by
 external factors.
 .P
 lvmpolld is used by LVM only if it is enabled in \fBlvm.conf\fP(5) by
 specifying the \fBglobal/use_lvmpolld\fP setting. If this is not defined in the
-LVM configuration explicitly then default setting is used instead (see the
+LVM configuration explicitly then the default setting is used instead (see the
 output of \fBlvmconfig --type default global/use_lvmpolld\fP command).
 .
 .SH OPTIONS
@@ -108,9 +108,9 @@ Path to the socket file. This overrides both the built-in default
 .
 .TP
 \fB-t\fP|\fB--timeout\fP \fItimeout_value\fP
-The daemon may shutdown after being idle for the given time (in seconds).
+The daemon may shut down after being idle for the given time (in seconds).
 When the option is omitted or the value given is zero
-the daemon never shutdowns on idle.
+the daemon never shuts down when idle.
 .
 .TP
 .BR -V | --version

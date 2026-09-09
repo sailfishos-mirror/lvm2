@@ -30,8 +30,8 @@ is another way to limit autoactivation.
 .
 LVM autoactivation is "event based", in which complete VGs are activated
 in response to uevents which occur during system startup or at any time
-after the system has started.  An old form of autoactivation was "static"
-in which complete VGs are activated at a fixed point during system startup
+after the system has started.  An old form of autoactivation was "static",
+in which complete VGs were activated at a fixed point during system startup
 by a systemd service, and not in response to events.
 .P
 Event based autoactivation is driven by udev, udev rules, and systemd.
@@ -44,7 +44,7 @@ device, which triggers autoactivation.
 There are two variations of event based autoactivation that may be used on
 a system, depending on the LVM udev rule that is installed (found in
 .IR /lib/udev/rules.d/ ).
-The following summarizes the steps in each rule which lead to autoactivation:
+The following summarizes the steps in each rule that lead to autoactivation:
 .P
 .B 69-dm-lvm-metad.rules
 .
@@ -173,7 +173,7 @@ is reserved for udev output.)
 .
 .SS run files
 .
-Autoactivation commands use a number of temp files in
+Autoactivation commands use a number of temporary files in
 .I #DEFAULT_RUN_DIR#
 (with the expectation that it is cleared between boots).
 .
@@ -217,7 +217,8 @@ prefixes should be included in the filter names; these
 prefixes help lvm detect that symlink names are used. Filters containing
 symlinks require special matching by commands run in the lvm udev rule.
 .P
-Common symlinks, e.g. beginning with wwn-, scsi-, pci-, or lvm-pv-uuid-,
+Common symlinks, such as those beginning with wwn-, scsi-, pci-, or
+lvm-pv-uuid-,
 are recommended.  Uncommon or custom symlinks created by custom udev rules
 may be less reliable. If a custom udev rule creates symlinks used in the
 lvm filter, then the udev rule should be started prior to the lvm rule.
@@ -233,7 +234,7 @@ VG "vg" contains two PVs:
 \  /dev/sdc   vg 5J3tM8-aIPe-2vbd-DBe7-bvRq-TGj0-DaKV2G
 .EE
 .P
-use of --cache:
+Use of --cache:
 .P
 .EX
 # pvscan --cache /dev/sdb
@@ -251,7 +252,7 @@ vg:vg
 dev:/dev/sdc
 .EE
 .P
-use of -aay:
+Use of -aay:
 .P
 .EX
 # pvscan --cache -aay /dev/sdb
@@ -265,7 +266,7 @@ use of -aay:
 8:16
 vg:vg
 dev:/dev/sdb
-$ cat #DEFAULT_RUN_DIR#/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G
+# cat #DEFAULT_RUN_DIR#/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G
 8:32
 vg:vg
 dev:/dev/sdc
@@ -273,7 +274,7 @@ dev:/dev/sdc
 #DEFAULT_RUN_DIR#/vgs_online/vg
 .EE
 .P
-use of --listvg:
+Use of --listvg:
 .P
 .EX
 # pvscan --cache --listvg /dev/sdb
@@ -285,13 +286,13 @@ use of --listvg:
 8:16
 vg:vg
 dev:/dev/sdb
-$ cat #DEFAULT_RUN_DIR#/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G
+# cat #DEFAULT_RUN_DIR#/pvs_online/5J3tM8aIPe2vbdDBe7bvRqTGj0DaKV2G
 8:32
 vg:vg
 dev:/dev/sdc
 .EE
 .P
-use of --checkcomplete:
+Use of --checkcomplete:
 .P
 .EX
 # pvscan --cache --listvg --checkcomplete --vgonline /dev/sdb
@@ -302,7 +303,7 @@ use of --checkcomplete:
 \  VG vg complete
 .EE
 .P
-use of --udevoutput:
+Use of --udevoutput:
 .P
 .EX
 # pvscan --cache --listvg --checkcomplete --vgonline --udevoutput /dev/sdb
@@ -311,7 +312,7 @@ LVM_VG_NAME_INCOMPLETE='vg'
 LVM_VG_NAME_COMPLETE='vg'
 .EE
 .P
-use of --listlvs:
+Use of --listlvs:
 .P
 .EX
 # lvs -o name,devices vg

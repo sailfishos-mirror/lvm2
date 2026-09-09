@@ -56,7 +56,7 @@ Alternatively, --metadatasize 2044k results in pe_start at 2\~MiB
 and mda_size of 2044\~KiB.
 .P
 The alignment of pe_start described above may be automatically overridden
-based on md device properties or device i/o properties reported in sysfs.
+based on md device properties or device I/O properties reported in sysfs.
 These automatic adjustments can be enabled/disabled using lvm.conf
 settings md_chunk_alignment and data_alignment_offset_detection.
 .P
@@ -68,7 +68,7 @@ metadata area start (page size), plus the specified --metadatasize,
 rounded up to the next multiple of --dataalignment.
 With metadata starting at 4\~KiB, --metadatasize 2048k,
 and --dataalignment 128k, pe_start is 2176\~KiB and mda_size is 2172\~KiB.
-The pe_start of 2176\~KiB is the nearest even multiple of 128\~KiB that
+The pe_start of 2176\~KiB is the nearest exact multiple of 128\~KiB that
 provides at least 2048\~KiB of metadata space.
 Always check the resulting alignment and metadata size when using
 these options.

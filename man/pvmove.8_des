@@ -1,5 +1,5 @@
 pvmove moves the allocated physical extents (PEs) on a source PV to one or
-more destination PVs.  You can optionally specify a source LV in which
+more destination PVs.  You can optionally specify a source LV, in which
 case only extents used by that LV will be moved to free (or specified)
 extents on the destination PV. If no destination PV is specified, the
 normal allocation rules for the VG are used.

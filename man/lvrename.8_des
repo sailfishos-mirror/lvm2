@@ -1,2 +1,2 @@
-lvrename renames an existing LV or a historical LV (see \fBlvremove\fP for
+lvrename renames an existing LV or a historical LV (see \fBlvremove\fP(8) for
 historical LV information.)

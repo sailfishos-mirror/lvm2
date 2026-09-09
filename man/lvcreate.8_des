@@ -14,7 +14,7 @@ original LV from the time the snapshot was created.
 .P
 RAID LVs can be created by specifying an LV type when creating the LV (see
 \fBlvmraid\fP(7)). Different RAID levels require different numbers of
-unique PVs be available in the VG for allocation.
+unique PVs to be available in the VG for allocation.
 .P
 Thin pools (for thin provisioning) and cache pools (for caching) are
 represented by special LVs with types thin-pool and cache-pool (see
@@ -26,7 +26,7 @@ virtual size rather than a physical size. A cache LV is the combination of
 a standard LV with a cache pool, used to cache active portions of the LV
 to improve performance.
 .P
-VDO LVs are also provisioned volumes from a VDO pool, and are created with a
+VDO LVs are also thinly provisioned volumes from a VDO pool, and are created with a
 virtual size rather than a physical size (see \fBlvmvdo\fP(7)).
 .
 .SS Usage notes
@@ -39,9 +39,9 @@ options, even though it is typically used. When the name is not
 specified, a new LV name is generated with the "lvol" prefix and a unique
 numeric suffix.
 .P
-In the usage section below, when creating a pool and the name is omitted
+In the usage section below, when creating a pool and the name is omitted,
 the new LV pool name is generated with the
 "vpool" prefix for vdo-pools and a unique numeric suffix.
 .P
-Pool name can be specified together with \fIVG\fP name i.e.:
+Pool name can be specified together with the \fIVG\fP name, i.e.:
 vg00/mythinpool.

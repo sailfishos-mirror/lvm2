@@ -79,12 +79,12 @@ and prints it.
 .TP
 .B --kill
 This is run by sanlock when it loses access to the storage holding leases
-for a VG.  It runs the command specified in lvm.conf
-lvmlockctl_kill_command to deactivate LVs in the VG.  If the specified
+for a VG.  It runs the command specified in the lvm.conf
+\fBlvmlockctl_kill_command\fP setting to deactivate LVs in the VG.  If the specified
 command is successful, locks will be dropped for the VG in lvmlockd
 (the equivalent of \fBlvmlockctl --drop\fP will be run.)  If no command
 is specified, or the command fails, then the user must intervene
-to forcefully deactivate LVs in the VG, and if successful, run
+to forcibly deactivate LVs in the VG, and if successful, run
 \fBlvmlockctl --drop\fP.  For more, see
 .BR lvmlockd (8).
 .
@@ -112,7 +112,7 @@ lock should be disabled in all but one sanlock VG.  For more, see
 .TP
 .B --stop-lockspaces
 This tells lvmlockd to stop all lockspaces.  It can be useful to stop
-lockspaces for VGs that the \fBvgchange --lock-stop\fP command can no longer
+lockspaces for VGs that the \fBvgchange --lockstop\fP command can no longer
 see, or to stop the dlm global lockspace which is not directly stopped by
 the vgchange command.  The wait and force options can be used with this
 command.

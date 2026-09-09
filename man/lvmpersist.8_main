@@ -32,7 +32,7 @@ commands (e.g. vgchange) run the lvmpersist script.
 .P
 .SS Device types
 .P
-SCSI or SCSI-like (e.g. iSCSI, SAS, Fibre Channel), dm-multipath, and NVME
+SCSI or SCSI-like (e.g. iSCSI, SAS, Fibre Channel), dm-multipath, and NVMe
 devices are supported.  PRs were introduced with the SCSI Primary Commands
 Version 3 standard (SPC-3).
 .P
@@ -245,7 +245,7 @@ Individually set or clear the autostart and require settings.
 .P
 When "autostart" is set, autoactivation and auto-lockstart commands
 (vgchange -aay, vgchange --lockstart --lockopt auto) will first start PR
-on the VG.  If PR start fails, these commands stop and not attempt
+on the VG.  If PR start fails, these commands stop and do not attempt
 activation or lockstart.
 .P
 When "require" is set, lvm commands that write or activate a VG require PR
@@ -293,7 +293,7 @@ started at once.)
 .B vgchange --persist check
 .I VG
 .P
-Check if PR is started (the local key and reservation exists on all
+Check if PR is started (the local key exists and a reservation is present on all
 devices.)  The command exits with success if PR is started on all VG devices.
 .P
 .B vgchange --persist read
@@ -369,9 +369,9 @@ where "remkey" is the PR key of the other host.
 .P
 .SS Local Settings
 .P
-Each host using PR is required to have a PR key that is unique among all
-hosts using the same VG.  There are two approaches to setting a key value,
-which are set in /etc/lvm/lvmlocal.conf:
+Each host using PR must have a PR key that is unique among all
+hosts using the same VG.  There are two key settings in
+/etc/lvm/lvmlocal.conf:
 .P
 local/pr_key
 
@@ -540,7 +540,7 @@ $ vgchange -ay vg
 $ lvcreate -l1 -n lvol1 vg
   Logical volume "lvol1" created.
 
-host2 foricibly takes VG from host1:
+host2 forcibly takes VG from host1:
 $ lvmconfig local/host_id
 host_id=2
 $ vgchange -ay vg
@@ -625,7 +625,7 @@ $ vgchange -an vg
   0 logical volume(s) in volume group "vg" now active
 $ vgchange --lockstop vg
 $ vgchange --persist stop vg
-  lvmpersist: stopped ee with key 0x1000000000010002.
+  lvmpersist: stopped vg with key 0x1000000000010002.
 $ vgchange --persist check vg
   key for local host is not registered (host_id 2)
   keys for all registered hosts: 0x1000000000010001

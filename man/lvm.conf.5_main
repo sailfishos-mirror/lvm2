@@ -35,7 +35,7 @@ exactly the same format as used in any LVM configuration file.
 .B profile config
 .br
 A profile is a set of selected customizable configuration settings
-that are aimed to achieve a certain characteristics in various
+that are intended to achieve certain characteristics in various
 environments or uses. It's used to override existing configuration.
 Normally, the name of the profile should reflect that environment or use.
 .P
@@ -75,13 +75,13 @@ Users are allowed to add more profiles with different values if needed.
 For this purpose, there's the \fBcommand_profile_template.profile\fP
 (for command profiles) and \fBmetadata_profile_template.profile\fP
 (for metadata profiles) which contain all settings that are customizable
-by profiles of certain type. Users are encouraged to copy these template
+by profiles of a certain type. Users are encouraged to copy these template
 profiles and edit them as needed. Alternatively, the
 \fBlvmconfig --file <ProfileName.profile> --type profilable-command <section>\fP
 or \fBlvmconfig --file <ProfileName.profile>
 --type profilable-metadata <section>\fP
-can be used to generate a configuration with profilable settings in either
-of the type for given section and save it to new ProfileName.profile
+can be used to generate a configuration with profilable settings for either
+type of the given section and save it to a new ProfileName.profile
 (if the section is not specified, all profilable settings are reported).
 .P
 The profiles are stored in

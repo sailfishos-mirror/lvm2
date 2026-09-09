@@ -1986,7 +1986,7 @@ See \fBlvmthin\fP(7) for more information about LVM thin provisioning.
 COW snapshots are created when a size is specified. The size is allocated
 from space in the VG, and is the amount of space that can be used
 for saving COW blocks as writes occur to the origin or snapshot.
-The size chosen should depend upon the amount of writes that are expected;
+The size chosen should depend upon the number of writes that are expected;
 often 20% of the origin LV is enough. If COW space runs low, it can
 be extended with lvextend (shrinking is also allowed with lvreduce.)
 A small amount of the COW snapshot LV size is used to track COW block

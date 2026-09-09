@@ -176,7 +176,7 @@ Used by: \fBvgimportdevices\fP
 .
 .TP
 \fB--autoactivation\fP \fIString\fP
-Specify if autoactivation is being used from an event.
+Specify whether autoactivation is being used from an event.
 This allows the command to apply settings that are specific
 to event activation, such as device scanning optimizations
 using pvs_online files created by event-based pvscans.
@@ -545,7 +545,7 @@ Used by: \fBpvck\fP
 .
 .TP
 \fB--edit\fP \fIString\fP
-Edit or remove a setting in an lvm config file.
+Edit or remove a setting in an LVM config file.
 The setting is specified as Section/Field=Value.
 To remove a setting, use Section/Field=-.
 Repeat this option to edit multiple settings.
@@ -1094,7 +1094,7 @@ Used by: \fBconfig\fP, \fBdevtypes\fP, \fBdumpconfig\fP, \fBformats\fP, \fBfullr
 .
 .TP
 \fB--norestorefile\fP
-In conjunction with --uuid, this allows a uuid to be specified
+In conjunction with --uuid, this allows a UUID to be specified
 without also requiring that a backup of the metadata be provided.
 .br
 Used by: \fBpvcreate\fP
@@ -1831,7 +1831,7 @@ Used by: \fBlvconvert\fP, \fBlvcreate\fP, \fBlvextend\fP, \fBlvresize\fP
 \fBprofilable-command\fP|\:\
 \fBprofilable-metadata\fP
 \fBcurrent\fP prints the config settings that would be applied
-to an lvm command (assuming the command does not override them
+to an LVM command (assuming the command does not override them
 on the command line.) This includes:
 settings that have been modified in lvm config files,
 settings that get their default values from config files,
@@ -1846,7 +1846,7 @@ and these settings are not printed as comments.
 from their default values in config files (the difference between
 current and default.)
 \fBfull\fP prints every setting uncommented and set to the
-current value, i.e. how it would be used by an lvm command.
+current value, i.e. how it would be used by an LVM command.
 This includes settings modified in config files, settings that usually
 get defaults internally, and settings that get defaults from config files.
 \fBlist\fP prints all config names without values.

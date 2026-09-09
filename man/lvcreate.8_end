@@ -50,7 +50,7 @@ Create a RAID5 LV with a usable size of 5 GiB, 3 stripes, a stripe size of
 Create a RAID5 LV using all of the free space in the VG and spanning all the
 PVs in the VG (note that the command will fail if there are more than 8 PVs in
 the VG, in which case \fB-i 7\fP must be used to get to the current maximum of
-8 devices including parity for RaidLVs).
+8 devices including parity for RAID LVs).
 .br
 .B lvcreate --config allocation/\:raid_stripe_all_devices=1 \
 --type raid5 -l 100%FREE -n mylv vg00

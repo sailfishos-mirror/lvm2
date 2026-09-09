@@ -567,7 +567,7 @@ For testing and debugging.
 .
 .TP
 .O_edit
-Edit or remove a setting in an lvm config file.
+Edit or remove a setting in an LVM config file.
 The setting is specified as Section/Field=Value.
 To remove a setting, use Section/Field=-.
 Repeat this option to edit multiple settings.
@@ -704,7 +704,7 @@ back metadata it believes has changed but hasn't.
 .TP
 .O_typeconfig
 \fBcurrent\fP prints the config settings that would be applied
-to an lvm command (assuming the command does not override them
+to an LVM command (assuming the command does not override them
 on the command line.) This includes:
 settings that have been modified in lvm config files,
 settings that get their default values from config files,
@@ -719,7 +719,7 @@ and these settings are not printed as comments.
 from their default values in config files (the difference between
 current and default.)
 \fBfull\fP prints every setting uncommented and set to the
-current value, i.e. how it would be used by an lvm command.
+current value, i.e. how it would be used by an LVM command.
 This includes settings modified in config files, settings that usually
 get defaults internally, and settings that get defaults from config files.
 \fBlist\fP prints all config names without values.

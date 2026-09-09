@@ -377,7 +377,7 @@ is used for dm crypt devices, reported by sysfs.
 is used for md devices, reported by sysfs.
 .IP \[bu]
 .B lvmlv_uuid
-is used if a PV is placed on top of an lvm LV, reported by sysfs.
+is used if a PV is placed on top of an LVM LV, reported by sysfs.
 .IP \[bu]
 .B loop_file
 is used for loop devices, the backing file name reported by sysfs.

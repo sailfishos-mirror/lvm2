@@ -79,7 +79,7 @@ Replace 3 PVs /dev/sd[b-d]1 with PVs /dev/sd[f-h]1 in a raid1 LV.
 .B lvconvert --replace /dev/sdb1 --replace /dev/sdc1 \
 --replace /dev/sdd1 vg/lvol1 /dev/sd[fgh]1
 .P
-Replace the maximum of 2 PVs /dev/sd[bc]1 with PVs /dev/sd[gh]1 in a raid6 LV.
+Replace a maximum of 2 PVs /dev/sd[bc]1 with PVs /dev/sd[gh]1 in a raid6 LV.
 .br
 .B lvconvert --replace /dev/sdb1 --replace /dev/sdc1 vg/lvol1 /dev/sd[gh]1
 .P

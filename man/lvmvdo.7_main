@@ -38,7 +38,7 @@ blocks and are reference-counted by the software.
 With compression, VDO compresses multiple blocks (or shared blocks)
 with the fast LZ4 algorithm, and bins them together where possible so that
 multiple compressed blocks fit within a 4 KB block on the underlying
-storage. Mapping from LBA is to a physical block address and index within
+storage. An LBA is mapped to a physical block address and an index within
 it for the desired compressed data. All compressed blocks are individually
 reference counted for correctness.
 .P
@@ -50,8 +50,8 @@ block addresses that are mapped to the shared physical block are not
 modified.
 .P
 To use VDO with \fBlvm\fP(8), you must install the standard VDO user-space tools
-\fBvdoformat\fP(8) and kernel module "\fIdm_vdo\fP" (For older kernels <6.9
-the out of tree kernel VDO module "\fIkvdo\fP" is necessary).
+\fBvdoformat\fP(8) and the kernel module "\fIdm_vdo\fP" (for older kernels
+before 6.9, the out-of-tree kernel VDO module "\fIkvdo\fP" is necessary).
 .P
 The kernel module implements fine-grained storage virtualization,
 thin provisioning, block sharing, compression and memory-efficient duplicate
@@ -68,13 +68,13 @@ to store all data and metadata blocks.
 .
 .TP
 .B VDOPoolLV
-VDO pool LV is a pool for virtual VDOLV(s),
-which are the size of used VDODataLV.
+A VDO pool LV is a pool for virtual VDOLVs.
+A VDOLV has the size of the used VDODataLV.
 Only a single VDOLV is currently supported.
 .
 .TP
 .B VDOLV
-VDO LV is a virtual LV created from VDOPoolLV.
+A VDO LV is a virtual LV created from a VDOPoolLV.
 Appears blank after creation.
 .
 .SH VDO USAGE
@@ -96,7 +96,7 @@ the sequence of vpool0, vpool1, \&...
 .P
 Note: The performance of TRIM/Discard operations is slow for large
 volumes of VDO type. Please try to avoid sending discard requests unless
-necessary because it might take considerable amount of time
+necessary because it might take a considerable amount of time
 to finish the discard operation.
 .P
 .B lvcreate --type vdo -n
@@ -118,10 +118,10 @@ to finish the discard operation.
 .
 .SS \n+[step]. Convert an existing LV into VDOPoolLV
 .
-Convert an already created or existing LV into a VDOPoolLV, which is a volume
+Convert an existing LV into a VDOPoolLV, which is a volume
 that can hold data and metadata.
 You will be prompted to confirm such conversion because it \fBIRREVERSIBLY
-DESTROYS\fP the content of such volume and the volume is immediately
+DESTROYS\fP the content of the volume and the volume is immediately
 formatted by \fBvdoformat\fP(8) as a VDO pool data volume. You can
 specify the virtual size of the VDOLV associated with this VDOPoolLV.
 If you do not specify the virtual size, it will be set to the maximum size
@@ -203,18 +203,17 @@ EOF
 .
 Use the form 'option=value' or 'option1=value option2=value',
 or repeat --vdosettings for each option being set.
-Options are listed in the Example section above, for the full description see
+Options are listed in the Example section above; for the full description see
 .BR lvm.conf (5).
-Options can omit 'vdo_' and 'vdo_use_' prefixes and all its underscores.
-So i.e. vdo_use_deduplication=1 and deduplication=1 are equivalent.
-To change the option for an already existing VDOPoolLV use
+Options can omit 'vdo_' and 'vdo_use_' prefixes and all their underscores.
+So, for example, vdo_use_deduplication=1 and deduplication=1 are equivalent.
+To change an option for an existing VDOPoolLV, use the
 .BR lvchange (8)
-command. However not all option can be changed.
-Only compression and deduplication options can be also changed
-for an active VDO LV.
-Lowest priority options are specified with configuration file,
-then with --vdosettings and highest are explicit option --compression
-and --deduplication.
+command. However, not all options can be changed.
+For an active VDO LV, only compression and deduplication options can be changed.
+Lowest priority options are specified in the configuration file,
+then with --vdosettings. The explicit options --compression
+and --deduplication have the highest priority.
 .P
 .I Example
 .P
@@ -225,10 +224,9 @@ and --deduplication.
 .
 .SS \n+[step]. Checking the usage of VDOPoolLV
 .
-To quickly check how much data on a VDOPoolLV is already consumed,
-use \fBlvs\fP(8). The Data% field reports how much data is occupied
-in the content of the virtual data for the VDOLV and how much space is already
-consumed with all the data and metadata blocks in the VDOPoolLV.
+To quickly check VDOPoolLV usage, use \fBlvs\fP(8). The Data% field reports
+both the proportion of the VDOLV's virtual data that is used and the space
+consumed by data and metadata blocks in the VDOPoolLV.
 For a detailed description, use the \fBvdostats\fP(8) command.
 .P
 Note: \fBvdostats\fP(8) currently understands only
@@ -283,7 +281,7 @@ Note: You cannot reduce the size of a VDOPoolLV.
 You can extend or reduce a virtual VDO LV as a standard LV with the
 \fBlvresize\fP(8), \fBlvextend\fP(8), and \fBlvreduce\fP(8) commands.
 .P
-Note: The reduction needs to process TRIM for reduced disk area
+Note: Reducing the size requires TRIM operations for the reduced disk area
 to unmap used data blocks from the VDOPoolLV, which might take
 a long time.
 .P
@@ -324,12 +322,12 @@ You have to deactivate the VDODataLV first to continue to use the VDOPoolLV.
 .
 .SS \n[step]. Stacking VDO
 .
-You can convert or stack a VDOPooLV with these currently supported
-volume types: linear, stripe, raid and cache with cachepool.
+You can convert or stack a VDOPoolLV with these currently supported
+volume types: linear, striped, RAID, and cache with a cachepool.
 .
-.SS \n[step]. Using multiple volumes using same VDOPoolLV
+.SS \n[step]. Using multiple volumes with the same VDOPoolLV
 .
-You can convert existing VDO LV into a thin volume. After this conversion
+You can convert an existing VDO LV into a thin volume. After this conversion
 you can create a thin snapshot or you can add more thin volumes
 with thin-pool named after original LV name LV_tpool0.
 See \fBlvmthin\fP(7) for more details.
@@ -344,7 +342,7 @@ See \fBlvmthin\fP(7) for more details.
 .
 .SS \n+[step]. VDOPoolLV on top of raid
 .
-Using a raid type LV for a VDODataLV.
+Using a RAID-type LV for a VDODataLV.
 .P
 .I Example
 .P
@@ -355,9 +353,9 @@ Using a raid type LV for a VDODataLV.
 .
 .SS \n+[step]. Caching a VDOPoolLV
 .
-VDOPoolLV (accepts also VDODataLV volume name) caching provides a mechanism
-to accelerate reads and writes of already compressed and deduplicated
-data blocks together with VDO metadata.
+Caching a VDOPoolLV (a VDODataLV volume name is also accepted) provides
+a mechanism to accelerate reads and writes of already compressed and
+deduplicated data blocks together with VDO metadata.
 .P
 .I Example
 .P
@@ -370,8 +368,8 @@ data blocks together with VDO metadata.
 .
 .SS \n+[step]. Caching a VDOLV
 .
-VDO LV cache allow you to 'cache' a device for better performance before
-it hits the processing of the VDO Pool LV layer.
+Caching a VDO LV improves performance by storing data before
+it reaches the VDO pool LV layer.
 .P
 .I Example
 .P
@@ -391,12 +389,12 @@ Unless you really need it, you should avoid using discard.
 .P
 When a block device is going to be rewritten,
 its blocks will be automatically reused for new data.
-Discard is useful in situations when user knows that the given portion of
+Discard is useful when the user knows that the given portion of
 a VDO LV is not going to be used and the discarded space
 can be used for block provisioning in other regions of the VDO LV.
 For the same reason, you should avoid using mkfs with discard for
 a freshly created VDO LV to save a lot of time that this operation would
-take otherwise as device is already expected to be empty.
+take otherwise, as the device is already expected to be empty.
 .
 .SS \n+[step]. Memory usage
 .

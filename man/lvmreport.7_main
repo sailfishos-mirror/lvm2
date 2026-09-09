@@ -15,9 +15,9 @@ lvmreport \(em LVM reporting and related features
 .
 .SH DESCRIPTION
 .
-LVM uses a single reporting infrastructure that sets standard on LVM command's
-output and it provides wide range of configuration settings and command line
-options to customize report and filter the report's output.
+LVM uses a single reporting infrastructure that sets the standard for LVM commands'
+output and provides a wide range of configuration settings and command line
+options to customize the report and filter the report's output.
 .
 .SH USAGE
 .
@@ -28,9 +28,9 @@ are divided into two groups:
 .
 .TP
 .B Report-oriented commands
-These commands inform about current LVM state and their primary role is to
-display this information in a concise way. To make a distinction, we will
-name this report as \fBmain report\fP. The set of report-only commands include:
+These commands report current LVM state; their primary role is to
+display this information in a concise way. To make a distinction, this report
+is called the \fBmain report\fP. The set of report-only commands includes:
 pvs, vgs, lvs, pvdisplay, vgdisplay, lvdisplay, lvm devtypes, lvm fullreport.
 For further information about main report, see \fBMain report specifics\fP.
 .
@@ -54,12 +54,13 @@ information about this report type.
 .SS Terms
 .
 When describing reporting functionality and features in this text, we will
-use terms \fBrow\fP and \fBcolumn\fP. By row we mean series of values reported
-for a single entity (for example single PV, VG or LV). Each value from the row
-then belongs to a column of certain type. The columns have \fBcolumn headings\fP
+use terms \fBrow\fP and \fBcolumn\fP. By row we mean a series of values reported
+for a single entity (for example a single PV, VG or LV). Each value from the row
+then belongs to a column of a certain type. The columns have
+\fBcolumn headings\fP
 which are short descriptions for the columns. The columns are referenced by
-\fBcolumn names\fP. Please note that this text is also using term \fBfield\fP
-interchangeably with the term \fBcolumn\fP. Most of the time the term columns
+\fBcolumn names\fP. Please note that this text also uses the term \fBfield\fP
+interchangeably with the term \fBcolumn\fP. Most of the time the term column
 is abbreviated as \fBcol\fP in configuration.
 .
 .SS Common report configuration settings and command line options
@@ -285,7 +286,7 @@ below for more information about constructing these criteria.
 .
 The \fBmain report\fP currently encompasses these distinct subtypes,
 referenced by their name \(en \fIReportName\fP as listed below.
-The command in parenthesis is representative command
+The command in parenthesis is a representative command
 that uses the main report subtype by default.
 Each subtype has its own configuration setting for global field set definition
 as well as sort field definition
@@ -385,14 +386,14 @@ representing report about device types
 .hy
 .
 .P
-Use \fBpvs, vgs, lvs -o help\fP or \fBlvm devtypes -o help\fP to get complete
-list of fields that you can use for main report. The list of fields in the
+Use \fBpvs, vgs, lvs -o help\fP or \fBlvm devtypes -o help\fP to get the complete
+list of fields that you can use for the main report. The list of fields in the
 help output is separated in groups based on which report type they belong to.
 Note that LVM can change final report type used if fields from different
 groups are combined together. Some of these combinations are not allowed in
 which case LVM will issue an error.
 .P
-For all main report subtypes except \fBfull\fP, it's not necessary to use
+For all main report subtypes except \fBfull\fP, it is not necessary to use
 \fB--configreport\fP \fIReportName\fP to denote which report any subsequent
 .BR -o ", " -O
 or \fB-S\fP option applies to as they always apply to the single main
@@ -403,12 +404,12 @@ if you need to configure each of its subreports in a different way.
 .
 .SS Log report specifics
 .
-You can enable log report with \fBlog/report_command_log\fP configuration
-setting \(en this functionality is disabled by default. The \fBlog report\fP
-contains a log collected during LVM command execution and then the log is
-displayed just like any other report known from main report. There is only one
-log report subtype as shown below together with related configuration settings
-for fields, sorting and selection:
+You can enable the log report with the \fBlog/report_command_log\fP
+configuration setting \(en this functionality is disabled by default.
+The \fBlog report\fP contains a log collected during LVM command execution,
+which is then displayed just like any other report known from the main report.
+There is only one log report subtype, shown below with its configuration
+settings for fields, sorting, and selection:
 .
 .RS
 .
@@ -431,55 +432,56 @@ You always need to use \fB--configreport log\fP together with
 or
 .BR -S | --select
 to override configuration settings directly on
-command line for \fBlog report\fP. When compared to \fBmain report\fP, in
-addition to usual configuration settings for report fields and sorting, the
-\fBlog report\fP has also configuration option for selection -
-\fBlog/command_log_selection\fP. This configuration setting is provided for
-convenience so it's not necessary to use
+the command line for the \fBlog report\fP. Compared with the \fBmain report\fP,
+the \fBlog report\fP also has a configuration option for selection,
+\fBlog/command_log_selection\fP, in addition to the usual configuration
+settings for report fields and sorting.  This configuration setting is provided
+for convenience so that it is not necessary to use
 .BR -S | --select
-on command line
-each time an LVM command is executed and we need the same selection criteria
-to be applied for \fBlog report\fP. Default selection criteria used for
+on the command line each time an LVM command is executed and the same selection
+criteria should be applied to the \fBlog report\fP. Default selection criteria
+used for
 \fBlog report\fP are
 \fBlog/command_log_selection="!(log_type=status && message=success)"\fP.
-This means that, by default, \fBlog report\fP doesn't display status messages
-about successful operation and it displays only rows with error, warning,
+This means that, by default, the \fBlog report\fP does not display status
+messages
+about successful operation and displays only rows with error, warning,
 print-type messages and messages about failure states. To see unfiltered
 command log, use \fB"all"\fP value for the selection. For more information,
 see \fBlog report content\fP below.
 .P
 .B Log report coverage
 .br
-Currently, when running LVM commands directly (not in LVM shell), the log
-report covers command's \fBprocessing stage\fP which is the moment when LVM
-entities are iterated and processed one by one. It does not cover any command
-initialization nor command finalization stage. If there is any message issued
-out of log report's coverage range, such message goes directly to output,
-bypassing the \fBlog report\fP. By default, that is \fBstandard error output\fP
+Currently, when LVM commands are run directly (not in the LVM shell), the log
+report covers the command's \fBprocessing stage\fP, the moment when LVM
+entities are iterated and processed one by one. It does not cover command
+initialization or finalization. If a message is issued outside the log report's
+coverage, it goes directly to output, bypassing the \fBlog report\fP.
+By default, that is \fBstandard error output\fP
 for error and warning messages and \fBstandard output\fP for common print-like
 messages.
 .P
-When running LVM commands in \fBLVM shell\fP, the log report covers the whole
-LVM command's execution, including command's \fBprocessing\fP as well as
-\fBinitialization\fP and \fBfinalization stage\fP. So from this point of view,
+When LVM commands are run in the \fBLVM shell\fP, the log report covers the
+whole LVM command execution, including \fBprocessing\fP, \fBinitialization\fP,
+and \fBfinalization\fP. So from this point of view,
 the log report coverage is complete for executed LVM commands. Note that there
 are still a few moments when LVM shell needs to initialize itself before it
 even enters the main loop in which it executes LVM commands. Also, there is a
 moment when \fBLVM shell\fP needs to prepare \fBlog report\fP properly for
 next command executed in the shell and then, after the command's run, the shell
 needs to display the log report for that recently executed command. If there
-is a failure or any other message issued during this time, the LVM will bypass
-\fBlog report\fP and display messages on output directly.
+is a failure or any other message issued during this time, LVM will bypass
+the \fBlog report\fP and display messages on output directly.
 .P
-For these reasons and for completeness, it's not possible to rely fully on
+For these reasons and for completeness, it is not possible to rely fully on
 \fBlog report\fP as the only indicator of LVM command's status and the only
 place where all messages issued during LVM command execution are collected.
-You always need to check whether the command has not failed out of log
-report's range by checking the non-report output too.
+You always need to check the non-report output to determine whether the command
+failed outside the log report's coverage.
 .P
 To help with this, LVM can separate output which you can then redirect to
 any \fBcustom file descriptor\fP that you prepare before running an LVM
-command or LVM shell and then you make LVM to use these file descriptors
+command or LVM shell and then use those file descriptors
 for different kinds of output by defining environment variables with file
 descriptor numbers. See also \fBLVM_OUT_FD\fP, \fBLVM_ERR_FD\fP and
 \fBLVM_REPORT_FD\fP environment variable description in \fBlvm\fP(8)
@@ -497,13 +499,13 @@ LVM_OUT_FD=3 LVM_ERR_FD=4 LVM_REPORT_FD=5 <lvm command> 3>out_file
 4>err_file 5>report_file
 .RE
 .P
-Where the <lvm_command> is either direct LVM command or LVM shell.
-You can collect all three types of output in particular files then.
+Here, <lvm_command> is either a direct LVM command or the LVM shell.
+The three output types can then be collected in separate files.
 .P
 .B Log report content
 .P
-Each item in the log report consists of these set of fields providing various
-information:
+Each item in the log report consists of the following set of fields, providing
+various information:
 .
 .TP
 Basic information (mandatory):
@@ -562,7 +564,7 @@ Message (mandatory):
 .
 .TP
 .I log_message
-Any message associated with current item. For \fBstatus\fP log type,
+Any message associated with the current item. For \fBstatus\fP log type,
 the message contains either \fBsuccess\fP or \fBfailure\fP denoting
 current state. For \fBprint\fP, \fBerror\fP and \fBwarn\fP log types,
 the message contains the exact message of that type that got issued.
@@ -625,11 +627,11 @@ Numeric status (used only if applicable):
 .
 .TP
 .I log_errno
-Error number associated with current item.
+Error number associated with the current item.
 .
 .TP
 .I log_ret_code
-Return code associated with current item.
+Return code associated with the current item.
 .RE
 .P
 You can also run \fBlvm --configreport log -o help\fP to
@@ -643,9 +645,9 @@ Selection is used for a report to display only rows that match
 \fISelection\fP and 0 otherwise. The \fBselection criteria\fP are a set of
 \fBstatements\fP combined by \fBlogical and grouping operators\fP.
 The \fBstatement\fP consists of a \fBfield\fP name for which a set of valid
-\fBvalues\fP is defined using \fBcomparison operators\fP. For complete list
-of fields names that you can use in selection, see the output of
-\fBlvm -S help\fP. The help output also contains type of values
+\fBvalues\fP is defined using \fBcomparison operators\fP. For a complete list
+of field names that you can use in selection, see the output of
+\fBlvm -S help\fP. The help output also contains the type of values
 that each field displays enclosed in brackets.
 .P
 .B List of operators recognized in selection criteria
@@ -781,7 +783,7 @@ for time values
 .RE
 .P
 When using \fBstring list\fP in selection criteria, there are several ways
-how LVM can match string list fields from report, depending on what list
+in which LVM can match string list fields from report, depending on what list
 grouping operator is used and what item separator is used within that set
 of items. Also, note that order of items does not matter here.
 .P
@@ -850,9 +852,9 @@ timezone
 .RE
 .RE
 .P
-The full date/time specification is YYYY-MM-DD hh:mm:ss. Users are able
-to leave date/time parts from right to left. Whenever these parts are left out,
-a range is assumed automatically with second granularity. For example:
+The full date/time specification is YYYY-MM-DD hh:mm:ss. Date/time parts may be
+omitted from right to left. Whenever parts are omitted, a range is assumed
+automatically with second granularity. For example:
 .
 .TP
 "2015-07-07\ 9:51"
@@ -1059,11 +1061,11 @@ segs_sort="vg_name,lv_name,seg_start"
 .EE
 .P
 We will use \fBreport/lvs_cols\fP and \fBreport/lvs_sort\fP configuration
-settings to define our own list of fields to use and to sort by that is
-different from defaults. You can do this for other reports in same manner
+settings to define our own list of fields to use and sort by, different from
+the defaults. You can do this for other reports in the same manner
 with \fBreport/{pvs,pvsegs,vgs,seg}_{cols,sort}\fP configuration settings.
-Also note that in the example below, we don't display the "lv_time" field
-even though we're using it for sorting \(en this is allowed.
+Also note that in the example below, we do not display the "lv_time" field
+even though we are using it for sorting \(en this is allowed.
 .P
 .EX
 # lvmconfig --type full report/lvs_cols report/lvs_sort
@@ -1103,8 +1105,8 @@ configuration directly on command line.
 \  lvol1 4.00m raid,raid1
 .EE
 .P
-You can obtain the same information with single command where all the
-information about PVs, PV segments, LVs and LV segments are obtained
+You can obtain the same information with a single command where all the
+information about PVs, PV segments, LVs and LV segments is obtained
 per VG under a single VG lock for consistency, see also \fBlvm fullreport\fP(8)
 man page for more information. The fullreport has its own configuration
 settings to define field sets to use, similar to individual reports as
@@ -1206,8 +1208,8 @@ We will use \fBreport/compact_output=1\fP for subsequent examples.
 .
 .SS Further formatting options
 .
-By default, LVM displays sizes in reports in human-readable form which means
-that the most suitable unit is used so it's easy to read. You can use
+By default, LVM displays sizes in reports in human-readable form, which means
+that the most suitable unit is used so it is easy to read. You can use
 \fBglobal/units\fP configuration setting (or \fB--units\fP option directly
 on command line) and \fBglobal/suffix\fP configuration setting
 (or \fB--nosuffix\fP command line option) to change this.
@@ -1234,7 +1236,7 @@ where key here is actually the field name. Use \fBreport/prefixes\fP
 configuration setting (or \fB--nameprefixes\fP command line option) to switch
 between standard output and the key=value output. The key=value pair is the
 output that is suitable for use in scripts and for other tools to parse easily.
-Usually, you also don't want to display headings with the output that has these
+Usually, you also do not want to display headings with the output that has these
 key=value pairs.
 .P
 .EX
@@ -1302,7 +1304,7 @@ for the lvs report output.
 .P
 The "LV Tags" column in the example above displays two list values,
 separated by "," character for LV lvol0. If you need different list item
-separator, use \fBreport/list_item_separator\fP configuration setting its
+separator, use \fBreport/list_item_separator\fP configuration setting for its
 definition.
 .P
 .EX
@@ -1381,7 +1383,7 @@ mark_hidden_devices=0
 \  lvol0          4.00m
 .EE
 .P
-It's not recommended to use LV marks for hidden devices to decide whether the
+It is not recommended to use LV marks for hidden devices to decide whether the
 LV is the one to use by end users or not. Please, use "lv_role" field instead
 which can report whether the LV is "public" or "private". The private LVs are
 used by LVM only and they should not be accessed directly by end users.
@@ -1398,8 +1400,8 @@ used by LVM only and they should not be accessed directly by end users.
 .EE
 .P
 Some of the reporting fields that LVM reports are of binary nature. For such
-fields, it's either  possible to display word representation of the value
-(this is used by default) or numeric value (0/1 or -1 in case the value is
+fields, it is possible to display either a word representation of the value
+(used by default) or a numeric value (0/1 or -1 if the value is
 undefined).
 .P
 .EX
@@ -1409,7 +1411,7 @@ undefined).
 \  lvol0 4.00m          active locally
 .EE
 .P
-We can change the way how these binary values are displayed with
+We can change how these binary values are displayed with
 \fBreport/binary_values_as_numeric\fP configuration setting.
 .P
 .EX
@@ -1450,7 +1452,7 @@ the report output format.
 .P
 Currently, LVM supports these output formats:
 .RS
-\(en \fB"basic"\fP (all the examples we used above used this format),
+\(en \fB"basic"\fP (all the examples above use this format),
 .br
 \(en \fB"json"\fP,
 .br
@@ -1472,7 +1474,7 @@ For example:
 \  }
 .EE
 .P
-The \fBjson_std\fP output format is more compliant with JSON standard and
+The \fBjson_std\fP output format is more compliant with the JSON standard and
 compared to the original \fBjson\fP format:
 .
 .IP \(en 2
@@ -1492,7 +1494,7 @@ instead of a single string.
 .P
 Note that some configuration settings and command line options have no
 effect with certain report formats. For example, with \fBjson\fP or
-\fBjson_std\fP output, it doesn't have any meaning to use \fBreport/aligned\fP
+\fBjson_std\fP output, using \fBreport/aligned\fP has no effect
 (\fB--aligned\fP), \fBreport/headings\fP (values 0, 1 or 2; \fB--noheadings\fP sets the value to 0),
 \fBreport/columns_as_rows\fP (\fB--rows\fP) or \fBreport/buffered\fP
 (\fB--unbuffered\fP). All these configuration settings
@@ -1502,9 +1504,9 @@ or \fBjson_std\fP report output format.
 .SS Selection
 .
 If you need to select only specific rows from report, you can use LVM's
-report selection feature. If you call \fBlvm -S help\fP, you'll get
-quick help on selection. The help contains list of all fields that LVM
-can use in reports together with its type enclosed in square brackets.
+report selection feature. If you call \fBlvm -S help\fP, you can get
+quick help on selection. The help contains a list of all fields that LVM
+can use in reports together with their types enclosed in square brackets.
 The example below contains a line from lvs -S help.
 .P
 .EX
@@ -1540,12 +1542,13 @@ before - Before specified time (same as '<'). [time]
 .EE
 .P
 Here you can match comparison operators that you may use with the "lv_size"
-field which is of type "size" \(en it's =, !=, >=, >, <= and <. You can find
+field which is of type "size" \(en these are =, !=, >=, >, <= and <. You can
+find
 applicable comparison operators for other fields and other field types the
 same way.
 .P
 To demonstrate selection functionality in LVM, we will create more LVs in
-addition to lvol0 and lvol1 we used in our previous examples.
+addition to lvol0 and lvol1 used in our previous examples.
 .P
 .EX
 # lvs -o name,size,origin,snap_percent,tags,time
@@ -1557,12 +1560,11 @@ addition to lvol0 and lvol1 we used in our previous examples.
 \  lvol0 4.00m               tagA,tagB      2016-08-29 10:15:17 +0200
 .EE
 .P
-When selecting size and percent fields, we don't need to use units.
+When selecting size and percent fields, we do not need to use units.
 For sizes, default "m" (for MiB) is used \(en this is the same behaviour
 as already used for LVM commands when specifying sizes (e.g. lvcreate -L).
 For percent fields, "%" is assumed automatically if it's not specified.
-The example below also demonstrates how several criteria can be combined
-together.
+The example below also demonstrates how several criteria can be combined.
 .P
 .EX
 # lvs -o name,size,snap_percent -S 'size=8m'
@@ -1611,7 +1613,7 @@ LVM can recognize more complex values used in selection criteria for
 string list and time field types. For string lists, you can match
 whole list strictly, its subset or intersection. Let's take "lv_tags"
 field as an example \(en we select only rows which contain "tagA" within
-tags field. We're using { } to denote that we're interested in subset
+tags field. We are using { } to denote that we're interested in a subset
 that matches. If the subset has only one item, we can leave out { }.
 .P
 .EX
@@ -1714,7 +1716,7 @@ also recognized.
 .P
 To match a set with no items, use "" to denote this (note that we have
 output compaction enabled so the "LV Tags" column is not displayed in
-the example below because it's blank and so it gets compacted).
+the example below because it is blank and is therefore compacted).
 .P
 .EX
 # lvs -o name,tags -S 'tags=""'
@@ -1730,8 +1732,8 @@ the example below because it's blank and so it gets compacted).
 .EE
 .P
 When doing selection based on time fields, we can use either standard,
-absolute or freeform time expressions in selection criteria. Examples below
-are using standard forms.
+absolute or freeform time expressions in selection criteria. The examples
+below use standard forms.
 .P
 .EX
 # lvs -o name,time
@@ -1789,7 +1791,7 @@ Time operators have synonyms: ">=" for since, "<=" for until,
 \  lvol0 2016-08-29 10:15:17 +0200
 .EE
 .P
-Example below demonstrates using absolute time expression.
+The example below demonstrates using an absolute time expression.
 .P
 .EX
 # lvs -o name,time --config report/time_format="%s"
@@ -1806,7 +1808,7 @@ Example below demonstrates using absolute time expression.
 \  lvol3 2016-09-09 16:56:48 +0200
 .EE
 .P
-Examples below demonstrates using freeform time expressions.
+Examples below demonstrate using freeform time expressions.
 .P
 .EX
 # lvs -o name,time -S 'time since "2 weeks ago"'
@@ -1854,7 +1856,7 @@ As described in \fBcategorization based on reporting facility\fP section
 at the beginning of this document, both \fBreport-oriented\fP and
 \fBprocessing-oriented\fP LVM commands can report the command log if
 this is enabled with \fBlog/report_command_log\fP configuration setting.
-Just like any other report, we can set the set of fields to display
+Just like any other report, we can set the fields to display
 (\fBlog/command_log_cols\fP) and to sort by (\fBlog/command_log_sort\fP)
 for this report.
 .P
@@ -1880,12 +1882,12 @@ command_log_selection="!(log_type=status && message=success)"
 \  Seq LogType Context ObjType ObjName ObjGrp  Msg     Errno RetCode
 .EE
 .P
-As you can see, the command log is empty (it contains only field names).
-By default, LVM uses selection on the command log report and this case
+As you can see, the command log contains no rows (only field names).
+By default, LVM uses selection on the command log report and in this case
 no row matched the selection criteria, see also \fBlog report specifics\fP
-section in this document for more information. We're displaying complete
-log report in the example below where we can see that both LVs lvol0 and
-lvol1 were successfully processed as well as the VG vg they are part of.
+section in this document for more information. We are displaying the complete
+log report in the example below, where we can see that both LVs lvol0 and
+lvol1 and the VG vg they are part of were successfully processed.
 .P
 .EX
 # lvmconfig --type full log/command_log_selection
@@ -1915,8 +1917,8 @@ command_log_selection="all"
 .
 .SS Handling multiple reports per single command
 .
-To configure the log report directly on command line, we need to use
-\fB--configreport\fP option before we start any
+To configure the log report directly on the command line, we need to use
+the \fB--configreport\fP option before using any
 .BR -o | --options ,
 .BR -O | --sort
 or
@@ -1941,13 +1943,13 @@ that is targeted for log report.
 .EE
 .P
 The \fBlvm fullreport\fP, with or without log report, consists of several
-reports \(en the \fB--configreport\fP is also used to target particular
-subreport here.
+reports \(en the \fB--configreport\fP option is also used to target a
+particular subreport here.
 .P
-Below is an extended example with \fBlvm fullreport\fP to illustrate
+Below is an extended example with \fBlvm fullreport\fP to illustrate a
 combination of various options. The report output is in JSON format.
-Also, we configure "vg", "pvseg", "seg" and "log" subreport to contain
-only specified fields. For the "pvseg" subreport, we're interested only
+Also, we configure "vg", "pvseg", "seg" and "log" subreports to contain
+only the specified fields. For the "pvseg" subreport, we're interested only
 in PV names having "sda" in their name. For the "log" subreport we're
 interested only in log lines related to either "lvol0" object or object
 having "sda" in its name. Also, for the log subreport we define ordering
@@ -2007,15 +2009,15 @@ to be based on "log_object_type" field.
 .
 As already stated in \fBlog report coverage\fP paragraph under
 \fBlog report specifics\fP in this documentation, when using \fBLVM shell\fP
-the \fBlog report\fP coverage is wider. There's also special command
+the \fBlog report\fP coverage is wider. There is also a special command
 designed to query last command's log report in the \fBLVM shell\fP -
 the \fBlastlog\fP command.
 .P
-The example below illustrates a situation where we called lvs command.
+The example below illustrates a situation where we called the lvs command.
 After that, we inspected the log report with the \fBlastlog\fP, without
 any selection so all the log report is displayed on output. Then we called
 \fBlastlog\fP further, giving various selection criteria. Then we ran
-unknown LVM command "abc" for which the log report displays appropriate
+an unknown LVM command "abc" for which the log report displays appropriate
 failure state.
 .P
 .EX

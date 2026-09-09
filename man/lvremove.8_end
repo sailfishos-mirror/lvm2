@@ -5,6 +5,6 @@ Remove an active LV without asking for confirmation.
 .br
 .B lvremove -f vg00/lvol1
 .P
-Remove all LVs the specified VG.
+Remove all LVs in the specified VG.
 .br
 .B lvremove vg00

@@ -15,4 +15,4 @@ multiple of the number of stripes.
 .P
 In the usage section below, \fB--size\fP \fISize\fP can be replaced
 with \fB--extents\fP \fINumber\fP.  See both descriptions
-the options section.
+in the options section.

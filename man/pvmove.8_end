@@ -31,7 +31,7 @@ the next segment of the pvmove LV.
 is removed and the VG metadata is updated so that the LVs reflect the new
 data locations.
 .P
-Note that this new process cannot support the original LVM1
+Note that this new procedure cannot support the original LVM1
 type of on-disk metadata.  Metadata can be converted using
 \fBvgconvert\fP(8).
 .P
@@ -54,7 +54,7 @@ details of all the data movements required.  This temporary LV contains
 all the segments of the various LVs that need to be moved.  However, in
 this case, an identical LV is allocated that contains the same number of
 segments and a mirror is created to copy the contents from the first
-temporary LV to the second.  After a complete copy is made, the temporary
+temporary LV to the second one.  After a complete copy is made, the temporary
 LVs are removed, leaving behind the segments on the destination PV.  If an
 abort is issued during the move, all LVs being moved will remain on the
 source PV.
@@ -83,9 +83,10 @@ inclusive on the specified PV.
 .br
 .B pvmove /dev/sdb1:1000-1999
 .P
-A range of physical extents to move can be specified as start+length. For
-example, starting from PE 1000. (Counting starts from 0, so this refers to the
-1001st to the 2000th PE inclusive.)
+A range of physical extents to move can be specified as start+length.
+For example, 1000+1000 specifies 1000 extents starting from PE 1000.
+(Counting starts from 0, so this refers to the 1001st to the 2000th PE
+inclusive.)
 .br
 .B pvmove /dev/sdb1:1000+1000
 .P
@@ -103,7 +104,7 @@ If the source and destination are on the same disk, the
 .br
 .B pvmove --alloc anywhere /dev/sdb1:1000-1999 /dev/sdb1:0-999
 .P
-The part of a specific LV present within in a range of physical
+The part of a specific LV present within a range of physical
 extents can also be picked out and moved.
 .br
 .B pvmove -n lvol1 /dev/sdb1:1000-1999 /dev/sdc1

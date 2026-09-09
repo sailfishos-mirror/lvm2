@@ -490,7 +490,7 @@ answer yes. Use with extreme caution.
 .
 .TP
 .O_zero
-Controls if the first 4 sectors (2048 bytes) of the device are wiped.
+Controls whether the first 4 sectors (2048 bytes) of the device are wiped.
 The default is to wipe these sectors unless either or both of
 --restorefile or --uuid are specified.
 .

@@ -3,4 +3,4 @@ other block devices in the system looking for LVM PVs. The size reported
 is the real device size. Define a filter in \fBlvm.conf\fP(5) to restrict
 the scan to avoid a CD ROM, for example.
 .P
-This command is deprecated, use \fBpvs\fP instead.
+This command is deprecated; use \fBpvs\fP instead.

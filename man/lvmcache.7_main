@@ -23,7 +23,7 @@ to improve the performance of the LV.
 To do this with lvm, a new special LV is first created from the faster
 device. This LV will hold the cache. Then, the new fast LV is attached to
 the main LV by way of an lvconvert command. lvconvert inserts one of the
-device mapper caching targets into the main LV's i/o path. The device
+device mapper caching targets into the main LV's I/O path. The device
 mapper target combines the main LV and fast LV into a hybrid device that looks
 like the main LV, but has better performance. While the main LV is being
 used, portions of its data will be temporarily and transparently stored on
@@ -33,7 +33,7 @@ The two kinds of caching are:
 .
 .IP \[bu] 2
 A read and write hot-spot cache, using the dm-cache kernel module.
-This cache tracks access patterns and adjusts its content deliberately so
+This cache tracks access patterns and adjusts its content so
 that commonly used parts of the main LV are likely to be found on the fast
 storage. LVM refers to this using the LV type \fBcache\fP.
 .
@@ -417,19 +417,19 @@ EOF
 .
 .SS dm-cache with separate data and metadata LVs
 .
-Preferred way of using dm-cache is to place the cache metadata and cache data
+The preferred way of using dm-cache is to place the cache metadata and cache data
 on separate LVs.  To do this, a "cache pool" is created, which is a special
 LV that references two sub LVs, one for data and one for metadata.
 .P
-To create a cache pool of given data size and let lvm2 calculate appropriate
-metadata size:
+To create a cache pool of a given data size and let LVM2 calculate an
+appropriate metadata size:
 .P
 .EX
 # lvcreate --type cache-pool -L DataSize -n fast vg /dev/fast_ssd1
 .EE
 .P
-To create a cache pool from separate LV and let lvm2 calculate
-appropriate cache metadata size:
+To create a cache pool from a separate LV and let LVM2 calculate
+an appropriate cache metadata size:
 .P
 .EX
 # lvcreate -n fast -L DataSize vg /dev/fast_ssd1
@@ -501,12 +501,12 @@ defines the default cache mode.
 The size of data blocks managed by dm-cache can be specified with the
 --chunksize option when caching is started.  The default unit is KiB.  The
 value must be a multiple of 32 KiB between 32 KiB and 1 GiB. Cache chunks
-bigger than 512KiB shall be only used when necessary.
+larger than 512 KiB should only be used when necessary.
 .P
 Using a chunk size that is too large can result in wasteful use of the
-cache, in which small reads and writes cause large sections of an LV to be
-stored in the cache. It can also require increasing migration threshold
-which defaults to 2048 sectors (1 MiB). Lvm2 ensures migration threshold is
+cache, where small reads and writes cause large sections of an LV to be
+stored in the cache. It can also require increasing the migration threshold,
+which defaults to 2048 sectors (1 MiB). LVM2 ensures the migration threshold is
 at least 8 chunks in size. This may in some cases result in very
 high bandwidth load of transferring data between the cache LV and its
 cache origin LV. However, choosing a chunk size that is too small
@@ -539,7 +539,7 @@ Checking migration threshold (in sectors) of running cached LV:
 .
 .SS dm-cache cache settings
 .
-To set dm-cache cache setting use:
+To set a dm-cache cache setting, use:
 .P
 --cachesettings 'option1=N option2=N \&.\|.\|.'
 .P
@@ -553,12 +553,12 @@ use special keyword 'default' as option parameter:
 Migrating data between the origin and cache LV uses bandwidth.
 The user can set a throttle to prevent more than a certain amount of
 migration occurring at any one time.  Currently dm-cache is not taking any
-account of normal io traffic going to the devices.
+account of normal I/O traffic going to the devices.
 .P
-User can set migration threshold via cache policy settings as
+The user can set the migration threshold via cache policy settings as
 "migration_threshold=<#sectors>" to set the maximum number
 of sectors being migrated, the default being 2048 sectors (1 MiB)
-or 8 cache chunks whichever of those two values is larger.
+or 8 cache chunks, whichever of those two values is larger.
 .P
 Command to set migration threshold to 2 MiB (4096 sectors):
 .P
@@ -590,11 +590,11 @@ back (flush) all cached writes to the origin LV.
 The older "mq" policy has a number of tunable parameters. The defaults are
 chosen to be suitable for the majority of systems, but in special
 circumstances, changing the settings can improve performance.
-Newer kernels however alias this policy with "smq" policy. Cache settings
+Newer kernels, however, alias this policy with the "smq" policy. Cache settings
 used to configure "mq" policy [random_threshold, sequential_threshold,
 discard_promote_adjustment, read_promote_adjustment,
-write_promote_adjustment] are thus silently ignored also performance
-matches "smq".
+write_promote_adjustment] are thus silently ignored, and the performance
+matches that of "smq".
 .P
 With the --cachepolicy and --cachesettings options, the cache policy and
 settings can be set when caching is started, or changed on an existing
@@ -625,7 +625,7 @@ defines the default cache settings.
 .
 .SS dm-cache using metadata profiles
 .
-Cache pools allows to set a variety of options. Lots of these settings
+Cache pools allow a variety of options to be set. Many of these settings
 can be specified in lvm.conf or profile settings. You can prepare
 a number of different profiles
 in the \fI#DEFAULT_SYS_DIR#/profile\fP
@@ -700,7 +700,7 @@ and metadata LVs, each of the sub-LVs can use RAID1.)
 .
 .SS dm-cache command shortcut
 .
-A single command can be used to cache main LV with automatic
+A single command can be used to cache the main LV with automatic
 creation of a cache-pool:
 .P
 .EX
@@ -717,7 +717,7 @@ or the longer variant
 In this command, the specified LV already exists, and is the main LV to be
 cached.  The command creates a new cache pool with size and given name
 or the name is automatically selected from a sequence lvolX_cpool,
-using the optionally specified fast PV(s) (typically an ssd).  Then it
+using the optionally specified fast PV(s) (typically an SSD).  Then it
 attaches the new cache pool to the existing main LV to begin caching.
 .P
 (Note: ensure that the specified main LV is a standard LV.  If a cache

@@ -44,7 +44,7 @@ results to perform autoactivation.
 Autoactivation of VGs or LVs can be enabled/disabled using vgchange or
 lvchange with --setautoactivation y|n, or by adding names to
 .BR lvm.conf (5)
-.B activation/auto_activation_volume_list
+\fBactivation/auto_activation_volume_list\fP.
 .P
 See
 .BR lvmautoactivation (7)

@@ -56,11 +56,11 @@ complete lvm configuration and cache (content of \fI#DEFAULT_SYS_DIR#\fP)
 .IP \[bu]
 list of device nodes present under \fI/dev\fP
 .IP \[bu]
-list of files present \fI/sys/block\fP
+list of files present in \fI/sys/block\fP
 .IP \[bu]
-list of files present \fI/sys/devices/virtual/block\fP
+list of files present in \fI/sys/devices/virtual/block\fP
 .IP \[bu]
-if enabled with -m, metadata dump will be also included
+if enabled with -m, metadata dump will also be included
 .IP \[bu]
 if enabled with -a, debug output of vgscan,
 pvscan and list of all available volume groups,
@@ -86,7 +86,7 @@ if \fB-a\fP is used.
 .
 .TP
 \fB-d\fP \fIdirectory\fP
-Dump into a directory instead of tarball
+Dump into a directory instead of a tarball
 By default, lvmdump will produce a single compressed tarball containing
 all the information. Using this option, it can be instructed to only
 produce the raw dump tree, rooted in \fIdirectory\fP.
@@ -114,9 +114,10 @@ However, the metadata dump may represent a valuable diagnostic resource.
 Include
 .BR lvmpolld (8)
 daemon dump if it is running.
-The dump contains all in-progress operation currently monitored
+The dump contains all in-progress operations currently monitored
 by the daemon and partial history for all yet uncollected results
-of polling operations already finished including reason.
+of polling operations already finished, including the reason for
+finishing.
 .
 .TP
 .B -s

@@ -1,3 +1,3 @@
 vgmerge merges two existing VGs. The inactive source VG is merged into the
-destination VG if physical extent sizes are equal and PV and LV summaries
-of both VGs fit into the destination VG's limits.
+destination VG if physical extent sizes are equal and the PV and LV totals
+of both VGs fit within the destination VG's limits.

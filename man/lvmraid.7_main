@@ -300,8 +300,8 @@ Devices are used to create mirrors in the order listed,
 e.g.\& for mirrors 1, stripes 2, listing PV1 PV2 PV3 PV4
 results in mirrors PV1/PV2 and PV3/PV4.
 .P
-RAID10 is not mirroring on top of stripes, which would be RAID01, which is
-less tolerant of device failures.
+RAID10 is not mirroring on top of stripes (which would be RAID01 and is
+less tolerant of device failures).
 .
 .SS Configuration Options
 .
@@ -359,8 +359,8 @@ synchronized.  When a RAID LV is first created and activated the first
 synchronization is called initialization.  A pointer stored in the raid
 metadata keeps track of the initialization process thus allowing it to be
 restarted after a deactivation of the RaidLV or a crash.  Any writes to
-the RaidLV dirties the respective region of the write intent bitmap which
-allow for fast recovery of the regions after a crash.  Without this, the
+the RaidLV dirty the respective region of the write intent bitmap which
+allows for fast recovery of the regions after a crash.  Without this, the
 entire LV would need to be synchronized every time it was activated.
 .P
 Automatic synchronization happens when a RAID LV is activated, but it is
@@ -648,8 +648,7 @@ Each rmeta SubLV holds RAID metadata.
 .SH DEVICE FAILURE
 .
 Physical devices in a RAID LV can fail or be lost for multiple reasons.
-A device could be disconnected, permanently failed,
-or temporarily disconnected.
+A device could be temporarily or permanently unavailable.
 The purpose of RAID LVs (levels 1 and higher) is to continue operating
 in a degraded mode, without losing LV data, even after a device fails.
 The number of devices that can fail without the loss of LV data depends
@@ -919,7 +918,7 @@ consistent in case of a crash. The bitmap areas are recalculated after a
 crash, so corruption in those areas would not be detected. A journal does
 not have this problem.  The journal mode doubles writes to storage, but
 can improve performance for scattered writes packed into a single journal
-write.  bitmap mode can in theory achieve full write throughput of the
+write.  Bitmap mode can in theory achieve full write throughput of the
 device, but would not benefit from the potential scattered write
 optimization.
 .
@@ -957,7 +956,7 @@ column).
 .
 To work around some limitations, it is possible to remove integrity from
 the LV, make the change, then add integrity again.  (Integrity metadata
-would need to initialized when added again.)
+would need to be initialized when added again.)
 .P
 LVM must be able to allocate the integrity metadata sub LV on a single PV
 that is already in use by the associated RAID image. This can potentially
@@ -1254,7 +1253,7 @@ Converting an LV from \fBstriped\fP (with 4 stripes) to \fBraid6_n_6\fP.
 \  [lv_rmeta_5]  linear
 .EE
 .P
-This convert begins by allocating MetaLVs (rmeta_#) for each of the
+This conversion begins by allocating MetaLVs (rmeta_#) for each of the
 existing stripe devices.  It then creates 2 additional MetaLV/DataLV pairs
 (rmeta_#/rimage_#) for dedicated raid6 parity.
 .P
@@ -1396,8 +1395,8 @@ Convert it from 3-way striped to 5-way-striped.
 \  [lv_rmeta_6]  ewi-aor--- linear   /dev/sdaf:0-0
 .EE
 .P
-Stripes also can be removed from raid5 and 6.
-Convert the 5-way striped raid6_nr LV to 4-way-striped.
+Stripes can also be removed from raid5 and 6.
+Convert the 5-way striped raid6_nr LV to 4-way striped.
 The force option needs to be used, because removing stripes
 (i.e. image SubLVs) from a RaidLV will shrink its size.
 .P
@@ -1440,9 +1439,10 @@ The force option needs to be used, because removing stripes
 \  [lv_rmeta_6]  ewi-aor-R- linear   /dev/sdaf:0-0
 .EE
 .P
-The 's' in column 9 of the attribute field shows the RaidLV is still reshaping.
+The 's' in column 9 of the attribute field shows that the RaidLV is still
+reshaping.
 The 'R' in the same column of the attribute field shows the freed image
-Sub LVs which will need removing once the reshaping finished.
+Sub LVs that will need to be removed once the reshaping has finished.
 .P
 .EX
 # lvs -o lv_name,attr,segtype,seg_pe_ranges,dataoffset vg
@@ -1454,8 +1454,8 @@ Sub LVs which will need removing once the reshaping finished.
 \                           lv_rimage_6:0-33   8192
 .EE
 .P
-Now that the reshape is finished the 'R' attribute on the RaidLV
-shows images can be removed.
+Now that the reshape is finished, the 'R' attribute on the RaidLV
+shows that images can be removed.
 .P
 .EX
 # lvs -o lv_name,attr,segtype,seg_pe_ranges,dataoffset vg
@@ -1519,7 +1519,7 @@ This is achieved by repeating the command
 .P
 Future developments might include automatic removal of the freed images.
 .P
-If the reshape space shall be removed any lvconvert command
+If the reshape space is to be removed, any lvconvert command
 not changing the layout can be used:
 .P
 .EX
@@ -1564,9 +1564,9 @@ In case the RaidLV should be converted to striped:
 \    raid6_n_6
 .EE
 .P
-A direct conversion isn't possible thus the command informed
-about the possible ones.
-raid6_n_6 is suitable to convert to striped so convert to it first
+A direct conversion is not possible, so the command reports
+the possible conversions.
+The raid6_n_6 type is suitable to convert to striped, so convert to it first
 (this is a reshape changing the raid6 layout from raid6_nr to raid6_n_6).
 .P
 .EX
@@ -1639,7 +1639,7 @@ From striped we can convert to raid10
 \  [lv_rmeta_7]  ewi-aor--- linear /dev/sdag:0-0
 .EE
 .P
-raid10 allows to add stripes but can't remove them.
+raid10 allows you to add stripes but cannot remove them.
 .P
 A more elaborate example to convert from linear to striped
 with interim conversions to raid1 then raid5 followed
@@ -1759,14 +1759,14 @@ Once the conversion has finished we can convert to striped.
 .P
 Reversing these steps will convert a given striped LV to linear.
 .P
-Mind the facts that stripes are removed thus the capacity of the RaidLV
-will shrink and that changing the RaidLV layout will influence
+Note that stripes are removed, so the capacity of the RaidLV
+will shrink, and that changing the RaidLV layout will influence
 its performance.
 .P
 "lvconvert --stripes 1 vg/lv" for converting to 1 stripe will inform
 upfront about the reduced size to allow for resizing the content
 or growing the RaidLV before actually converting to 1 stripe.
-The \fB--force\fP option is needed to allow stripe removing conversions
+The \fB--force\fP option is needed for stripe-removing conversions
 to prevent data loss.
 .P
 Of course any interim step can be the intended last one
@@ -2002,7 +2002,7 @@ The 2.6.38-rc1 version of the Linux kernel introduced a device-mapper
 target to interface with the software RAID (MD) personalities.
 This provided device-mapper with RAID 4/5/6 capabilities and a larger
 development community.
-Later, support for RAID1, RAID10, and RAID1E (RAID10 variants) were added.
+Later, support for RAID1, RAID10, and RAID1E (RAID10 variants) was added.
 Support for these new kernel RAID targets was added to LVM version 2.02.87.
 The capabilities of the LVM \fBraid1\fP type have surpassed
 the old \fBmirror\fP type.

@@ -16,7 +16,7 @@
 .
 .SH NAME
 .
-fsadm \(em Utility to resize or check filesystem on a device
+fsadm \(em Utility to resize or check a filesystem on a device
 .
 .SH SYNOPSIS
 .
@@ -70,7 +70,12 @@ functionality is provided with complementary \fBlvresize\fP(8) and the option
 .
 .TP
 .BR -n | --dry-run
-Print commands without running them.
+Print commands that would change devices without running them.
+Read filesystem geometry and perform available read-only checks.
+Do not mount or unmount filesystems. Offline checks of mounted
+filesystems and ReiserFS checks that may replay the journal are skipped
+with a warning. A successful dry run does not guarantee that a later
+resize will succeed.
 .
 .TP
 .BR -v | --verbose

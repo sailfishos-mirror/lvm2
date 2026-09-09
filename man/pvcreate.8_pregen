@@ -531,7 +531,7 @@ incorrect results.
 .
 .TP
 .O_norestorefile
-In conjunction with --uuid, this allows a uuid to be specified
+In conjunction with --uuid, this allows a UUID to be specified
 without also requiring that a backup of the metadata be provided.
 .
 .TP
@@ -616,7 +616,7 @@ answer yes. Use with extreme caution.
 .
 .TP
 .O_zero
-Controls if the first 4 sectors (2048 bytes) of the device are wiped.
+Controls whether the first 4 sectors (2048 bytes) of the device are wiped.
 The default is to wipe these sectors unless either or both of
 --restorefile or --uuid are specified.
 .

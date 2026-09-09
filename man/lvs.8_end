@@ -16,7 +16,7 @@ v(\fBd\fP)o pool, v(\fBD\fP)o pool data,
 raid or pool m(\fBe\fP)tadata or pool metadata spare.
 .
 .IP 2
-Permissions: (\fBw\fP)riteable, (\fBr\fP)ead-only, (\fBR\fP)ead-only activation
+Permissions: (\fBw\fP)ritable, (\fBr\fP)ead-only, (\fBR\fP)ead-only activation
 of non-read-only volume
 .
 .IP 3
@@ -64,7 +64,7 @@ Volume Health, where there are currently five groups of attributes identified:
 Common ones for all Logical Volumes: (\fBp\fP)artial, (\fBX\fP) unknown.
 .br
 (\fBp\fP)artial signifies that one or more of the Physical Volumes this Logical
-Volume uses is missing from the system. (\fBX\fP) unknown signifies the status
+Volume uses are missing from the system. (\fBX\fP) unknown signifies the status
 is unknown.
 .
 .IP
@@ -72,7 +72,7 @@ Related to RAID Logical Volumes: (\fBr\fP)efresh or repair needed,
 (\fBm\fP)ismatches exist, (\fBw\fP)ritemostly.
 .br
 (\fBr\fP)efresh or repair signifies that one or more of the Physical Volumes
-this RAID Logical Volume uses had suffered a write error.
+this RAID Logical Volume uses have suffered a write error.
 The write error could be due to a temporary failure of that Physical Volume
 or an indication that it is failing.
 The device should be refreshed or replaced. (\fBm\fP)ismatches signifies
@@ -90,23 +90,23 @@ still to be removed.
 Related to Thin pool Logical Volumes: (\fBF\fP)ailed, out of (\fBD\fP)ata space,
 (\fBM\fP)etadata read only.
 .br
-(\fBF\fP)ailed is set if thin pool encounters serious failures
+(\fBF\fP)ailed is set if a thin pool encounters serious failures
 and hence no further I/O is permitted at all.
-The out of (\fBD\fP)ata space is set if thin pool has run out of data space.
-(\fBM\fP)etadata read only signifies that thin pool encounters certain
-types of failures but it's still possible to do reads at least,
-but no metadata changes are allowed.
+Out of (\fBD\fP)ata space is set if a thin pool has run out of data space.
+(\fBM\fP)etadata read only signifies that a thin pool encounters certain
+types of failures, in which case reads are still possible but no metadata
+changes are allowed.
 .
 .IP
 Related to Thin Logical Volumes: (\fBF\fP)ailed.
 .br
-(\fBF\fP)ailed is set when related thin pool enters Failed state and
+(\fBF\fP)ailed is set when the related thin pool enters the Failed state and
 no further I/O is permitted at all.
 .
 .IP
 Related to writecache logical volumes: (\fBE\fP)rror.
 .br
-(\fBE\fP)rror is set dm-writecache reports an error.
+(\fBE\fP)rror is set when dm-writecache reports an error.
 .
 .IP 10
 s(\fBk\fP)ip activation: this volume is flagged to be skipped during activation.
