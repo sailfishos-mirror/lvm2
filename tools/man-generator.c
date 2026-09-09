@@ -1061,7 +1061,7 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 		       "For commands managing physical extents, a PV positional arg\n"
 		       "generally accepts a suffix indicating a range (or multiple ranges)\n"
 		       "of physical extents (PEs). When the first PE is omitted, it defaults\n"
-		       "to the start of the device, and when the last PE is omitted it defaults to end.\n"
+		       "to the start of the device, and when the last PE is omitted it defaults to the end.\n"
                        ".br\n"
 		       "Start and end range (inclusive):\n"
 		       "\\fIPV\\fP[\\fB:\\fP\\fIPE\\fP\\fB-\\fP\\fIPE\\fP]\\ .\\|.\\|.\\&\n"

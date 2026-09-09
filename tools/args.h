@@ -80,7 +80,7 @@ arg(atomic_ARG, '\0', "atomic", 0, 0, 0,
 
 arg(atversion_ARG, '\0', "atversion", string_VAL, 0, 0,
     "Specify an LVM version in x.y.z format where x is the major version,\n"
-    "the y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
+    "y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
     "When configuration is displayed, the configuration settings recognized\n"
     "at this LVM version will be considered only. This can be used\n"
     "to display a configuration that a certain LVM version understands and\n"
@@ -96,7 +96,7 @@ arg(auto_ARG, '\0', "auto", 0, 0, 0,
     "(both in the \\fI#DEFAULT_SYS_DIR#/devices/\\fP directory.)\n")
 
 arg(autoactivation_ARG, '\0', "autoactivation", string_VAL, 0, 0,
-    "Specify if autoactivation is being used from an event.\n"
+    "Specify whether autoactivation is being used from an event.\n"
     "This allows the command to apply settings that are specific\n"
     "to event activation, such as device scanning optimizations\n"
     "using pvs_online files created by event-based pvscans.\n")
@@ -241,7 +241,7 @@ arg(deviceidtype_ARG, '\0', "deviceidtype", string_VAL, 0, 0,
 arg(devices_ARG, '\0', "devices", pv_VAL, ARG_GROUPABLE, 0,
     "Restricts the devices that are visible and accessible to the command.\n"
     "Devices not listed will appear to be missing. This option can be\n"
-    "repeated, or accepts a comma separated list of devices. This overrides\n"
+    "repeated, or accepts a comma-separated list of devices. This overrides\n"
     "the devices file.\n")
 
 arg(devicesfile_ARG, '\0', "devicesfile", string_VAL, 0, 0,
@@ -275,7 +275,7 @@ arg(dump_ARG, '\0', "dump", dumptype_VAL, 0, 0,
     "\\fBmetadata_area\\fP to save an entire text metadata area to a file.\n")
 
 arg(edit_ARG, '\0', "edit", string_VAL, ARG_GROUPABLE, 0,
-    "Edit or remove a setting in an lvm config file.\n"
+    "Edit or remove a setting in an LVM config file.\n"
     "The setting is specified as Section/Field=Value.\n"
     "To remove a setting, use Section/Field=-.\n"
     "Repeat this option to edit multiple settings.\n")
@@ -367,7 +367,7 @@ arg(ignoreskippedcluster_ARG, '\0', "ignoreskippedcluster", 0, 0, 0,
 
 arg(ignoreunsupported_ARG, '\0', "ignoreunsupported", 0, 0, 0,
     "Exclude unsupported configuration settings from the output. These settings are\n"
-    "either used for debugging and development purposes only or their support is not\n"
+    "either used for debugging and development purposes only, or their support is not\n"
     "yet complete and they are not meant to be used in production. The \\fBcurrent\\fP\n"
     "and \\fBdiff\\fP types include unsupported settings in their output by default,\n"
     "all the other types ignore unsupported settings.\n")
@@ -557,7 +557,7 @@ arg(nolocking_ARG, '\0', "nolocking", 0, 0, 0,
     "incorrect results.\n")
 
 arg(norestorefile_ARG, '\0', "norestorefile", 0, 0, 0,
-    "In conjunction with --uuid, this allows a uuid to be specified\n"
+    "In conjunction with --uuid, this allows a UUID to be specified\n"
     "without also requiring that a backup of the metadata be provided.\n")
 
 arg(nosuffix_ARG, '\0', "nosuffix", 0, 0, 0,
@@ -757,7 +757,7 @@ arg(reportformat_ARG, '\0', "reportformat", reportformat_VAL, ARG_NONINTERACTIVE
     "If there is more than one report per command, each report is prefixed\n"
     "with the report name for identification. \\fBjson\\fP produces report\n"
     "output in JSON format. \\fBjson_std\\fP produces report output in\n"
-    "JSON format which is more compliant with JSON standard.\n"
+    "JSON format which is more compliant with the JSON standard.\n"
     "See \\fBlvmreport\\fP(7) for more information.\n")
 
 arg(restorefile_ARG, '\0', "restorefile", string_VAL, 0, 0,
@@ -900,7 +900,7 @@ arg(showunsupported_ARG, '\0', "showunsupported", 0, 0, 0,
 
 arg(sinceversion_ARG, '\0', "sinceversion", string_VAL, 0, 0,
     "Specify an LVM version in x.y.z format where x is the major version,\n"
-    "the y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
+    "y is the minor version and z is the patchlevel (e.g. 2.2.106).\n"
     "This option is currently applicable only with --typeconfig new\n"
     "to display all configuration settings introduced since given version.\n")
 
@@ -1008,7 +1008,7 @@ arg(type_ARG, '\0', "type", segtype_VAL, 0, 0,
 
 arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0,
     "\\fBcurrent\\fP prints the config settings that would be applied\n"
-    "to an lvm command (assuming the command does not override them\n"
+    "to an LVM command (assuming the command does not override them\n"
     "on the command line.) This includes:\n"
     "settings that have been modified in lvm config files,\n"
     "settings that get their default values from config files,\n"
@@ -1023,7 +1023,7 @@ arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0,
     "from their default values in config files (the difference between\n"
     "current and default.)\n"
     "\\fBfull\\fP prints every setting uncommented and set to the\n"
-    "current value, i.e. how it would be used by an lvm command.\n"
+    "current value, i.e. how it would be used by an LVM command.\n"
     "This includes settings modified in config files, settings that usually\n"
     "get defaults internally, and settings that get defaults from config files.\n"
     "\\fBlist\\fP prints all config names without values.\n"
@@ -1041,7 +1041,7 @@ arg(configtype_ARG, '\0', "typeconfig", configtype_VAL, 0, 0,
     "Also see \\fBlvm.conf\\fP(5).\n")
 
 arg(udevoutput_ARG, '\0', "udevoutput", 0, 0, 0,
-    "Command output is modified to be imported from a udev rule.\n")
+    "Command output is modified to be imported by a udev rule.\n")
 
 arg(unbuffered_ARG, '\0', "unbuffered", 0, 0, 0,
     "Produce output immediately without sorting or aligning the columns properly.\n")
@@ -1544,7 +1544,7 @@ arg(list_ARG, 'l', "list", 0, 0, 0,
     "#lvmconfig\n"
     "#dumpconfig\n"
     "#config\n"
-    "Print a list of config settings instead of structured config settings tree.\n"
+    "Print a list of config settings instead of the structured config settings tree.\n"
     "If used without other options, this is the same as --typeconfig list --withsummary.\n"
     "#vgcfgrestore\n"
     "List metadata backup and archive files pertaining to the VG.\n"
@@ -1783,7 +1783,8 @@ arg(snapshot_ARG, 's', "snapshot", 0, 0, 0,
     "COW snapshots are created when a size is specified. The size is allocated\n"
     "from space in the VG, and is the amount of space that can be used\n"
     "for saving COW blocks as writes occur to the origin or snapshot.\n"
-    "The size chosen should depend upon the amount of writes that are expected;\n"
+    "The size chosen should depend upon the number of writes that are "
+    "expected;\n"
     "often 20% of the origin LV is enough. If COW space runs low, it can\n"
     "be extended with lvextend (shrinking is also allowed with lvreduce.)\n"
     "A small amount of the COW snapshot LV size is used to track COW block\n"
@@ -1909,7 +1910,8 @@ arg(zero_ARG, 'Z', "zero", bool_VAL, 0, 0,
     "#pvcreate\n"
     "#vgcreate\n"
     "#vgextend\n"
-    "Controls if the first 4 sectors (2048 bytes) of the device are wiped.\n"
+    "Controls whether the first 4 sectors (2048 bytes) of the device are "
+    "wiped.\n"
     "The default is to wipe these sectors unless either or both of\n"
     "--restorefile or --uuid are specified.\n")
 
