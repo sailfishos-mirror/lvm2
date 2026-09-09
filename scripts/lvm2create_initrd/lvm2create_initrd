@@ -192,7 +192,7 @@ if ! mount -t auto -o ro $rootvol /rootvol; then
 	do_shell
 fi
 
-echo "$PRE Umounting /proc"
+echo "$PRE Unmounting /proc"
 umount /proc
 
 echo "$PRE Changing roots"
@@ -311,7 +311,7 @@ if [ -n "$MODULES" ]; then
     fi
 fi
 
-# Calculate the the size of the ramdisk image.
+# Calculate the size of the ramdisk image.
 # Don't forget that inodes take up space too, as does the filesystem metadata.
 echo "$cmd -- calculating initrd filesystem parameters"
 if [ -z "$INITRDSIZE" ]; then
@@ -459,7 +459,7 @@ fi
 verbose "removing $TMPMNT/lost+found"
 rmdir $TMPMNT/lost+found
 
-echo "$cmd -- ummounting ram disk"
+echo "$cmd -- unmounting ram disk"
 umount $DEVRAM
 if [ $? -ne 0 ]; then
    echo "$cmd -- ERROR umounting $DEVRAM"

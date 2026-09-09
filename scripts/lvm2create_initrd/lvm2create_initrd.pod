@@ -9,7 +9,7 @@ B<lvm2create_initrd> [ B<-h|--help> ] [ B<-v|--verbose> ] [ B<-c|--lvmconf> I</p
 
 =head1 DESCRIPTION
 
-lvm2create_initrd creates an initial ramdisk (initrd) image suitable for booting to system that has an LVM2 volume as its root filesystem.
+lvm2create_initrd creates an initial ramdisk (initrd) image suitable for booting to a system that has an LVM2 volume as its root filesystem.
 
 To boot to such a setup, you'll
 either need a bootloader that understands LVM2 volumes, or you'll need a
@@ -54,7 +54,7 @@ option is (of course) optional.
 
 =head1 OPTIONS
 
-Most of parameters that can be set via command-line options can also be set
+Most of the parameters that can be set via command-line options can also be set
 via environment variables. Options specified on the command-line always take
 precedence.
 
@@ -95,7 +95,7 @@ the B<$EXTRAFILES> environment variable.
 =item B<-r|--raid> "I</dev/md1 /dev/md2...>"
 
 RAID devices to be started prior to scanning for LVM2 volume groups. If this
-option is used then then B<mdadm> program must be installed. This can also be
+option is used then B<mdadm> program must be installed. This can also be
 specified via the B<$RAID> environment variable.
 
 =item B<-R|--raidconf> "I</path/to/mdadm.conf>"
@@ -111,7 +111,7 @@ Set MAKEDEV invocation style. The script currently supports 3 styles of
 MAKEDEV programs I<debian>, I<redhat> and I<gentoo>. The default is I<debian>.
 Set to I<redhat> if using the RedHat/Fedora binary MAKEDEV program. I<gentoo>
 has the same binary but in /sbin instead of /dev. Please send a bug report to
-maintainer if your distribution doesn't work with any of the current options.
+the maintainer if your distribution doesn't work with any of the current options.
 
 =back
 

@@ -137,7 +137,7 @@ lvm2create_initrd \- create initrd image for booting to root\e\-on\e\-LVM2
 [ \fB\-R|\-\-raidconf\fR \fI/path/to/mdadm.conf\fR ] [ \fB\-M|\-\-makedev\fR \fIstyle\fR ]
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
-lvm2create_initrd creates an initial ramdisk (initrd) image suitable for booting to system that has an \s-1LVM2\s0 volume as its root filesystem.
+lvm2create_initrd creates an initial ramdisk (initrd) image suitable for booting to a system that has an \s-1LVM2\s0 volume as its root filesystem.
 .PP
 To boot to such a setup, you'll
 either need a bootloader that understands \s-1LVM2\s0 volumes, or you'll need a
@@ -173,7 +173,7 @@ a problem with the root filesystem (corrupted image, incorrect device setup, etc
 option is (of course) optional.
 .SH "OPTIONS"
 .IX Header "OPTIONS"
-Most of parameters that can be set via command-line options can also be set
+Most of the parameters that can be set via command-line options can also be set
 via environment variables. Options specified on the command-line always take
 precedence.
 .IP "\fB\-h|\-\-help\fR" 4
@@ -209,7 +209,7 @@ the \fB\f(CB$EXTRAFILES\fB\fR environment variable.
 .el .IP "\fB\-r|\-\-raid\fR ``\fI/dev/md1 /dev/md2...\fR''" 4
 .IX Item "-r|--raid ""/dev/md1 /dev/md2..."""
 \&\s-1RAID\s0 devices to be started prior to scanning for \s-1LVM2\s0 volume groups. If this
-option is used then then \fBmdadm\fR program must be installed. This can also be
+option is used then \fBmdadm\fR program must be installed. This can also be
 specified via the \fB\f(CB$RAID\fB\fR environment variable.
 .ie n .IP "\fB\-R|\-\-raidconf\fR ""\fI/path/to/mdadm.conf\fR""" 4
 .el .IP "\fB\-R|\-\-raidconf\fR ``\fI/path/to/mdadm.conf\fR''" 4
@@ -224,7 +224,7 @@ Set \s-1MAKEDEV\s0 invocation style. The script currently supports 3 styles of
 \&\s-1MAKEDEV\s0 programs \fIdebian\fR, \fIredhat\fR and \fIgentoo\fR. The default is \fIdebian\fR.
 Set to \fIredhat\fR if using the RedHat/Fedora binary \s-1MAKEDEV\s0 program. \fIgentoo\fR
 has the same binary but in /sbin instead of /dev. Please send a bug report to
-maintainer if your distribution doesn't work with any of the current options.
+the maintainer if your distribution doesn't work with any of the current options.
 .SH "ENVIRONMENT VARIABLES"
 .IX Header "ENVIRONMENT VARIABLES"
 Most of the options to this script can be set via environment variables. In
