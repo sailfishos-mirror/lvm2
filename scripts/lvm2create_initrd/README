@@ -18,7 +18,7 @@ kernel modules during the initrd phase, then you'll need to hand-modify the
 image.
 
 4) The generated initrd image supports an 'lvm2rescue' mode as well. If you add
-the parameter 'lvmrescue' on the kernel command line, it will run a shell at
+the parameter 'lvm2rescue' on the kernel command line, it will run a shell at
 the end of the initrd 'init' script. This can be helpful when trying to fix a
 corrupt root volume or root LVM2 volume group.
 
