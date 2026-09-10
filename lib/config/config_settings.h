@@ -139,8 +139,8 @@ cfg_section(root_CFG_SECTION, "(root)", root_CFG_SECTION, 0, vsn(0, 0, 0), 0, NU
 	"# new version of LVM using this file will continue using that value,\n" \
 	"# even if the new version of LVM changes the built-in default value.\n" \
 	"#\n" \
-	"# To put this file in a different directory and override @DEFAULT_SYS_DIR@ set\n" \
-	"# the environment variable LVM_SYSTEM_DIR before running the tools.\n" \
+	"# To put this file in a different directory and override @DEFAULT_SYS_DIR@,\n" \
+	"# set the environment variable LVM_SYSTEM_DIR before running the tools.\n" \
 	"#\n" \
 	"# N.B. Take care that each setting only appears once if uncommenting\n" \
 	"# example settings in this file.\n\n"
@@ -192,7 +192,7 @@ cfg_section(local_CFG_SECTION, "local", root_CFG_SECTION, 0, vsn(2, 2, 117), 0, 
 	"# Refer to 'man lvm.conf' for information about the file layout.\n" \
 	"#\n" \
 	"# To put this file in a different directory and override\n" \
-	"# @DEFAULT_SYS_DIR@ set the environment variable LVM_SYSTEM_DIR before\n" \
+	"# @DEFAULT_SYS_DIR@, set the environment variable LVM_SYSTEM_DIR before\n" \
 	"# running the tools.\n" \
 	"#\n" \
 	"# The lvmlocal.conf file is normally expected to contain only the\n" \
@@ -328,14 +328,14 @@ cfg(devices_device_ids_refresh_CFG, "device_ids_refresh", devices_CFG_SECTION, C
 	"If PVs are restored or moved to a new system with new devices, but\n"
 	"an old system.devices remains with old device IDs, then search for\n"
 	"the PVIDs on new devices and update the device IDs in system.devices.\n"
-	"See device_ids_refresh_check for conditions that trigger the refresh.\n"
+	"See device_ids_refresh_checks for conditions that trigger the refresh.\n"
 	"Set to 1 to enable a single automatic refresh attempt when a trigger\n"
 	"condition is detected. Set to 0 to disable automatic refresh.\n"
 	"Set to a value between 10 and 600 (in seconds) to enable an extended\n"
 	"refresh period during which missing PVs will be located using the PVID,\n"
 	"and the system.devices device ID updated if the PV is found on a new device.\n"
 	"An extended refresh period may be useful if devices require refresh,\n"
-	"but are attached to the system some time the initial refresh.\n")
+	"but are attached to the system some time after the initial refresh.\n")
 
 cfg_array(devices_device_ids_refresh_checks_CFG, "device_ids_refresh_checks", devices_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, "#Sproduct_uuid#Shostname", vsn(2, 3, 23), NULL, 0, NULL,
 	"Conditions that trigger device_ids_refresh to locate PVIDs on new devices.\n"
@@ -493,7 +493,7 @@ cfg(devices_data_alignment_offset_detection_CFG, "data_alignment_offset_detectio
 	"Shift the start of an aligned PV data area based on sysfs information.\n"
 	"After a PV data area is aligned, it will be shifted by the\n"
 	"alignment_offset exposed in sysfs. This offset is often 0, but may\n"
-	"be non-zero. Certain 4KiB sector drives that compensate for windows\n"
+	"be non-zero. Certain 4KiB sector drives that compensate for Windows\n"
 	"partitioning will have an alignment_offset of 3584 bytes (sector 7\n"
 	"is the lowest aligned logical block, the 4KiB sectors start at\n"
 	"LBA -1, and consequently sector 63 is aligned on a 4KiB boundary).\n"
@@ -753,17 +753,17 @@ cfg(allocation_vdo_use_deduplication_CFG, "vdo_use_deduplication", allocation_CF
 	"to have good deduplication rates but compression is still desired.\n")
 
 cfg_runtime(allocation_vdo_use_metadata_hints_CFG, "vdo_use_metadata_hints", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, VDO_1ST_VSN, vsn(2, 3, 27), NULL,
-	"Deprecated. Controls whether VDO volume tags its latency-critical\n"
+	"Deprecated. Controls whether a VDO volume tags its latency-critical\n"
 	"writes with the REQ_SYNC flag. Some device mapper targets such as dm-raid5\n"
 	"process writes with this flag at a higher priority.\n")
 
 cfg(allocation_vdo_minimum_io_size_CFG, "vdo_minimum_io_size", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_MINIMUM_IO_SIZE, VDO_1ST_VSN, NULL, 0, NULL,
-	"The minimum IO size for VDO volume to accept, in bytes.\n"
+	"The minimum IO size for a VDO volume to accept, in bytes.\n"
 	"Valid values are 512 or 4096. The recommended value is 4096.\n")
 
 cfg(allocation_vdo_block_map_cache_size_mb_CFG, "vdo_block_map_cache_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_BLOCK_MAP_CACHE_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the amount of memory in MiB allocated for caching block map\n"
-	"pages for VDO volume. The value must be a multiple of 4096 and must be\n"
+	"pages for a VDO volume. The value must be a multiple of 4096 and must be\n"
 	"at least 128MiB and less than 16TiB. The cache must be at least 16MiB\n"
 	"per logical thread. Note that there is a memory overhead of 15%.\n")
 
@@ -776,21 +776,21 @@ cfg(allocation_vdo_block_map_era_length_CFG, "vdo_block_map_period", allocation_
 	"; the minimum value is " DM_TO_STRING(DM_VDO_BLOCK_MAP_ERA_LENGTH_MINIMUM) ".\n")
 
 cfg(allocation_vdo_check_point_frequency_CFG, "vdo_check_point_frequency", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_CHECK_POINT_FREQUENCY, VDO_1ST_VSN, NULL, vsn(2, 3, 22), NULL,
-	"Deprecated option to set default check point frequency for VDO volume.\n")
+	"Deprecated option to set default check point frequency for a VDO volume.\n")
 
 /* vdo format */
 cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_SPARSE_INDEX, VDO_1ST_VSN, NULL, 0, NULL,
-	"Enables sparse indexing for VDO volume.\n")
+	"Enables sparse indexing for a VDO volume.\n")
 
 /* vdo format */
 cfg(allocation_vdo_use_kernel_format_CFG, "vdo_use_kernel_format", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_KERNEL_FORMAT, vsn(2, 3, 41), NULL, 0, NULL,
-	"Use kernel direct formatting for VDO volume.\n"
+	"Use kernel direct formatting for a VDO volume.\n"
 	"When enabled (1), uses kernel direct formatting (requires dm-vdo 9.2.0+).\n"
 	"When disabled (0), uses traditional userspace vdoformat tool.\n")
 
 /* vdo format */
 cfg(allocation_vdo_index_memory_size_mb_CFG, "vdo_index_memory_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_INDEX_MEMORY_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
-	"Specifies the amount of index memory in MiB for VDO volume.\n"
+	"Specifies the amount of index memory in MiB for a VDO volume.\n"
 	"The value must be at least 256MiB and at most 1TiB.\n")
 
 cfg(allocation_vdo_slab_size_mb_CFG, "vdo_slab_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_SLAB_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
@@ -806,7 +806,7 @@ cfg(allocation_vdo_ack_threads_CFG, "vdo_ack_threads", allocation_CFG_SECTION, C
 
 cfg(allocation_vdo_bio_threads_CFG, "vdo_bio_threads", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_BIO_THREADS, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the number of threads to use for submitting I/O\n"
-	"operations to the storage device of VDO volume.\n"
+	"operations to the storage device of a VDO volume.\n"
 	"The value must be in range [" DM_TO_STRING(DM_VDO_BIO_THREADS_MINIMUM) ".."
 	DM_TO_STRING(DM_VDO_BIO_THREADS_MAXIMUM) "].\n"
 	"Each additional thread after the first will use an additional 18MiB of RAM,\n"
@@ -820,7 +820,7 @@ cfg(allocation_vdo_bio_rotation_CFG, "vdo_bio_rotation", allocation_CFG_SECTION,
 
 cfg(allocation_vdo_cpu_threads_CFG, "vdo_cpu_threads", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_CPU_THREADS, VDO_1ST_VSN, NULL, 0, NULL,
 	"Specifies the number of threads to use for CPU-intensive work such as\n"
-	"hashing or compression for VDO volume. The value must be in range ["
+	"hashing or compression for a VDO volume. The value must be in range ["
 	DM_TO_STRING(DM_VDO_CPU_THREADS_MINIMUM) ".."
 	DM_TO_STRING(DM_VDO_CPU_THREADS_MAXIMUM) "].\n")
 
@@ -859,7 +859,7 @@ cfg(allocation_vdo_write_policy_CFG, "vdo_write_policy", allocation_CFG_SECTION,
 	"        This policy is not supported if the underlying storage is not also synchronous.\n"
 	"async - Writes are acknowledged after data has been cached for writing to stable storage.\n"
 	"        Data which has not been flushed is not guaranteed to persist in this mode.\n"
-	"async-unsafe - Writes are handled like 'async' but there is no guarantee of the atomicity async provides.\n"
+	"async-unsafe - Writes are handled like 'async' but there is no guarantee of the atomicity that async provides.\n"
 	"        This mode should only be used for better performance when atomicity is not required.\n")
 
 cfg(allocation_vdo_max_discard_CFG, "vdo_max_discard", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_MAX_DISCARD, VDO_1ST_VSN, NULL, 0, NULL,
@@ -873,7 +873,7 @@ cfg(allocation_vdo_max_discard_CFG, "vdo_max_discard", allocation_CFG_SECTION, C
 	"The default and minimum is 1. The maximum is UINT_MAX / 4096.\n")
 
 cfg(allocation_vdo_pool_header_size_CFG, "vdo_pool_header_size", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_POOL_HEADER_SIZE_KB, vsn(2, 3, 12), NULL, 0, NULL,
-	"Specifies the empty header size in KiB at the front and end of vdo pool device.\n")
+	"Specifies the empty header size in KiB at the front and end of the VDO pool device.\n")
 
 cfg(log_report_command_log_CFG, "report_command_log", log_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED | CFG_DISALLOW_INTERACTIVE, CFG_TYPE_BOOL, DEFAULT_COMMAND_LOG_REPORT, vsn(2, 2, 158), NULL, 0, NULL,
 	"Enable or disable LVM log reporting.\n"
@@ -881,11 +881,11 @@ cfg(log_report_command_log_CFG, "report_command_log", log_CFG_SECTION, CFG_PROFI
 	"per-object return codes with object identification and associated\n"
 	"error numbers (errnos) during LVM command processing. Then the\n"
 	"log is either reported solely or in addition to any existing\n"
-	"reports, depending on LVM command used. If it is a reporting command\n"
+	"reports, depending on the LVM command used. If it is a reporting command\n"
 	"(e.g. pvs, vgs, lvs, lvm fullreport), then the log is reported in\n"
-	"addition to any existing reports. Otherwise, there's only log report\n"
-	"on output. For all applicable LVM commands, you can request that\n"
-	"the output has only log report by using --logonly command line\n"
+	"addition to any existing reports. Otherwise, the log report is the only\n"
+	"output. For all applicable LVM commands, you can request that\n"
+	"the output contains only the log report by using --logonly command line\n"
 	"option. Use log/command_log_cols and log/command_log_sort settings\n"
 	"to define fields to display and sort fields for the log report.\n"
 	"You can also use log/command_log_selection to define selection\n"
@@ -907,13 +907,13 @@ cfg(log_command_log_cols_CFG, "command_log_cols", log_CFG_SECTION, CFG_PROFILABL
 cfg(log_command_log_selection_CFG, "command_log_selection", log_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED | CFG_DISALLOW_INTERACTIVE, CFG_TYPE_STRING, DEFAULT_COMMAND_LOG_SELECTION, vsn(2, 2, 158), NULL, 0, NULL,
 	"Selection criteria used when reporting command log.\n"
 	"You can define selection criteria that are applied each\n"
-	"time log is reported. This way, it is possible to control the\n"
-	"amount of log that is displayed on output and you can select\n"
+	"time the log is reported. This way, it is possible to control the\n"
+	"amount of log displayed on output and select\n"
 	"only parts of the log that are important for you. To define\n"
-	"selection criteria, use fields from log report. See also\n"
+	"selection criteria, use fields from the log report. See also\n"
 	"<lvm command> --logonly --configreport log -S help for the\n"
 	"list of possible fields and selection operators. You can also\n"
-	"define selection criteria for log report on command line directly\n"
+	"define selection criteria for the log report on the command line directly\n"
 	"using <lvm command> --configreport log -S <selection criteria>\n"
 	"which has precedence over log/command_log_selection setting.\n"
 	"To make all the command log lines visible, use \"all\" value\n"
@@ -1234,7 +1234,7 @@ cfg(global_sanlock_lv_extend_CFG, "sanlock_lv_extend", global_CFG_SECTION, CFG_D
 	"will automatically extend the internal LV when needed by the amount\n"
 	"specified here. Setting this to 0 disables the automatic extension\n"
 	"and can cause lvcreate to fail. Applicable only if LVM is compiled\n"
-	"with lockd support\n")
+	"with lockd support.\n")
 
 cfg(global_sanlock_align_size_CFG, "sanlock_align_size", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_SANLOCK_ALIGN_SIZE, vsn(2, 3, 27), NULL, 0, NULL,
 	"The sanlock lease size in MiB to use on disks with a 4K sector size.\n"
@@ -1351,10 +1351,10 @@ cfg_array(global_cache_restore_options_CFG, "cache_restore_options", global_CFG_
 
 cfg(global_vdo_format_executable_CFG, "vdo_format_executable", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, VDO_FORMAT_CMD, VDO_1ST_VSN, "@VDO_FORMAT_CMD@", 0, NULL,
 	"The full path to the vdoformat command.\n"
-	"LVM uses this command to initial data volume for VDO type logical volume\n")
+	"LVM uses this command to initialize the data volume for a VDO logical volume\n")
 
 cfg_array(global_vdo_format_options_CFG, "vdo_format_options", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_VDO_FORMAT_OPTIONS_CONFIG, VDO_1ST_VSN, NULL, 0, NULL,
-	"List of options passed added to standard vdoformat command.\n")
+	"List of options added to standard vdoformat command.\n")
 
 cfg_array(global_vdo_disabled_features_CFG, "vdo_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 3, 11), NULL, 0, NULL,
 	"Features to not use in the vdo driver.\n"
@@ -1431,8 +1431,8 @@ cfg(global_notify_dbus_CFG, "notify_dbus", global_CFG_SECTION, CFG_DEFAULT_COMME
 	"or changes the activation state of an LV will send a notification.\n")
 
 cfg(global_io_memory_size_CFG, "io_memory_size", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_IO_MEMORY_SIZE_KB, vsn(2, 3, 2), NULL, 0, NULL,
-	"The amount of memory in KiB that LVM allocates to perform disk io.\n"
-	"LVM performance may benefit from more io memory when there are many\n"
+	"The amount of memory in KiB that LVM allocates to perform disk I/O.\n"
+	"LVM performance may benefit from more I/O memory when there are many\n"
 	"disks or VG metadata is large. Increasing this size may be necessary\n"
 	"when a single copy of VG metadata is larger than the current setting.\n"
 	"This value should usually not be decreased from the default; setting\n"
@@ -1469,8 +1469,8 @@ cfg(activation_retry_deactivation_CFG, "retry_deactivation", activation_CFG_SECT
 cfg(activation_missing_stripe_filler_CFG, "missing_stripe_filler", activation_CFG_SECTION, CFG_DEFAULT_COMMENTED | CFG_ADVANCED, CFG_TYPE_STRING, DEFAULT_STRIPE_FILLER, vsn(1, 0, 0), NULL, 0, NULL,
 	"Method to fill missing stripes when activating an incomplete LV.\n"
 	"Using 'error' will make inaccessible parts of the device return I/O\n"
-	"errors on access. Using 'zero' will return success (and zero) on I/O\n"
-	"You can instead use a device path, in which case,\n"
+	"errors on access. Using 'zero' will return success (and zero) on I/O.\n"
+	"You can instead use a device path, in which case\n"
 	"that device will be used in place of missing stripes. Using anything\n"
 	"other than 'error' with mirrored or snapshotted volumes is likely to\n"
 	"result in data corruption.\n")
@@ -1864,7 +1864,7 @@ cfg(metadata_vgmetadatacopies_CFG, "vgmetadatacopies", metadata_CFG_SECTION, CFG
 	"The --vgmetadatacopies option overrides this setting.\n"
 	"If set to a non-zero value, LVM automatically chooses which of the\n"
 	"available metadata areas to use to achieve the requested number of\n"
-	"copies of the VG metadata. If you set a value larger than the the\n"
+	"copies of the VG metadata. If you set a value larger than the\n"
 	"total number of metadata areas available, then metadata is stored in\n"
 	"them all. The value 0 (unmanaged) disables this automatic management\n"
 	"and allows you to control which metadata areas are used at the\n"
@@ -1910,7 +1910,7 @@ cfg(report_output_format_CFG, "output_format", report_CFG_SECTION, CFG_PROFILABL
 	"Accepted values:\n"
 	"  basic\n"
 	"    Original format with columns and rows. If there is more than\n"
-	"    one report per command, each report is prefixed with report's\n"
+	"    one report per command, each report is prefixed with the report's\n"
 	"    name for identification.\n"
 	"  json\n"
 	"    JSON format.\n"
@@ -1919,8 +1919,8 @@ cfg(report_output_format_CFG, "output_format", report_CFG_SECTION, CFG_PROFILABL
         "    Compared to original \"json\" format:\n"
         "      - it does not use double quotes around numeric values,\n"
         "      - it uses 'null' for undefined numeric values,\n"
-        "      - it prints string list as proper JSON array of strings instead of a single string.\n"
-	"Note that if json or json_std output format is used, then log/command_log_report=1 is default.\n")
+        "      - it prints a string list as a proper JSON array of strings instead of a single string.\n"
+	"Note that if json or json_std output format is used, then log/report_command_log=1 is default.\n")
 
 cfg(report_compact_output_CFG, "compact_output", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_REP_COMPACT_OUTPUT, vsn(2, 2, 115), NULL, 0, NULL,
 	"Do not print empty values for all report fields.\n"
@@ -1928,15 +1928,15 @@ cfg(report_compact_output_CFG, "compact_output", report_CFG_SECTION, CFG_PROFILA
 	"rows reported are skipped and not printed. Compact output is\n"
 	"applicable only if report/buffered is enabled. If you need to\n"
 	"compact only specified fields, use compact_output=0 and define\n"
-	"report/compact_output_cols configuration setting instead.\n")
+	"the report/compact_output_cols configuration setting instead.\n")
 
 cfg(report_compact_output_cols_CFG, "compact_output_cols", report_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_COMPACT_OUTPUT_COLS, vsn(2, 2, 133), NULL, 0, NULL,
 	"Do not print empty values for specified report fields.\n"
 	"If defined, specified fields that do not have a value set for any\n"
 	"of the rows reported are skipped and not printed. Compact output\n"
 	"is applicable only if report/buffered is enabled. If you need to\n"
-	"compact all fields, use compact_output=1 instead in which case\n"
-	"the compact_output_cols setting is then ignored.\n")
+	"compact all fields, use compact_output=1 instead, in which case\n"
+	"the compact_output_cols setting is ignored.\n")
 
 cfg(report_aligned_CFG, "aligned", report_CFG_SECTION, CFG_PROFILABLE | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_REP_ALIGNED, vsn(1, 0, 0), NULL, 0, NULL,
 	"Align columns in report output.\n")
@@ -2007,9 +2007,9 @@ cfg(report_time_format_CFG, "time_format", report_CFG_SECTION, CFG_PROFILABLE | 
 	"    (alt O)\n"
 	"  %D\n"
 	"    Equivalent to %m/%d/%y. (For Americans only. Americans should\n"
-	"    note that in other countries%d/%m/%y is rather common. This\n"
+	"    note that in other countries %d/%m/%y is rather common. This\n"
 	"    means that in international context this format is ambiguous and\n"
-	"    should not be used.\n"
+	"    should not be used.)\n"
 	"  %e\n"
 	"    Like %d, the day of the month as a decimal number, but a leading\n"
 	"    zero is replaced by a space. (alt O)\n"
@@ -2251,10 +2251,10 @@ cfg(dmeventd_thin_library_CFG, "thin_library", dmeventd_CFG_SECTION, CFG_DEFAULT
 	"warning is repeated when 85%, 90% and 95% of the pool is filled.\n")
 
 cfg(dmeventd_thin_command_CFG, "thin_command", dmeventd_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_DMEVENTD_THIN_COMMAND, vsn(2, 2, 169), NULL, 0, NULL,
-	"The plugin runs command with each 5% increment when thin-pool data volume\n"
+	"The plugin runs a command with each 5% increment when thin-pool data volume\n"
 	"or metadata volume gets above 50%.\n"
 	"Command which starts with 'lvm ' prefix is internal lvm command.\n"
-	"You can write your own handler to customise behaviour in more details.\n"
+	"You can write your own handler to customise behaviour in more detail.\n"
 	"User handler is specified with the full path starting with '/'.\n")
 	/* TODO: systemd service handler */
 
@@ -2265,10 +2265,10 @@ cfg(dmeventd_vdo_library_CFG, "vdo_library", dmeventd_CFG_SECTION, CFG_DEFAULT_C
 	"warning is repeated when 85%, 90% and 95% of the pool is filled.\n")
 
 cfg(dmeventd_vdo_command_CFG, "vdo_command", dmeventd_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_DMEVENTD_VDO_COMMAND, VDO_1ST_VSN, NULL, 0, NULL,
-	"The plugin runs command with each 5% increment when VDO pool volume\n"
+	"The plugin runs a command with each 5% increment when VDO pool volume\n"
 	"gets above 50%.\n"
 	"Command which starts with 'lvm ' prefix is internal lvm command.\n"
-	"You can write your own handler to customise behaviour in more details.\n"
+	"You can write your own handler to customise behaviour in more detail.\n"
 	"User handler is specified with the full path starting with '/'.\n")
 	/* TODO: systemd service handler */
 
@@ -2277,7 +2277,7 @@ cfg(dmeventd_executable_CFG, "executable", dmeventd_CFG_SECTION, CFG_DEFAULT_COM
 
 cfg(tags_hosttags_CFG, "hosttags", tags_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_HOSTTAGS, vsn(1, 0, 18), NULL, 0, NULL,
 	"Create a host tag using the machine name.\n"
-	"The machine name is nodename returned by uname(2).\n")
+	"The machine name is the nodename returned by uname(2).\n")
 
 cfg_section(tag_CFG_SUBSECTION, "tag", tags_CFG_SECTION, CFG_NAME_VARIABLE | CFG_DEFAULT_COMMENTED, vsn(1, 0, 18), 0, NULL,
 	"Replace this subsection name with a custom tag name.\n"
