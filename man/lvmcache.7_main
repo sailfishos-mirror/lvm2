@@ -563,7 +563,7 @@ or 8 cache chunks whichever of those two values is larger.
 Command to set migration threshold to 2 MiB (4096 sectors):
 .P
 .EX
-# lvcreate --cachesettings 'migration_threshold=4096' VG/LV
+# lvchange --cachesettings 'migration_threshold=4096' VG/LV
 .EE
 .P
 Command to display the migration threshold:

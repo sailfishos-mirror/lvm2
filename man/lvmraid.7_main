@@ -1497,7 +1497,7 @@ This is achieved by repeating the command
 \  [lv_rmeta_4]  ewi-aor--- linear   /dev/sdad:0-0
 \  [lv_rmeta_5]  ewi-aor--- linear   /dev/sdae:0-0
 .P
-# lvs -a -o lv_name,attr,segtype,reshapelen vg
+# lvs -a -o lv_name,attr,segtype,reshape_len_le vg
 \  LV            Attr       Type     RSize
 \  lv            rwi-a-r--- raid6_nr 24.00m
 \  [lv_rimage_0] iwi-aor--- linear    4.00m
@@ -1528,7 +1528,7 @@ not changing the layout can be used:
 \  No change in RAID LV vg/lv layout, freeing reshape space.
 \  Logical volume vg/lv successfully converted.
 .P
-# lvs -a -o lv_name,attr,segtype,reshapelen vg
+# lvs -a -o lv_name,attr,segtype,reshape_len_le vg
 \  LV            Attr       Type     RSize
 \  lv            rwi-a-r--- raid6_nr    0
 \  [lv_rimage_0] iwi-aor--- linear      0
@@ -1649,7 +1649,7 @@ We start with the linear LV.
 .P
 .EX
 # lvs -a -o name,size,segtype,syncpercent,datastripes,\\
-\            stripesize,reshapelenle,devices vg
+\            stripesize,reshape_len_le,devices vg
 \  LV   LSize   Type   Cpy%Sync #DStr Stripe RSize Devices
 \  lv   128.00m linear              1     0        /dev/sda(0)
 .EE
@@ -1661,7 +1661,7 @@ Then convert it to a 2-way raid1.
 \  Logical volume vg/lv successfully converted.
 .P
 # lvs -a -o name,size,segtype,datastripes,\\
-\            stripesize,reshapelenle,devices vg
+\            stripesize,reshape_len_le,devices vg
 \  LV            LSize   Type   #DStr Stripe RSize Devices
 \  lv            128.00m raid1      2     0        lv_rimage_0(0),\\
 \                                                  lv_rimage_1(0)
@@ -1682,7 +1682,7 @@ and can be converted to striped directly without any additional conversion.
 \  Logical volume vg/lv successfully converted.
 .P
 # lvs -a -o name,size,segtype,syncpercent,datastripes,\\
-\            stripesize,reshapelenle,devices vg
+\            stripesize,reshape_len_le,devices vg
 \  LV            LSize   Type    #DStr Stripe RSize Devices
 \  lv            128.00m raid5_n     1 64.00k     0 lv_rimage_0(0),\\
 \                                                   lv_rimage_1(0)
@@ -1708,7 +1708,7 @@ or the LV can be reduced in size after the reshaping conversion has finished.
 \  Logical volume vg/lv successfully converted.
 .P
 # lvs -a -o name,size,segtype,datastripes,\\
-\            stripesize,reshapelenle,devices
+\            stripesize,reshape_len_le,devices
 \  LV            LSize   Type    #DStr Stripe  RSize Devices
 \  lv            640.00m raid5_n     5 128.00k     6 lv_rimage_0(0),\\
 \                                                    lv_rimage_1(0),\\
@@ -1743,7 +1743,7 @@ Once the conversion has finished we can convert to striped.
 \  Logical volume vg/lv successfully converted.
 .P
 # lvs -a -o name,size,segtype,datastripes,\\
-\            stripesize,reshapelenle,devices vg
+\            stripesize,reshape_len_le,devices vg
 \  LV   LSize   Type    #DStr Stripe  RSize Devices
 \  lv   640.00m striped     5 128.00k       /dev/sda(33),\\
 \                                           /dev/sdhx(33),\\
@@ -1779,28 +1779,28 @@ raid5_ls
 .ipbu
 RAID5 left symmetric
 .ipbu
-Rotating parity N with data restart
+Rotating parity 0 with data restart
 .
 .TP
 raid5_la
 .ipbu
 RAID5 left asymmetric
 .ipbu
-Rotating parity N with data continuation
+Rotating parity 0 with data continuation
 .
 .TP
 raid5_rs
 .ipbu
 RAID5 right symmetric
 .ipbu
-Rotating parity 0 with data restart
+Rotating parity N with data restart
 .
 .TP
 raid5_ra
 .ipbu
 RAID5 right asymmetric
 .ipbu
-Rotating parity 0 with data continuation
+Rotating parity N with data continuation
 .
 .TP
 raid5_n

@@ -195,7 +195,7 @@ The devices file is meant to be edited by lvm commands, not by the user.
 The devices file contains a HASH value which lvm uses to detect if the
 file has been modified since lvm last wrote it.
 When lvm updates the devices file, the previous version is moved to
-/etc/lvm/devices/backup/.
+#DEFAULT_SYS_DIR#/devices/backup/.
 .P
 The following fields can be found in the devices file:
 .br

@@ -58,7 +58,7 @@ Newly-allocated data blocks are overwritten with blocks
 of (\fBz\fP)eroes before use.
 .
 .IP 9
-Volume Health, where there are currently three groups of attributes identified:
+Volume Health, where there are currently five groups of attributes identified:
 .
 .IP
 Common ones for all Logical Volumes: (\fBp\fP)artial, (\fBX\fP) unknown.
@@ -83,7 +83,8 @@ logical volume via the 'lvchange' command.)  (\fBw\fP)ritemostly signifies the
 devices in a RAID 1 logical volume that have been marked write-mostly.
 Re(\fBs\fP)haping signifies a RAID Logical Volume is either undergoing
 a stripe addition/removal, a stripe size or RAID algorithm change.
-(\fBR\fP)emove after reshape signifies freed striped raid images to be removed.
+(\fBR\fP)emove after reshape signifies that freed striped raid images are
+still to be removed.
 .
 .IP
 Related to Thin pool Logical Volumes: (\fBF\fP)ailed, out of (\fBD\fP)ata space,

@@ -249,7 +249,7 @@ Special options
 .TP
 \fB--configreport\fP \fIReportName\fP
 This defines the \fIReportName\fP for which any subsequent
-.BR -o | --columns ,
+.BR -o | --options ,
 .BR -O | --sort
 or
 .BR -S | --select
@@ -310,9 +310,9 @@ representing report about Physical Volumes (pvs)
 representing report about Physical Volume Segments
 (pvs\ --segments)
 .RS
-\(en report/pvseg_cols
+\(en report/pvsegs_cols
 .br
-\(en report/pvseg_sort
+\(en report/pvsegs_sort
 .RE
 .
 .TP
@@ -354,7 +354,7 @@ representing report combining all of the above as a whole
 .br
 \(en report/pvsegs_cols_full
 .br
-\(en report/pvseg_sort_full
+\(en report/pvsegs_sort_full
 .br
 \(en report/vgs_cols_full
 .br
@@ -429,12 +429,12 @@ representing log report
 You always need to use \fB--configreport log\fP together with
 .BR -o | --options ", " -O | --sort
 or
-.BR -S | --selection
+.BR -S | --select
 to override configuration settings directly on
 command line for \fBlog report\fP. When compared to \fBmain report\fP, in
 addition to usual configuration settings for report fields and sorting, the
 \fBlog report\fP has also configuration option for selection -
-\fBreport/command_log_selection\fP. This configuration setting is provided for
+\fBlog/command_log_selection\fP. This configuration setting is provided for
 convenience so it's not necessary to use
 .BR -S | --select
 on command line
@@ -1061,7 +1061,7 @@ segs_sort="vg_name,lv_name,seg_start"
 We will use \fBreport/lvs_cols\fP and \fBreport/lvs_sort\fP configuration
 settings to define our own list of fields to use and to sort by that is
 different from defaults. You can do this for other reports in same manner
-with \fBreport/{pvs,pvseg,vgs,seg}_{cols,sort}\fP configuration settings.
+with \fBreport/{pvs,pvsegs,vgs,seg}_{cols,sort}\fP configuration settings.
 Also note that in the example below, we don't display the "lv_time" field
 even though we're using it for sorting \(en this is allowed.
 .P
@@ -1208,8 +1208,8 @@ We will use \fBreport/compact_output=1\fP for subsequent examples.
 .
 By default, LVM displays sizes in reports in human-readable form which means
 that the most suitable unit is used so it's easy to read. You can use
-\fBreport/units\fP configuration setting (or \fB--units\fP option directly
-on command line) and \fBreport/suffix\fP configuration setting
+\fBglobal/units\fP configuration setting (or \fB--units\fP option directly
+on command line) and \fBglobal/suffix\fP configuration setting
 (or \fB--nosuffix\fP command line option) to change this.
 .P
 .EX
@@ -1254,7 +1254,7 @@ line option).
 .EE
 .P
 For easier parsing, you can even transpose the report so each column now
-becomes a row in the output. This is done with \fBreport/output_as_rows\fP
+becomes a row in the output. This is done with \fBreport/columns_as_rows\fP
 configuration setting (or \fB--rows\fP command line option).
 .P
 .EX
@@ -1493,7 +1493,7 @@ instead of a single string.
 Note that some configuration settings and command line options have no
 effect with certain report formats. For example, with \fBjson\fP or
 \fBjson_std\fP output, it doesn't have any meaning to use \fBreport/aligned\fP
-(\fB--aligned\fP), \fBreport/noheadings\fP (\fB--noheadings\fP),
+(\fB--aligned\fP), \fBreport/headings\fP (values 0, 1 or 2; \fB--noheadings\fP sets the value to 0),
 \fBreport/columns_as_rows\fP (\fB--rows\fP) or \fBreport/buffered\fP
 (\fB--unbuffered\fP). All these configuration settings
 and command line options are ignored if using the \fBjson\fP

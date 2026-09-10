@@ -130,7 +130,7 @@ name in the metadata.
 .br
 \fBdata_offset=\fP\fIbytes\fP
 .br
-When repairing a pv_header, the device_size, data_offset, and pvid can all
+When repairing a pv_header, the device_size, data_offset, and pv_uuid can all
 be specified directly, in which case these values are not taken from a
 metadata file (where they usually come from), and the metadata file can be
 omitted.  data_offset is the starting location of the first physical
