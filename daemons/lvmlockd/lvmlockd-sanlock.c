@@ -626,7 +626,6 @@ static int get_sizes_device(char *path, uint64_t *dev_size, int *sector_size, in
 static int _lease_corrupt_error(int rv)
 {
 	if (rv == SANLK_LEADER_MAGIC ||
-	    rv == SANLK_LEADER_VERSION ||
 	    rv == SANLK_LEADER_SECTORSIZE ||
 	    rv == SANLK_LEADER_DIFF ||
 	    rv == SANLK_LEADER_LOCKSPACE ||
