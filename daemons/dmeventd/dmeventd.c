@@ -1788,20 +1788,25 @@ static int _register_for_event(struct message_data *message_data)
 		/* Set next timeout for new thread before it starts */
 		_set_timeout_to_thread(thread, message_data->timeout_secs);
 
+		/*
+		 * Create the thread and link it under _global_mutex: a
+		 * monitoring thread that fails early moves itself to
+		 * _thread_registry_unused through _monitor_unregister(),
+		 * which needs _global_mutex, so it cannot run before the
+		 * thread is linked here.
+		 *
+		 * Events cleared while the thread is still REGISTERING are
+		 * handled by _monitor_unregister() through thread->registered.
+		 */
+		_lock_mutex();
+
 		if ((ret = _create_thread(thread))) {
 			stack;
+			_unlock_mutex();
 			_free_thread_status(thread);
 			return ret;
 		}
 
-		_lock_mutex();
-		/*
-		 * Thread must NOT be linked before _create_thread():
-		 * an early UNREGISTER would clear events while the
-		 * thread is still in REGISTERING state, leaving the
-		 * device registered with the DSO but never unregistered
-		 * (_monitor_unregister skips REGISTERING threads).
-		 */
 		LINK_THREAD(thread);
 	}
 
