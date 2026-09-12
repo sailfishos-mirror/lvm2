@@ -521,7 +521,7 @@ Common options for lvm:
 .TP
 .O_atversion
 Specify an LVM version in x.y.z format where x is the major version,
-the y is the minor version and z is the patchlevel (e.g. 2.2.106).
+y is the minor version and z is the patchlevel (e.g. 2.2.106).
 When configuration is displayed, the configuration settings recognized
 at this LVM version will be considered only. This can be used
 to display a configuration that a certain LVM version understands and
@@ -549,7 +549,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -594,7 +594,7 @@ other hosts.
 .TP
 .O_ignoreunsupported
 Exclude unsupported configuration settings from the output. These settings are
-either used for debugging and development purposes only or their support is not
+either used for debugging and development purposes only, or their support is not
 yet complete and they are not meant to be used in production. The \fBcurrent\fP
 and \fBdiff\fP types include unsupported settings in their output by default,
 all the other types ignore unsupported settings.
@@ -614,7 +614,7 @@ debug: record full command debugging.
 .
 .TP
 .O_list
-Print a list of config settings instead of structured config settings tree.
+Print a list of config settings instead of the structured config settings tree.
 If used without other options, this is the same as --typeconfig list --withsummary.
 .
 .TP
@@ -689,7 +689,7 @@ output by default, all the other types ignore unsupported settings.
 .TP
 .O_sinceversion
 Specify an LVM version in x.y.z format where x is the major version,
-the y is the minor version and z is the patchlevel (e.g. 2.2.106).
+y is the minor version and z is the patchlevel (e.g. 2.2.106).
 This option is currently applicable only with --typeconfig new
 to display all configuration settings introduced since given version.
 .

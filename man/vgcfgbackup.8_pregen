@@ -132,8 +132,8 @@ vgcfgbackup \(em Backup volume group configuration(s)
 .
 .SH DESCRIPTION
 .
-vgcfgbackup creates back up files containing metadata of VGs.
-If no VGs are named, back up files are created for all VGs. See
+vgcfgbackup creates backup files containing metadata of VGs.
+If no VGs are named, backup files are created for all VGs. See
 .BR vgcfgrestore (8)
 for information on using the back up files.
 .P
@@ -141,7 +141,7 @@ In a default installation, each VG is backed up into a separate file
 bearing the name of the VG in the directory
 \fI#DEFAULT_BACKUP_DIR#\fP.
 .P
-To use an alternative back up file, use \fB-f\fP. In this case, when
+To use an alternative backup file, use \fB-f\fP. In this case, when
 backing up multiple VGs, the file name is treated as a template, with %s
 replaced by the VG name.
 .P
@@ -283,7 +283,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -371,7 +371,7 @@ the report/output_format setting in \fBlvm.conf\fP(5).
 If there is more than one report per command, each report is prefixed
 with the report name for identification. \fBjson\fP produces report
 output in JSON format. \fBjson_std\fP produces report output in
-JSON format which is more compliant with JSON standard.
+JSON format which is more compliant with the JSON standard.
 See \fBlvmreport\fP(7) for more information.
 .
 .TP

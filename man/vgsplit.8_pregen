@@ -151,8 +151,8 @@ vgsplit \(em Move physical volumes into a new or existing volume group
 .SH DESCRIPTION
 .
 vgsplit moves one or more PVs from a source VG (the first VG arg) to a
-destination VG (the second VG arg).  The PV(s) to move are named after the
-source and destination VGs, or an LV is named, in which case the PVs
+destination VG (the second VG arg).  The PVs to move are those listed after
+the source and destination VGs, or an LV may be named, in which case the PVs
 underlying the LV are moved.
 .P
 If the destination VG does not exist, a new VG is created (command options
@@ -348,7 +348,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -485,7 +485,7 @@ Physical Volume name, a device path under /dev.
 For commands managing physical extents, a PV positional arg
 generally accepts a suffix indicating a range (or multiple ranges)
 of physical extents (PEs). When the first PE is omitted, it defaults
-to the start of the device, and when the last PE is omitted it defaults to end.
+to the start of the device, and when the last PE is omitted it defaults to the end.
 .br
 Start and end range (inclusive):
 \fIPV\fP[\fB:\fP\fIPE\fP\fB-\fP\fIPE\fP]\ .\|.\|.\&

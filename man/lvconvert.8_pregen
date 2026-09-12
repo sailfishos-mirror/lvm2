@@ -563,7 +563,7 @@ Striped raid types are
 .P
 As opposed to mirroring, raid5 and raid6 stripe data and calculate parity
 blocks. The parity blocks can be used for data block recovery in case
-devices fail. A maximum number of one device in a raid5 LV may fail, and
+devices fail. A maximum of one device in a raid5 LV may fail, and
 two in case of raid6. Striped raid types typically rotate the parity and
 data blocks for performance reasons, thus avoiding contention on a single
 device. Specific arrangements of parity and data blocks (layouts) can be
@@ -584,15 +584,15 @@ their raid5 counterparts (e.g. raid5_rs can be directly converted to
 raid6_rs_6 and vice-versa).
 .P
 raid10 (an alias for raid10_near) is currently limited to one data copy
-and even number of sub LVs. This is a mirror group layout, thus a single
+and an even number of sub LVs. This is a mirror group layout, thus a single
 sub LV may fail per mirror group without data loss.
 .P
 Striped raid types support converting the layout, their stripesize and
 their number of stripes.
 .P
 The striped raid types combined with raid1 allow for conversion from
-linear \[->] striped/raid0/raid0_meta and vice-versa by e.g. linear \[<>] raid1
-\[<>] raid5_n (then adding stripes) \[<>] striped/raid0/raid0_meta.
+linear \[->] striped/raid0/raid0_meta and vice-versa, e.g. via
+linear \[<>] raid1 \[<>] raid5_n (then adding stripes) \[<>] striped/raid0/raid0_meta.
 .
 .SH USAGE
 .
@@ -984,7 +984,7 @@ error
 \(em
 .P
 .
-Attach a cache pool to an LV, converts the LV to type cache.
+Attach a cache pool to an LV, converting the LV to type cache.
 .P
 .B lvconvert
 \fB--cachepool\fP \fILV\fP
@@ -1065,7 +1065,7 @@ error
 \(em
 .P
 .
-Attach a writecache to an LV, converts the LV to type writecache.
+Attach a writecache to an LV, converting the LV to type writecache.
 .P
 .B lvconvert
 .O_cachevol
@@ -1089,7 +1089,7 @@ thinpool
 \(em
 .P
 .
-Attach a cache to an LV, converts the LV to type cache.
+Attach a cache to an LV, converting the LV to type cache.
 .P
 .B lvconvert
 .O_cachevol
@@ -1831,7 +1831,7 @@ See \fBlvmvdo\fP(7) for more information about VDO usage.
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -2286,7 +2286,7 @@ Physical Volume name, a device path under /dev.
 For commands managing physical extents, a PV positional arg
 generally accepts a suffix indicating a range (or multiple ranges)
 of physical extents (PEs). When the first PE is omitted, it defaults
-to the start of the device, and when the last PE is omitted it defaults to end.
+to the start of the device, and when the last PE is omitted it defaults to the end.
 .br
 Start and end range (inclusive):
 \fIPV\fP[\fB:\fP\fIPE\fP\fB-\fP\fIPE\fP]\ .\|.\|.\&
@@ -2575,7 +2575,7 @@ error
 \(em
 .P
 .
-Attach a cache to an LV, converts the LV to type cache.
+Attach a cache to an LV, converting the LV to type cache.
 .P
 .B lvconvert
 .O_cachevol
@@ -2796,7 +2796,7 @@ striped
 .P
 .
 Poll LV to continue conversion (also see --startpoll)
-or waits till conversion/mirror syncing is finished
+or wait until conversion/mirror syncing is finished
 .P
 .B lvconvert
 \fILV1\fP

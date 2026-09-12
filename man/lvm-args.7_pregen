@@ -154,7 +154,7 @@ Used by: \fBpvmove\fP
 .TP
 \fB--atversion\fP \fIString\fP
 Specify an LVM version in x.y.z format where x is the major version,
-the y is the minor version and z is the patchlevel (e.g. 2.2.106).
+y is the minor version and z is the patchlevel (e.g. 2.2.106).
 When configuration is displayed, the configuration settings recognized
 at this LVM version will be considered only. This can be used
 to display a configuration that a certain LVM version understands and
@@ -491,7 +491,7 @@ Used by: \fBlvmdevices\fP
 \fB--devices\fP \fIPV\fP
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .br
 Used by: \fBconfig\fP, \fBdevtypes\fP, \fBdumpconfig\fP, \fBformats\fP, \fBfullreport\fP, \fBhelp\fP, \fBlastlog\fP, \fBlvchange\fP, \fBlvconvert\fP, \fBlvcreate\fP, \fBlvdisplay\fP, \fBlvextend\fP, \fBlvmchange\fP, \fBlvmconfig\fP, \fBlvmdevices\fP, \fBlvmdiskscan\fP, \fBlvmsadc\fP, \fBlvmsar\fP, \fBlvpoll\fP, \fBlvreduce\fP, \fBlvremove\fP, \fBlvrename\fP, \fBlvresize\fP, \fBlvs\fP, \fBlvscan\fP, \fBpvchange\fP, \fBpvck\fP, \fBpvcreate\fP, \fBpvdata\fP, \fBpvdisplay\fP, \fBpvmove\fP, \fBpvremove\fP, \fBpvresize\fP, \fBpvs\fP, \fBpvscan\fP, \fBsegtypes\fP, \fBsystemid\fP, \fBtags\fP, \fBversion\fP, \fBvgcfgbackup\fP, \fBvgcfgrestore\fP, \fBvgchange\fP, \fBvgck\fP, \fBvgconvert\fP, \fBvgcreate\fP, \fBvgdisplay\fP, \fBvgexport\fP, \fBvgextend\fP, \fBvgimport\fP, \fBvgimportclone\fP, \fBvgimportdevices\fP, \fBvgmerge\fP, \fBvgmknodes\fP, \fBvgreduce\fP, \fBvgremove\fP, \fBvgrename\fP, \fBvgs\fP, \fBvgscan\fP, \fBvgsplit\fP
@@ -724,7 +724,7 @@ Used by: \fBlvchange\fP, \fBlvcreate\fP, \fBvgchange\fP
 .TP
 \fB--ignoreunsupported\fP
 Exclude unsupported configuration settings from the output. These settings are
-either used for debugging and development purposes only or their support is not
+either used for debugging and development purposes only, or their support is not
 yet complete and they are not meant to be used in production. The \fBcurrent\fP
 and \fBdiff\fP types include unsupported settings in their output by default,
 all the other types ignore unsupported settings.
@@ -1424,7 +1424,7 @@ the report/output_format setting in \fBlvm.conf\fP(5).
 If there is more than one report per command, each report is prefixed
 with the report name for identification. \fBjson\fP produces report
 output in JSON format. \fBjson_std\fP produces report output in
-JSON format which is more compliant with JSON standard.
+JSON format which is more compliant with the JSON standard.
 See \fBlvmreport\fP(7) for more information.
 .br
 Used by: \fBdevtypes\fP, \fBfullreport\fP, \fBlastlog\fP, \fBlvchange\fP, \fBlvcreate\fP, \fBlvdisplay\fP, \fBlvextend\fP, \fBlvreduce\fP, \fBlvremove\fP, \fBlvrename\fP, \fBlvresize\fP, \fBlvs\fP, \fBlvscan\fP, \fBpvchange\fP, \fBpvcreate\fP, \fBpvdisplay\fP, \fBpvmove\fP, \fBpvremove\fP, \fBpvresize\fP, \fBpvs\fP, \fBpvscan\fP, \fBvgcfgbackup\fP, \fBvgchange\fP, \fBvgck\fP, \fBvgconvert\fP, \fBvgcreate\fP, \fBvgdisplay\fP, \fBvgexport\fP, \fBvgextend\fP, \fBvgimport\fP, \fBvgimportdevices\fP, \fBvgmknodes\fP, \fBvgreduce\fP, \fBvgremove\fP, \fBvgrename\fP, \fBvgs\fP, \fBvgscan\fP
@@ -1616,7 +1616,7 @@ Used by: \fBconfig\fP, \fBdumpconfig\fP, \fBlvmconfig\fP
 .TP
 \fB--sinceversion\fP \fIString\fP
 Specify an LVM version in x.y.z format where x is the major version,
-the y is the minor version and z is the patchlevel (e.g. 2.2.106).
+y is the minor version and z is the patchlevel (e.g. 2.2.106).
 This option is currently applicable only with --typeconfig new
 to display all configuration settings introduced since given version.
 .br
@@ -1867,7 +1867,7 @@ Used by: \fBconfig\fP, \fBdumpconfig\fP, \fBlvmconfig\fP
 .
 .TP
 \fB--udevoutput\fP
-Command output is modified to be imported from a udev rule.
+Command output is modified to be imported by a udev rule.
 .br
 Used by: \fBpvscan\fP
 .

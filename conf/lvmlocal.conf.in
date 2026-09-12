@@ -4,7 +4,7 @@
 # Refer to 'man lvm.conf' for information about the file layout.
 #
 # To put this file in a different directory and override
-# @DEFAULT_SYS_DIR@ set the environment variable LVM_SYSTEM_DIR before
+# @DEFAULT_SYS_DIR@, set the environment variable LVM_SYSTEM_DIR before
 # running the tools.
 #
 # The lvmlocal.conf file is normally expected to contain only the

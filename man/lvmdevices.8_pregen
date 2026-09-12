@@ -313,7 +313,7 @@ Remove a device by referencing its device ID:
 LVM identifies devices in the devices file using hardware-specific IDs,
 such as the WWID or serial number.  Subsystem-specific IDs are used for
 virtual device types, which also aim to be unique and stable.
-When no hardware or subsystem ID is available, lvm falls back using the
+When no hardware or subsystem ID is available, lvm falls back to using the
 device name as the device ID.  Using device names as IDs is not optimal
 because they are not stable, and will often change after reboot.  When
 device names are used as IDs, lvm must perform extra device scanning
@@ -426,7 +426,7 @@ The devices file is meant to be edited by lvm commands, not by the user.
 The devices file contains a HASH value which lvm uses to detect if the
 file has been modified since lvm last wrote it.
 When lvm updates the devices file, the previous version is moved to
-/etc/lvm/devices/backup/.
+#DEFAULT_SYS_DIR#/devices/backup/.
 .P
 The following fields can be found in the devices file:
 .br
@@ -464,7 +464,7 @@ search for the missing PVIDs in system.devices.  If a PVID is found on a
 new device, the system.devices entry is updated with a new device ID matching
 the new device on which the PVID was found.  The refresh mode can be configured
 to run once, when the machine change is first detected, or can be enabled
-for period of time following the first refresh, or can be disabled
+for a period of time following the first refresh, or can be disabled
 entirely.
 .P
 .B device_ids_refresh = 0
@@ -512,7 +512,7 @@ allows lvm to be used with different sets of devices.  For example, a
 given application may not need to access the system's devices, and the
 system may not need to access the application's devices.  In this case,
 system.devices could list only the system's devices and
-<application>.devices file could list only the application's devices.  The
+the <application>.devices file could list only the application's devices.  The
 option --devicesfile <filename> is used to select the devices file to use
 with the command.  Without the option set, the default system.devices file
 is used.
@@ -880,7 +880,7 @@ then it will override the default type that lvm would use.
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP

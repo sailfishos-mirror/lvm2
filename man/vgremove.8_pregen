@@ -129,7 +129,7 @@ vgremove \(em Remove volume group(s)
 .SH DESCRIPTION
 .
 vgremove removes one or more VGs. If LVs exist in the VG, a prompt is used
-to confirm LV removal.
+to confirm their removal.
 .P
 If one or more PVs in the VG are lost, consider
 \fBvgreduce --removemissing\fP to make the VG
@@ -266,7 +266,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -345,7 +345,7 @@ the report/output_format setting in \fBlvm.conf\fP(5).
 If there is more than one report per command, each report is prefixed
 with the report name for identification. \fBjson\fP produces report
 output in JSON format. \fBjson_std\fP produces report output in
-JSON format which is more compliant with JSON standard.
+JSON format which is more compliant with the JSON standard.
 See \fBlvmreport\fP(7) for more information.
 .
 .TP

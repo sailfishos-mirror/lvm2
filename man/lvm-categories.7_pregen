@@ -317,7 +317,7 @@ Utility to deactivate block devices
 .\" CONDITION_BEGIN fsadm.8
 .TP 20
 .B fsadm
-Utility to resize or check filesystem on a device
+Utility to resize or check a filesystem on a device
 .\" CONDITION_END fsadm.8
 .\" CONDITION_BEGIN lvm_import_vdo.8
 .TP 20

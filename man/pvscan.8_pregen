@@ -300,7 +300,7 @@ results to perform autoactivation.
 Autoactivation of VGs or LVs can be enabled/disabled using vgchange or
 lvchange with --setautoactivation y|n, or by adding names to
 .BR lvm.conf (5)
-.B activation/auto_activation_volume_list
+\fBactivation/auto_activation_volume_list\fP.
 .P
 See
 .BR lvmautoactivation (7)
@@ -635,7 +635,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -738,7 +738,7 @@ the report/output_format setting in \fBlvm.conf\fP(5).
 If there is more than one report per command, each report is prefixed
 with the report name for identification. \fBjson\fP produces report
 output in JSON format. \fBjson_std\fP produces report output in
-JSON format which is more compliant with JSON standard.
+JSON format which is more compliant with the JSON standard.
 See \fBlvmreport\fP(7) for more information.
 .
 .TP
@@ -755,7 +755,7 @@ back metadata it believes has changed but hasn't.
 .
 .TP
 .O_udevoutput
-Command output is modified to be imported from a udev rule.
+Command output is modified to be imported by a udev rule.
 .
 .TP
 .O_uuid
@@ -789,7 +789,7 @@ Physical Volume name, a device path under /dev.
 For commands managing physical extents, a PV positional arg
 generally accepts a suffix indicating a range (or multiple ranges)
 of physical extents (PEs). When the first PE is omitted, it defaults
-to the start of the device, and when the last PE is omitted it defaults to end.
+to the start of the device, and when the last PE is omitted it defaults to the end.
 .br
 Start and end range (inclusive):
 \fIPV\fP[\fB:\fP\fIPE\fP\fB-\fP\fIPE\fP]\ .\|.\|.\&

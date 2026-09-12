@@ -266,7 +266,7 @@ specify it in --settings.  Otherwise, the wrong PV UUID could be used if
 device names have been swapped since the metadata was last written.
 .P
 If a PV has no metadata areas and the pv_header is damaged, then the
-repair will not know to create no metadata areas during repair.  It will
+repair will not know that no metadata areas should be created.  It will
 by default repair metadata in mda1.  To repair with no metadata areas, use
 --settings "mda_offset=0 mda_size=0".
 .P
@@ -314,7 +314,7 @@ print/save one instance of metadata text.
 .br
 Refers to a metadata area (mda) location and size.  An mda includes an
 mda_header and circular metadata text buffer.  Setting this forces
-metadata_search look for metadata in the given area instead of the
+metadata_search to look for metadata in the given area instead of the
 standard locations.  When set to zero with repair, it indicates no
 metadata areas should exist.
 .P
@@ -333,7 +333,7 @@ name in the metadata.
 .br
 \fBdata_offset=\fP\fIbytes\fP
 .br
-When repairing a pv_header, the device_size, data_offset, and pvid can all
+When repairing a pv_header, the device_size, data_offset, and pv_uuid can all
 be specified directly, in which case these values are not taken from a
 metadata file (where they usually come from), and the metadata file can be
 omitted.  data_offset is the starting location of the first physical
@@ -524,7 +524,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
@@ -659,7 +659,7 @@ Physical Volume name, a device path under /dev.
 For commands managing physical extents, a PV positional arg
 generally accepts a suffix indicating a range (or multiple ranges)
 of physical extents (PEs). When the first PE is omitted, it defaults
-to the start of the device, and when the last PE is omitted it defaults to end.
+to the start of the device, and when the last PE is omitted it defaults to the end.
 .br
 Start and end range (inclusive):
 \fIPV\fP[\fB:\fP\fIPE\fP\fB-\fP\fIPE\fP]\ .\|.\|.\&

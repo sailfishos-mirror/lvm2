@@ -123,8 +123,8 @@ vgmerge \(em Merge volume groups
 .SH DESCRIPTION
 .
 vgmerge merges two existing VGs. The inactive source VG is merged into the
-destination VG if physical extent sizes are equal and PV and LV summaries
-of both VGs fit into the destination VG's limits.
+destination VG if physical extent sizes are equal and the PV and LV totals
+of both VGs fit within the destination VG's limits.
 .
 .SH USAGE
 .
@@ -256,7 +256,7 @@ messages sent to the log file and/or syslog (if configured).
 .O_devices
 Restricts the devices that are visible and accessible to the command.
 Devices not listed will appear to be missing. This option can be
-repeated, or accepts a comma separated list of devices. This overrides
+repeated, or accepts a comma-separated list of devices. This overrides
 the devices file.
 .
 .TP
