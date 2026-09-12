@@ -277,6 +277,7 @@ struct thread_status {
 
 	/* === Fields protected by thread->mutex === */
 	unsigned status;		/* DM_THREAD_{REGISTERING,RUNNING,GRACE_PERIOD,DONE} */
+	unsigned registered;		/* Device is registered with the DSO */
 	pthread_mutex_t mutex;		/* The lock protecting fields */
 	int current_events;		/* Occurred events bitfield */
 	int events;			/* Event filter bitfield */
@@ -1327,12 +1328,13 @@ static void _thread_unused(struct thread_status *thread)
 static void _monitor_unregister(void *arg)
 {
 	struct thread_status *thread = arg;
-	int status;
+	int registered;
 
 	thread->events = 0;	/* Filter is now empty */
 	thread->pending = 0;	/* Event pending resolved */
 	thread->processing = 1;	/* Process unregistering */
-	status = thread->status;
+	registered = thread->registered;
+	thread->registered = 0;
 	/* coverity[missing_lock] thread->mutex held by caller */
 	thread->status = DM_THREAD_TERMINATING;
 	_unlock_thread(thread);
@@ -1345,7 +1347,12 @@ static void _monitor_unregister(void *arg)
 	DEBUGLOG("Unregistering monitor for %s.", thread->device.name);
 	_unregister_for_timeout(thread);
 
-	if ((status != DM_THREAD_REGISTERING) &&
+	/*
+	 * Release the DSO registration whenever it was taken, even if the
+	 * thread is still REGISTERING: _do_register_device() may already
+	 * have succeeded before events were cleared.
+	 */
+	if (registered &&
 	    !_do_unregister_device(thread))
 		log_error("%s: %s unregister failed.", __func__,
 			  thread->device.name);
@@ -1480,6 +1487,7 @@ static void *_monitor_thread(void *arg)
 		log_error("Failed to register device %s.", thread->device.name);
 		goto out;
 	}
+	thread->registered = 1;
 
 	/* Main monitoring loop with grace period support */
 	while (thread->events) {
