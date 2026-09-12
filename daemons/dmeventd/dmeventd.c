@@ -2067,15 +2067,41 @@ static int _get_timeout(struct message_data *message_data)
 	return (msg->data && msg->size) ? 0 : -ENOMEM;
 }
 
+/*
+ * Warn about parent directories of the fifo path that other users can
+ * replace entries in: they could plant a fifo or a symlink for the daemon
+ * to use.  Sticky directories are fine: only the owner can remove entries
+ * from them.
+ */
+static void _check_fifo_path_security(const char *path)
+{
+	char buf[PATH_MAX];
+	struct stat st;
+	char *slash;
+
+	if (dm_snprintf(buf, sizeof(buf), "%s", path) < 0)
+		return;
+
+	for (slash = strchr(buf + 1, '/'); slash; slash = strchr(slash + 1, '/')) {
+		*slash = '\0';
+
+		if (!stat(buf, &st) && S_ISDIR(st.st_mode) &&
+		    !(st.st_mode & S_ISVTX) &&
+		    (((st.st_uid != 0) && (st.st_uid != geteuid())) ||
+		     (st.st_mode & (S_IWGRP | S_IWOTH))))
+			log_warn("WARNING: %s: directory %s is not secure.",
+				 path, buf);
+
+		*slash = '/';
+	}
+}
+
 static int _open_fifo(const char *path)
 {
 	struct stat st;
 	int fd = -1;
 
-	/*
-	 * FIXME Explicitly verify the code's requirement that path is secure:
-	 * - All parent directories owned by root without group/other write access unless sticky.
-	 */
+	_check_fifo_path_security(path);
 
 	/* If path exists, only use it if it is root-owned fifo mode 0600 */
 	if ((lstat(path, &st) < 0)) {
