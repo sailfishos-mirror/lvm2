@@ -32,6 +32,7 @@
 #include <sys/wait.h>
 #include <sys/resource.h>
 #include <signal.h>
+#include <limits.h>		/* for UINT_MAX */
 #include <arpa/inet.h>		/* for htonl, ntohl */
 #include <fcntl.h>		/* for musl libc */
 #include <poll.h>
@@ -655,12 +656,42 @@ static void _free_message(struct message_data *message_data)
 	free(message_data->timeout_str);
 }
 
+/*
+ * Parse an unsigned decimal field of a client message.
+ *
+ * Returns 0 when the field is empty (no value), 1 on success and
+ * -1 when the field is not a valid unsigned number.
+ */
+static int _fetch_unsigned(const char *str, unsigned *value)
+{
+	char *end;
+	unsigned long v;
+
+	*value = 0;
+
+	if (!str)
+		return 0;	/* Empty field ('-') */
+
+	errno = 0;
+	v = strtoul(str, &end, 10);
+
+	if (errno || (end == str) || *end || (v > UINT_MAX)) {
+		log_error("Failed to parse unsigned field %s.", str);
+		return -1;
+	}
+
+	*value = (unsigned) v;
+
+	return 1;
+}
+
 /* Parse a register message from the client. */
 static int _parse_message(struct message_data *message_data)
 {
 	int ret = 0;
 	struct dm_event_daemon_message *msg = message_data->msg;
 	char *p = msg->data;
+	unsigned events, timeout;
 
 	if (!msg->data)
 		return 0;
@@ -673,14 +704,11 @@ static int _parse_message(struct message_data *message_data)
 	    _fetch_string(&message_data->dso_name, &p, ' ') &&
 	    _fetch_string(&message_data->device_uuid, &p, ' ') &&
 	    _fetch_string(&message_data->events_str, &p, ' ') &&
-	    _fetch_string(&message_data->timeout_str, &p, ' ')) {
-		if (message_data->events_str)
-			message_data->events_field =
-				atoi(message_data->events_str);
-		if (message_data->timeout_str)
-			message_data->timeout_secs =
-				atoi(message_data->timeout_str)
-				? : DM_EVENT_DEFAULT_TIMEOUT;
+	    _fetch_string(&message_data->timeout_str, &p, ' ') &&
+	    _fetch_unsigned(message_data->events_str, &events) >= 0 &&
+	    _fetch_unsigned(message_data->timeout_str, &timeout) >= 0) {
+		message_data->events_field = events;
+		message_data->timeout_secs = timeout ? : DM_EVENT_DEFAULT_TIMEOUT;
 		ret = 1;
 	}
 
