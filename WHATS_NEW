@@ -1,5 +1,17 @@
 Version 2.03.43 - 
 ==================
+  Fix out-of-bounds read when parsing short dmeventd client messages.
+  Reject malformed numeric fields in dmeventd client registration messages.
+  Reject dmeventd registrations without a plugin or device name.
+  Use non-blocking dmeventd FIFO I/O and timeouts for stalled clients.
+  Fix dmeventd timeout thread spin when no timeout is scheduled.
+  Fix dmeventd monitor thread list corruption when pthread_create fails.
+  Unregister dmeventd devices from plugins if monitoring stops early.
+  Do not reuse dmeventd grace-period threads when the device inode is unknown.
+  Reset dmeventd pending SIGALRM without changing signal disposition.
+  Warn when parent directories of dmeventd FIFO paths are not secure.
+  Validate systemd-activated dmeventd FIFOs and use non-blocking I/O.
+  Fix dmeventd info when the running daemon returns no status reply data.
   Reject undersized --pooldatavdo conversion before allocating pool metadata.
   Allow lvchange --refresh and properties on hidden thin and cache pool sub LVs.
   Allow 4K stripe size smaller than page size (except on DAX and MD RAID).
