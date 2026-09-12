@@ -1185,35 +1185,38 @@ enum {
 	DM_WAIT_FATAL
 };
 
-/* Reset pending signal for a task/thread */
+/*
+ * Consume a pending signal for the calling thread.
+ *
+ * Note: the (process wide) signal disposition must not be changed here.
+ * SIGALRM is also used to wake up other monitoring threads, and an
+ * ignored signal is discarded instead of being delivered.
+ */
 static int _reset_pending_signal(int signal)
 {
-	sigset_t prev_mask, mask;
-	struct sigaction prev_act, act = { .sa_handler = SIG_IGN };
+	sigset_t prev_mask, mask, pending;
+	struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
 	int r = 1;
 
-	sigemptyset(&act.sa_mask);
-	sigemptyset(&prev_mask);
 	sigemptyset(&mask);
 	sigaddset(&mask, signal);
 
-	if (pthread_sigmask(SIG_SETMASK, &mask, &prev_mask) != 0) {
-		log_sys_error("pthread_sigmask", "ignore signal");
+	/* The signal must be blocked before it can be consumed */
+	if (pthread_sigmask(SIG_BLOCK, &mask, &prev_mask) != 0) {
+		log_sys_error("pthread_sigmask", "block signal");
 		return 0; /* What better */
 	}
 
-	if (sigaction(signal, &act, &prev_act) < 0) {
-		log_sys_error("sigaction", "ignore signal");
+	if (sigpending(&pending) < 0) {
+		log_sys_error("sigpending", "");
 		r = 0;
-		goto restore_mask;
+	} else if (sigismember(&pending, signal) &&
+		   (sigtimedwait(&mask, NULL, &ts) < 0) &&
+		   (errno != EAGAIN) && (errno != EINTR)) {
+		log_sys_error("sigtimedwait", "");
+		r = 0;
 	}
 
-	if (sigaction(signal, &prev_act, NULL) < 0) {
-		log_sys_error("sigaction", "restore signal");
-		r = 0;
-	}
-
-restore_mask:
 	/* Restore the process's original sigmask */
 	if (pthread_sigmask(SIG_SETMASK, &prev_mask, NULL) < 0) {
 		log_sys_error("pthread_sigmask", "restore signal");
