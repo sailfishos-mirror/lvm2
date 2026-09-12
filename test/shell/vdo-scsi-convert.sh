@@ -36,7 +36,7 @@ if not which vdo ; then
 	# enable expansion of aliases within script itself
 	shopt -s expand_aliases
 	alias vdo='lvm_vdo_wrapper'
-	export VDO_BINARY=lvm_vdo_wrapper
+	export VDO_BINARY=$(command -v lvm_vdo_wrapper)
 	echo "Using 'lvm_vdo_wrapper' emulation of 'vdo' manager."
 fi
 
