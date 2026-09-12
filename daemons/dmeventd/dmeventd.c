@@ -1456,16 +1456,30 @@ static int _monitor_events(struct thread_status *thread)
 static void _monitor_grace_period_wait(struct thread_status *thread)
 {
 	struct timespec grace_timeout = { .tv_sec = _get_curr_time() + _grace_period };
+	int r;
 
 	DEBUGLOG("Thread %lx entering grace period for %d seconds.",
 		 (unsigned long) thread->thread, _grace_period);
 
 	/* Wait on per-thread condition variable with thread mutex
 	 * pthread_cond_timedwait atomically releases and reacquires the mutex */
-	while (!_exit_now && !thread->events &&
-	       (ETIMEDOUT != pthread_cond_timedwait(&thread->grace_cond,
-						    &thread->mutex, &grace_timeout)))
-		/* Waiting */;
+	for (;;) {
+		if (_exit_now || thread->events)
+			break;			/* New registration or exit */
+
+		r = pthread_cond_timedwait(&thread->grace_cond,
+					   &thread->mutex, &grace_timeout);
+		if (!r)
+			continue;		/* Spurious wake-up */
+
+		if (r == ETIMEDOUT)
+			break;			/* Grace period expired */
+
+		/* Any other error would make this loop spin */
+		log_error("Failed to wait for grace period of Thr %lx: %s.",
+			  (unsigned long) thread->thread, strerror(r));
+		break;
+	}
 
 	DEBUGLOG("Thread %lx wakeup grace period.", (unsigned long) thread->thread);
 }
