@@ -2665,12 +2665,27 @@ static int _handle_preloaded_fifo(int fd, const char *path)
 	if (fstat(fd, &st_fd) < 0 || !S_ISFIFO(st_fd.st_mode))
 		return 0;
 
+	/*
+	 * Enforce the same invariant as _open_fifo(): the daemon trusts
+	 * whoever can write to these fifos, so they have to be owned by
+	 * root and not accessible, executable or writable by others.
+	 */
+	if (st_fd.st_uid ||
+	    (st_fd.st_mode & (S_IEXEC | S_IRWXG | S_IRWXO))) {
+		log_error("%s: activated fifo has incorrect attributes", path);
+		return 0;
+	}
+
 	if (stat(path, &st_path) < 0 ||
 	    st_path.st_dev != st_fd.st_dev ||
 	    st_path.st_ino != st_fd.st_ino)
 		return 0;
 
 	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC) < 0)
+		return 0;
+
+	/* Read/write paths rely on poll() deadlines, not on blocking I/O */
+	if (fcntl(fd, F_SETFL, O_NONBLOCK) < 0)
 		return 0;
 
 	return 1;
