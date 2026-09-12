@@ -2931,6 +2931,11 @@ static int _info_dmeventd(const char *name, struct dm_event_fifos *fifos)
 		goto out;
 	}
 
+	if (!msg.data) {
+		fprintf(stderr, "No status reply from existing dmeventd.\n");
+		goto out;
+	}
+
 	if (!(line = strchr(msg.data, ' '))) {
 		free(msg.data);
 		goto out;
@@ -3004,7 +3009,7 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 	if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0))
 		goto bad;
 
-	if (!(message = strchr(msg.data, ' ')))
+	if (!msg.data || !(message = strchr(msg.data, ' ')))
 		goto bad;
 	message++;
 	for (i = 0; msg.data[i]; ++i)
