@@ -928,7 +928,13 @@ static struct thread_status *_lookup_grace_thread_status(const struct message_da
 	/* Grace threads stay in active registry */
 	dm_list_iterate_items(thread, &_thread_registry) {
 		_lock_thread(thread);
+		/*
+		 * inode 0 means it could not be determined, which must not be
+		 * treated as a match: the uuid may have been reused for a
+		 * different device in the meantime.
+		 */
 		if ((thread->status == DM_THREAD_GRACE_PERIOD) &&
+		    thread->inode &&
 		    !strcmp(data->device_uuid, thread->device.uuid) &&
 		    !strcmp(data->dso_name, thread->dso_data->dso_name) &&
 		    (thread->inode == _get_device_inode(thread))) {
