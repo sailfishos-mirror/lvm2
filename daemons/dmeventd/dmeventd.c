@@ -1466,7 +1466,17 @@ static void *_monitor_thread(void *arg)
 	/* Now with resolved major:minor store also device inode */
 	thread->inode = _get_device_inode(thread);
 
-	if (!_do_register_device(thread)) {
+	/*
+	 * Register with the DSO without holding thread->mutex: plugin code
+	 * may do I/O and take locks, and _lookup_thread_status() locks each
+	 * thread while holding _global_mutex (same reasoning as in
+	 * _do_process_event()).
+	 */
+	_unlock_thread(thread);
+	ret = _do_register_device(thread);
+	_lock_thread(thread);
+
+	if (!ret) {
 		log_error("Failed to register device %s.", thread->device.name);
 		goto out;
 	}
