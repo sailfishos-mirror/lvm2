@@ -2974,10 +2974,14 @@ static int _info_dmeventd(const char *name, struct dm_event_fifos *fifos)
 		goto out;
 	}
 
-	if (!(line = strchr(msg.data, ' '))) {
-		free(msg.data);
+	if (!msg.data) {
+		fprintf(stderr, "No status reply from existing dmeventd.\n");
 		goto out;
 	}
+
+	if (!(line = strchr(msg.data, ' ')))
+		goto out;
+
 	line++;
 	for (i = 0; msg.data[i]; ++i)
 		if (msg.data[i] == ';') {
@@ -2989,22 +2993,22 @@ static int _info_dmeventd(const char *name, struct dm_event_fifos *fifos)
 			++count;
 		}
 
-	free(msg.data);
-
 	if (!count)
 		printf("%s does not monitor any device.\n", name);
 
 	if (version >= 2) {
+		free(msg.data);
 		if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_PARAMETERS, "-", "-", 0, 0)) {
 			fprintf(stderr, "Failed to acquire parameters from existing dmeventd.\n");
 			goto out;
 		}
-		printf("%s internal status: %s\n", name, msg.data);
-		free(msg.data);
+		if (msg.data)
+			printf("%s internal status: %s\n", name, msg.data);
 	}
 
 	ret = 1;
 out:
+	free(msg.data);
 	fini_fifos(fifos);
 
 	return ret;
@@ -3047,7 +3051,7 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 	if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0))
 		goto bad;
 
-	if (!(message = strchr(msg.data, ' ')))
+	if (!msg.data || !(message = strchr(msg.data, ' ')))
 		goto bad;
 	message++;
 	for (i = 0; msg.data[i]; ++i)
