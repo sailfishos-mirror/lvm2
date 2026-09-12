@@ -433,6 +433,11 @@ static struct dso_data *_load_dso(struct message_data *data)
 	struct dso_data *ret;
 	const char *dlerr;
 
+	if (!data->dso_name || !*data->dso_name) {
+		dlerr = "no plugin name";
+		goto_bad;
+	}
+
 	if (!(dl = dlopen(data->dso_name, RTLD_NOW))) {
 		dlerr = dlerror();
 		goto_bad;
@@ -1718,6 +1723,12 @@ static int _register_for_event(struct message_data *message_data)
 	int ret = 0;
 	struct thread_status *thread;
 	struct dso_data *dso_data;
+
+	/* A registration must name the DSO and the device to monitor */
+	if (!message_data->dso_name || !message_data->device_uuid) {
+		stack;
+		return -EINVAL;
+	}
 
 	if (!(dso_data = _lookup_dso(message_data)) &&
 	    !(dso_data = _load_dso(message_data))) {
