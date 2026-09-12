@@ -16,6 +16,7 @@
 UNIT_SOURCE=\
 	test/unit/bcache_t.c \
 	test/unit/daemon_stray_t.c \
+	test/unit/dmeventd_t.c \
 	test/unit/bcache_utils_t.c \
 	test/unit/bitset_t.c \
 	test/unit/config_t.c \

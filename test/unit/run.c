@@ -22,6 +22,10 @@
 
 #define MAX_COMPONENTS 16
 
+/* Set by the --extended option or LVM_TEST_EXTENDED so suites can omit
+ * timing-sensitive tests. */
+bool extended_tests = false;
+
 struct token {
 	const char *b, *e;
 };
@@ -229,7 +233,7 @@ static bool _run_tests(struct test_details **tests, unsigned nr)
 
 static void _usage(void)
 {
-	fprintf(stderr, "Usage: unit-test <list|run> [pattern]\n");
+	fprintf(stderr, "Usage: unit-test [--extended] <list|run> [pattern]\n");
 }
 
 static int _cmp_paths(const void *lhs, const void *rhs)
@@ -261,11 +265,37 @@ static unsigned _filter(const char *pattern, struct test_details **tests, unsign
 
 int main(int argc, char **argv)
 {
-	int r;
+	const char *cmd = NULL, *pattern = NULL;
+	int r, ai;
 	unsigned i, nr_tests;
 	struct test_suite *ts;
 	struct test_details *t, **t_array;
 	struct dm_list suites;
+
+	/*
+	 * Enable extended tests when the suite opts in with LVM_TEST_EXTENDED
+	 * or a --extended option.  Parse this before the suite registration
+	 * callbacks run so it can gate timing-sensitive test registration.
+	 */
+	{
+		const char *extended = getenv("LVM_TEST_EXTENDED");
+
+		if (extended && strcmp(extended, "0"))
+			extended_tests = true;
+	}
+
+	for (ai = 1; ai < argc; ai++) {
+		if (!strcmp(argv[ai], "--extended"))
+			extended_tests = true;
+		else if (!cmd)
+			cmd = argv[ai];
+		else if (!pattern)
+			pattern = argv[ai];
+		else {
+			_usage();
+			exit(1);
+		}
+	}
 
 	dm_list_init(&suites);
 	register_all_tests(&suites);
@@ -290,28 +320,25 @@ int main(int argc, char **argv)
 			t_array[i++] = t;
 
 	// filter
-	if (argc == 3)
-		nr_tests = _filter(argv[2], t_array, nr_tests);
+	if (pattern)
+		nr_tests = _filter(pattern, t_array, nr_tests);
 
 	// sort
 	qsort(t_array, nr_tests, sizeof(*t_array), _cmp_paths);
 
 	// run or list them
-	if (argc == 1)
+	if (!cmd)
 		r = !_run_tests(t_array, nr_tests);
-	else {
-		const char *cmd = argv[1];
-		if (!strcmp(cmd, "run"))
-			r = !_run_tests(t_array, nr_tests);
+	else if (!strcmp(cmd, "run"))
+		r = !_run_tests(t_array, nr_tests);
 
-		else if (!strcmp(cmd, "list")) {
-			_list_tests(t_array, nr_tests);
-			r = 0;
+	else if (!strcmp(cmd, "list")) {
+		_list_tests(t_array, nr_tests);
+		r = 0;
 
-		} else {
-			_usage();
-			r = 1;
-		}
+	} else {
+		_usage();
+		r = 1;
 	}
 
 	free(t_array);
