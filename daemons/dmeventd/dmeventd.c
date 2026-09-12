@@ -103,6 +103,16 @@ static const time_t DMEVENTD_IDLE_EXIT_TIMEOUT = 60 * 60;
 /* Sanity limit for client message size */
 #define DM_EVENT_MAX_MSG_SIZE (16 * 1024 * 1024)
 
+/* Maximum time (seconds) to wait for the rest of a partially received
+ * client message before discarding it */
+#define DM_EVENT_MSG_READ_TIMEOUT 5
+
+/* Maximum time (seconds) to wait for a client to accept a reply */
+#define DM_EVENT_MSG_WRITE_TIMEOUT 30
+
+/* Replies are written in chunks small enough to never block in write() */
+#define DM_EVENT_MSG_WRITE_CHUNK 4096
+
 /* A parsed timeout is never zero: absent or zero timeout fields are
  * replaced by DM_EVENT_DEFAULT_TIMEOUT, so that default must stay
  * nonzero or a registered timeout could be left unarmed */
@@ -2094,6 +2104,16 @@ static int _open_fifo(const char *path)
 		goto fail;
 	}
 
+	/*
+	 * Non-blocking I/O: _client_read() and _client_write() use poll()
+	 * with deadlines and must not be stuck in read()/write() by a
+	 * client that goes away or never reads its reply.
+	 */
+	if (fcntl(fd, F_SETFL, O_NONBLOCK)) {
+		log_sys_error("fcntl(O_NONBLOCK)", path);
+		goto fail;
+	}
+
 	return fd;
 
 fail:
@@ -2124,11 +2144,28 @@ static int _open_fifos(struct dm_event_fifos *fifos)
  * Read message from client making sure that data is available
  * and a complete message is read.  Must not block indefinitely.
  */
+static void _drain_client_fifo(struct dm_event_fifos *fifos)
+{
+	char buf[256];
+	struct pollfd pfd = { .fd = fifos->client, .events = POLLIN };
+	ssize_t n;
+
+	/*
+	 * A message that was not read in full is not followed by a message
+	 * boundary, so the only way to get back in sync is to drop
+	 * everything that is buffered.
+	 */
+	while ((poll(&pfd, 1, 0) > 0) && (pfd.revents & POLLIN) &&
+	       ((n = read(fifos->client, buf, sizeof(buf))) > 0))
+		;
+}
+
 static int _client_read(struct dm_event_fifos *fifos,
 			struct dm_event_daemon_message *msg)
 {
 	unsigned bytes = 0;
 	int ret;
+	time_t deadline = 0;
 	struct pollfd pfd = { .fd = fifos->client, .events = POLLIN };
 	size_t size = 2 * sizeof(uint32_t);	/* status + size */
 	uint32_t *header = alloca(size);
@@ -2141,19 +2178,42 @@ static int _client_read(struct dm_event_fifos *fifos,
 		ret = poll(&pfd, 1,
 			   (_exit_now > DM_SIGNALED_EXIT) ? 10 : 1000);
 
-		if (!ret && bytes)
-			continue; /* trying to finish read */
+		if (!ret) {
+			if (!bytes)
+				goto bad;	/* nothing to read */
 
-		if (ret <= 0)	/* nothing to read */
+			if (!deadline)
+				deadline = _get_curr_time() +
+					   (_exit_now ? 1 : DM_EVENT_MSG_READ_TIMEOUT);
+			else if (_get_curr_time() >= deadline) {
+				/* Client died or stalled mid message */
+				log_warn("WARNING: Discarding truncated message on %s.",
+					 fifos->client_path);
+				goto desync;
+			}
+			continue;	/* trying to finish read */
+		}
+
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;	/* interrupted, retry */
 			goto bad;
+		}
 
 		if (pfd.revents & (POLLHUP | POLLERR))
 			goto bad;
 
 		ret = read(fifos->client, buf + bytes, size - bytes);
-		if (ret <= 0)
+		if (ret < 0) {
+			if ((errno == EINTR) || (errno == EAGAIN))
+				continue;
 			goto bad;
+		}
+		if (!ret)
+			goto bad;	/* EOF */
+
 		bytes += ret;
+		deadline = 0;		/* Progress made */
 		if (!msg->data && (bytes == 2 * sizeof(uint32_t))) {
 			msg->cmd = ntohl(header[0]);
 			bytes = 0;
@@ -2162,7 +2222,7 @@ static int _client_read(struct dm_event_fifos *fifos,
 				break;
 
 			if (msg->size > (DM_EVENT_MAX_MSG_SIZE))
-				goto bad;
+				goto desync;
 
 			if (!(buf = msg->data = malloc(msg->size + 1)))
 				goto bad;
@@ -2180,6 +2240,12 @@ bad:
 	msg->data = NULL;
 
 	return 0;
+
+desync:
+	/* Left-overs would be parsed as part of the next request */
+	_drain_client_fifo(fifos);
+
+	goto bad;
 }
 
 /*
@@ -2191,6 +2257,8 @@ static int _client_write(struct dm_event_fifos *fifos,
 	uint32_t temp[2];
 	unsigned bytes = 0;
 	int ret;
+	time_t deadline = 0;
+	size_t chunk;
 	struct pollfd pfd = { .fd = fifos->server, .events = POLLOUT };
 
 	size_t size = 2 * sizeof(uint32_t) + ((msg->data) ? msg->size : 0);
@@ -2214,20 +2282,45 @@ static int _client_write(struct dm_event_fifos *fifos,
 
 	while (bytes < size) {
 		/* Watch client write FIFO to be ready for output. */
-		ret = poll(&pfd, 1, -1);
+		ret = poll(&pfd, 1, 1000);
 
-		if ((ret < 0) && (errno != EINTR)) {
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
 			log_sys_debug("poll", fifos->server_path);
 			break;
 		}
 
-		if (ret < 1)
+		if (!ret) {
+			if (!deadline)
+				deadline = _get_curr_time() +
+					   (_exit_now ? 1 : DM_EVENT_MSG_WRITE_TIMEOUT);
+			else if (_get_curr_time() >= deadline) {
+				/* Client is not reading its reply */
+				log_error("Client does not read reply on %s: giving up.",
+					  fifos->server_path);
+				break;
+			}
 			continue;
+		}
 
-		if ((ret = write(fifos->server, buf + bytes, size - bytes)) > 0)
+		/* Bounded chunk: a blocking write() of more could block forever */
+		chunk = size - bytes;
+		if (chunk > DM_EVENT_MSG_WRITE_CHUNK)
+			chunk = DM_EVENT_MSG_WRITE_CHUNK;
+
+		if ((ret = write(fifos->server, buf + bytes, chunk)) > 0)
 			bytes += ret;
-		else if (errno == EIO)
+		else if (ret < 0) {
+			if ((errno == EINTR) || (errno == EAGAIN) ||
+			    (errno == EWOULDBLOCK))
+				continue;
+			if (errno == EIO)
+				break;	/* Client went away */
+			log_sys_debug("write", fifos->server_path);
 			break;
+		} else
+			break;		/* write() returned 0 */
 	}
 
 	if (header != temp)
