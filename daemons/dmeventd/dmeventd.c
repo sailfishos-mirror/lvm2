@@ -102,6 +102,14 @@ static const time_t DMEVENTD_IDLE_EXIT_TIMEOUT = 60 * 60;
 
 /* Sanity limit for client message size */
 #define DM_EVENT_MAX_MSG_SIZE (16 * 1024 * 1024)
+
+/* A parsed timeout is never zero: absent or zero timeout fields are
+ * replaced by DM_EVENT_DEFAULT_TIMEOUT, so that default must stay
+ * nonzero or a registered timeout could be left unarmed */
+#if DM_EVENT_DEFAULT_TIMEOUT < 1
+#error DM_EVENT_DEFAULT_TIMEOUT must be nonzero
+#endif
+
 static int _grace_period = DMEVENTD_DEFAULT_GRACE_PERIOD;
 
 static int _systemd_activation = 0;
@@ -1064,7 +1072,16 @@ static void *_timeout_thread(void *unused __attribute__((unused)))
 		dm_list_iterate_items_gen(thread, &_timeout_registry, timeout_list) {
 			/* coverity[lock_order] we always lock timeout mutex first */
 			_lock_thread(thread);
-			if (thread->next_time <= curr_time) {
+			/*
+			 * next_time == 0 means no timeout is scheduled.  That
+			 * should not happen for a registered timeout (parsed
+			 * timeouts are nonzero and armed before being listed),
+			 * but never treat an unexpected zero as "due now":
+			 * that would spin this loop at 100% CPU and storm the
+			 * thread with SIGALRM.
+			 */
+			if (thread->next_time &&
+			    thread->next_time <= curr_time) {
 				thread->next_time = curr_time + thread->timeout;
 				if (thread->processing) {
 					/* Cannot signal processing monitoring thread */
@@ -1079,7 +1096,8 @@ static void *_timeout_thread(void *unused __attribute__((unused)))
 				}
 			}
 
-			if (thread->next_time < timeout.tv_sec)
+			if (thread->next_time &&
+			    thread->next_time < timeout.tv_sec)
 				timeout.tv_sec = thread->next_time;
 			_unlock_thread(thread);
 		}
@@ -1968,12 +1986,12 @@ static int _set_timeout(const struct message_data *message_data)
 
 	/* _lookup_thread_status returns with both _global_mutex and thread->mutex held */
 
-	/* Update timeout value and event mask */
-	_set_timeout_to_thread(thread, timeout);
+	/* Update event mask first, then (re)arm or clear the timeout */
 	if (timeout)
 		_add_events_to_thread(thread, DM_EVENT_TIMEOUT);
 	else if (_remove_events_from_thread(thread, DM_EVENT_TIMEOUT))
 		_update_events(thread);
+	_set_timeout_to_thread(thread, timeout);
 
 	/* Unlock in reverse order: thread mutex, then global mutex */
 	_unlock_thread(thread);
