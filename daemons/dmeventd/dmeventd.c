@@ -629,12 +629,17 @@ static int _fetch_string(char **ptr, char **src, const int delimiter)
 		}
 		(*src)++; /* Skip delimiter, next field */
 	} else if ((len = strlen(*src))) {
-		/* No delimiter, item ends with '\0' */
+		/* No delimiter, item ends with '\0'.
+		 * Leave the cursor on the terminating NUL: advancing past it
+		 * would make the next field read out of bounds whenever the
+		 * message has fewer fields than the caller asks for.  All
+		 * following fields are then parsed as empty.
+		 */
 		if (!(*ptr = strdup(*src))) {
 			log_error("Failed to fetch last item %s.", *src);
 			ret = 0; /* Fail */
 		}
-		*src += len + 1;
+		*src += len;
 	}
 out:
 	return ret;
