@@ -2038,7 +2038,7 @@ version_at_least() {
 	[[ "$minor" -eq "$2" ]] || return 1
 
 	[[ -n "${3:-}" ]] || return 0
-	[[ "$revision" -ge "$3" ]] 2>/dev/null || return 1
+	[[ "$revision" -ge "$3" ]] 2>/dev/null
 }
 #
 # Check whether kernel [dm module] target exist
