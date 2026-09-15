@@ -16,7 +16,7 @@ ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="lvm_end"
 # ignore lvm data from the guest and not attempt to scan or
 # activate guest PVs/LVs.  (To enable functions in this file
 # for PVs layered on LVs, set LVM_PVSCAN_ON_LVS="1" from a
-# custom udev rule.)
+# custom udev rule; see lvmautoactivation(7).)
 ENV{ID_FS_TYPE}=="LVM2_member", ENV{DM_UUID}=="LVM-?*", ENV{LVM_PVSCAN_ON_LVS}!="1", GOTO="lvm_end"
 
 # Only process devices already marked as a PV - this requires blkid to be called before.
@@ -93,4 +93,3 @@ ENV{LVM_VG_NAME_COMPLETE}=="?*", RUN+="(SYSTEMDRUN) --no-block --property Defaul
 GOTO="lvm_end"
 
 LABEL="lvm_end"
-
