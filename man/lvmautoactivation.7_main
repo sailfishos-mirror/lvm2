@@ -171,6 +171,90 @@ using the udev environment key format, i.e. NAME='value'.
 Send standard command output to the journal (when stdout
 is reserved for udev output.)
 .
+.SS PVs on LVs
+An active LV can be used as a PV for another VG.  This is sometimes called
+a layered or nested VG.  For example, an LV in an outer VG can contain a PV
+and an inner VG.  The outer LV must be active before commands can find or use
+the inner PV.
+.P
+By default, LVM does not scan LVs for PVs.  This avoids finding LVM metadata
+inside guest or VM disk images stored on an LV.  Do not enable scanning for
+all LVs unless every such LV is intended to be used as an LVM PV by the host.
+.P
+To allow commands to find intentionally layered PVs, set
+.B devices/scan_lvs
+to 1 in
+.BR lvm.conf (5).
+When this setting is enabled, restrict the LVs that LVM scans to the intended
+storage LVs.  Use the LVM devices file described in
+.BR lvmdevices (8),
+or, when the devices file is disabled, use the
+.B lvm.conf
+filter.  The devices file must include the outer LV device as well as any
+other devices needed by the command.
+.P
+For example, after configuring scan_lvs and the applicable devices-file or
+filter restriction, an outer LV can be prepared and used as follows:
+.P
+.EX
+# lvchange -ay outer_vg/storage_lv
+# pvcreate /dev/outer_vg/storage_lv
+# vgcreate inner_vg /dev/outer_vg/storage_lv
+# vgchange -ay inner_vg
+# pvs /dev/outer_vg/storage_lv
+# vgs inner_vg
+.EE
+.P
+The setting enables explicit LVM commands to scan active LVs, but does not
+enable event-based autoactivation of an inner VG.  The installed
+.B 69-dm-lvm.rules
+deliberately ignores a PV found on an LV, again to avoid host activation of
+guest VGs.  To opt in to event-based autoactivation, add a custom udev rule
+that sets
+.B LVM_PVSCAN_ON_LVS=1
+only for the selected storage LVs.  The rule must sort before
+.B 69-dm-lvm.rules
+and must match the local naming or identification convention for those LVs.
+.P
+For example, a file named
+.I /etc/udev/rules.d/68-lvm-pv-on-lv.rules
+can use LVM's udev properties to select an outer VG and LV:
+.P
+.EX
+ACTION=="add|change", ENV{DM_UUID}=="LVM-?*", \\
+ENV{DM_VG_NAME}=="outer_vg", ENV{DM_LV_NAME}=="storage_lv", \\
+ENV{LVM_PVSCAN_ON_LVS}="1"
+.EE
+.P
+Replace the VG and LV matches with a sufficiently narrow local rule.  In
+particular, do not use a rule that sets this variable for every LV: it can
+cause the host to scan and activate VGs belonging to guest images.  The
+properties used in the example are populated by the device-mapper udev rules
+that run before this rule.
+.P
+After adding or changing the custom rule, reload udev rules and cause an
+event for the active outer LV, for example:
+.P
+.EX
+# udevadm control --reload
+# udevadm trigger --action=change /dev/outer_vg/storage_lv
+# udevadm settle
+.EE
+.P
+When udev recognizes the contained PV, its usual pvscan flow records the
+inner PV as online.  If all PVs in the inner VG are present and eligible for
+autoactivation, the inner VG is activated.  Check the result with
+.B vgs
+or
+.B lvs
+and inspect the transient
+.B lvm-activate-inner_vg
+unit journal if activation does not occur.
+.P
+At boot, the outer VG and storage LV must first be eligible for and complete
+enough to be autoactivated.  Activation of that LV then produces the event
+that lets the udev rule discover and activate the inner VG.
+.
 .SS run files
 .
 Autoactivation commands use a number of temp files in

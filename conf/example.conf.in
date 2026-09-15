@@ -265,7 +265,8 @@ devices {
 	# avoid using PVs that belong to guest images stored on LVs.
 	# When enabled, the LVs scanned should be restricted using the
 	# devices file or the filter. This option does not enable autoactivation
-	# of layered VGs, which requires editing LVM udev rules (see LVM_PVSCAN_ON_LVS).
+	# of layered VGs, which requires editing LVM udev rules (see LVM_PVSCAN_ON_LVS
+	# and lvmautoactivation(7)).
 	# This configuration option has an automatic default value.
 	# scan_lvs = 0
 

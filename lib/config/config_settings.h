@@ -414,7 +414,8 @@ cfg(devices_scan_lvs_CFG, "scan_lvs", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED
 	"avoid using PVs that belong to guest images stored on LVs.\n"
 	"When enabled, the LVs scanned should be restricted using the\n"
 	"devices file or the filter. This option does not enable autoactivation\n"
-	"of layered VGs, which requires editing LVM udev rules (see LVM_PVSCAN_ON_LVS).\n")
+	"of layered VGs, which requires editing LVM udev rules (see LVM_PVSCAN_ON_LVS\n"
+	"and lvmautoactivation(7)).\n")
 
 cfg(devices_multipath_component_detection_CFG, "multipath_component_detection", devices_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_MULTIPATH_COMPONENT_DETECTION, vsn(2, 2, 89), NULL, 0, NULL,
 	"Ignore devices that are components of DM multipath devices.\n")
