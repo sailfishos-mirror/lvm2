@@ -537,6 +537,28 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 				if (!*virtual_extents)
 					vdo_logical_size = pinfo.data_blocks * DM_VDO_BLOCK_SIZE;
 			} else {
+				/*
+				 * The data LV was zeroed and its known signatures
+				 * wiped before we got here.  On thin-provisioned
+				 * storage that zeroing may have only now provisioned
+				 * the first chunk, making a stale signature from a
+				 * previously freed block visible.  wipe_lv() reads
+				 * signatures before it zeroes, so it could not have
+				 * seen that one.  Wipe again, just before userspace
+				 * vdoformat runs its own blkid check, so that what
+				 * vdoformat would find is already gone.
+				 */
+				if (!wipe_lv(data_lv, (struct wipe_params)
+					     {
+						     .do_wipe_signatures = 1,
+						     .yes = 1,
+						     .force = DONT_PROMPT,
+					     })) {
+					log_error("Failed to wipe signatures on VDO data volume %s.",
+						  display_lvname(data_lv));
+					return 0;
+				}
+
 				/* Traditional userspace vdoformat */
 				if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
 					log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
