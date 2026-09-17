@@ -77,6 +77,11 @@ grep "Invalid stripe size" err
 # Verify that the LV was not created via lvdisplay empty output
 test -z "$(lvdisplay $vg)"
 
+# 4K stripe size is accepted regardless of the page size and can be activated
+lvcreate -L 64m -n $lv -i2 --stripesize 4k $vg
+check lv_field $vg/$lv stripesize "4.00k"
+lvremove -ff $vg
+
 # Setting max_lv works. (bz490298)
 check vg_field $vg max_lv "0"
 vgchange -l 3 $vg
