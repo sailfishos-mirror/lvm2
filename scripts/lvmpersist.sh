@@ -16,19 +16,31 @@ LVM=${LVM_BINARY:-lvm}
 IFS_NL='
 '
 
+# errorexit: invalid invocation (stderr only).  die: runtime failure
+# (stderr and syslog).  logerror: non-fatal problem or warning.
 errorexit() {
-	echo "  ${SCRIPTNAME}: $1"
-	if [[ "$DO_START" -eq 1 || "$DO_STOP" -eq 1 || "$DO_REMOVE" -eq 1 ]]; then
-		logger "${SCRIPTNAME}: $1"
-	fi
+	printf '  %s: %s\n' "${SCRIPTNAME}" "$1" >&2
 	exit 1
 }
 
+die() {
+	logerror "$1"
+	exit 1
+}
+
+# logger is best-effort: it may be missing (minimal or container
+# environments), and a logger failure must not affect PR operations.
+
+logerror() {
+	printf '  %s: %s\n' "${SCRIPTNAME}" "$1" >&2
+	logger "${SCRIPTNAME}: $1" >/dev/null 2>&1 || true
+}
+
 logmsg() {
-	echo "  ${SCRIPTNAME}: $1"
-	if [[ "$DO_START" -eq 1 || "$DO_STOP" -eq 1 || "$DO_REMOVE" -eq 1 ]]; then
-		logger "${SCRIPTNAME}: $1"
-	fi
+	printf '  %s: %s\n' "${SCRIPTNAME}" "$1" >&2
+	[[ "$DO_START" -eq 1 || "$DO_STOP" -eq 1 || "$DO_REMOVE" -eq 1 ||
+	   "$DO_CLEAR" -eq 1 ]] && \
+		logger "${SCRIPTNAME}: $1" >/dev/null 2>&1 || true
 }
 
 # nvme commands
@@ -552,7 +564,7 @@ check_devices() {
 	test "$err" -eq 1 && exit 1
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
-		which mpathpersist > /dev/null || errorexit "mpathpersist command not found."
+		which mpathpersist > /dev/null || die "mpathpersist command not found."
 		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null; then
 			echo "To use persistent reservations with multipath, run:"
 			echo "  mpathconf --option reservation_key:file"
@@ -561,12 +573,12 @@ check_devices() {
 	fi
 
 	if [[ $FOUND_SCSI -eq 1 ]]; then
-		which sg_persist > /dev/null || errorexit "sg_persist command not found."
-		which sg_turs > /dev/null || errorexit "sg_turs command not found."
+		which sg_persist > /dev/null || die "sg_persist command not found."
+		which sg_turs > /dev/null || die "sg_turs command not found."
 	fi
 
 	if [[ $FOUND_NVME -eq 1 ]]; then
-		which nvme > /dev/null || errorexit "nvme command not found."
+		which nvme > /dev/null || die "nvme command not found."
 	fi
 
 	# Sometimes a device will return a Unit Attention error
@@ -850,7 +862,7 @@ do_clear() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		if ! device_supports_type_str "$dev" "$type_str"; then
-			echo "Device $dev: does not support PR"
+			logerror "Device $dev: does not support PR"
 			continue
 		fi
 		if ! key_is_on_device "$dev" "$OURKEY" ; then
@@ -960,7 +972,7 @@ do_devtest() {
 		if device_supports_type_str "$dev" "$type_str"; then
 			echo "Device $dev: supports type $type_str"
 		else
-			echo "Device $dev: does not support type $type_str"
+			logerror "Device $dev: does not support type $type_str"
 			err=1
 		fi
 	done
@@ -977,7 +989,7 @@ do_checkkey() {
 		if key_is_on_device "$dev" "$OURKEY" ; then
 			echo "Device $dev: has key $OURKEY"
 		else
-			echo "Device $dev: does not have key $OURKEY"
+			logerror "Device $dev: does not have key $OURKEY"
 			err=1
 		fi
 	done
@@ -1370,7 +1382,7 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		NVME_PRTYPE=3
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
-		echo "WERO is not yet supported."
+		errorexit "WERO is not yet supported."
 		exit 1
 		;;
 	EARO)
@@ -1380,7 +1392,7 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		NVME_PRTYPE=4
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
-		echo "EARO is not yet supported."
+		errorexit "EARO is not yet supported."
 		exit 1
 		;;
 	WEAR)
@@ -1396,7 +1408,7 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		NVME_PRTYPE=6
 		;;
 	*)
-		echo "Unknown PRTYPE string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
+		errorexit "Unknown PRTYPE string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
 		exit 1
 		;;
 	esac
@@ -1436,7 +1448,7 @@ fi
 FIRST_DEVICE="${DEVICES[0]}"
 
 if [[ -z "$FIRST_DEVICE" ]]; then
-	echo "Missing required --vg or --device."
+	errorexit "Missing required --vg or --device."
 	exit 1
 fi
 
