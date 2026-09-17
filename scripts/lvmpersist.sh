@@ -286,13 +286,14 @@ get_dev_reservation_holder_nvme() {
 	# get rkey from the regctlext section with rcsts=1
 	# jq without -e: no holder is an empty list, handled below (not a jq failure).
 
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null \
+	str=$(
+		nvme resv-report --eds -o json "$dev" 2>/dev/null \
 		| jq -r '.regctlext | map(select(.rcsts == 1)) | .[].rkey' \
-		| xargs -r printf '0x%x')
-	if [ $? -ne 0 ]; then
+		| xargs -r printf '0x%x'
+	) || {
 		logmsg "nvme resv-report error on $dev"
 		return 1
-	fi
+	}
 
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report holder output not found $dev"
@@ -315,14 +316,14 @@ get_dev_reservation_holder_scsi() {
 	# differs between sg_persist and mpathpersist) and extract just the
 	# hex key, so the HOLDER value is not polluted by ", scope: ...".
 	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
-	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null \
-		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+')
-	if [ $? -ne 0 ]; then
-		if ! no_reservation_held "$dev"; then
+	str=$(
+		"$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
+		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+'
+	) || {
+		no_reservation_held "$dev" ||
 			logmsg "$cmd read-reservation error on $dev"
-		fi
 		return 1
-	fi
+	}
 
 	# Take the first line here instead of piping through head -1: head
 	# exits early and can SIGPIPE the upstream command, which pipefail
@@ -331,9 +332,8 @@ get_dev_reservation_holder_scsi() {
 	str=${str%%$'\n'*}
 
 	if [[ -z $str ]]; then
-		if ! no_reservation_held "$dev"; then
+		no_reservation_held "$dev" ||
 			logmsg "$cmd read-reservation holder output not found $dev"
-		fi
 		return 1
 	fi
 
@@ -365,20 +365,19 @@ get_dev_reservation_nvme() {
 	DEV_PRTYPE=0
 	DEV_PRDESC=error
 
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype')
-	if [ $? -ne 0 ]; then
+	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype') || {
 		logmsg "nvme resv-report error on $dev"
 		return 1
-	fi
+	}
 
 	# jq prints null and exits 0 when rtype is missing; an
 	# out-of-range value is equally unusable.  Both are a
 	# per-device query failure, not a reason to abort the
 	# whole command.
-	if ! [[ "$str" =~ ^[0-9]$ ]]; then
+	[[ "$str" =~ ^[0-9]$ ]] || {
 		logmsg "nvme resv-report unexpected reservation type '$str' for $dev"
 		return 1
-	fi
+	}
 
 	case "$str" in
 	0)
@@ -422,8 +421,7 @@ get_dev_reservation_scsi() {
 	dev=$1
 	set_cmd "$dev"
 
-	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type")
-	if [ $? -ne 0 ]; then
+	str=$( "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type" ) || {
 		if no_reservation_held "$dev"; then
 			DEV_PRDESC=none
 			DEV_PRTYPE=0
@@ -433,7 +431,7 @@ get_dev_reservation_scsi() {
 			DEV_PRTYPE=0
 		fi
 		return 1
-	fi
+	}
 
 	if [[ -z $str ]]; then
 		if no_reservation_held "$dev"; then
@@ -451,41 +449,43 @@ get_dev_reservation_scsi() {
 	# sg_persist:   "scope: LU_SCOPE,  type: "
 	# mpathpersist: "scope = LU_SCOPE, type = "
 
-	if [[ "$str" == *"Exclusive Access, all registrants"* ]]; then
+	case "$str" in
+	*"Exclusive Access, all registrants"*)
 		# scsi type 8
 		DEV_PRDESC=EAAR
 		DEV_PRTYPE=8
-		true
-	elif [[ "$str" == *"Write Exclusive, all registrants"* ]]; then
+		;;
+	*"Write Exclusive, all registrants"*)
 		# scsi type 7
 		DEV_PRDESC=WEAR
 		DEV_PRTYPE=7
-		true
-	elif [[ "$str" == *"Exclusive Access, registrants only"* ]]; then
+		;;
+	*"Exclusive Access, registrants only"*)
 		# scsi type 6
 		DEV_PRDESC=EARO
 		DEV_PRTYPE=6
-		true
-	elif [[ "$str" == *"Write Exclusive, registrants only"* ]]; then
+		;;
+	*"Write Exclusive, registrants only"*)
 		# scsi type 5
 		DEV_PRDESC=WERO
 		DEV_PRTYPE=5
-		true
-	elif [[ "$str" == *"Exclusive Access"* ]]; then
+		;;
+	*"Exclusive Access"*)
 		# scsi type 3
 		DEV_PRDESC=EA
 		DEV_PRTYPE=3
-		true
-	elif [[ "$str" == *"Write Exclusive"* ]]; then
+		;;
+	*"Write Exclusive"*)
 		# scsi type 1
 		DEV_PRDESC=WE
 		DEV_PRTYPE=1
-		true
-	else
+		;;
+	*)
 		DEV_PRDESC=unknown
 		DEV_PRTYPE=0
 		false
-	fi
+		;;
+	esac
 }
 
 # Set DEV_PRDESC and DEV_PRTYPE to whatever is
@@ -507,13 +507,7 @@ no_reservation_held_nvme() {
 
 	get_dev_reservation_nvme "$dev"
 
-	if [[ "$DEV_PRDESC" == "none" ]]; then
-		true
-		return
-	fi
-
-	false
-	return
+	[[ "$DEV_PRDESC" == "none" ]]
 }
 
 no_reservation_held_scsi() {
@@ -521,7 +515,8 @@ no_reservation_held_scsi() {
 
 	# sg_persist and mpathpersist word the message differently and with
 	# different capitalization, so match case-insensitively.
-	$cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -qi "no reservation held"
+	"$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
+		| grep -qi "no reservation held"
 }
 
 no_reservation_held() {
@@ -553,10 +548,10 @@ device_supports_type_str_nvme() {
 	# NVMe has no per-type report-capabilities output like SCSI.  When
 	# resv-report succeeds, the namespace supports persistent reservations
 	# and the standard reservation types (1-6) map to the WE..EAAR strings.
-	if ! nvme resv-report --eds "$dev" > /dev/null 2>&1; then
+	nvme resv-report --eds "$dev" > /dev/null 2>&1 || {
 		logmsg "nvme resv-report error on $dev"
 		return 2
-	fi
+	}
 
 	return 0
 }
@@ -586,18 +581,15 @@ device_supports_type_str_scsi() {
 		;;
 	*)
 		logmsg "unknown type string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
-		false
-		return
+		return 1
 		;;
 	esac
 
 	# Do not set_cmd here because for report-capabilities,
 	# sg_persist works on mpath devs, but mpathpersist doesn't work.
 
-	if sg_persist --in --report-capabilities "$dev" 2>/dev/null | grep -q "${SUPPORTED}"; then
-		true
-		return
-	fi
+	sg_persist --in --report-capabilities "$dev" 2>/dev/null \
+		| grep -q "${SUPPORTED}" && return 0
 
 	# PIPESTATUS[1] is grep's exit: 1 just means the type is not supported,
 	# which is the normal "no" answer, not a command error.
@@ -606,8 +598,7 @@ device_supports_type_str_scsi() {
 		return 2
 	fi
 
-	false
-	return
+	return 1
 }
 
 device_supports_type_str() {
