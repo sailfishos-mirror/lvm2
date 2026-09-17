@@ -920,13 +920,20 @@ do_stop() {
 
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
 
-		if key_is_on_device "$dev" "$OURKEY" ; then
+		key_is_on_device "$dev" "$OURKEY"
+		rc=$?
+		if [ "$rc" -eq 0 ]; then
 			logmsg "stop $GROUP failed to unregister our key $OURKEY from $dev."
+			err=1
+		elif [ "$rc" -eq 2 ]; then
+			logmsg "stop $GROUP failed to verify our key $OURKEY was unregistered from $dev."
 			err=1
 		fi
 	done
 
-	test "$err" -eq 1 && exit 1
+	if [ "$err" -ne 0 ]; then
+		errorexit "stop $GROUP failed."
+	fi
 
 	logmsg "stopped $GROUP with key $OURKEY."
 	exit 0
