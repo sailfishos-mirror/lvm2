@@ -6106,7 +6106,7 @@ static int _vdostats_walk(int major, int minor, struct vdo_walk *w)
 	int r = 0;
 
 	if (w->depth >= VDO_WALK_MAX_DEPTH) {
-		log_debug("Descended VDO_WALK_MAX_DEPTH (%u).", VDO_WALK_MAX_DEPTH);
+		log_debug("Reached VDO_WALK_MAX_DEPTH (%u).", VDO_WALK_MAX_DEPTH);
 		return 1;
 	}
 

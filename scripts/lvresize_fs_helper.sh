@@ -569,7 +569,7 @@ fi
 
 # Top-level operation: lvresize passes exactly one of --fsextend, --fsreduce, or
 # standalone --cryptresize.  It may also pass --cryptresize with extend/reduce
-# to resize the LUKS layer (DO_CRYPTRESIZE without making cryptresize() the main).
+# to resize the LUKS layer (DO_CRYPTRESIZE without making cryptresize() the main operation).
 if [[ "$DO_FSEXTEND" -eq 0 && "$DO_FSREDUCE" -eq 0 && "$DO_CRYPTRESIZE" -eq 0 ]]; then
 	errorexit "Missing --fsextend|--fsreduce|--cryptresize."
 fi

@@ -1630,11 +1630,14 @@ static struct dm_thread_state *_get_thread_state(void)
 	return ts;
 }
 
+/* Destroy the current thread state without allocating a new one. */
 void dm_thread_state_exit(void)
 {
-	struct dm_thread_state *ts = _get_thread_state();
+	struct dm_thread_state *ts;
 
-	if (ts)
+	pthread_once(&_thread_state_once, _init_thread_state_key);
+
+	if ((ts = pthread_getspecific(_thread_state_key)))
 		_destroy_thread_state(ts);
 
 	pthread_key_delete(_thread_state_key);
