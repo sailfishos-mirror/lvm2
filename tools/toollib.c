@@ -1070,6 +1070,8 @@ int get_pool_params(struct cmd_context *cmd,
 static int _validate_stripe_params(struct cmd_context *cmd, const struct segment_type *segtype,
 				   uint32_t *stripes, uint32_t *stripe_size)
 {
+	uint32_t stripe_size_min;
+
 	if (*stripes < 1 || *stripes > MAX_STRIPES) {
 		log_error("Number of stripes (%u) must be between %u and %u.",
 			  *stripes, 1U, MAX_STRIPES);
@@ -1088,6 +1090,8 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 			*stripe_size = 0;
 		}
 	} else {
+		stripe_size_min = segtype_stripe_size_min(segtype);
+
 		if (!*stripe_size) {
 			*stripe_size = find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 			log_print_unless_silent("Using default stripesize %s.",
@@ -1098,7 +1102,7 @@ static int _validate_stripe_params(struct cmd_context *cmd, const struct segment
 			log_error("Stripe size cannot be larger than %s.",
 				  display_size(cmd, (uint64_t) STRIPE_SIZE_LIMIT));
 			return 0;
-		} else if (*stripe_size < STRIPE_SIZE_MIN || !is_power_of_2(*stripe_size)) {
+		} else if (*stripe_size < stripe_size_min || !is_power_of_2(*stripe_size)) {
 			log_error("Invalid stripe size %s.",
 				  display_size(cmd, (uint64_t) *stripe_size));
 			return 0;

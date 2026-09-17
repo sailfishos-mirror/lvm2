@@ -1327,8 +1327,9 @@ int add_linear_area_to_dtree(struct dm_tree_node *node, uint64_t size, uint32_t 
 		/*
 		 * We'll use the extent size as the stripe size.
 		 * Extent size and page size are always powers of 2.
-		 * The striped target requires that the stripe size is
-		 * divisible by the page size.
+		 * The striped target supports sub-page stripe sizes now, but
+		 * keep the conservative linear fallback for extent sizes below
+		 * the page size.
 		 */
 		if (extent_size >= page_size) {
 			/* Use striped target */
@@ -1337,9 +1338,8 @@ int add_linear_area_to_dtree(struct dm_tree_node *node, uint64_t size, uint32_t 
 			return 1;
 		}
 
-		/* Some exotic cases are unsupported by striped. */
-		log_warn("WARNING: Using linear target for %s/%s: Striped requires extent size "
-			 "(" FMTu32 " sectors) >= page size (" FMTu32 ").",
+		log_warn("WARNING: Using linear target for %s/%s: extent size "
+			 "(" FMTu32 " sectors) is smaller than page size (" FMTu32 ").",
 			 vgname, lvname, extent_size, page_size);
 	}
 

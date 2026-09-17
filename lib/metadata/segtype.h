@@ -291,6 +291,8 @@ struct segment_type *get_segtype_from_string(struct cmd_context *cmd,
 struct segment_type *get_segtype_from_flag(struct cmd_context *cmd,
 					   uint64_t flag);
 
+uint32_t segtype_stripe_size_min(const struct segment_type *segtype);
+
 struct segtype_library;
 int lvm_register_segtype(struct segtype_library *seglib,
 			 struct segment_type *segtype);

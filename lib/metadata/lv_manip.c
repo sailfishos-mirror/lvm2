@@ -5740,7 +5740,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 
 	/* Perform any rounding to produce complete stripes. */
 	if (lp->stripes > 1) {
-		if (lp->stripe_size < STRIPE_SIZE_MIN) {
+		if (lp->stripe_size < segtype_stripe_size_min(lp->segtype)) {
 			log_error("Invalid stripe size %s.",
 				  display_size(cmd, (uint64_t) lp->stripe_size));
 			return 0;
@@ -9533,7 +9533,7 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 	}
 
 	if (lp->stripe_size > vg->extent_size) {
-		if (seg_is_raid(lp) && (vg->extent_size < STRIPE_SIZE_MIN)) {
+		if (seg_is_raid(lp) && (vg->extent_size < segtype_stripe_size_min(lp->segtype))) {
 			/*
 			 * FIXME: RAID will simply fail to load the table if
 			 *        this is the case, but we should probably

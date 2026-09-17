@@ -25,6 +25,8 @@
 #include "lib/activate/targets.h"
 #include "lib/misc/lvm-string.h"
 #include "lib/activate/activate.h"
+#include "lib/device/device.h"
+#include "lib/device/dev-type.h"
 #include "lib/metadata/pv_alloc.h"
 #include "lib/metadata/metadata.h"
 
@@ -164,6 +166,35 @@ static int _striped_target_status_compatible(const char *type)
 	return (strcmp(type, TARGET_NAME_LINEAR) == 0);
 }
 
+/*
+ * The striped target maps DAX accesses a whole page at a time onto a single
+ * stripe, so a stripe size smaller than the page size cannot be used on a
+ * DAX (pmem) device.  Check the stripe size against the page size for all
+ * areas backed by a pmem device.
+ */
+static int _striped_check_pmem(const struct lv_segment *seg)
+{
+	uint32_t page_size = (uint32_t) lvm_getpagesize() >> SECTOR_SHIFT;
+	unsigned s;
+
+	if (seg->stripe_size >= page_size)
+		return 1;
+
+	for (s = 0; s < seg->area_count; s++) {
+		if ((seg_type(seg, s) != AREA_PV) ||
+		    !dev_is_pmem(seg->lv->vg->cmd->dev_types, seg_pv(seg, s)->dev))
+			continue;
+
+		log_error("Stripe size %s is smaller than the page size %s on DAX device %s for %s.",
+			  display_size(seg->lv->vg->cmd, (uint64_t) seg->stripe_size),
+			  display_size(seg->lv->vg->cmd, (uint64_t) page_size),
+			  dev_name(seg_pv(seg, s)->dev), display_lvname(seg->lv));
+		return 0;
+	}
+
+	return 1;
+}
+
 static int _striped_add_target_line(struct dev_manager *dm,
 				struct dm_pool *mem __attribute__((unused)),
 				struct cmd_context *cmd,
@@ -183,9 +214,13 @@ static int _striped_add_target_line(struct dev_manager *dm,
 					      cmd->use_linear_target,
 					      seg->lv->vg->name, seg->lv->name))
 			return_0;
-	} else if (!dm_tree_node_add_striped_target(node, len,
-						  seg->stripe_size))
-		return_0;
+	} else {
+		if (!_striped_check_pmem(seg))
+			return_0;
+		if (!dm_tree_node_add_striped_target(node, len,
+						    seg->stripe_size))
+			return_0;
+	}
 
 	return add_areas_line(dm, seg, node, 0u, seg->area_count);
 }

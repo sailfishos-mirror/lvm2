@@ -33,7 +33,14 @@
 #define MAX_STRIPES 128U
 #define SECTOR_SHIFT 9L
 #define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
-#define STRIPE_SIZE_MIN ( (unsigned) lvm_getpagesize() >> SECTOR_SHIFT)	/* PAGESIZE in sectors */
+/*
+ * The dm-stripe target does not require the stripe size to be a multiple of
+ * the page size, so allow 4 KiB stripes to make striped LVs portable across
+ * architectures with different page sizes.  MD RAID levels 4/5/6/10 and DAX
+ * devices still require a stripe size of at least the page size, see
+ * segtype_stripe_size_min() and the DAX check in the striped target.
+ */
+#define STRIPE_SIZE_MIN ( 4096 >> SECTOR_SHIFT)	/* 4 KB in sectors */
 #define STRIPE_SIZE_MAX ( 512L * 1024L >> SECTOR_SHIFT)	/* 512 KB in sectors */
 #define STRIPE_SIZE_LIMIT ((UINT_MAX >> 2) + 1)
 #define MAX_EXTENT_SIZE ((uint32_t) -1)
