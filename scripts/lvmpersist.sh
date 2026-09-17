@@ -575,21 +575,29 @@ check_devices() {
 	test "$err" -eq 0 || errorexit "unsupported or invalid device(s)."
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
-		which mpathpersist > /dev/null || die "mpathpersist command not found."
-		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null; then
+		command -v mpathpersist > /dev/null || die "mpathpersist command not found."
+		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null 2>&1; then
 			echo "To use persistent reservations with multipath, run:"
 			echo "  mpathconf --option reservation_key:file"
 			echo "to configure multipath.conf, and then restart multipathd."
 		fi
 	fi
 
-	if [[ $FOUND_SCSI -eq 1 ]]; then
-		which sg_persist > /dev/null || die "sg_persist command not found."
-		which sg_turs > /dev/null || die "sg_turs command not found."
+	# sg_persist is used for report-capabilities on both scsi and
+	# multipath devices, and sg_turs is run on both to clear unit
+	# attention errors.
+	if [[ $FOUND_SCSI -eq 1 || $FOUND_MPATH -eq 1 ]]; then
+		command -v sg_persist > /dev/null || die "sg_persist command not found."
+		command -v sg_turs > /dev/null || die "sg_turs command not found."
 	fi
 
 	if [[ $FOUND_NVME -eq 1 ]]; then
-		which nvme > /dev/null || die "nvme command not found."
+		command -v nvme > /dev/null || die "nvme command not found."
+		# jq >= 1.7 is required: it represents 64-bit PR keys exactly.
+		# jq <= 1.6, and 1.7+ built with --disable-decnum, use IEEE-754
+		# doubles: keys above 2^53 lose precision and distinct keys can
+		# compare equal.
+		command -v jq > /dev/null || die "jq command not found."
 	fi
 
 	# Sometimes a device will return a Unit Attention error
