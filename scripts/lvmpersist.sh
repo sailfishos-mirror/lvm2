@@ -739,29 +739,45 @@ do_takeover() {
 		exit 1
 	fi
 
+	err=0
+
 	for dev in "${DEVICES[@]}"; do
-		if ! key_is_on_device "$dev" "$REMKEY" ; then
-			logmsg "start $GROUP specified key to remove $REMKEY not found on $dev."
-			exit 1
+		set_type "$dev"
+		device_supports_type_str "$dev" "$type_str"
+		rc=$?
+		if [ "$rc" -ne 0 ]; then
+			if [ "$rc" -eq 2 ]; then
+				logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			else
+				logmsg "start $GROUP $dev does not support reservation type $type_str."
+			fi
+			err=1
 		fi
 	done
 
-	err=0
+	if [ "$err" -ne 0 ]; then
+		errorexit "start $GROUP failed."
+	fi
+
+	for dev in "${DEVICES[@]}"; do
+		key_is_on_device "$dev" "$REMKEY"
+		rc=$?
+		if [ "$rc" -eq 1 ]; then
+			die "start $GROUP specified key to remove $REMKEY not found on $dev."
+		elif [ "$rc" -eq 2 ]; then
+			die "start $GROUP failed to check for key $REMKEY on $dev."
+		fi
+	done
 
 	# Register our key
 
 	for dev in "${DEVICES[@]}"; do
 		if ! do_register "$dev"; then
-			err=1
-			break
+			logmsg "start $GROUP failed to register our key."
+			undo_register
+			exit 1
 		fi
 	done
-
-	if [[ "$err" -eq 1 ]]; then
-		logmsg "start $GROUP failed to register our key."
-		undo_register
-		exit 1
-	fi
 
 	# The register above triggers udev to re-probe the device (blkid,
 	# scsi_id).  Those probing reads share the iSCSI connection with
