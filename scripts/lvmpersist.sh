@@ -1041,26 +1041,49 @@ do_remove() {
 	fi
 
 	for dev in "${DEVICES[@]}"; do
-		if ! key_is_on_device "$dev" "$OURKEY" ; then
+		key_is_on_device "$dev" "$OURKEY"
+		rc=$?
+		if [ "$rc" -eq 1 ]; then
 			logmsg "cannot remove $REMKEY from $dev without ourkey $OURKEY being registered"
+			err=1
+			continue
+		elif [ "$rc" -eq 2 ]; then
+			logmsg "cannot remove $REMKEY from $dev, failed to check ourkey $OURKEY."
 			err=1
 			continue
 		fi
 
 		set_cmd "$dev"
-		# get the current pr type to use as the type for the preempt-abort command
+		# Use the current reservation type when one is held; otherwise use
+		# the configured type (--access or --prtype) for preempt-abort.
 		get_dev_reservation "$dev"
+		if [[ "$DEV_PRDESC" == "error" ]]; then
+			logmsg "cannot remove $REMKEY from $dev, failed to read reservation type."
+			err=1
+			continue
+		fi
+
+		remove_type=$DEV_PRTYPE
+		if [[ "$DEV_PRDESC" == "none" ]]; then
+			set_type "$dev"
+			remove_type=$type
+		fi
 
 		if [[ "$cmd" == "nvme" ]]; then
-			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$DEV_PRTYPE" --racqa=2 "$dev" >/dev/null 2>&1
+			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$remove_type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$DEV_PRTYPE" "$dev" >/dev/null 2>&1
+			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
 		fi
 
 		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
 
-		if key_is_on_device "$dev" "$REMKEY" ; then
+		key_is_on_device "$dev" "$REMKEY"
+		rc=$?
+		if [ "$rc" -eq 0 ]; then
 			logmsg "failed to remove key $REMKEY from $dev in $GROUP."
+			err=1
+		elif [ "$rc" -eq 2 ]; then
+			logmsg "failed to verify key $REMKEY was removed from $dev in $GROUP."
 			err=1
 		fi
 	done
@@ -1077,7 +1100,7 @@ do_remove() {
 		err=1
 	fi
 
-	test "$err" -eq 1 && exit 1
+	test "$err" -eq 0 || errorexit "remove $GROUP failed."
 
 	logmsg "removed key $REMKEY for $GROUP."
 	exit 0
