@@ -1459,8 +1459,14 @@ fi
 get_devices_from_vg() {
 	local IFS=:
 	local ALL_DEVS
+	# Split on ':' without pathname expansion, so a PV name containing
+	# a glob character is not expanded against the filesystem.
+	set -f
 	# shellcheck disable=SC2207 # intentional split of device list
-	ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") )
+	if ! ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ); then
+		die "failed to get devices from VG $VGNAME."
+	fi
+	set +f
 
 	DEVICES=()
 	MISSING_DEV_COUNT=0
