@@ -469,14 +469,28 @@ no_reservation_held() {
 
 device_supports_type_str_nvme() {
 	dev=$1
+	str=${2-}
 
-	if nvme resv-report --eds "$dev" > /dev/null 2>&1; then
-		true
-		return
+	case "$str" in
+	"")
+		;&
+	WE|EA|WERO|EARO|WEAR|EAAR)
+		;;
+	*)
+		logmsg "unknown type string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
+		return 1
+		;;
+	esac
+
+	# NVMe has no per-type report-capabilities output like SCSI.  When
+	# resv-report succeeds, the namespace supports persistent reservations
+	# and the standard reservation types (1-6) map to the WE..EAAR strings.
+	if ! nvme resv-report --eds "$dev" > /dev/null 2>&1; then
+		logmsg "nvme resv-report error on $dev"
+		return 2
 	fi
 
-	false
-	return
+	return 0
 }
 
 device_supports_type_str_scsi() {
@@ -517,8 +531,11 @@ device_supports_type_str_scsi() {
 		return
 	fi
 
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+	# PIPESTATUS[1] is grep's exit: 1 just means the type is not supported,
+	# which is the normal "no" answer, not a command error.
+	if [[ "${PIPESTATUS[0]}" -ne "0" ]]; then
 		logmsg "sg_persist report-capabilities error on $dev"
+		return 2
 	fi
 
 	false
