@@ -620,6 +620,20 @@ check_devices() {
 	done
 }
 
+# udevadm is best-effort: if it is missing or settle fails, report the
+# problem and continue.  The wait only reduces the chance of an LIO
+# deadlock during start/takeover (see do_takeover/do_start); it is not
+# required for correctness.
+# TODO: consider failing hard when udevadm is unavailable or settle
+# fails, if this turns out to be a real point of failure in the field.
+settle_udev() {
+	if ! command -v udevadm > /dev/null; then
+		logmsg "udevadm not found: cannot wait for udev before reserving $GROUP."
+		return 0
+	fi
+	udevadm settle || logmsg "failed to settle udev events before reserving $GROUP."
+}
+
 undo_register() {
 	for dev in "${DEVICES[@]}"; do
 		set_cmd "$dev"
@@ -721,7 +735,7 @@ do_takeover() {
 	# preempt-abort arrives at the LIO target, the target deadlocks in
 	# core_tmr_drain_state_list (waiting for in-flight reads) vs
 	# iscsit_close_connection (waiting for RX thread exit).
-	udevadm settle
+	settle_udev
 
 	# Reserve the device
 
@@ -784,7 +798,7 @@ do_start() {
 	# The register above triggers udev to re-probe the device.
 	# Wait for probing to finish before issuing the reservation
 	# to avoid the LIO deadlock (same issue fixed in do_takeover).
-	udevadm settle
+	settle_udev
 
 	# Reserve devices
 
