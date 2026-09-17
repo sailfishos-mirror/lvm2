@@ -1,8 +1,18 @@
 Version 2.03.43 - 
 ==================
+  Fix out-of-bounds access on an unterminated mda_header raw_locns list.
+  Fix out-of-bounds write when PV label area lists exceed the label buffer.
+  Fix out-of-bounds read when formatting '#' UUIDs into a larger buffer.
+  Fix metadata buffer size overflow check to account for the NUL terminator.
+  Validate GPT partition table bounds before scanning partition entries.
+  Validate snapshot chunk size when importing metadata.
+  Reject PV labels with invalid characters in the on-disk UUID.
+  Fix lvmlockd to fail on an incompatible sanlock lease version, not reformat it.
+  Allow lvchange --refresh and properties on hidden pool sub LVs.
   Prevent redundant device access attempts after I/O errors via DEV_SCAN_NOT_READ.
   Set recursion limit to 1024 LVs when processing device tree.
   Remove cmirrord and clustered mirror log daemon support.
+  Remove legacy vgimportclone.sh script (superseded by native vgimportclone).
   Respect /run/mdadm/creating-<md_dev_name> in 69-dm-lvm.rules.
   Add `lvmconfig --edit Section/Field=Value` to set an lvm.conf setting.
   Add `lvmconfig --edit Section/Field=-` to remove an lvm.conf setting.
