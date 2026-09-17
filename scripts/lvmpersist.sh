@@ -213,23 +213,22 @@ get_key_list() {
 
 get_dev_reservation_holder_nvme() {
 	dev=$1
+	HOLDER=0
 
 	# get rkey from the regctlext section with rcsts=1
+	# jq without -e: no holder is an empty list, handled below (not a jq failure).
 
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.regctlext | map(select(.rcsts == 1)) | .[].rkey' | xargs printf '0x%x')
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null \
+		| jq -r '.regctlext | map(select(.rcsts == 1)) | .[].rkey' \
+		| xargs -r printf '0x%x')
+	if [ $? -ne 0 ]; then
 		logmsg "nvme resv-report error on $dev"
-		HOLDER=0
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report holder output not found $dev"
-		HOLDER=0
-		false
-		return
+		return 1
 	fi
 
 	HOLDER=$str
@@ -237,46 +236,49 @@ get_dev_reservation_holder_nvme() {
 
 get_dev_reservation_holder_scsi() {
 	dev=$1
+	HOLDER=0
 
 	# combine with get_dev_reservation to
 	# run a single sg_persist for holder and type?
 
 	set_cmd "$dev"
 
-	str=$( $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "Key\s*=\s*0x" | xargs )
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		if no_reservation_held "$dev"; then
-			HOLDER=0
-		else
+	# Match the reservation key line case-insensitively (the key= format
+	# differs between sg_persist and mpathpersist) and extract just the
+	# hex key, so the HOLDER value is not polluted by ", scope: ...".
+	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
+	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null \
+		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+')
+	if [ $? -ne 0 ]; then
+		if ! no_reservation_held "$dev"; then
 			logmsg "$cmd read-reservation error on $dev"
-			HOLDER=0
 		fi
-		false
-		return
+		return 1
 	fi
+
+	# Take the first line here instead of piping through head -1: head
+	# exits early and can SIGPIPE the upstream command, which pipefail
+	# would then report as a failed query.  multipath may repeat the
+	# key, and the reservation holder is the first.
+	str=${str%%$'\n'*}
 
 	if [[ -z $str ]]; then
-		if no_reservation_held "$dev"; then
-			HOLDER=0
-		else
+		if ! no_reservation_held "$dev"; then
 			logmsg "$cmd read-reservation holder output not found $dev"
-			HOLDER=0
 		fi
-		false
-		return
+		return 1
 	fi
 
-	HOLDER="${str:4}"
+	HOLDER=$str
 }
 
 get_dev_reservation_holder() {
 	dev=$1
 	cur_type=$2
+	HOLDER=0
 
 	# holder is not relevant for WEAR/EAAR
 	if [[ "$cur_type" == "WEAR" || "$cur_type" == "EAAR" ]]; then
-		HOLDER=0
 		return
 	fi
 
@@ -291,23 +293,23 @@ get_dev_reservation_holder() {
 
 get_dev_reservation_nvme() {
 	dev=$1
-	
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype')
 
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+	DEV_PRTYPE=0
+	DEV_PRDESC=error
+
+	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype')
+	if [ $? -ne 0 ]; then
 		logmsg "nvme resv-report error on $dev"
-		DEV_PRDESC=error
-		DEV_PRTYPE=0
-		false
-		return
+		return 1
 	fi
 
-	if [[ -z $str ]]; then
-		logmsg "nvme resv-report no reservation type for $dev"
-		DEV_PRDESC=error
-		DEV_PRTYPE=0
-		false
-		return
+	# jq prints null and exits 0 when rtype is missing; an
+	# out-of-range value is equally unusable.  Both are a
+	# per-device query failure, not a reason to abort the
+	# whole command.
+	if ! [[ "$str" =~ ^[0-9]$ ]]; then
+		logmsg "nvme resv-report unexpected reservation type '$str' for $dev"
+		return 1
 	fi
 
 	case "$str" in
@@ -340,8 +342,8 @@ get_dev_reservation_nvme() {
 		true
 		;;
 	*)
-		echo "Unknown PR value"
-		exit 1
+		logmsg "nvme resv-report unknown reservation type '$str' for $dev"
+		return 1
 		;;
 	esac
 
@@ -350,10 +352,10 @@ get_dev_reservation_nvme() {
 
 get_dev_reservation_scsi() {
 	dev=$1
+	set_cmd "$dev"
 
-	str=$( $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type" )
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type")
+	if [ $? -ne 0 ]; then
 		if no_reservation_held "$dev"; then
 			DEV_PRDESC=none
 			DEV_PRTYPE=0
@@ -362,8 +364,7 @@ get_dev_reservation_scsi() {
 			DEV_PRDESC=error
 			DEV_PRTYPE=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	if [[ -z $str ]]; then
@@ -375,8 +376,7 @@ get_dev_reservation_scsi() {
 			DEV_PRDESC=error
 			DEV_PRTYPE=0
 		fi
-		false
-		return
+		return 1
 	fi
 
 	# Output format differs between commands:
@@ -451,13 +451,9 @@ no_reservation_held_nvme() {
 no_reservation_held_scsi() {
 	dev=$1
 
-	if $cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -q "there is NO reservation held"; then
-		true
-		return
-	fi
-
-	false
-	return
+	# sg_persist and mpathpersist word the message differently and with
+	# different capitalization, so match case-insensitively.
+	$cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -qi "no reservation held"
 }
 
 no_reservation_held() {
