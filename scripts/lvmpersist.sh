@@ -572,7 +572,7 @@ check_devices() {
 		esac
 	done
 
-	test "$err" -eq 1 && exit 1
+	test "$err" -eq 0 || errorexit "unsupported or invalid device(s)."
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
 		which mpathpersist > /dev/null || die "mpathpersist command not found."
