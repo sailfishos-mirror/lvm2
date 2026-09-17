@@ -10,9 +10,6 @@
 
 set -o pipefail
 
-# user may override lvm location by setting LVM_BINARY
-LVM=${LVM_BINARY:-lvm}
-
 IFS_NL='
 '
 
@@ -589,7 +586,7 @@ check_devices() {
 		/dev/dm-*)
 			;&
 		/dev/mapper*)
-			MAJORMINOR=$(dmsetup info --noheadings -c -o major,minor "$dev")
+			MAJORMINOR=$("$DMSETUP" info --noheadings -c -o major,minor "$dev")
 			case "$MAJORMINOR" in
 			  *[!0-9:]*|"") die "unexpected dmsetup output for $dev" ;;
 			esac
@@ -1222,6 +1219,55 @@ do_readreservation() {
 	fi
 }
 
+# Reject a path a non-root user could modify or replace between this
+# check and its use: every component of the canonical path must be
+# root-owned and must not be group or world writable.  The sticky bit
+# is accepted for directories (e.g. /tmp), where other users cannot
+# remove entries owned by root.
+validate_path() {
+	local NAME=$1
+	local NODE=$2
+	local MODE
+
+	while :; do
+		MODE=$(stat -c '%u %a' "$NODE") ||
+			errorexit "$NAME \"$NODE\" is not accessible."
+		test "${MODE%% *}" = "0" ||
+			errorexit "$NAME \"$NODE\" must be owned by root."
+		MODE=${MODE##* }
+		if [ $(( 0$MODE & 022 )) -ne 0 ]; then
+			if ! test -d "$NODE" || [ $(( 0$MODE & 01000 )) -eq 0 ]; then
+				errorexit "$NAME \"$NODE\" must not be group or world writable."
+			fi
+		fi
+		test "$NODE" = "/" && break
+		NODE=${NODE%/*}
+		test -n "$NODE" || NODE=/
+	done
+}
+
+validate_override() {
+	local OPATH VAL
+
+	VAL=${!1-}
+	test -z "$VAL" && return 0
+	test "${VAL#/}" != "$VAL" ||
+		errorexit "$1 must be an absolute path."
+
+	OPATH=$(readlink -f "$VAL") ||
+		errorexit "$1 \"$VAL\" must be accessible and owned by root."
+
+	validate_path "$1" "$OPATH"
+
+	if ! test -f "$OPATH" || ! test -x "$OPATH"; then
+		errorexit "$1 \"$OPATH\" must be an executable file."
+	fi
+
+	# Run the validated canonical path, not the original one, so that a
+	# symlink cannot be repointed at a different binary after this check.
+	printf -v "$1" '%s' "$OPATH"
+}
+
 usage() {
 	echo "${SCRIPTNAME}: use persistent reservations on devices in an LVM VG."
 	echo ""
@@ -1304,6 +1350,14 @@ if [ $# -lt 1 ]; then
 	usage
 	exit 0
 fi
+
+# user may override lvm and dmsetup location by setting LVM_BINARY
+# and DMSETUP_BINARY; overrides must be root-owned executables
+validate_override DMSETUP_BINARY
+validate_override LVM_BINARY
+
+DMSETUP=${DMSETUP_BINARY:-dmsetup}
+LVM=${LVM_BINARY:-lvm}
 
 DO_START=0
 DO_STOP=0
