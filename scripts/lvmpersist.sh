@@ -554,7 +554,11 @@ check_devices() {
 			;&
 		/dev/mapper*)
 			MAJORMINOR=$(dmsetup info --noheadings -c -o major,minor "$dev")
-			read -r <"/sys/dev/block/$MAJORMINOR/dm/uuid" DM_UUID 2>&1
+			case "$MAJORMINOR" in
+			  *[!0-9:]*|"") die "unexpected dmsetup output for $dev" ;;
+			esac
+			DM_UUID=
+			read -r DM_UUID 2>/dev/null <"/sys/dev/block/$MAJORMINOR/dm/uuid"
 			if [[ $DM_UUID == *"mpath-"* ]]; then
 				FOUND_MPATH=1
 			else
