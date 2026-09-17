@@ -554,6 +554,17 @@ device_supports_type_str() {
 	fi
 }
 
+device_supports_pr() {
+	dev=$1
+	set_cmd "$dev"
+
+	if [[ "$cmd" == "nvme" ]]; then
+		device_supports_type_str_nvme "$dev"
+	else
+		sg_persist --in --report-capabilities "$dev" >/dev/null 2>&1
+	fi
+}
+
 check_devices() {
 	err=0
 	FOUND_MPATH=0
@@ -940,6 +951,8 @@ do_stop() {
 }
 
 do_clear() {
+	local err=0
+
 	if [[ -z "$OURKEY" ]]; then
 		echo "Missing required option: --ourkey."
 		exit 1
@@ -950,23 +963,35 @@ do_clear() {
 	# so just skip any devs that we cannot register with, and clear
 	# what we can.
 
+	# Only PR-capable devices where our key is registered (or we registered
+	# it below) are cleared; skip unsupported devices and any we cannot
+	# register on or query.
+	CLEAR_DEVICES=()
+
 	for dev in "${DEVICES[@]}"; do
-		set_type "$dev"
-		if ! device_supports_type_str "$dev" "$type_str"; then
+		if ! device_supports_pr "$dev"; then
 			logerror "Device $dev: does not support PR"
 			continue
 		fi
-		if ! key_is_on_device "$dev" "$OURKEY" ; then
-			if ! do_register "$dev"; then
+
+		key_is_on_device "$dev" "$OURKEY"
+		rc=$?
+		if [ "$rc" -eq 0 ]; then
+			CLEAR_DEVICES+=("$dev")
+		elif [ "$rc" -eq 1 ]; then
+			if do_register "$dev"; then
+				CLEAR_DEVICES+=("$dev")
+			else
 				logmsg "clear $GROUP skip $dev without registration"
 			fi
+		else
+			logmsg "clear $GROUP failed to check for our key $OURKEY on $dev."
+			err=1
 		fi
 	done
 
-	err=0
-
 	# clear releases the reservation and clears all registrations
-	for dev in "${DEVICES[@]}"; do
+	for dev in "${CLEAR_DEVICES[@]}"; do
 		set_cmd "$dev"
 
 		if [[ "$cmd" == "nvme" ]]; then
@@ -980,8 +1005,10 @@ do_clear() {
 		# Real result is whether the dev now has no registrations and
 		# reservation.
 
-		get_key_list "$dev"
-		if [[ -n "${KEYS[*]}" ]]; then
+		if ! get_key_list "$dev"; then
+			logmsg "clear $GROUP failed to read keys from $dev"
+			err=1
+		elif [[ ${#KEYS[@]} -gt 0 ]]; then
 			logmsg "clear $GROUP keys not cleared from $dev - ${KEYS[*]}"
 			err=1
 		fi
@@ -992,7 +1019,9 @@ do_clear() {
 		fi
 	done
 
-	test "$err" -eq 1 && exit 1
+	if [ "$err" -ne 0 ]; then
+		errorexit "clear $GROUP failed."
+	fi
 
 	logmsg "cleared $GROUP reservation and keys"
 	exit 0
