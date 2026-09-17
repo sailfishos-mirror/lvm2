@@ -48,3 +48,21 @@ struct segment_type *get_segtype_from_flag(struct cmd_context *cmd, uint64_t fla
 
 	return NULL;
 }
+
+/*
+ * Minimum stripe size (in sectors) allowed for a segment type.
+ *
+ * The dm-stripe target supports a stripe size smaller than the page size,
+ * but MD RAID levels 4/5/6/10 still require the chunk (stripe) size to be
+ * at least the page size (raid4/5/6 additionally require a multiple of it).
+ * raid0/raid1 have no such limitation.
+ */
+uint32_t segtype_stripe_size_min(const struct segment_type *segtype)
+{
+	uint32_t min = STRIPE_SIZE_MIN;
+
+	if (segtype_is_striped_raid(segtype) && !segtype_is_any_raid0(segtype))
+		min = max(min, (uint32_t) lvm_getpagesize() >> SECTOR_SHIFT);
+
+	return min;
+}
