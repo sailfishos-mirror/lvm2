@@ -42,6 +42,10 @@ logmsg() {
 		logger "${SCRIPTNAME}: $1" >/dev/null 2>&1 || true
 }
 
+require_opt() {
+	test -n "${!1-}" || errorexit "Missing required option: --$2."
+}
+
 # nvme commands
 # register: nvme resv-register --nrkey=$OURKEY --rrega=0
 # unregister: nvme resv-register --crkey=$OURKEY --rrega=1
@@ -1415,20 +1419,23 @@ case $CMD in
 		usage
 		exit 0
 		;;
+	--help)
+		usage
+		exit 0
+		;;
 	*)
-		echo "Unknown command: $CMD."
-		exit 1
+		errorexit "Unknown command: $CMD."
 		;;
 esac
 
 if [ "$UID" != 0 ] && [ "$EUID" != 0 ] && [ "$CMD" != "help" ]; then
-	echo "${SCRIPTNAME} must be run as root."
-	exit 1
+	errorexit "must be run as root."
 fi
 
 GETOPT="getopt"
 
-OPTIONS=$("$GETOPT" -o h -l help,ourkey:,removekey:,key:,prtype:,access:,ptpl,debug,device:,vg: -n "${SCRIPTNAME}" -- "$@")
+OPTIONS=$("$GETOPT" -o h -l help,ourkey:,removekey:,key:,prtype:,access:,ptpl,debug,device:,vg: -n "${SCRIPTNAME}" -- "$@") ||
+	errorexit "invalid option."
 eval set -- "$OPTIONS"
 
 while true
@@ -1481,8 +1488,7 @@ do
 		break
 		;;
 	*)
-		echo "Unknown option \"$1\."
-		exit 1
+		errorexit "Unknown option \"$1\"."
 		;;
     esac
 done
@@ -1492,23 +1498,19 @@ done
 #
 
 if [[ -z "$LAST_DEVICE" && -z "$VGNAME" ]]; then
-	echo "Missing required option: --vg or --device."
-	exit 1
+	errorexit "Missing required option: --vg or --device."
 fi
 
 if [[ -n "$PRTYPE_ARG" && -n "$ACCESS" ]]; then
-	echo "Set --prtype or --access, not both."
-	exit 1
+	errorexit "Set --prtype or --access, not both."
 fi
 
-if [[ "$DO_CHECKKEY" -eq 1 && -z "$KEY" ]]; then
-	echo "Missing required option: --key"
-	exit 1
+if [[ "$DO_CHECKKEY" -eq 1 ]]; then
+	require_opt KEY key
 fi
 
 if [[ "$DO_CHECKKEY" -eq 0 && -n "$KEY" ]]; then
-	echo "Invalid option: --key"
-	exit 1
+	errorexit "Invalid option: --key."
 fi
 
 if [[ "$DO_CHECKKEY" -eq 1 ]]; then
@@ -1524,57 +1526,88 @@ fi
 DECDIGITS='^[0-9]+$'
 HEXDIGITS='^[0-9a-fA-F]+$'
 
-if [[ -n "$OURKEY" && "$OURKEY" == "0x0"* ]]; then
-	echo "Leading 0s are not permitted in keys."
-	exit 1
-fi
+# Decimal keys are converted with shell arithmetic, which is 64-bit and
+# wraps silently above 2^64-1 (e.g. 2^64 becomes 0x0).  Reject values
+# that do not fit so we never register a key other than the one asked
+# for.  Leading zeros are insignificant and stripped for the range test.
+key_from_decimal() {
+	local dec=${1#"${1%%[!0]*}"}
 
-if [[ -n "$REMKEY" && "$REMKEY" == "0x0"* ]]; then
-	echo "Leading 0s are not permitted in keys."
-	exit 1
-fi
+	dec=${dec:-0}
 
+	# Compare as strings, not integers: an out-of-range value would
+	# overflow the very arithmetic used by -gt.  Both sides are
+	# equal-length digit strings without leading zeros, so lexicographic
+	# order matches numeric order here.
+	# shellcheck disable=SC2071
+	if [[ ${#dec} -gt 20 ||
+	      ( ${#dec} -eq 20 && "$dec" > "18446744073709551615" ) ]]; then
+		return 1
+	fi
+
+	# Force base-10 before printf %x: shell arithmetic reads a leading
+	# zero as octal (010 -> 8).  Leading zeros are stripped above, but
+	# keep the explicit base so the conversion does not depend on that.
+	printf '0x%x' "$((10#$dec))"
+}
 
 if [[ -n "$OURKEY" && "$OURKEY" != "0x"* ]]; then
 	if [[ "$OURKEY" =~ $DECDIGITS ]]; then
-		OURKEY=$(printf '%x\n' "$OURKEY")
-		OURKEY=0x${OURKEY}
+		key_hex=$(key_from_decimal "$OURKEY") ||
+			errorexit "Key is out of range: $OURKEY"
+		OURKEY=$key_hex
 		if [[ -n "$KEY" ]]; then
 			echo "Using key: $OURKEY"
 		else
 			echo "Using ourkey: $OURKEY"
 		fi
 	else
-		echo "Invalid decimal digits in key: $OURKEY (use 0x prefix for hex key)"
-		exit 1
+		errorexit "Invalid decimal digits in key: $OURKEY (use 0x prefix for hex key)"
 	fi
 fi
 
 if [[ -n "$OURKEY" && "$OURKEY" == "0x"* ]]; then
 	if [[ ! "${OURKEY:2}" =~ $HEXDIGITS ]]; then
-		echo "Invalid hex digits in key: $OURKEY"
-		exit 1
+		errorexit "Invalid hex digits in key: $OURKEY"
+	fi
+	# PR keys are 64-bit; a longer hex key cannot be represented
+	# and the tools would truncate or saturate it to a different key.
+	if [[ ${#OURKEY} -gt 18 ]]; then
+		errorexit "Key is out of range: $OURKEY"
 	fi
 	OURKEY="${OURKEY,,}"
 fi
 
 if [[ -n "$REMKEY" && "$REMKEY" != "0x"* ]]; then
 	if [[ "$REMKEY" =~ $DECDIGITS ]]; then
-		REMKEY=$(printf '%x\n' "$REMKEY")
-		REMKEY=0x${REMKEY}
+		key_hex=$(key_from_decimal "$REMKEY") ||
+			errorexit "Key is out of range: $REMKEY"
+		REMKEY=$key_hex
 		echo "Using removekey: $REMKEY"
 	else
-		echo "Invalid decimal digits in key: $REMKEY (use 0x prefix for hex key)"
-		exit 1
+		errorexit "Invalid decimal digits in key: $REMKEY (use 0x prefix for hex key)"
 	fi
 fi
 
 if [[ -n "$REMKEY" && "$REMKEY" == "0x"* ]]; then
 	if [[ ! "${REMKEY:2}" =~ $HEXDIGITS ]]; then
-		echo "Invalid hex digits in key: $REMKEY"
-		exit 1
+		errorexit "Invalid hex digits in key: $REMKEY"
+	fi
+	# PR keys are 64-bit; a longer hex key cannot be represented
+	# and the tools would truncate or saturate it to a different key.
+	if [[ ${#REMKEY} -gt 18 ]]; then
+		errorexit "Key is out of range: $REMKEY"
 	fi
 	REMKEY="${REMKEY,,}"
+fi
+
+# Reject leading-zero hex keys (e.g. 0x01 or decimal 0 -> 0x0).
+if [[ -n "$OURKEY" && "$OURKEY" == "0x0"* ]]; then
+	errorexit "Leading 0s are not permitted in keys."
+fi
+
+if [[ -n "$REMKEY" && "$REMKEY" == "0x0"* ]]; then
+	errorexit "Leading 0s are not permitted in keys."
 fi
 
 if [[ -z "$PRTYPE_ARG" && -z "$ACCESS" ]]; then
@@ -1604,8 +1637,7 @@ if [[ -n "$ACCESS" ]]; then
 		MPATH_PRTYPE=7
 		MPATH_PRDESC=WEAR
 	else
-		echo "Invalid access mode (use ex or sh)."
-		exit 1
+		errorexit "Invalid access mode (use ex or sh)."
 	fi
 fi
 
