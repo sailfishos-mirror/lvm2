@@ -99,50 +99,56 @@ set_type() {
 	esac
 }
 
-key_is_on_device_nvme() {
-	FINDKEY_DEC=$(printf '%u' "$FINDKEY")
-
-	if nvme resv-report --eds -o json "$dev" 2>/dev/null | jq -e ".regctlext[] | select(.rkey == ${FINDKEY_DEC})" > /dev/null 2>&1; then
-		true
-		return
-	fi
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		errorexit "$cmd resv-report error on $dev"
-	fi
-
-	false
-	return
-}
-
-key_is_on_device_scsi() {
-	# grep with space to avoid matching the line "PR generation=0x..."
-	# end-of-line matching required to avoid 0x123ab matching 0x123abc
-	FINDKEY=" $FINDKEY$"
-
-	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q "${FINDKEY}"; then
-		true
-		return
-	fi
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		errorexit "$cmd read-keys error on $dev"
-	fi
-
-	false
-	return
-}
+# Return 0 if the key is found, 1 if not found, 2 if the
+# query command itself failed (caller must not treat 2 the
+# same as 1: the presence of the key could not be determined).
 
 key_is_on_device() {
+	local op FINDKEY FINDKEY_DEC
+
 	dev=$1
 	FINDKEY=$2
 	set_cmd "$dev"
 
 	if [[ "$cmd" == "nvme" ]]; then
-		key_is_on_device_nvme "$dev" "$FINDKEY"
+		FINDKEY_DEC=$(printf '%u' "$FINDKEY")
+		op="resv-report"
+
+		# jq -e: exit non-zero when the filter matches nothing (key absent).
+		if nvme resv-report --eds -o json "$dev" 2>/dev/null \
+			| jq -e ".regctlext[] | select(.rkey == ${FINDKEY_DEC})" > /dev/null 2>&1; then
+			return 0
+		fi
 	else
-		key_is_on_device_scsi "$dev" "$FINDKEY"
+		op="read-keys"
+
+		# grep with space to avoid matching the line "PR generation=0x..."
+		# end-of-line matching required to avoid 0x123ab matching 0x123abc
+		if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null \
+			| grep -q " $FINDKEY$"; then
+			return 0
+		fi
 	fi
+
+	# Inspect PIPESTATUS immediately: nothing may run between the pipeline
+	# above and here, since any command, even a plain assignment, resets it.
+	# A successful command whose filter matched nothing means the key is
+	# absent (jq -e exits 1 or 4, grep exits 1; grep never exits 4).
+	case "${PIPESTATUS[0]}" in
+	0)
+		case "${PIPESTATUS[1]:-0}" in
+		1|4) return 1 ;;
+		*)
+			logmsg "$cmd $op error on $dev"
+			return 2
+			;;
+		esac
+		;;
+	*)
+		logmsg "$cmd $op error on $dev"
+		return 2
+		;;
+	esac
 }
 
 get_key_list_nvme() {
@@ -150,15 +156,18 @@ get_key_list_nvme() {
 	dev=$1
 	set_cmd "$dev"
 
-	# json/jq output is only decimal
-	KEYS=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.regctlext[].rkey' | sort | xargs printf '0x%x ')
+	# json/jq output is only decimal; xargs -r skips printf when there are no keys.
+	# Do not use jq -e here: no registrants is success (empty output), not an error.
 
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		errorexit "$cmd read-keys error on $dev"
-	fi
-
-	if [[ "$KEYS" == "0x0 " ]]; then
-		KEYS=""
+	# shellcheck disable=SC2207 # intentional split of key values
+	KEYS=( $(nvme resv-report --eds -o json "$dev" 2>/dev/null \
+		| jq -r '.regctlext[].rkey' \
+		| sort -n \
+		| xargs -r printf '0x%x\n') )
+	if [ $? -ne 0 ]; then
+		logmsg "$cmd read-keys error on $dev"
+		KEYS=()
+		return 1
 	fi
 }
 
@@ -173,18 +182,21 @@ get_key_list_scsi() {
 		no_keys_msg="there are NO registered reservation keys"
 	fi
 
-	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q $no_keys_msg; then
-		KEYS=""
+	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q "$no_keys_msg"; then
+		KEYS=()
 		return
 	fi
 
-	# sort with -u eliminates repeated keys listed with multipath
+	# sort -u eliminates repeated keys listed with multipath
+	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
 
 	# shellcheck disable=SC2207 # intentional split of key values
-	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep "    0x" | sort -u | xargs ) )
-
-	if [ "${PIPESTATUS[0]}" -ne "0" ]; then
-		errorexit "$cmd read-keys error on $dev"
+	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null \
+		| grep "    0x" | grep -oE '0x[0-9a-fA-F]+' | sort -u) )
+	if [ $? -ne 0 ]; then
+		logmsg "$cmd read-keys error on $dev"
+		KEYS=()
+		return 1
 	fi
 }
 
