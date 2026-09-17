@@ -13,6 +13,8 @@ set -o pipefail
 IFS_NL='
 '
 
+MISSING_DEV_COUNT=0
+
 # errorexit: invalid invocation (stderr only).  die: runtime failure
 # (stderr and syslog).  logerror: non-fatal problem or warning.
 errorexit() {
@@ -1343,7 +1345,7 @@ usage() {
 #
 # BEGIN SCRIPT
 #
-PATH="/sbin:/usr/sbin:/bin:/usr/bin:$PATH"
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
 SCRIPTNAME=$(basename "$0")
 
 if [ $# -lt 1 ]; then
