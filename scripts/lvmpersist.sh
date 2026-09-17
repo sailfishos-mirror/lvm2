@@ -535,6 +535,13 @@ check_devices() {
 	FOUND_SCSI=0
 	FOUND_NVME=0
 
+	# Reject non-block paths up front: the rest of the script (and the
+	# PR tools) assumes each entry is a real device, otherwise they fail
+	# with a less clear error.
+	for dev in "${DEVICES[@]}"; do
+		test -b "$dev" || errorexit "not a block device: $dev."
+	done
+
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
 	  	/dev/nvme*)
