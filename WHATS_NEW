@@ -1,5 +1,6 @@
 Version 2.03.43 - 
 ==================
+  Allow 4K stripe size smaller than page size (except on DAX and MD RAID).
   Set recursion limit to 1024 LVs when processing device tree.
   Remove cmirrord and clustered mirror log daemon support.
   Respect /run/mdadm/creating-<md_dev_name> in 69-dm-lvm.rules.
