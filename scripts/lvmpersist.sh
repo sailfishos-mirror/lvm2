@@ -1136,50 +1136,90 @@ do_checkkey() {
 	err=0
 
 	for dev in "${DEVICES[@]}"; do
-		if key_is_on_device "$dev" "$OURKEY" ; then
+		key_is_on_device "$dev" "$OURKEY"
+		rc=$?
+		if [ "$rc" -eq 0 ]; then
 			echo "Device $dev: has key $OURKEY"
+		elif [ "$rc" -eq 2 ]; then
+			logerror "Device $dev: failed to check for key $OURKEY"
+			err=1
 		else
 			logerror "Device $dev: does not have key $OURKEY"
 			err=1
 		fi
 	done
 
-	test "$err" -eq 1 && exit 1
+	if [ "$err" -ne 0 ]; then
+		errorexit "check-key failed."
+	fi
 
 	exit 0
 }
 
 do_readkeys() {
+	local err=0
+
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
-		if ! device_supports_type_str "$dev" "$type_str"; then
+		device_supports_type_str "$dev" "$type_str"
+		rc=$?
+		if [ "$rc" -eq 1 ]; then
 			echo "Device $dev: does not support PR"
 			continue
+		elif [ "$rc" -eq 2 ]; then
+			logerror "Device $dev: failed to query reservation type"
+			err=1
+			continue
 		fi
-		get_key_list "$dev"
-		if [[ -z "$KEYS" ]]; then
+		if ! get_key_list "$dev"; then
+			logerror "Device $dev: failed to read registered keys"
+			err=1
+		elif [[ ${#KEYS[@]} -eq 0 ]]; then
 			echo "Device $dev: registered keys: none"
 		else
 			echo "Device $dev: registered keys: ${KEYS[*]}"
 		fi
 	done
+
+	if [ "$err" -ne 0 ]; then
+		errorexit "read-keys failed."
+	fi
 }
 
 do_readreservation() {
+	local err=0
+
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
-		if ! device_supports_type_str "$dev" "$type_str"; then
+		device_supports_type_str "$dev" "$type_str"
+		rc=$?
+		if [ "$rc" -eq 1 ]; then
 			echo "Device $dev: does not support PR"
+			continue
+		elif [ "$rc" -eq 2 ]; then
+			logerror "Device $dev: failed to query reservation type"
+			err=1
 			continue
 		fi
 		get_dev_reservation "$dev"
-		get_dev_reservation_holder "$dev" $DEV_PRDESC
-		if [[ "$DEV_PRDESC" == "WEAR" || "$DEV_PRDESC" == "EAAR" ]]; then
+		if [[ "$DEV_PRDESC" == "error" ]]; then
+			logerror "Device $dev: failed to read reservation"
+			err=1
+		elif [[ "$DEV_PRDESC" == "none" ]]; then
+			echo "Device $dev: reservation: none"
+		elif [[ "$DEV_PRDESC" == "WEAR" || "$DEV_PRDESC" == "EAAR" ]]; then
 			echo "Device $dev: reservation: $DEV_PRDESC"
+		elif ! get_dev_reservation_holder "$dev" "$DEV_PRDESC"; then
+			logerror "Device $dev: failed to read reservation holder"
+			err=1
 		else
 			echo "Device $dev: reservation: $DEV_PRDESC holder $HOLDER"
 		fi
 	done
+
+	if [ "$err" -ne 0 ]; then
+		errorexit "read-reservation failed."
+	fi
 }
 
 usage() {
