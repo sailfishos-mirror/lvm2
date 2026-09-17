@@ -1112,15 +1112,22 @@ do_devtest() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 
-		if device_supports_type_str "$dev" "$type_str"; then
+		device_supports_type_str "$dev" "$type_str"
+		rc=$?
+		if [ "$rc" -eq 0 ]; then
 			echo "Device $dev: supports type $type_str"
+		elif [ "$rc" -eq 2 ]; then
+			logerror "Device $dev: failed to query type $type_str"
+			err=1
 		else
 			logerror "Device $dev: does not support type $type_str"
 			err=1
 		fi
 	done
 
-	test "$err" -eq 1 && exit 1
+	if [ "$err" -ne 0 ]; then
+		errorexit "devtest failed."
+	fi
 
 	exit 0
 }
