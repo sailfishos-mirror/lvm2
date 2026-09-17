@@ -1288,11 +1288,9 @@ validate_path() {
 		test "${MODE%% *}" = "0" ||
 			errorexit "$NAME \"$NODE\" must be owned by root."
 		MODE=${MODE##* }
-		if [ $(( 0$MODE & 022 )) -ne 0 ]; then
-			if ! test -d "$NODE" || [ $(( 0$MODE & 01000 )) -eq 0 ]; then
-				errorexit "$NAME \"$NODE\" must not be group or world writable."
-			fi
-		fi
+		test $(( 0$MODE & 022 )) -eq 0 ||
+			{ test -d "$NODE" && test $(( 0$MODE & 01000 )) -ne 0; } ||
+			errorexit "$NAME \"$NODE\" must not be group or world writable."
 		test "$NODE" = "/" && break
 		NODE=${NODE%/*}
 		test -n "$NODE" || NODE=/
@@ -1312,9 +1310,9 @@ validate_override() {
 
 	validate_path "$1" "$OPATH"
 
-	if ! test -f "$OPATH" || ! test -x "$OPATH"; then
+	test -f "$OPATH" && test -x "$OPATH" || {
 		errorexit "$1 \"$OPATH\" must be an executable file."
-	fi
+	}
 
 	# Run the validated canonical path, not the original one, so that a
 	# symlink cannot be repointed at a different binary after this check.
@@ -1358,7 +1356,7 @@ REGISTERED_DEVICES=()
 CMD=$1
 shift
 
-case $CMD in
+case "$CMD" in
 	start)
 		DO_START=1
 		;;
@@ -1386,15 +1384,7 @@ case $CMD in
 	read)
 		DO_READ=1
 		;;
-	help)
-		usage
-		exit 0
-		;;
-	-h)
-		usage
-		exit 0
-		;;
-	--help)
+	help|-h|--help)
 		usage
 		exit 0
 		;;
@@ -1415,47 +1405,37 @@ eval set -- "$OPTIONS"
 
 while true
 do
-	case $1 in
+	case "$1" in
 	--ourkey)
-		OURKEY=$2;
-		shift; shift
+		OURKEY=$2; shift
 		;;
 	--key)
-		KEY=$2;
-		shift; shift
+		KEY=$2; shift
 		;;
 	--removekey)
-		REMKEY=$2;
-		shift; shift
+		REMKEY=$2; shift
 		;;
 	--ptpl)
 		PTPL=1
-		shift
 		;;
 	--access)
-		ACCESS=$2
-		shift; shift;
+		ACCESS=$2; shift
 		;;
 	--prtype)
-		PRTYPE_ARG=$2
-		shift; shift;
+		PRTYPE_ARG=$2; shift
 		;;
 	--device)
 		LAST_DEVICE=$2
-		DEVICES+=("$LAST_DEVICE")
-		shift; shift
+		DEVICES+=("$LAST_DEVICE"); shift
 		;;
 	--vg)
-		VGNAME=$2;
-		shift; shift
+		VGNAME=$2; shift
 		;;
 	--debug)
 		set -x
-		shift
 		;;
 	-h|--help)
 		usage
-		shift
 		exit 0
 		;;
 	--)
@@ -1465,7 +1445,8 @@ do
 	*)
 		errorexit "Unknown option \"$1\"."
 		;;
-    esac
+	esac
+	shift
 done
 
 #
@@ -1480,9 +1461,7 @@ if [[ -n "$PRTYPE_ARG" && -n "$ACCESS" ]]; then
 	errorexit "Set --prtype or --access, not both."
 fi
 
-if [[ "$DO_CHECKKEY" -eq 1 ]]; then
-	require_opt KEY key
-fi
+[[ "$DO_CHECKKEY" -eq 1 ]] && require_opt KEY key
 
 if [[ "$DO_CHECKKEY" -eq 0 && -n "$KEY" ]]; then
 	errorexit "Invalid option: --key."
@@ -1542,9 +1521,8 @@ if [[ -n "$OURKEY" && "$OURKEY" != "0x"* ]]; then
 fi
 
 if [[ -n "$OURKEY" && "$OURKEY" == "0x"* ]]; then
-	if [[ ! "${OURKEY:2}" =~ $HEXDIGITS ]]; then
+	[[ "${OURKEY:2}" =~ $HEXDIGITS ]] ||
 		errorexit "Invalid hex digits in key: $OURKEY"
-	fi
 	# PR keys are 64-bit; a longer hex key cannot be represented
 	# and the tools would truncate or saturate it to a different key.
 	if [[ ${#OURKEY} -gt 18 ]]; then
@@ -1565,9 +1543,8 @@ if [[ -n "$REMKEY" && "$REMKEY" != "0x"* ]]; then
 fi
 
 if [[ -n "$REMKEY" && "$REMKEY" == "0x"* ]]; then
-	if [[ ! "${REMKEY:2}" =~ $HEXDIGITS ]]; then
+	[[ "${REMKEY:2}" =~ $HEXDIGITS ]] ||
 		errorexit "Invalid hex digits in key: $REMKEY"
-	fi
 	# PR keys are 64-bit; a longer hex key cannot be represented
 	# and the tools would truncate or saturate it to a different key.
 	if [[ ${#REMKEY} -gt 18 ]]; then
@@ -1597,23 +1574,27 @@ if [[ -n "$ACCESS" ]]; then
 	# ex: scsi, nvme use WE; mpath uses WEAR
 	# sh: scsi, nvme, mpath all use WEAR
 
-	if [[ "$ACCESS" == "ex" ]]; then
+	case "$ACCESS" in
+	ex)
 		SCSI_PRTYPE=1
 		SCSI_PRDESC=WE
 		NVME_PRTYPE=1
 		NVME_PRDESC=WE
 		MPATH_PRTYPE=7
 		MPATH_PRDESC=WEAR
-	elif [[ "$ACCESS" == "sh" ]]; then
+		;;
+	sh)
 		SCSI_PRTYPE=7
 		SCSI_PRDESC=WEAR
 		NVME_PRTYPE=5
 		NVME_PRDESC=WEAR
 		MPATH_PRTYPE=7
 		MPATH_PRDESC=WEAR
-	else
+		;;
+	*)
 		errorexit "Invalid access mode (use ex or sh)."
-	fi
+		;;
+	esac
 fi
 
 # When --prtype is set, all device types use the
@@ -1641,7 +1622,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
 		errorexit "WERO is not yet supported."
-		exit 1
 		;;
 	EARO)
 		# Exclusive Access - registrants only
@@ -1651,7 +1631,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
 		errorexit "EARO is not yet supported."
-		exit 1
 		;;
 	WEAR)
 		# Write Exclusive - all registrants
@@ -1667,7 +1646,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		;;
 	*)
 		errorexit "Unknown PRTYPE string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
-		exit 1
 		;;
 	esac
 
@@ -1688,9 +1666,8 @@ get_devices_from_vg() {
 	# a glob character is not expanded against the filesystem.
 	set -f
 	# shellcheck disable=SC2207 # intentional split of device list
-	if ! ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ); then
+	ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ) ||
 		die "failed to get devices from VG $VGNAME."
-	fi
 	set +f
 
 	DEVICES=()
@@ -1713,7 +1690,6 @@ FIRST_DEVICE="${DEVICES[0]}"
 
 if [[ -z "$FIRST_DEVICE" ]]; then
 	errorexit "Missing required --vg or --device."
-	exit 1
 fi
 
 # Prefix some log messages with VGNAME, or if no VGNAME is set,
@@ -1779,4 +1755,3 @@ elif [[ "$DO_READ" -eq 1 ]]; then
 	do_readkeys
 	do_readreservation
 fi
-
