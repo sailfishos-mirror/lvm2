@@ -746,35 +746,29 @@ undo_register() {
 do_register_nvme() {
 	dev=$1
 	set_cmd "$dev"
-
-	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=' --cptpl=1'
-	fi
+	[[ $PTPL -eq 1 ]] && cmdopts+=("--cptpl=1")
 
 	# If our previous key is still registered, then we must use
 	# rrega=2 and iekey.  If our previous key has been removed,
 	# then we must use rrega=0.
 
-	if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
-		if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
+	nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1 || {
+		nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1 || {
 			logmsg "$cmd register error on $dev"
 			return 1
-		fi
-	fi
+		}
+	}
 }
 
 do_register_scsi() {
 	dev=$1
 	set_cmd "$dev"
+	[[ $PTPL -eq 1 ]] && cmdopts+=("--param-aptpl")
 
-	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=' --param-aptpl'
-	fi
-
-	if ! $cmd $cmdopts --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
+	"$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1 || {
 		logmsg "$cmd register error on $dev"
 		return 1
-	fi
+	}
 }
 
 do_register() {
@@ -785,65 +779,63 @@ do_register() {
 		do_register_nvme "$dev"
 	else
 		do_register_scsi "$dev"
-	fi
-	# Only record a device our key was successfully registered on.
-	if [ $? -ne 0 ]; then
-		return 1
-	fi
+	fi || return 1
 
 	REGISTERED_DEVICES+=("$dev")
 }
 
 do_takeover() {
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
-
-	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
+	require_opt REMKEY removekey
 
 	err=0
 
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			if [ "$rc" -eq 2 ]; then
-				logmsg "start $GROUP $dev failed to query reservation type $type_str."
-			else
-				logmsg "start $GROUP $dev does not support reservation type $type_str."
-			fi
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports the type
+			;;
+		1)
+			logmsg "start $GROUP $dev does not support reservation type $type_str."
 			err=1
-		fi
+			;;
+		2)
+			logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			err=1
+			;;
+		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "start $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "start $GROUP failed."
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$REMKEY"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# key present, which is required to remove it
+			;;
+		1)
 			die "start $GROUP specified key to remove $REMKEY not found on $dev."
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			die "start $GROUP failed to check for key $REMKEY on $dev."
-		fi
+			;;
+		esac
 	done
 
 	# Register our key
 
 	for dev in "${DEVICES[@]}"; do
-		if ! do_register "$dev"; then
+		do_register "$dev" || {
 			logmsg "start $GROUP failed to register our key."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	# The register above triggers udev to re-probe the device (blkid,
@@ -863,14 +855,12 @@ do_takeover() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
-		fi
-
-		if [[ "$?" -ne 0 ]]; then
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+		fi || {
 			logmsg "start $GROUP failed to preempt-abort $REMKEY on $dev."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	logmsg "started $GROUP with key $OURKEY."
@@ -880,37 +870,37 @@ do_takeover() {
 do_start() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			if [ "$rc" -eq 2 ]; then
-				logmsg "start $GROUP $dev failed to query reservation type $type_str."
-			else
-				logmsg "start $GROUP $dev does not support reservation type $type_str."
-			fi
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports the type
+			;;
+		1)
+			logmsg "start $GROUP $dev does not support reservation type $type_str."
 			err=1
-		fi
+			;;
+		2)
+			logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			err=1
+			;;
+		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "start $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "start $GROUP failed."
 
 	# Register our key on devices
 
 	for dev in "${DEVICES[@]}"; do
-		if ! do_register "$dev"; then
+		do_register "$dev" || {
 			logmsg "start $GROUP failed to register our key."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	# The register above triggers udev to re-probe the device.
@@ -932,31 +922,25 @@ do_start() {
 
 		if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
 			get_dev_reservation "$dev"
-			if [[ "$DEV_PRDESC" == "$type_str" ]]; then
-				continue
-			fi
+			[[ "$DEV_PRDESC" == "$type_str" ]] && continue
 		fi
 
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --rtype="$type" --racqa=0 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
-		fi
-
-		if [[ "$?" -ne 0 ]]; then
+			"$cmd" "${cmdopts[@]}" --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+		fi || {
 			# For WEAR/EAAR, another host may have acquired the
 			# reservation between our check and our acquire attempt.
 			# Re-check: if the reservation now exists, that's fine.
 			if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
 				get_dev_reservation "$dev"
-				if [[ "$DEV_PRDESC" == "$type_str" ]]; then
-					continue
-				fi
+				[[ "$DEV_PRDESC" == "$type_str" ]] && continue
 			fi
 			logmsg "start $GROUP failed to reserve $dev."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	logmsg "started $GROUP with key $OURKEY."
@@ -966,10 +950,7 @@ do_start() {
 do_stop() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	# Removing reservation is not needed, we just remove our registration key.
 	# The reservation will go away when the last key is removed.
@@ -982,25 +963,26 @@ do_stop() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
 
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			logmsg "stop $GROUP failed to unregister our key $OURKEY from $dev."
 			err=1
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logmsg "stop $GROUP failed to verify our key $OURKEY was unregistered from $dev."
 			err=1
-		fi
+			;;
+		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "stop $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "stop $GROUP failed."
 
 	logmsg "stopped $GROUP with key $OURKEY."
 	exit 0
@@ -1009,10 +991,7 @@ do_stop() {
 do_clear() {
 	local err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	# our key must be registered to do clear.
 	# we want to clear any/all PR state that we can find on the devs,
@@ -1025,25 +1004,29 @@ do_clear() {
 	CLEAR_DEVICES=()
 
 	for dev in "${DEVICES[@]}"; do
-		if ! device_supports_pr "$dev"; then
+		device_supports_pr "$dev" || {
 			logerror "Device $dev: does not support PR"
 			continue
-		fi
-
+		}
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# our key present
 			CLEAR_DEVICES+=("$dev")
-		elif [ "$rc" -eq 1 ]; then
+			;;
+		1)
 			if do_register "$dev"; then
 				CLEAR_DEVICES+=("$dev")
 			else
 				logmsg "clear $GROUP skip $dev without registration"
 			fi
-		else
+			;;
+		2)
 			logmsg "clear $GROUP failed to check for our key $OURKEY on $dev."
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	# clear releases the reservation and clears all registrations
@@ -1053,10 +1036,8 @@ do_clear() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-release --crkey="$OURKEY" --rrela=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
-		fi
-
-		test $? -eq 0 || logmsg "$cmd clear error on $dev"
+			"$cmd" "${cmdopts[@]}" --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+		fi || logmsg "$cmd clear error on $dev"
 
 		# Real result is whether the dev now has no registrations and
 		# reservation.
@@ -1069,15 +1050,13 @@ do_clear() {
 			err=1
 		fi
 
-		if ! no_reservation_held "$dev"; then
+		no_reservation_held "$dev" || {
 			logmsg "clear $GROUP reservation not cleared from $dev"
 			err=1
-		fi
+		}
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "clear $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "clear $GROUP failed."
 
 	logmsg "cleared $GROUP reservation and keys"
 	exit 0
@@ -1086,28 +1065,27 @@ do_clear() {
 do_remove() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
-
-	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
+	require_opt REMKEY removekey
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# our key present, as required to remove another key
+			;;
+		1)
 			logmsg "cannot remove $REMKEY from $dev without ourkey $OURKEY being registered"
 			err=1
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logmsg "cannot remove $REMKEY from $dev, failed to check ourkey $OURKEY."
 			err=1
 			continue
-		fi
+			;;
+		esac
 
 		set_cmd "$dev"
 		# Use the current reservation type when one is held; otherwise use
@@ -1128,20 +1106,24 @@ do_remove() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$remove_type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
-		fi
-
-		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
+		fi || logmsg "$cmd preempt-abort error on $dev"
 
 		key_is_on_device "$dev" "$REMKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			logmsg "failed to remove key $REMKEY from $dev in $GROUP."
 			err=1
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		1)
+			# key not found, removal succeeded
+			;;
+		2)
 			logmsg "failed to verify key $REMKEY was removed from $dev in $GROUP."
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	# Fencing (remove) requires removing the target's PR key from all
@@ -1169,21 +1151,23 @@ do_devtest() {
 		set_type "$dev"
 
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			echo "Device $dev: supports type $type_str"
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query type $type_str"
 			err=1
-		else
+			;;
+		*)
 			logerror "Device $dev: does not support type $type_str"
 			err=1
-		fi
+			;;
+		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "devtest failed."
-	fi
+	test "$err" -eq 0 || errorexit "devtest failed."
 
 	exit 0
 }
@@ -1193,21 +1177,23 @@ do_checkkey() {
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			echo "Device $dev: has key $OURKEY"
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to check for key $OURKEY"
 			err=1
-		else
+			;;
+		*)
 			logerror "Device $dev: does not have key $OURKEY"
 			err=1
-		fi
+			;;
+		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "check-key failed."
-	fi
+	test "$err" -eq 0 || errorexit "check-key failed."
 
 	exit 0
 }
@@ -1218,15 +1204,21 @@ do_readkeys() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports PR, continue below
+			;;
+		1)
 			echo "Device $dev: does not support PR"
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query reservation type"
 			err=1
 			continue
-		fi
+			;;
+		esac
 		if ! get_key_list "$dev"; then
 			logerror "Device $dev: failed to read registered keys"
 			err=1
@@ -1237,9 +1229,7 @@ do_readkeys() {
 		fi
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "read-keys failed."
-	fi
+	test "$err" -eq 0 || errorexit "read-keys failed."
 }
 
 do_readreservation() {
@@ -1248,15 +1238,21 @@ do_readreservation() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports PR, continue below
+			;;
+		1)
 			echo "Device $dev: does not support PR"
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query reservation type"
 			err=1
 			continue
-		fi
+			;;
+		esac
 		get_dev_reservation "$dev"
 		if [[ "$DEV_PRDESC" == "error" ]]; then
 			logerror "Device $dev: failed to read reservation"
@@ -1273,9 +1269,7 @@ do_readreservation() {
 		fi
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "read-reservation failed."
-	fi
+	test "$err" -eq 0 || errorexit "read-reservation failed."
 }
 
 # Reject a path a non-root user could modify or replace between this
