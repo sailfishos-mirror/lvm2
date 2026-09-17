@@ -10,9 +10,6 @@
 
 set -o pipefail
 
-IFS_NL='
-'
-
 MISSING_DEV_COUNT=0
 
 usage() {
@@ -125,19 +122,17 @@ set_cmd() {
 	case "$dev" in
 	  /dev/nvme*)
 		cmd="nvme"
-		cmdopts=""
+		cmdopts=()
 		;;
 	  /dev/dm-*)
+		;&
+	  /dev/mapper/*)
 		cmd="mpathpersist"
-		cmdopts=""
-		;;
-	  /dev/mapper*)
-		cmd="mpathpersist"
-		cmdopts=""
+		cmdopts=()
 		;;
 	  *)
 		cmd="sg_persist"
-		cmdopts="--no-inquiry"
+		cmdopts=("--no-inquiry")
 		;;
 	esac
 }
@@ -154,10 +149,8 @@ set_type() {
 		type_str="$NVME_PRDESC"
 		;;
 	  /dev/dm-*)
-		type="$MPATH_PRTYPE"
-		type_str="$MPATH_PRDESC"
-		;;
-	  /dev/mapper*)
+		;&
+	  /dev/mapper/*)
 		type="$MPATH_PRTYPE"
 		type_str="$MPATH_PRDESC"
 		;;
@@ -184,19 +177,15 @@ key_is_on_device() {
 		op="resv-report"
 
 		# jq -e: exit non-zero when the filter matches nothing (key absent).
-		if nvme resv-report --eds -o json "$dev" 2>/dev/null \
-			| jq -e ".regctlext[] | select(.rkey == ${FINDKEY_DEC})" > /dev/null 2>&1; then
-			return 0
-		fi
+		nvme resv-report --eds -o json "$dev" 2>/dev/null \
+			| jq -e ".regctlext[] | select(.rkey == ${FINDKEY_DEC})" > /dev/null 2>&1 && return 0
 	else
 		op="read-keys"
 
 		# grep with space to avoid matching the line "PR generation=0x..."
 		# end-of-line matching required to avoid 0x123ab matching 0x123abc
-		if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null \
-			| grep -q " $FINDKEY$"; then
-			return 0
-		fi
+		"$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null \
+			| grep -q " $FINDKEY$" && return 0
 	fi
 
 	# Inspect PIPESTATUS immediately: nothing may run between the pipeline
@@ -221,29 +210,37 @@ key_is_on_device() {
 }
 
 get_key_list_nvme() {
-	local IFS=$IFS_NL
+	local keys_str
 	dev=$1
 	set_cmd "$dev"
+
+	KEYS=()
 
 	# json/jq output is only decimal; xargs -r skips printf when there are no keys.
 	# Do not use jq -e here: no registrants is success (empty output), not an error.
 
-	# shellcheck disable=SC2207 # intentional split of key values
-	KEYS=( $(nvme resv-report --eds -o json "$dev" 2>/dev/null \
+	keys_str=$(
+		nvme resv-report --eds -o json "$dev" 2>/dev/null \
 		| jq -r '.regctlext[].rkey' \
 		| sort -n \
-		| xargs -r printf '0x%x\n') )
-	if [ $? -ne 0 ]; then
+		| xargs -r printf '0x%x\n'
+	) || {
 		logmsg "$cmd read-keys error on $dev"
 		KEYS=()
 		return 1
+	}
+
+	if [[ -n $keys_str ]]; then
+		mapfile -t KEYS <<< "$keys_str"
 	fi
 }
 
 get_key_list_scsi() {
-	local IFS=$IFS_NL
+	local keys_str
 	dev=$1
 	set_cmd "$dev"
+
+	KEYS=()
 
 	if [[ "$cmd" == "mpathpersist" ]]; then
 		no_keys_msg="0 registered reservation key"
@@ -251,21 +248,23 @@ get_key_list_scsi() {
 		no_keys_msg="there are NO registered reservation keys"
 	fi
 
-	if $cmd $cmdopts --in --read-keys "$dev" 2>/dev/null | grep -q "$no_keys_msg"; then
-		KEYS=()
-		return
-	fi
+	"$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null \
+		| grep -q "$no_keys_msg" && return
 
 	# sort -u eliminates repeated keys listed with multipath
 	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
 
-	# shellcheck disable=SC2207 # intentional split of key values
-	KEYS=( $($cmd $cmdopts --in --read-keys "$dev" 2>/dev/null \
-		| grep "    0x" | grep -oE '0x[0-9a-fA-F]+' | sort -u) )
-	if [ $? -ne 0 ]; then
+	keys_str=$(
+		"$cmd" "${cmdopts[@]}" --in --read-keys "$dev" 2>/dev/null \
+		| grep "    0x" | grep -oE '0x[0-9a-fA-F]+' | sort -u
+	) || {
 		logmsg "$cmd read-keys error on $dev"
 		KEYS=()
 		return 1
+	}
+
+	if [[ -n $keys_str ]]; then
+		mapfile -t KEYS <<< "$keys_str"
 	fi
 }
 
