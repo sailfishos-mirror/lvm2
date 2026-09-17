@@ -678,9 +678,10 @@ undo_register() {
 
 do_register_nvme() {
 	dev=$1
+	set_cmd "$dev"
 
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+='--cptpl=1'
+		cmdopts+=' --cptpl=1'
 	fi
 
 	# If our previous key is still registered, then we must use
@@ -688,10 +689,9 @@ do_register_nvme() {
 	# then we must use rrega=0.
 
 	if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
-		if ! nvme resv-register --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
+		if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
 			logmsg "$cmd register error on $dev"
-			false
-			return
+			return 1
 		fi
 	fi
 }
@@ -701,13 +701,12 @@ do_register_scsi() {
 	set_cmd "$dev"
 
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+='--param-aptpl'
+		cmdopts+=' --param-aptpl'
 	fi
 
 	if ! $cmd $cmdopts --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
 		logmsg "$cmd register error on $dev"
-		false
-		return
+		return 1
 	fi
 }
 
