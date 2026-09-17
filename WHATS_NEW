@@ -9,6 +9,12 @@ Version 2.03.43 -
   Fix memleak of config tree list nodes on toolcontext refresh.
   Fix lvmconfig output of merged and unregistered config nodes.
   Recurse into subsections when merging config trees.
+  Make lvmpersist reject non-block devices and unsupported device types.
+  Make lvmpersist validate `--vg`/`--device` and key options before use.
+  Make lvmpersist check for required PR tools (sg_persist, nvme, mpathpersist, jq).
+  Make lvmpersist clean up registered keys when interrupted during start/takeover.
+  Make lvmpersist report failures from start, stop, clear, remove and query commands.
+  Fix lvmpersist `--vg` device list splitting to avoid pathname expansion.
 
 Version 2.03.42 - 06th August 2026
 ==================================
