@@ -639,10 +639,10 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/nvme*)
+		/dev/nvme*)
 			FOUND_NVME=1
 			;;
-	  	/dev/sd*)
+		/dev/sd*)
 			FOUND_SCSI=1
 			;;
 		/dev/dm-*)
@@ -661,7 +661,7 @@ check_devices() {
 				err=1
 			fi
 			;;
-	  	*)
+		*)
 			logmsg "device type not supported for $dev."
 			err=1
 		esac
@@ -671,11 +671,11 @@ check_devices() {
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
 		command -v mpathpersist > /dev/null || die "mpathpersist command not found."
-		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null 2>&1; then
+		grep "reservation_key file" /etc/multipath.conf > /dev/null 2>&1 || {
 			echo "To use persistent reservations with multipath, run:"
 			echo "  mpathconf --option reservation_key:file"
 			echo "to configure multipath.conf, and then restart multipathd."
-		fi
+		}
 	fi
 
 	# sg_persist is used for report-capabilities on both scsi and
@@ -703,11 +703,11 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/sd*)
+		/dev/sd*)
 			;&
 		/dev/dm-*)
 			;&
-		/dev/mapper*)
+		/dev/mapper/*)
 			sg_turs "$dev" >/dev/null 2>&1
 			ec=$?
 			test $ec -eq 0 || logmsg "test unit ready error $ec from $dev"
@@ -722,10 +722,10 @@ check_devices() {
 # TODO: consider failing hard when udevadm is unavailable or settle
 # fails, if this turns out to be a real point of failure in the field.
 settle_udev() {
-	if ! command -v udevadm > /dev/null; then
+	command -v udevadm > /dev/null || {
 		logmsg "udevadm not found: cannot wait for udev before reserving $GROUP."
 		return 0
-	fi
+	}
 	udevadm settle || logmsg "failed to settle udev events before reserving $GROUP."
 }
 
@@ -738,11 +738,8 @@ undo_register() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
-		fi
-		if [ $? -ne 0 ]; then
-			logmsg "$cmd unregister error on $dev"
-		fi
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+		fi || logmsg "$cmd unregister error on $dev"
 	done
 }
 
