@@ -820,30 +820,31 @@ do_start() {
 
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
-		if ! device_supports_type_str "$dev" "$type_str"; then
-			logmsg "start $GROUP $dev does not support reservation type $type_str."
+		device_supports_type_str "$dev" "$type_str"
+		rc=$?
+		if [ "$rc" -ne 0 ]; then
+			if [ "$rc" -eq 2 ]; then
+				logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			else
+				logmsg "start $GROUP $dev does not support reservation type $type_str."
+			fi
 			err=1
 		fi
 	done
 
-	test "$err" -eq 1 && exit 1
-
-	err=0
+	if [ "$err" -ne 0 ]; then
+		errorexit "start $GROUP failed."
+	fi
 
 	# Register our key on devices
 
 	for dev in "${DEVICES[@]}"; do
 		if ! do_register "$dev"; then
-			err=1
-			break
+			logmsg "start $GROUP failed to register our key."
+			undo_register
+			exit 1
 		fi
 	done
-
-	if [[ "$err" -eq 1 ]]; then
-		logmsg "start $GROUP failed to register our key."
-		undo_register
-		exit 1
-	fi
 
 	# The register above triggers udev to re-probe the device.
 	# Wait for probing to finish before issuing the reservation
