@@ -1,5 +1,6 @@
 Version 1.02.217 - 
 ===================
+  Ignore stale raid sync/nosync in active table for reload suppression.
   Resolve dmsetup vdostats through device tree and try -vpool name suffix.
   Make library initialization and finalization safe with dlopen and dlclose.
   Disable LeakSanitizer for the dmsetup udevcomplete udev rule.
