@@ -362,6 +362,10 @@ node2 lvmpersist start --ourkey $KEY2 --access sh --vg testvg
 node1 lvmpersist check-key --key $KEY1 --vg testvg
 node1 lvmpersist check-key --key $KEY2 --vg testvg
 
+# Populate system.devices explicitly.  vgcreate does not create it when the
+# node already has an OS VG, and without it LVM would continue to scan d2.
+node1 vgimportdevices testvg
+
 # remove d2 from system.devices on node1 so it appears as [unknown]
 node1 lvmdevices --deldev $d2
 
