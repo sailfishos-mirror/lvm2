@@ -1,5 +1,6 @@
 Version 2.03.43 - 
 ==================
+  Reject undersized --pooldatavdo conversion before allocating pool metadata.
   Allow lvchange --refresh and properties on hidden thin and cache pool sub LVs.
   Allow 4K stripe size smaller than page size (except on DAX and MD RAID).
   Set recursion limit to 1024 LVs when processing device tree.
