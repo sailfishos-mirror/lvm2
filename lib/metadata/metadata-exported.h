@@ -1402,6 +1402,9 @@ struct vdo_pool_info {
 int vdo_pool_info(uint64_t pool_size_sectors,
 		  const struct dm_vdo_target_params *vtp,
 		  struct vdo_pool_info *info);
+int vdo_pool_validate_size(struct logical_volume *lv,
+			   const struct dm_vdo_target_params *vtp,
+			   struct vdo_pool_info *info);
 int update_vdo_pool_virtual_size(struct lv_segment *vdo_pool_seg);
 uint32_t get_vdo_pool_max_extents(const struct dm_vdo_target_params *vtp,
 				  uint32_t extent_size);
