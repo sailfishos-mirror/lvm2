@@ -64,6 +64,19 @@ check lv_field $vg/$lv1 segtype thin-pool
 check lv_field $vg/${lv1}_tdata segtype vdo -a
 check lv_field $vg/${lv1}_tdata vdo_deduplication "" -a  # deduplication should be disabled
 
+# The configured VDO pool header size must reach the vdopool segment
+# (default 512 KiB at each end -> 1024 in the stored header_size value).
+vgcfgbackup -f vgbackup $vg
+grep "header_size = 1024" vgbackup
+
+lvremove -f $vg
+
+# Undersized LV must fail before creating metadata/spare or renaming to _vpool
+lvcreate -L12M --name $lv1 $vg
+fail lvconvert --yes -Wy --type thin-pool --pooldatavdo y $vg/$lv1
+check lv_exists $vg $lv1
+check lv_not_exists $vg ${lv1}_vpool0
+test "$(get vg_field $vg lv_count)" -eq "1"
 lvremove -f $vg
 
 
