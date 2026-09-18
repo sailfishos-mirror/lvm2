@@ -436,6 +436,31 @@ out:
 }
 
 /*
+ * Validate the data LV is large enough to hold a VDO pool for the given
+ * target parameters.  On success, optionally returns the computed pool
+ * geometry in @info.  Returns 0 and logs the minimum required pool size
+ * when the LV is too small.
+ */
+int vdo_pool_validate_size(struct logical_volume *lv,
+			   const struct dm_vdo_target_params *vtp,
+			   struct vdo_pool_info *info)
+{
+	struct vdo_pool_info local = { 0 };
+
+	if (!info)
+		info = &local;
+
+	if (vdo_pool_info(lv->size, vtp, info))
+		return 1;
+
+	log_error("Pool %s is too small (%s) for the given VDO configuration, needs at least %s.",
+		  display_lvname(lv),
+		  display_size(lv->vg->cmd, lv->size),
+		  display_size(lv->vg->cmd, info->min_pool_sectors));
+	return 0;
+}
+
+/*
  * convert_vdo_pool_lv
  * @data_lv
  * @vtp
@@ -492,19 +517,20 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 				use_kernel = 0;
 			}
 
+			/*
+			 * Validate size before wipe/format for both kernel and
+			 * userspace paths.  Undersized pools used to reach
+			 * vdoformat and fail with "Out of space" after partial
+			 * conversion (rename, metadata LV, spare).
+			 */
+			if (!vdo_pool_validate_size(data_lv, vtp, &pinfo))
+				return 0;
+
 			if (use_kernel) {
 				/* Kernel decides to format if the first 4k are zeroes */
 				if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, PROMPT)) {
 					log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
 						  display_lvname(data_lv));
-					return 0;
-				}
-
-				if (!vdo_pool_info(data_lv->size, vtp, &pinfo)) {
-					log_error("Pool %s is too small (%s) for the given VDO configuration, needs at least %s.",
-						  display_lvname(data_lv),
-						  display_size(data_lv->vg->cmd, data_lv->size),
-						  display_size(data_lv->vg->cmd, pinfo.min_pool_sectors));
 					return 0;
 				}
 
@@ -632,6 +658,15 @@ struct logical_volume *convert_vdo_lv(struct logical_volume *lv,
 			  lvc.segtype->name);
 		return NULL;
 	}
+
+	/*
+	 * Fail before renaming / formatting when the LV cannot hold a VDO
+	 * pool for the configured slab/index sizes.  Validated even in test
+	 * mode so a dry run reports the same size failure as a real run.
+	 */
+	if (vcp->do_zero &&
+	    !vdo_pool_validate_size(lv, &vcp->vdo_params, NULL))
+		return NULL;
 
 	if (!vcp->lv_name) {
 		/* TODO: maybe  _vpool would be sufficient */

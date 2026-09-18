@@ -3153,7 +3153,6 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 	thin_zero_t zero_new_blocks;
 	int error_when_full;
 	int data_vdo;
-	uint64_t vdo_pool_header_size;
 	struct vdo_convert_params vcp = {
 		.activate = CHANGE_AN,
 		.do_zero = 1,
@@ -3339,6 +3338,23 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 		goto bad;
 	}
 
+	/*
+	 * When converting pool data to VDO, validate the data LV is large
+	 * enough before allocating metadata/spare LVs or renaming.  Otherwise
+	 * a late vdoformat failure leaves abandoned volumes requiring manual
+	 * cleanup.
+	 */
+	if (data_vdo && !to_thin && !lv_is_vdo(lv)) {
+		if (!fill_vdo_target_params(cmd, &vcp.vdo_params, &vcp.header_size, vg->profile))
+			goto_bad;
+
+		if (!get_vdo_settings(cmd, &vcp.vdo_params, NULL))
+			goto_bad;
+
+		if (!vdo_pool_validate_size(lv, &vcp.vdo_params, NULL))
+			goto bad;
+	}
+
 	log_verbose("Pool metadata extents %u chunk_size %u", meta_extents, chunk_size);
 
 	(void) dm_snprintf(converted_names, sizeof(converted_names), "%s%s%s",
@@ -3461,12 +3477,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 				log_print_unless_silent("Volume %s is already VDO volume, skipping VDO conversion.",
 							display_lvname(lv));
 			} else {
-				if (!fill_vdo_target_params(cmd, &vcp.vdo_params, &vdo_pool_header_size, vg->profile))
-					goto_bad;
-
-				if (!get_vdo_settings(cmd, &vcp.vdo_params, NULL))
-					goto_bad;
-
+				/* vcp filled and size-checked above before metadata allocation */
 				if (!convert_vdo_lv(lv, &vcp))
 					goto_bad;
 			}
