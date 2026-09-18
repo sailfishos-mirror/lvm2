@@ -172,13 +172,12 @@ test_index_memory_size() {
 	grep "out of range" out
 
 	# Pool too small for the given index config -- must print minimum required size
-	if test "$use_kernel" -eq 1; then
-		not lvcreate --vdo -L1G -V2G -n $lv1 $vg/vdopool \
-			--config 'allocation/vdo_index_memory_size_mb=768' \
-			--vdosettings "use_sparse_index=1 use_kernel_format=1" 2>&1 | tee out
-		grep "needs at least" out
-		lvremove -ff $vg || true
-	fi
+	# (both kernel and userspace formatting share the same pre-check)
+	not lvcreate --vdo -L1G -V2G -n $lv1 $vg/vdopool \
+		--config 'allocation/vdo_index_memory_size_mb=768' \
+		--vdosettings "use_sparse_index=1 use_kernel_format=$use_kernel" 2>&1 | tee out
+	grep "needs at least" out
+	lvremove -ff $vg || true
 }
 
 aux prepare_vg 1 1000000
