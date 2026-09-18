@@ -41,6 +41,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#if defined(ENABLE_ASAN) && defined(__linux__)
+#  include <sys/ptrace.h>
+#endif
+
 #ifdef UDEV_SYNC_SUPPORT
 #  include <sys/types.h>
 #  include <sys/ipc.h>
@@ -7226,6 +7230,67 @@ static int _do_report_wait(void)
 	return _do_timer_wait();
 }
 
+#ifdef ENABLE_ASAN
+/*
+ * LeakSanitizer's exit-time check starts a helper that ptrace-attaches to
+ * this process.  That fails with EPERM inside a systemd-udevd worker and can
+ * turn a successful udev cookie completion into a non-zero exit.
+ *
+ * Sanitizer defaults hooks (__lsan_default_options) run before the C runtime
+ * is initialised, so they cannot probe anything: getenv() returns NULL there
+ * and file I/O crashes the process.  Instead probe from main(), where
+ * everything works, whether ptrace is actually permitted.  If it is not,
+ * force detect_leaks=0 and re-exec ourselves so that LSan picks the option up
+ * at startup.  ASan and UBSan stay active; only leak detection is turned off.
+ *
+ * The guard variable prevents an endless re-exec loop.
+ */
+#define LSAN_REEXEC_ENV "LVM_LSAN_REEXEC"
+
+static int _ptrace_allowed(void)
+{
+	pid_t pid = fork();
+	int status;
+
+	if (pid < 0)
+		return 1;	/* cannot tell, assume allowed */
+
+	if (!pid) {
+		/* Probe in a child so we do not become traceable ourselves. */
+		if (ptrace(PTRACE_TRACEME, 0, 0, 0) == -1)
+			_exit(1);
+		_exit(0);
+	}
+
+	if (waitpid(pid, &status, 0) < 0)
+		return 1;
+
+	return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static void _disable_lsan_without_ptrace(char *const argv[])
+{
+	const char *lsan;
+	char opts[256];
+
+	if (getenv(LSAN_REEXEC_ENV) || _ptrace_allowed())
+		return;
+
+	lsan = getenv("LSAN_OPTIONS");
+	if (lsan && *lsan)
+		snprintf(opts, sizeof(opts), "%s:detect_leaks=0", lsan);
+	else
+		snprintf(opts, sizeof(opts), "detect_leaks=0");
+
+	if (setenv("LSAN_OPTIONS", opts, 1) ||
+	    setenv(LSAN_REEXEC_ENV, "1", 1))
+		return;
+
+	execv("/proc/self/exe", argv);
+	/* Re-exec failed: fall back to running with leak detection enabled. */
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	int ret = 1, r;
@@ -7233,6 +7298,10 @@ int main(int argc, char **argv)
 	const struct command *cmd;
 	const char *subcommand = "";
 	int multiple_devices;
+
+#ifdef ENABLE_ASAN
+	_disable_lsan_without_ptrace(argv);
+#endif
 
 	(void) setlocale(LC_ALL, "");
 
