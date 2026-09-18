@@ -1859,6 +1859,36 @@ static int _skip_raid_volatile_token(const char **pp)
 }
 
 /*
+ * Skip optional "sync" or "nosync" flag token in the active table.
+ * External tools (dmsetup) may inject these to force a resync and the
+ * kernel keeps reporting the token in STATUSTYPE_TABLE afterwards, while
+ * LVM metadata does not.  Dropping it via reload is rejected with EINVAL,
+ * so the token is ignored when comparing against the active table only.
+ */
+static int _skip_raid_sync_flag(const char **pp)
+{
+	const char *p = *pp;
+
+	if (!strncmp(p, "nosync", 6) && (!p[6] || p[6] == ' ')) {
+		p += 6;
+		if (*p == ' ')
+			p++;
+		*pp = p;
+		return 1;
+	}
+
+	if (!strncmp(p, "sync", 4) && (!p[4] || p[4] == ' ')) {
+		p += 4;
+		if (*p == ' ')
+			p++;
+		*pp = p;
+		return 1;
+	}
+
+	return 0;
+}
+
+/*
  * Check if raid params are functionally equivalent.
  * p1 = new table, p2 = active table (kernel STATUSTYPE_TABLE).
  *
@@ -1867,6 +1897,11 @@ static int _skip_raid_volatile_token(const char **pp)
  * table output once In_sync is set.  Both cause spurious string
  * mismatches that defeat reload suppression.  We skip the param
  * count and ignore volatile "rebuild N" / "write_mostly N" pairs.
+ *
+ * "sync" / "nosync" may also differ: an externally forced resync
+ * leaves the token in the active table only, so it is skipped there.
+ * The new table (p1) is never skipped -- a sync/nosync it carries is
+ * a deliberate force/avoid-resync request and must trigger a reload.
  *
  * The 'suspended' flag gates which side gets the volatile skip.
  * Do not simplify this to always-symmetric or always-asymmetric.
@@ -1906,6 +1941,13 @@ static int _raid_params_equiv(const char *p1, const char *p2,
 	s2++;
 
 	for (;;) {
+		/*
+		 * Stale sync/nosync from an externally forced resync only
+		 * appears in the active table; never skip the new table.
+		 */
+		while (*s2 && _skip_raid_sync_flag(&s2))
+			;
+
 		if (suspended)
 			while (*s1 && _skip_raid_volatile_token(&s1))
 				;
