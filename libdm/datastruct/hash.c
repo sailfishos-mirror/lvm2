@@ -36,14 +36,13 @@ struct dm_hash_table {
 	struct dm_hash_node **slots;
 };
 
-#undef get16bits
-#if (defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)))
-#define get16bits(d) (*((const uint16_t *) (d)))
-#endif
+#define get16bits_bytes(d) ((((uint32_t)(((const uint8_t *)(d))[1])) << 8)\
+			    +(uint32_t)(((const uint8_t *)(d))[0]))
 
-#if !defined (get16bits)
-#define get16bits(d) ((((uint32_t)(((const uint8_t *)(d))[1])) << 8)\
-                       +(uint32_t)(((const uint8_t *)(d))[0]) )
+#if (defined(__GNUC__) && (defined(__i386__) || defined(__x86_64__)))
+#define get16bits_aligned(d) (*((const uint16_t *) (d)))
+#else
+#define get16bits_aligned(d) get16bits_bytes(d)
 #endif
 
 static struct dm_hash_node *_create_node(const void *key, unsigned len)
@@ -62,18 +61,26 @@ static struct dm_hash_node *_create_node(const void *key, unsigned len)
  * Adapted Bob Jenkins hash to read by 2 bytes if possible.
  * https://secure.wikimedia.org/wikipedia/en/wiki/Jenkins_hash_function
  *
- * Reduces amount of hash collisions
+ * Aligned keys use a uint16_t load; unaligned keys use byte loads.
  */
 static unsigned _hash(const void *key, unsigned len)
 {
-	const uint8_t *str = (uint8_t*) key;
+	const uint8_t *str = key;
 	unsigned hash = 0, i;
 	unsigned sz = len / 2;
 
-	for(i = 0; i < sz; ++i) {
-		hash += get16bits(str + 2 * i);
-		hash += (hash << 10);
-		hash ^= (hash >> 6);
+	if ((uintptr_t) str & 1) {
+		for (i = 0; i < sz; ++i) {
+			hash += get16bits_bytes(str + 2 * i);
+			hash += (hash << 10);
+			hash ^= (hash >> 6);
+		}
+	} else {
+		for (i = 0; i < sz; ++i) {
+			hash += get16bits_aligned(str + 2 * i);
+			hash += (hash << 10);
+			hash ^= (hash >> 6);
+		}
 	}
 
 	if (len & 1) {
