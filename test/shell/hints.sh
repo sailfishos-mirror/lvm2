@@ -112,8 +112,9 @@ not grep scan: tmptest
 # Test I/O syscalls for different backends
 if which strace && ! aux with_sanitizer; then
 for backend in async; do
-	# Skip if backend is not available
-	if ! pvs --config "global/io_backend=\"$backend\"" >/dev/null 2>&1; then
+	# A successful command may have fallen back to sync.
+	pvs -vvv --config "global/io_backend=\"$backend\"" >tmptest 2>&1
+	if ! grep -q "Created bcache.*$backend" tmptest; then
 		continue
 	fi
 
