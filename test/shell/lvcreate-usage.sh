@@ -178,8 +178,21 @@ lvcreate -L 8 -n $lv2 --readahead none $vg
 check lv_field $vg/$lv2 lv_read_ahead "0"
 check lv_field $vg/$lv2 lv_kernel_read_ahead "0"
 lvcreate -L 8 -n $lv3 --readahead 8k $vg
-check lv_field $vg/$lv3 lv_read_ahead "8.00k"
-check lv_field $vg/$lv3 lv_kernel_read_ahead "8.00k"
+# An explicit readahead that is not a multiple of the machine page size is
+# overridden to a multiple of the page size (see tools/lvcreate.c
+# _read_activation_params), so compute the expected value from this host.
+pagesize_sectors=$(( $(getconf PAGESIZE) / 512 ))
+ra_sectors=$(( 8 * 1024 / 512 ))
+if (( ra_sectors % pagesize_sectors )); then
+	if (( ra_sectors < pagesize_sectors )); then
+		ra_sectors=$pagesize_sectors
+	else
+		ra_sectors=$(( ra_sectors / pagesize_sectors * pagesize_sectors ))
+	fi
+fi
+ra_kb=$(( ra_sectors / 2 ))
+check lv_field $vg/$lv3 lv_read_ahead "${ra_kb}.00k" --units k
+check lv_field $vg/$lv3 lv_kernel_read_ahead "${ra_kb}.00k" --units k
 lvcreate -L 8 -n $lv4 --readahead auto $vg "$dev1"
 check lv_field $vg/$lv4 lv_read_ahead "auto"
 # figure RA value of a PV origin device (only applicable to DM-backed devices)
