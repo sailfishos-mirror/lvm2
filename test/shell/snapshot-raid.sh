@@ -16,7 +16,7 @@
 . lib/inittest --skip-with-lvmpolld
 
 aux have_raid 1 3 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 mount_dir="mnt"
 mkdir -p "$mount_dir"

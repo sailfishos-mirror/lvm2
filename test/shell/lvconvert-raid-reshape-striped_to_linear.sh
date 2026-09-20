@@ -16,7 +16,7 @@
 
 aux lvmconf 'activation/raid_region_size = 512'
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 aux have_raid 1 14 0 || skip
 
 aux prepare_vg 5 20

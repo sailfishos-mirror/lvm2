@@ -18,7 +18,7 @@ SKIP_WITH_LOW_SPACE=256
 
 aux have_integrity 1 5 0 || skip
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 mnt="mnt"
 mkdir -p "$mnt"
 

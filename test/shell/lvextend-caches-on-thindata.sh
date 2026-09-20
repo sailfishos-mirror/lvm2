@@ -110,7 +110,7 @@ do_test()
 
 aux have_cache 1 10 0 || skip
 aux have_writecache 1 0 0 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 mount_dir="mnt"
 mkdir -p "$mount_dir"

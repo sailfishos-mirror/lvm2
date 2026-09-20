@@ -24,7 +24,7 @@ aux can_use_16T || skip
 # Main
 #
 aux have_thin 1 0 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 # 16T device
 aux prepare_pvs 2 8388608

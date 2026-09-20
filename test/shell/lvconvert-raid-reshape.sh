@@ -18,7 +18,7 @@ case "$(uname -r)" in
 5.19*) skip "Skipping test that crashes this kernel version" ;;
 esac
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 aux have_raid 1 14 0 || skip
 
 test "$(aux total_mem)" -gt 1048576 || skip "Insufficient RAM for this test"

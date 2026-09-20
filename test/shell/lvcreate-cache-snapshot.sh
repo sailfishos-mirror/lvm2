@@ -15,7 +15,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext2 || skip
+aux have_fs ext2 || skip
 which fsck || skip
 
 aux have_cache 1 5 0 || skip

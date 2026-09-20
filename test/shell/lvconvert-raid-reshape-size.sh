@@ -51,7 +51,7 @@ aux kernel_at_least 6 9 0 || skip
 
 test "$(aux total_mem)" -gt 1048576 || skip "Not enough RAM for this test"
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 test "$SKIP_RESIZE" -eq 1 || ( which resize2fs || skip )
 

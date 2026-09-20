@@ -16,7 +16,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext2 || skip
+aux have_fs ext2 || skip
 
 aux lvmconf "activation/snapshot_autoextend_percent = 0" \
             "activation/snapshot_autoextend_threshold = 100"

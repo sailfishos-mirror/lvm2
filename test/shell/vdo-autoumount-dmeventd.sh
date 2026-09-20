@@ -34,7 +34,7 @@ _is_lv_opened()
 #
 # Main
 #
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
 
 aux have_vdo 6 2 0 || skip

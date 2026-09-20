@@ -16,8 +16,8 @@
 . lib/inittest --skip-with-lvmpolld
 
 test "${LVM_VALGRIND:-0}" -eq 0 || skip # too slow for valgrind
-which mkfs.ext4 || skip
-which mkfs.xfs || skip
+aux have_fs ext4 || skip
+aux have_fs xfs || skip
 aux have_integrity 1 5 0 || skip
 
 # Kernel 6.1 added "dm integrity: clear the journal on suspend" (984bf2cc531e).

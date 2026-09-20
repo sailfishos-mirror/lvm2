@@ -20,7 +20,7 @@ esac
 
 # Test reshaping under io load
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 aux have_raid 1 13 2 || skip
 
 mount_dir="mnt"

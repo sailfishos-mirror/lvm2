@@ -26,7 +26,7 @@
 aux have_vdo 6 2 1 || skip
 aux have_cache 1 3 0 || skip
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
 
 aux prepare_vg 1 9000

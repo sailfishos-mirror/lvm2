@@ -31,7 +31,7 @@ check_lv_field_modules_()
 # Main
 #
 aux have_thin 1 0 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 aux prepare_pvs 2 64
 get_devs

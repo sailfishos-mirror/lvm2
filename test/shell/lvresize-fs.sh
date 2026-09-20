@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 which resize2fs || skip
 which mkswap || skip
 

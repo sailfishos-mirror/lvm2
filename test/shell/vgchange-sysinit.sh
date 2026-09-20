@@ -13,7 +13,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext3 || skip
+aux have_fs ext3 || skip
 
 aux prepare_pvs 2 8
 

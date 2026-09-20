@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext2 || skip
+aux have_fs ext2 || skip
 
 extend() {
 	lvextend --use-policies --config "activation { snapshot_autoextend_threshold = $1 }" $vg/snap

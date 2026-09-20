@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext2 || skip
+aux have_fs ext2 || skip
 aux mirror_recovery_works || skip
 
 aux prepare_dmeventd

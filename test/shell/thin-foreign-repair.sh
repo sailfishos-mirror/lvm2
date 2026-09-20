@@ -33,7 +33,7 @@ cleanup_mounted_and_teardown()
 # Main
 #
 aux have_thin 1 0 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 # Use our mkfs config file to get approximately same results
 # TODO: maybe use it for all test via some 'prepare' function

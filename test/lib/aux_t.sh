@@ -2376,6 +2376,18 @@ kernel_at_least() {
 	version_at_least "$(uname -r)" "$@"
 }
 
+have_fs() {
+	# Verify the kernel can mount filesystem type '$1' AND the mkfs.$1 tool
+	# is present before a test uses it (e.g. with mkfs + mount).
+	# This single check replaces the plain 'which mkfs.$1' skips in tests.
+	# Note: /proc/filesystems prefixes real filesystems with a tab.
+	local t=$1
+	command -v "mkfs.$t" >/dev/null 2>&1 || return 1
+	grep -qw "$t" /proc/filesystems && return 0
+	modprobe "$t" >/dev/null 2>&1
+	grep -qw "$t" /proc/filesystems
+}
+
 [[ "${LVM_TEST_AUX_TRACE-0}" = "0" ]] || set -x
 
 [[ -f DEVICES ]] && devs=$(< DEVICES)

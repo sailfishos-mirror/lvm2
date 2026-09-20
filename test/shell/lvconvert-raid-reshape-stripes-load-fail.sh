@@ -20,7 +20,7 @@ case "$(uname -r)" in
   3.10.0-862*) skip "Cannot run this test on unfixed kernel." ;;
 esac
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 aux have_raid 1 13 2 || skip
 
 mount_dir="mnt"
