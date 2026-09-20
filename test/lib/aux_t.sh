@@ -799,6 +799,45 @@ prepare_ramdisk() {
 	touch RAMDISK
 }
 
+prepare_ramdisk_static() {
+	local size=$1
+
+	# brd built-in: /dev/ram0 exists from boot at a fixed size given on the
+	# kernel command line (brd.rd_size=...).  There is no module to reload
+	# (and no resizing), so reuse it only when it is BOTH big enough for
+	# this request AND unused -- otherwise fall back to a loop device.
+	# prepare_devs() blkdiscards it for freshness right after
+	# prepare_backing_dev().
+	[[ -d /sys/block/ram0 ]] || return 1
+
+	local rd_mb=$(( $(blockdev --getsize64 /dev/ram0) >> 20 ))
+	[[ "$size" -le "$rd_mb" ]] || return 1
+
+	# "in use" checks -- mirrors the 'modprobe -r brd' busy test used by the
+	# module path: never touch the ram disk if somebody else is using it.
+	local h
+	for h in /sys/block/ram0/holders/*; do
+		[[ -e "$h" ]] && return 1	# dm/md device stacked on top
+		break
+	done
+	if grep -qw /dev/ram0 /proc/mounts; then
+		return 1			# a filesystem is mounted from it
+	fi
+	# A device-mapper device depending on this ram disk counts as in use;
+	# 'dmsetup deps' reports dependencies as stable decimal "(maj, min)"
+	# tuples, far more robust than parsing target table strings.
+	local mj mn
+	read -r mj mn < <(stat -Lc '%t %T' /dev/ram0)
+	if dmsetup deps 2>/dev/null | grep -qE "\($(( 0x$mj )), $(( 0x$mn ))\)"; then
+		return 1
+	fi
+
+	echo -n "## preparing static ramdisk device..."
+	BACKING_DEV=/dev/ram0
+	echo "ok ($BACKING_DEV)"
+	touch RAMDISK
+}
+
 prepare_real_devs() {
 	lvmconf 'devices/scan = "/dev"'
 
@@ -1130,8 +1169,7 @@ prepare_backing_dev() {
 		BACKING_DEV=${BACKING_DEVICE_ARRAY[0]}
 		echo "$BACKING_DEV" > BACKING_DEV
 		return 0
-	elif [[ "${LVM_TEST_PREFER_BRD-1}" = "1" && \
-	     ! -d /sys/block/ram0 ]] && \
+	elif [[ "${LVM_TEST_PREFER_BRD-1}" = "1" ]] && \
 	     kernel_at_least 4 16 0 && \
 	     [[ "$size" -lt 16384 ]]; then
 		# try to use ramdisk if possible, but for
@@ -1142,7 +1180,17 @@ prepare_backing_dev() {
 		# and  bio-based 'error' device.
 		# However with request based DAX brd device we get this:
 		# device-mapper: ioctl: can't change device type after initial table load.
-		prepare_ramdisk "$size" "$@" && return
+		#
+		# Two possible brd setups:
+		#   * brd built-in: ram disks exist from boot, sized by the kernel
+		#     command line (brd.rd_size=...).  No module reload is possible
+		#     (nor needed) -- reuse the fixed-size device.
+		#   * brd as a module: reload it with the size needed by this test.
+		if [[ -d /sys/block/ram0 ]]; then
+			prepare_ramdisk_static "$size" "$@" && return
+		else
+			prepare_ramdisk "$size" "$@" && return
+		fi
 		echo "(failed)"
 	fi
 
