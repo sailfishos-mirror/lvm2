@@ -13,7 +13,7 @@
 
 . lib/inittest --skip-with-lvmpolld --skip-with-lvmlockd
 
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 # Don't attempt to test stats with driver < 4.33.00
 aux driver_at_least 4 33 || skip

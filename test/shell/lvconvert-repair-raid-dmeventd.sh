@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext3 || skip
+aux have_fs ext3 || skip
 aux have_raid 1 3 0 || skip
 
 aux lvmconf \

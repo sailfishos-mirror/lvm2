@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext3 || skip
+aux have_fs ext3 || skip
 
 lvdev_() {
     echo "$DM_DEV_DIR/$1/$2"

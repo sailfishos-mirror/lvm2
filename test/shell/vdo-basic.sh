@@ -17,7 +17,7 @@
 . lib/inittest --skip-with-lvmpolld --with-extended
 
 aux have_vdo 6 2 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 aux prepare_vg 1 6400
 

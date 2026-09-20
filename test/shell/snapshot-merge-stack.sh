@@ -17,7 +17,7 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
 
 . lib/inittest
 
-which mkfs.ext3 || skip
+aux have_fs ext3 || skip
 
 aux target_at_least dm-snapshot-merge 1 0 0 || skip
 

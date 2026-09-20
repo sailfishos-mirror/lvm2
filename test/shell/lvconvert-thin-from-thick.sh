@@ -17,7 +17,7 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 which fsck || skip
 aux have_tool_at_least "$LVM_TEST_THIN_RESTORE_CMD" 0 3 1 || skip
 aux have_thin 1 5 0 || skip

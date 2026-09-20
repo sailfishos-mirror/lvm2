@@ -15,7 +15,7 @@
 
 aux have_cache 1 10 0 || skip
 aux have_writecache 1 0 0 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 aux prepare_devs 6 70 # want 64M of usable space from each dev
 

@@ -22,7 +22,7 @@ export LVM_TEST_PREFER_BRD=0
 aux prepare_vg 1 1100
 
 # Tests require a libblkid version that shows FSLASTBLOCK
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 lvcreate -n $lv1 -L 100 $vg
 mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"

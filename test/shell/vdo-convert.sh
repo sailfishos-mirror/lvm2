@@ -40,7 +40,7 @@ if not which vdo ; then
 	export VDO_BINARY=lvm_vdo_wrapper
 	echo "Using 'lvm_vdo_wrapper' emulation of 'vdo' manager."
 fi
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
 
 # Conversion can be made with this version of vdo driver

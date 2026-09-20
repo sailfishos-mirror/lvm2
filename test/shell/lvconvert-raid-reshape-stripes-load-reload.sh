@@ -17,7 +17,7 @@
 # Test reshaping under io load
 
 which md5sum || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 aux have_raid 1 14 || skip
 
 mount_dir="mnt"

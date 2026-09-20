@@ -43,7 +43,7 @@ fi
 # VDO automatically starts dmeventd
 aux prepare_dmeventd
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
 export TMPDIR=$PWD
 

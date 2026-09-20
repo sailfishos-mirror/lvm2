@@ -49,7 +49,7 @@ mount_umount()
 }
 
 aux have_cache 1 10 0 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 case $(cache_check -V) in
 # support for v2 starts with version 0.7

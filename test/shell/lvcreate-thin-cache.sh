@@ -24,7 +24,7 @@ export LVM_TEST_THIN_REPAIR_CMD=${LVM_TEST_THIN_REPAIR_CMD-/bin/false}
 aux have_thin 1 0 0 || skip
 aux have_cache 1 3 0 || skip
 
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 aux prepare_pvs 2 64
 get_devs

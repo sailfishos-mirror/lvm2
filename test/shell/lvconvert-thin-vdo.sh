@@ -28,7 +28,7 @@ prepare_lvs() {
 #
 aux have_thin 1 0 0 || skip
 aux have_vdo 6 2 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 aux prepare_vg 4 6400
 

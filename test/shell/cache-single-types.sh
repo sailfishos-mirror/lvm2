@@ -17,7 +17,7 @@
 
 aux have_cache 1 10 0 || skip
 aux have_raid 1 3 5 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 mount_dir="mnt"
 mkdir -p "$mount_dir"

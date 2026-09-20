@@ -19,7 +19,7 @@
 # Main
 #
 aux have_vdo 6 2 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 aux prepare_pvs 2 6400
 get_devs

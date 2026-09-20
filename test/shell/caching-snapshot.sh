@@ -19,7 +19,7 @@ lvm segtypes 2>/dev/null | grep writecache$ >/dev/null || {
 	skip 'Writecache is not built-in.'
 }
 aux have_cache 1 10 0 || skip
-which mkfs.ext4 || skip
+aux have_fs ext4 || skip
 
 HAVE_WRITECACHE=1
 aux have_writecache 1 0 0 || HAVE_WRITECACHE=0

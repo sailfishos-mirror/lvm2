@@ -16,7 +16,7 @@
 . lib/inittest --skip-with-lvmpolld
 
 aux have_cache 1 10 0 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 mount_dir="mnt"
 mkdir -p "$mount_dir"

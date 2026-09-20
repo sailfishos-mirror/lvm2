@@ -17,7 +17,7 @@ SKIP_WITH_LOW_SPACE=1100
 . lib/inittest --skip-with-lvmpolld
 
 aux have_integrity 1 5 0 || skip
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 
 mnt="mnt"
 mkdir -p "$mnt"

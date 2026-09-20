@@ -14,7 +14,7 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-which mkfs.xfs || skip
+aux have_fs xfs || skip
 which xfs_growfs || skip
 
 aux have_fsinfo || skip "Test needs --fs checksize support"
