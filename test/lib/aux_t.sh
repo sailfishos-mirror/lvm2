@@ -525,8 +525,29 @@ kill_sleep_kill_() {
 		sleep "$sleep_time"
 	done
 
+	# Process survived the graceful-wait window: dump its state (zombie 'Z',
+	# uninterruptible 'D', alive) and where each thread is blocked (wchan)
+	# before SIGKILL - it answers why the daemon did not shut down.
+	if ps "${pid[@]}" >/dev/null 2>&1 ; then
+		ls_proc_state_ "$(basename "$pidfile") not exiting on SIGTERM" "${pid[@]}" || true
+	fi
+
 	# After timeout, use SIGKILL as last resort
 	kill -KILL "${pid[@]}" 2>/dev/null || true
+}
+
+# Print process/thread state for diagnostics: whether a process is a zombie
+# ('Z'), in uninterruptible sleep ('D') or still alive, plus where each of
+# its threads is blocked (wchan).  Expected to leave no error behind even
+# when /proc entries disappear, so it is safe under 'set -e'.
+ls_proc_state_() {
+	local label=$1; shift
+	local pid
+	for pid in "$@" ; do
+		[[ -e "/proc/$pid" ]] || continue
+		echo "## $label: $(ps -o pid=,stat=,etime=,wchan:32=,cmd= -p "$pid" 2>/dev/null || echo "pid $pid not listed by ps")"
+		ps -L -p "$pid" -o pid=,tid=,stat=,wchan:32= 2>/dev/null | sed "s/^/## $label\t/" || true
+	done
 }
 
 print_procs_by_tag_() {
@@ -619,8 +640,14 @@ teardown() {
 		kill_sleep_kill_ LOCAL_DMEVENTD "${LVM_VALGRIND_DMEVENTD:-0}"
 		# Kill any dmeventd auto-restarted with a new PID after a crash
 		if DPID=$(pgrep dmeventd 2>/dev/null); then
+			ls_proc_state_ "dmeventd survived SIGTERM" $DPID || true
 			echo "## killing leftover dmeventd ($DPID)"
 			kill -KILL $DPID 2>/dev/null || true
+			sleep 1 || true
+			# Recheck in case dmeventd is uninterruptible ('D') and ignores SIGKILL
+			if DPID=$(pgrep dmeventd 2>/dev/null); then
+				ls_proc_state_ "dmeventd survived SIGKILL" $DPID || true
+			fi
 		fi
 	fi
 
@@ -647,8 +674,14 @@ teardown() {
 	fi
 
 	if [[ "${LVM_TEST_PARALLEL:-0}" = 0 && -z "$RUNNING_DMEVENTD" ]]; then
-		rm -f debug.log* # no trace of lvm2 command for this case
+		# Final check has to run before removing debug logs: when it fails,
+		# STACKTRACE prints debug.log* (incl. debug.log_DMEVENTD_out) and the
+		# state below shows whether the survivor is a zombie or 'D' state.
+		if DPID=$(pgrep dmeventd 2>/dev/null); then
+			ls_proc_state_ "dmeventd survived all SIGKILLs at final check" $DPID || true
+		fi
 		not pgrep dmeventd &>/dev/null # printed in STACKTRACE
+		rm -f debug.log* # no trace of lvm2 command for this case
 	fi
 
 	if [[ -n "${TESTDIR-}" ]]; then
