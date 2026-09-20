@@ -1919,7 +1919,12 @@ udev_wait() {
 		which udevadm &>/dev/null || { echo "" >UDEV_PID ; return 0 ; }
 	fi
 
-	[[ -s UDEV_PID ]] && { udevadm settle "$arg" 2>/dev/null || true ; }
+	# be careful: with no udev running the UDEV_PID file stays empty, so do
+	# NOT try to settle -- and never let that (or a failed settle) fail
+	# udev_wait: it is called from teardown where set -e + ERR trap would
+	# mark the whole test as failed.
+	[[ -s UDEV_PID ]] || return 0
+	udevadm settle "$arg" 2>/dev/null || true
 }
 
 # wait_for_sync <VG/LV>
