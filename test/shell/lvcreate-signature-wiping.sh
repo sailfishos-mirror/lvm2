@@ -16,6 +16,10 @@
 
 . lib/inittest --skip-with-lvmpolld
 
+# mkswap needs at least 10 pages of swap space, i.e. 640 KiB on 64K pages,
+# so do not use the smallest 1-extent (512 KiB) LV.
+lvsize=8M
+
 _init_lv() {
 	mkswap "$DM_DEV_DIR/$vg/$lv1"
 }
@@ -47,7 +51,7 @@ aux prepare_vg
 # lvcreate wipes signatures when found on newly created LV - test this on "swap".
 # Test all combinations with -Z{y|n} and -W{y|n} and related lvm.conf settings.
 
-lvcreate -l1 -n $lv1 $vg
+lvcreate -L "$lvsize" -n $lv1 $vg
 _init_lv
 # This system has unusable blkid (does not recognize small swap, needs fix...)
 _is_swap || skip
@@ -55,42 +59,42 @@ lvremove -f $vg/$lv1
 
 # Zeroing stops the command when there is a failure (write error in this case)
 aux error_dev "$dev1" "$(get first_extent_sector "$dev1"):8"
-not lvcreate -l1 -n $lv1 $vg 2>&1 | tee out
+not lvcreate -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 grep "Failed to initialize" out
 aux enable_dev "$dev1"
 
 
 aux lvmconf "allocation/wipe_signatures_when_zeroing_new_lvs = 0"
 
-lvcreate -y -Zn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_swap
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zn -Wn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -Wn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_swap
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zn -Wy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -Wy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -Wn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -Wn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -Wy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -Wy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_wiping
 _is_not_swap
 _init_lv
@@ -98,35 +102,35 @@ lvremove -f $vg/$lv1
 
 aux lvmconf "allocation/wipe_signatures_when_zeroing_new_lvs = 1"
 
-lvcreate -y -Zn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_swap
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zn -Wn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -Wn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_swap
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zn -Wy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zn -Wy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -Wn -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -Wn -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_not_wiping
 _is_not_swap
 _init_lv
 lvremove -f $vg/$lv1
 
-lvcreate -y -Zy -Wy -l1 -n $lv1 $vg 2>&1 | tee out
+lvcreate -y -Zy -Wy -L "$lvsize" -n $lv1 $vg 2>&1 | tee out
 _was_wiping
 _is_not_swap
 _init_lv
