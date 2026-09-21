@@ -451,41 +451,43 @@ get_dev_reservation_scsi() {
 	# sg_persist:   "scope: LU_SCOPE,  type: "
 	# mpathpersist: "scope = LU_SCOPE, type = "
 
-	if [[ "$str" == *"Exclusive Access, all registrants"* ]]; then
+	case "$str" in
+	*"Exclusive Access, all registrants"*)
 		# scsi type 8
 		DEV_PRDESC=EAAR
 		DEV_PRTYPE=8
-		true
-	elif [[ "$str" == *"Write Exclusive, all registrants"* ]]; then
+		;;
+	*"Write Exclusive, all registrants"*)
 		# scsi type 7
 		DEV_PRDESC=WEAR
 		DEV_PRTYPE=7
-		true
-	elif [[ "$str" == *"Exclusive Access, registrants only"* ]]; then
+		;;
+	*"Exclusive Access, registrants only"*)
 		# scsi type 6
 		DEV_PRDESC=EARO
 		DEV_PRTYPE=6
-		true
-	elif [[ "$str" == *"Write Exclusive, registrants only"* ]]; then
+		;;
+	*"Write Exclusive, registrants only"*)
 		# scsi type 5
 		DEV_PRDESC=WERO
 		DEV_PRTYPE=5
-		true
-	elif [[ "$str" == *"Exclusive Access"* ]]; then
+		;;
+	*"Exclusive Access"*)
 		# scsi type 3
 		DEV_PRDESC=EA
 		DEV_PRTYPE=3
-		true
-	elif [[ "$str" == *"Write Exclusive"* ]]; then
+		;;
+	*"Write Exclusive"*)
 		# scsi type 1
 		DEV_PRDESC=WE
 		DEV_PRTYPE=1
-		true
-	else
+		;;
+	*)
 		DEV_PRDESC=unknown
 		DEV_PRTYPE=0
 		false
-	fi
+		;;
+	esac
 }
 
 # Set DEV_PRDESC and DEV_PRTYPE to whatever is
@@ -817,15 +819,20 @@ do_takeover() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			if [ "$rc" -eq 2 ]; then
-				logmsg "start $GROUP $dev failed to query reservation type $type_str."
-			else
-				logmsg "start $GROUP $dev does not support reservation type $type_str."
-			fi
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports the type
+			;;
+		1)
+			logmsg "start $GROUP $dev does not support reservation type $type_str."
 			err=1
-		fi
+			;;
+		2)
+			logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			err=1
+			;;
+		esac
 	done
 
 	if [ "$err" -ne 0 ]; then
@@ -834,12 +841,18 @@ do_takeover() {
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$REMKEY"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# key present, which is required to remove it
+			;;
+		1)
 			die "start $GROUP specified key to remove $REMKEY not found on $dev."
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			die "start $GROUP failed to check for key $REMKEY on $dev."
-		fi
+			;;
+		esac
 	done
 
 	# Register our key
@@ -891,15 +904,20 @@ do_start() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -ne 0 ]; then
-			if [ "$rc" -eq 2 ]; then
-				logmsg "start $GROUP $dev failed to query reservation type $type_str."
-			else
-				logmsg "start $GROUP $dev does not support reservation type $type_str."
-			fi
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports the type
+			;;
+		1)
+			logmsg "start $GROUP $dev does not support reservation type $type_str."
 			err=1
-		fi
+			;;
+		2)
+			logmsg "start $GROUP $dev failed to query reservation type $type_str."
+			err=1
+			;;
+		esac
 	done
 
 	if [ "$err" -ne 0 ]; then
@@ -988,14 +1006,17 @@ do_stop() {
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
 
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			logmsg "stop $GROUP failed to unregister our key $OURKEY from $dev."
 			err=1
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logmsg "stop $GROUP failed to verify our key $OURKEY was unregistered from $dev."
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	if [ "$err" -ne 0 ]; then
@@ -1028,19 +1049,24 @@ do_clear() {
 		fi
 
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# our key present
 			CLEAR_DEVICES+=("$dev")
-		elif [ "$rc" -eq 1 ]; then
+			;;
+		1)
 			if do_register "$dev"; then
 				CLEAR_DEVICES+=("$dev")
 			else
 				logmsg "clear $GROUP skip $dev without registration"
 			fi
-		else
+			;;
+		2)
 			logmsg "clear $GROUP failed to check for our key $OURKEY on $dev."
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	# clear releases the reservation and clears all registrations
@@ -1088,16 +1114,22 @@ do_remove() {
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# our key present, as required to remove another key
+			;;
+		1)
 			logmsg "cannot remove $REMKEY from $dev without ourkey $OURKEY being registered"
 			err=1
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logmsg "cannot remove $REMKEY from $dev, failed to check ourkey $OURKEY."
 			err=1
 			continue
-		fi
+			;;
+		esac
 
 		set_cmd "$dev"
 		# Use the current reservation type when one is held; otherwise use
@@ -1124,14 +1156,20 @@ do_remove() {
 		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
 
 		key_is_on_device "$dev" "$REMKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			logmsg "failed to remove key $REMKEY from $dev in $GROUP."
 			err=1
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		1)
+			# key not found, removal succeeded
+			;;
+		2)
 			logmsg "failed to verify key $REMKEY was removed from $dev in $GROUP."
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	# Fencing (remove) requires removing the target's PR key from all
@@ -1159,16 +1197,20 @@ do_devtest() {
 		set_type "$dev"
 
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			echo "Device $dev: supports type $type_str"
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query type $type_str"
 			err=1
-		else
+			;;
+		*)
 			logerror "Device $dev: does not support type $type_str"
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	if [ "$err" -ne 0 ]; then
@@ -1183,16 +1225,20 @@ do_checkkey() {
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$OURKEY"
-		rc=$?
-		if [ "$rc" -eq 0 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
 			echo "Device $dev: has key $OURKEY"
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to check for key $OURKEY"
 			err=1
-		else
+			;;
+		*)
 			logerror "Device $dev: does not have key $OURKEY"
 			err=1
-		fi
+			;;
+		esac
 	done
 
 	if [ "$err" -ne 0 ]; then
@@ -1208,15 +1254,21 @@ do_readkeys() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports PR, continue below
+			;;
+		1)
 			echo "Device $dev: does not support PR"
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query reservation type"
 			err=1
 			continue
-		fi
+			;;
+		esac
 		if ! get_key_list "$dev"; then
 			logerror "Device $dev: failed to read registered keys"
 			err=1
@@ -1238,15 +1290,21 @@ do_readreservation() {
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
 		device_supports_type_str "$dev" "$type_str"
-		rc=$?
-		if [ "$rc" -eq 1 ]; then
+		# Inspect $? immediately: any intervening command replaces it.
+		case $? in
+		0)
+			# supports PR, continue below
+			;;
+		1)
 			echo "Device $dev: does not support PR"
 			continue
-		elif [ "$rc" -eq 2 ]; then
+			;;
+		2)
 			logerror "Device $dev: failed to query reservation type"
 			err=1
 			continue
-		fi
+			;;
+		esac
 		get_dev_reservation "$dev"
 		if [[ "$DEV_PRDESC" == "error" ]]; then
 			logerror "Device $dev: failed to read reservation"
@@ -1576,23 +1634,27 @@ if [[ -n "$ACCESS" ]]; then
 	# ex: scsi, nvme use WE; mpath uses WEAR
 	# sh: scsi, nvme, mpath all use WEAR
 
-	if [[ "$ACCESS" == "ex" ]]; then
+	case "$ACCESS" in
+	ex)
 		SCSI_PRTYPE=1
 		SCSI_PRDESC=WE
 		NVME_PRTYPE=1
 		NVME_PRDESC=WE
 		MPATH_PRTYPE=7
 		MPATH_PRDESC=WEAR
-	elif [[ "$ACCESS" == "sh" ]]; then
+		;;
+	sh)
 		SCSI_PRTYPE=7
 		SCSI_PRDESC=WEAR
 		NVME_PRTYPE=5
 		NVME_PRDESC=WEAR
 		MPATH_PRTYPE=7
 		MPATH_PRDESC=WEAR
-	else
+		;;
+	*)
 		errorexit "Invalid access mode (use ex or sh)."
-	fi
+		;;
+	esac
 fi
 
 # When --prtype is set, all device types use the
