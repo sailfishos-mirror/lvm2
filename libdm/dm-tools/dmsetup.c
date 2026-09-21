@@ -4612,7 +4612,9 @@ static int _report_init(const struct command *cmd, const char *subcommand)
 	if (columns_as_rows)
 		flags |= DM_REPORT_OUTPUT_COLUMNS_AS_ROWS;
 
-	if (cmd && !strcmp(cmd->name, "vdostats")) {
+	if ((cmd && !strcmp(cmd->name, "vdostats")) ||
+	    _base_command_type == VDOSTATS_TYPE ||
+	    (_command && !strcmp(_command, "vdostats"))) {
 		const char *vdo_opts =
 			(_switches[OPTIONS_ARG] && _string_args[OPTIONS_ARG])
 				? options : NULL;
