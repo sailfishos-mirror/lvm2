@@ -44,6 +44,11 @@ dmvdostats -o vdo_all "$VPOOL_DM"
 dmvdostats -o vdo_name,vdo_used_pct "$VPOOL_DM" | tee select.out
 grep -q "$VPOOL_DM" select.out
 
+# help -c must list VDO report fields, not dmstats fields
+dmvdostats -h -c 2>&1 | tee help-c.out
+grep -q vdo_physical_size help-c.out
+not grep -q reads_merged_count help-c.out
+
 # Via dmsetup subcommand
 dmsetup vdostats "$VPOOL_DM"
 
