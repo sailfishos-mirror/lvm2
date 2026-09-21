@@ -315,7 +315,7 @@ get_dev_reservation_holder_scsi() {
 	# differs between sg_persist and mpathpersist) and extract just the
 	# hex key, so the HOLDER value is not polluted by ", scope: ...".
 	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
-	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null \
+	str=$("$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
 		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+')
 	if [ $? -ne 0 ]; then
 		if ! no_reservation_held "$dev"; then
@@ -422,7 +422,7 @@ get_dev_reservation_scsi() {
 	dev=$1
 	set_cmd "$dev"
 
-	str=$($cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type")
+	str=$("$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type")
 	if [ $? -ne 0 ]; then
 		if no_reservation_held "$dev"; then
 			DEV_PRDESC=none
@@ -521,7 +521,8 @@ no_reservation_held_scsi() {
 
 	# sg_persist and mpathpersist word the message differently and with
 	# different capitalization, so match case-insensitively.
-	$cmd $cmdopts --in --read-reservation "$dev" 2>/dev/null | grep -qi "no reservation held"
+	"$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
+		| grep -qi "no reservation held"
 }
 
 no_reservation_held() {
