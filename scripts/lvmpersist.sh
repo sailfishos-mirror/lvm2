@@ -1354,7 +1354,7 @@ REGISTERED_DEVICES=()
 CMD=$1
 shift
 
-case $CMD in
+case "$CMD" in
 	start)
 		DO_START=1
 		;;
@@ -1382,15 +1382,7 @@ case $CMD in
 	read)
 		DO_READ=1
 		;;
-	help)
-		usage
-		exit 0
-		;;
-	-h)
-		usage
-		exit 0
-		;;
-	--help)
+	help|-h|--help)
 		usage
 		exit 0
 		;;
@@ -1411,47 +1403,37 @@ eval set -- "$OPTIONS"
 
 while true
 do
-	case $1 in
+	case "$1" in
 	--ourkey)
-		OURKEY=$2;
-		shift; shift
+		OURKEY=$2; shift
 		;;
 	--key)
-		KEY=$2;
-		shift; shift
+		KEY=$2; shift
 		;;
 	--removekey)
-		REMKEY=$2;
-		shift; shift
+		REMKEY=$2; shift
 		;;
 	--ptpl)
 		PTPL=1
-		shift
 		;;
 	--access)
-		ACCESS=$2
-		shift; shift;
+		ACCESS=$2; shift
 		;;
 	--prtype)
-		PRTYPE_ARG=$2
-		shift; shift;
+		PRTYPE_ARG=$2; shift
 		;;
 	--device)
 		LAST_DEVICE=$2
-		DEVICES+=("$LAST_DEVICE")
-		shift; shift
+		DEVICES+=("$LAST_DEVICE"); shift
 		;;
 	--vg)
-		VGNAME=$2;
-		shift; shift
+		VGNAME=$2; shift
 		;;
 	--debug)
 		set -x
-		shift
 		;;
 	-h|--help)
 		usage
-		shift
 		exit 0
 		;;
 	--)
@@ -1461,7 +1443,8 @@ do
 	*)
 		errorexit "Unknown option \"$1\"."
 		;;
-    esac
+	esac
+	shift
 done
 
 #
@@ -1637,7 +1620,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
 		errorexit "WERO is not yet supported."
-		exit 1
 		;;
 	EARO)
 		# Exclusive Access - registrants only
@@ -1647,7 +1629,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		# TODO: figure out the model of usage when
 		# the reservation holder goes away.
 		errorexit "EARO is not yet supported."
-		exit 1
 		;;
 	WEAR)
 		# Write Exclusive - all registrants
@@ -1663,7 +1644,6 @@ if [[ -n "$PRTYPE_ARG" ]]; then
 		;;
 	*)
 		errorexit "Unknown PRTYPE string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
-		exit 1
 		;;
 	esac
 
@@ -1709,7 +1689,6 @@ FIRST_DEVICE="${DEVICES[0]}"
 
 if [[ -z "$FIRST_DEVICE" ]]; then
 	errorexit "Missing required --vg or --device."
-	exit 1
 fi
 
 # Prefix some log messages with VGNAME, or if no VGNAME is set,
@@ -1775,4 +1754,3 @@ elif [[ "$DO_READ" -eq 1 ]]; then
 	do_readkeys
 	do_readreservation
 fi
-
