@@ -286,13 +286,14 @@ get_dev_reservation_holder_nvme() {
 	# get rkey from the regctlext section with rcsts=1
 	# jq without -e: no holder is an empty list, handled below (not a jq failure).
 
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null \
+	str=$(
+		nvme resv-report --eds -o json "$dev" 2>/dev/null \
 		| jq -r '.regctlext | map(select(.rcsts == 1)) | .[].rkey' \
-		| xargs -r printf '0x%x')
-	if [ $? -ne 0 ]; then
+		| xargs -r printf '0x%x'
+	) || {
 		logmsg "nvme resv-report error on $dev"
 		return 1
-	fi
+	}
 
 	if [[ -z $str ]]; then
 		logmsg "nvme resv-report holder output not found $dev"
@@ -315,14 +316,14 @@ get_dev_reservation_holder_scsi() {
 	# differs between sg_persist and mpathpersist) and extract just the
 	# hex key, so the HOLDER value is not polluted by ", scope: ...".
 	# grep -oE (ERE): in basic regex -oe, '+' is literal and never matches.
-	str=$("$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
-		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+')
-	if [ $? -ne 0 ]; then
-		if ! no_reservation_held "$dev"; then
+	str=$(
+		"$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null \
+		| grep -ie "key\s*[:=]\s*0x" | grep -oE '0x[0-9a-fA-F]+'
+	) || {
+		no_reservation_held "$dev" ||
 			logmsg "$cmd read-reservation error on $dev"
-		fi
 		return 1
-	fi
+	}
 
 	# Take the first line here instead of piping through head -1: head
 	# exits early and can SIGPIPE the upstream command, which pipefail
@@ -331,9 +332,8 @@ get_dev_reservation_holder_scsi() {
 	str=${str%%$'\n'*}
 
 	if [[ -z $str ]]; then
-		if ! no_reservation_held "$dev"; then
+		no_reservation_held "$dev" ||
 			logmsg "$cmd read-reservation holder output not found $dev"
-		fi
 		return 1
 	fi
 
@@ -365,20 +365,19 @@ get_dev_reservation_nvme() {
 	DEV_PRTYPE=0
 	DEV_PRDESC=error
 
-	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype')
-	if [ $? -ne 0 ]; then
+	str=$(nvme resv-report --eds -o json "$dev" 2>/dev/null | jq '.rtype') || {
 		logmsg "nvme resv-report error on $dev"
 		return 1
-	fi
+	}
 
 	# jq prints null and exits 0 when rtype is missing; an
 	# out-of-range value is equally unusable.  Both are a
 	# per-device query failure, not a reason to abort the
 	# whole command.
-	if ! [[ "$str" =~ ^[0-9]$ ]]; then
+	[[ "$str" =~ ^[0-9]$ ]] || {
 		logmsg "nvme resv-report unexpected reservation type '$str' for $dev"
 		return 1
-	fi
+	}
 
 	case "$str" in
 	0)
@@ -422,8 +421,7 @@ get_dev_reservation_scsi() {
 	dev=$1
 	set_cmd "$dev"
 
-	str=$("$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type")
-	if [ $? -ne 0 ]; then
+	str=$( "$cmd" "${cmdopts[@]}" --in --read-reservation "$dev" 2>/dev/null | grep -e "LU_SCOPE,\s\+type" ) || {
 		if no_reservation_held "$dev"; then
 			DEV_PRDESC=none
 			DEV_PRTYPE=0
@@ -433,7 +431,7 @@ get_dev_reservation_scsi() {
 			DEV_PRTYPE=0
 		fi
 		return 1
-	fi
+	}
 
 	if [[ -z $str ]]; then
 		if no_reservation_held "$dev"; then
@@ -509,13 +507,7 @@ no_reservation_held_nvme() {
 
 	get_dev_reservation_nvme "$dev"
 
-	if [[ "$DEV_PRDESC" == "none" ]]; then
-		true
-		return
-	fi
-
-	false
-	return
+	[[ "$DEV_PRDESC" == "none" ]]
 }
 
 no_reservation_held_scsi() {
@@ -556,10 +548,10 @@ device_supports_type_str_nvme() {
 	# NVMe has no per-type report-capabilities output like SCSI.  When
 	# resv-report succeeds, the namespace supports persistent reservations
 	# and the standard reservation types (1-6) map to the WE..EAAR strings.
-	if ! nvme resv-report --eds "$dev" > /dev/null 2>&1; then
+	nvme resv-report --eds "$dev" > /dev/null 2>&1 || {
 		logmsg "nvme resv-report error on $dev"
 		return 2
-	fi
+	}
 
 	return 0
 }
@@ -589,18 +581,15 @@ device_supports_type_str_scsi() {
 		;;
 	*)
 		logmsg "unknown type string (choose WE/EA/WERO/EARO/WEAR/EAAR)."
-		false
-		return
+		return 1
 		;;
 	esac
 
 	# Do not set_cmd here because for report-capabilities,
 	# sg_persist works on mpath devs, but mpathpersist doesn't work.
 
-	if sg_persist --in --report-capabilities "$dev" 2>/dev/null | grep -q "${SUPPORTED}"; then
-		true
-		return
-	fi
+	sg_persist --in --report-capabilities "$dev" 2>/dev/null \
+		| grep -q "${SUPPORTED}" && return 0
 
 	# PIPESTATUS[1] is grep's exit: 1 just means the type is not supported,
 	# which is the normal "no" answer, not a command error.
@@ -609,8 +598,7 @@ device_supports_type_str_scsi() {
 		return 2
 	fi
 
-	false
-	return
+	return 1
 }
 
 device_supports_type_str() {
@@ -683,11 +671,11 @@ check_devices() {
 
 	if [[ $FOUND_MPATH -eq 1 ]]; then
 		command -v mpathpersist > /dev/null || die "mpathpersist command not found."
-		if ! grep "reservation_key file" /etc/multipath.conf > /dev/null 2>&1; then
+		grep "reservation_key file" /etc/multipath.conf > /dev/null 2>&1 || {
 			echo "To use persistent reservations with multipath, run:"
 			echo "  mpathconf --option reservation_key:file"
 			echo "to configure multipath.conf, and then restart multipathd."
-		fi
+		}
 	fi
 
 	# sg_persist is used for report-capabilities on both scsi and
@@ -734,10 +722,10 @@ check_devices() {
 # TODO: consider failing hard when udevadm is unavailable or settle
 # fails, if this turns out to be a real point of failure in the field.
 settle_udev() {
-	if ! command -v udevadm > /dev/null; then
+	command -v udevadm > /dev/null || {
 		logmsg "udevadm not found: cannot wait for udev before reserving $GROUP."
 		return 0
-	fi
+	}
 	udevadm settle || logmsg "failed to settle udev events before reserving $GROUP."
 }
 
@@ -751,45 +739,36 @@ undo_register() {
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
 			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
-		fi
-		if [ $? -ne 0 ]; then
-			logmsg "$cmd unregister error on $dev"
-		fi
+		fi || logmsg "$cmd unregister error on $dev"
 	done
 }
 
 do_register_nvme() {
 	dev=$1
 	set_cmd "$dev"
-
-	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=("--cptpl=1")
-	fi
+	[[ $PTPL -eq 1 ]] && cmdopts+=("--cptpl=1")
 
 	# If our previous key is still registered, then we must use
 	# rrega=2 and iekey.  If our previous key has been removed,
 	# then we must use rrega=0.
 
-	if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
-		if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
+	nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1 || {
+		nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1 || {
 			logmsg "$cmd register error on $dev"
 			return 1
-		fi
-	fi
+		}
+	}
 }
 
 do_register_scsi() {
 	dev=$1
 	set_cmd "$dev"
+	[[ $PTPL -eq 1 ]] && cmdopts+=("--param-aptpl")
 
-	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=("--param-aptpl")
-	fi
-
-	if ! "$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
+	"$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1 || {
 		logmsg "$cmd register error on $dev"
 		return 1
-	fi
+	}
 }
 
 do_register() {
@@ -800,11 +779,7 @@ do_register() {
 		do_register_nvme "$dev"
 	else
 		do_register_scsi "$dev"
-	fi
-	# Only record a device our key was successfully registered on.
-	if [ $? -ne 0 ]; then
-		return 1
-	fi
+	fi || return 1
 
 	REGISTERED_DEVICES+=("$dev")
 }
@@ -835,9 +810,7 @@ do_takeover() {
 		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "start $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "start $GROUP failed."
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$REMKEY"
@@ -858,11 +831,11 @@ do_takeover() {
 	# Register our key
 
 	for dev in "${DEVICES[@]}"; do
-		if ! do_register "$dev"; then
+		do_register "$dev" || {
 			logmsg "start $GROUP failed to register our key."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	# The register above triggers udev to re-probe the device (blkid,
@@ -883,13 +856,11 @@ do_takeover() {
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
 			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
-		fi
-
-		if [[ "$?" -ne 0 ]]; then
+		fi || {
 			logmsg "start $GROUP failed to preempt-abort $REMKEY on $dev."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	logmsg "started $GROUP with key $OURKEY."
@@ -920,18 +891,16 @@ do_start() {
 		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "start $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "start $GROUP failed."
 
 	# Register our key on devices
 
 	for dev in "${DEVICES[@]}"; do
-		if ! do_register "$dev"; then
+		do_register "$dev" || {
 			logmsg "start $GROUP failed to register our key."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	# The register above triggers udev to re-probe the device.
@@ -953,31 +922,25 @@ do_start() {
 
 		if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
 			get_dev_reservation "$dev"
-			if [[ "$DEV_PRDESC" == "$type_str" ]]; then
-				continue
-			fi
+			[[ "$DEV_PRDESC" == "$type_str" ]] && continue
 		fi
 
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --rtype="$type" --racqa=0 "$dev" >/dev/null 2>&1
 		else
 			"$cmd" "${cmdopts[@]}" --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
-		fi
-
-		if [[ "$?" -ne 0 ]]; then
+		fi || {
 			# For WEAR/EAAR, another host may have acquired the
 			# reservation between our check and our acquire attempt.
 			# Re-check: if the reservation now exists, that's fine.
 			if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
 				get_dev_reservation "$dev"
-				if [[ "$DEV_PRDESC" == "$type_str" ]]; then
-					continue
-				fi
+				[[ "$DEV_PRDESC" == "$type_str" ]] && continue
 			fi
 			logmsg "start $GROUP failed to reserve $dev."
 			undo_register
 			exit 1
-		fi
+		}
 	done
 
 	logmsg "started $GROUP with key $OURKEY."
@@ -1019,9 +982,7 @@ do_stop() {
 		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "stop $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "stop $GROUP failed."
 
 	logmsg "stopped $GROUP with key $OURKEY."
 	exit 0
@@ -1043,11 +1004,10 @@ do_clear() {
 	CLEAR_DEVICES=()
 
 	for dev in "${DEVICES[@]}"; do
-		if ! device_supports_pr "$dev"; then
+		device_supports_pr "$dev" || {
 			logerror "Device $dev: does not support PR"
 			continue
-		fi
-
+		}
 		key_is_on_device "$dev" "$OURKEY"
 		# Inspect $? immediately: any intervening command replaces it.
 		case $? in
@@ -1077,9 +1037,7 @@ do_clear() {
 			nvme resv-release --crkey="$OURKEY" --rrela=1 "$dev" >/dev/null 2>&1
 		else
 			"$cmd" "${cmdopts[@]}" --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
-		fi
-
-		test $? -eq 0 || logmsg "$cmd clear error on $dev"
+		fi || logmsg "$cmd clear error on $dev"
 
 		# Real result is whether the dev now has no registrations and
 		# reservation.
@@ -1092,15 +1050,13 @@ do_clear() {
 			err=1
 		fi
 
-		if ! no_reservation_held "$dev"; then
+		no_reservation_held "$dev" || {
 			logmsg "clear $GROUP reservation not cleared from $dev"
 			err=1
-		fi
+		}
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "clear $GROUP failed."
-	fi
+	test "$err" -eq 0 || errorexit "clear $GROUP failed."
 
 	logmsg "cleared $GROUP reservation and keys"
 	exit 0
@@ -1151,9 +1107,7 @@ do_remove() {
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$remove_type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
 			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
-		fi
-
-		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
+		fi || logmsg "$cmd preempt-abort error on $dev"
 
 		key_is_on_device "$dev" "$REMKEY"
 		# Inspect $? immediately: any intervening command replaces it.
@@ -1213,9 +1167,7 @@ do_devtest() {
 		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "devtest failed."
-	fi
+	test "$err" -eq 0 || errorexit "devtest failed."
 
 	exit 0
 }
@@ -1241,9 +1193,7 @@ do_checkkey() {
 		esac
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "check-key failed."
-	fi
+	test "$err" -eq 0 || errorexit "check-key failed."
 
 	exit 0
 }
@@ -1279,9 +1229,7 @@ do_readkeys() {
 		fi
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "read-keys failed."
-	fi
+	test "$err" -eq 0 || errorexit "read-keys failed."
 }
 
 do_readreservation() {
@@ -1321,9 +1269,7 @@ do_readreservation() {
 		fi
 	done
 
-	if [ "$err" -ne 0 ]; then
-		errorexit "read-reservation failed."
-	fi
+	test "$err" -eq 0 || errorexit "read-reservation failed."
 }
 
 # Reject a path a non-root user could modify or replace between this
@@ -1342,11 +1288,9 @@ validate_path() {
 		test "${MODE%% *}" = "0" ||
 			errorexit "$NAME \"$NODE\" must be owned by root."
 		MODE=${MODE##* }
-		if [ $(( 0$MODE & 022 )) -ne 0 ]; then
-			if ! test -d "$NODE" || [ $(( 0$MODE & 01000 )) -eq 0 ]; then
-				errorexit "$NAME \"$NODE\" must not be group or world writable."
-			fi
-		fi
+		test $(( 0$MODE & 022 )) -eq 0 ||
+			{ test -d "$NODE" && test $(( 0$MODE & 01000 )) -ne 0; } ||
+			errorexit "$NAME \"$NODE\" must not be group or world writable."
 		test "$NODE" = "/" && break
 		NODE=${NODE%/*}
 		test -n "$NODE" || NODE=/
@@ -1366,9 +1310,9 @@ validate_override() {
 
 	validate_path "$1" "$OPATH"
 
-	if ! test -f "$OPATH" || ! test -x "$OPATH"; then
+	test -f "$OPATH" && test -x "$OPATH" || {
 		errorexit "$1 \"$OPATH\" must be an executable file."
-	fi
+	}
 
 	# Run the validated canonical path, not the original one, so that a
 	# symlink cannot be repointed at a different binary after this check.
@@ -1517,9 +1461,7 @@ if [[ -n "$PRTYPE_ARG" && -n "$ACCESS" ]]; then
 	errorexit "Set --prtype or --access, not both."
 fi
 
-if [[ "$DO_CHECKKEY" -eq 1 ]]; then
-	require_opt KEY key
-fi
+[[ "$DO_CHECKKEY" -eq 1 ]] && require_opt KEY key
 
 if [[ "$DO_CHECKKEY" -eq 0 && -n "$KEY" ]]; then
 	errorexit "Invalid option: --key."
@@ -1579,9 +1521,8 @@ if [[ -n "$OURKEY" && "$OURKEY" != "0x"* ]]; then
 fi
 
 if [[ -n "$OURKEY" && "$OURKEY" == "0x"* ]]; then
-	if [[ ! "${OURKEY:2}" =~ $HEXDIGITS ]]; then
+	[[ "${OURKEY:2}" =~ $HEXDIGITS ]] ||
 		errorexit "Invalid hex digits in key: $OURKEY"
-	fi
 	# PR keys are 64-bit; a longer hex key cannot be represented
 	# and the tools would truncate or saturate it to a different key.
 	if [[ ${#OURKEY} -gt 18 ]]; then
@@ -1602,9 +1543,8 @@ if [[ -n "$REMKEY" && "$REMKEY" != "0x"* ]]; then
 fi
 
 if [[ -n "$REMKEY" && "$REMKEY" == "0x"* ]]; then
-	if [[ ! "${REMKEY:2}" =~ $HEXDIGITS ]]; then
+	[[ "${REMKEY:2}" =~ $HEXDIGITS ]] ||
 		errorexit "Invalid hex digits in key: $REMKEY"
-	fi
 	# PR keys are 64-bit; a longer hex key cannot be represented
 	# and the tools would truncate or saturate it to a different key.
 	if [[ ${#REMKEY} -gt 18 ]]; then
@@ -1726,9 +1666,8 @@ get_devices_from_vg() {
 	# a glob character is not expanded against the filesystem.
 	set -f
 	# shellcheck disable=SC2207 # intentional split of device list
-	if ! ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ); then
+	ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ) ||
 		die "failed to get devices from VG $VGNAME."
-	fi
 	set +f
 
 	DEVICES=()
