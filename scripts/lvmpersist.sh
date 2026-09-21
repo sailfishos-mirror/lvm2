@@ -649,10 +649,10 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/nvme*)
+		/dev/nvme*)
 			FOUND_NVME=1
 			;;
-	  	/dev/sd*)
+		/dev/sd*)
 			FOUND_SCSI=1
 			;;
 		/dev/dm-*)
@@ -671,7 +671,7 @@ check_devices() {
 				err=1
 			fi
 			;;
-	  	*)
+		*)
 			logmsg "device type not supported for $dev."
 			err=1
 		esac
@@ -713,11 +713,11 @@ check_devices() {
 
 	for dev in "${DEVICES[@]}"; do
 		case "$dev" in
-	  	/dev/sd*)
+		/dev/sd*)
 			;&
 		/dev/dm-*)
 			;&
-		/dev/mapper*)
+		/dev/mapper/*)
 			sg_turs "$dev" >/dev/null 2>&1
 			ec=$?
 			test $ec -eq 0 || logmsg "test unit ready error $ec from $dev"
@@ -748,7 +748,7 @@ undo_register() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 		if [ $? -ne 0 ]; then
 			logmsg "$cmd unregister error on $dev"
