@@ -50,12 +50,14 @@ cmd3=(pvmove -i +2 $backgroundarg $mode -n $vg1/$lv1 "$dev4" "$dev6")
 if test -z "$backgroundarg" ; then
 	"${cmd1[@]}" &
 	PVMOVE1_PID=$!
-	aux wait_pvmove_lv_ready "$vg-pvmove0"
 	"${cmd2[@]}" &
 	PVMOVE2_PID=$!
 	"${cmd3[@]}" &
 	PVMOVE3_PID=$!
-	LVM_TEST_AUX_TRACE=1 aux wait_pvmove_lv_ready "$vg-pvmove1" "$vg1-pvmove0"
+	# Global "pvmove --abort" (see pvmove-abort.sh for per-PV abort): pvmove
+	# index order does not matter; see wait_pvmove_lv_started_in_vg in aux.
+	aux wait_pvmove_lv_started_in_vg "$vg" "$PVMOVE1_PID" "$PVMOVE2_PID"
+	aux wait_pvmove_lv_started_in_vg "$vg1" "$PVMOVE3_PID"
 else
 	LVM_TEST_TAG="kill_me_$PREFIX" "${cmd1[@]}"
 	LVM_TEST_TAG="kill_me_$PREFIX" "${cmd2[@]}"

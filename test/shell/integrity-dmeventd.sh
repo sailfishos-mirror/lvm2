@@ -113,6 +113,14 @@ _wait_for_repair() {
 		# All devices gone, repair completed
 		return 0
 	done
+	# Print diagnostics before die() drops the debug logs.
+	{
+		echo "## dmeventd repair did not complete for: $*"
+		echo "## lvs state:"
+		cat out 2>/dev/null || true
+		echo "## dmeventd log tail:"
+		tail -n 200 debug.log_DMEVENTD_out 2>/dev/null || true
+	} >&2
 	die "dmeventd repair timeout - expected devices removed: $*."
 }
 

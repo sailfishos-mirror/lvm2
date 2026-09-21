@@ -2341,6 +2341,30 @@ wait_pvmove_lv_ready() {
 	die "Waiting for pvmove LV to get activated has timed out"
 }
 
+# Wait until each still-running pvmove in VG $1 (PIDs $2...) has a temporary
+# pvmove LV (counted via lvs), or until every listed process has exited.
+# Unlike wait_pvmove_lv_ready this does not poll lvmpolld; it assumes the
+# temporary pvmove LV is visible in lvs, which matches abort-all's needs.
+wait_pvmove_lv_started_in_vg() {
+	local vg=$1
+	shift
+	local want=0 pid n
+
+	for i in {100..0}; do
+		want=0
+		for pid in "$@"; do
+			kill -0 "$pid" 2>/dev/null && want=$((want + 1))
+		done
+		[[ "$want" -eq 0 ]] && return 0
+		n=$(lvs -a --noheadings -S 'name=~"^pvmove[0-9]+$"' "$vg" \
+		    2>/dev/null | wc -l)
+		[[ "${n:-0}" -ge "$want" ]] && return
+		sleep .1
+	done
+
+	die "Waiting for pvmove in $vg to start timed out"
+}
+
 # Holds device open with sleep which automatically expires after given timeout
 # Prints  PID of running holding sleep process in background
 hold_device_open() {
