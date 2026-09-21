@@ -761,15 +761,15 @@ do_register_nvme() {
 	set_cmd "$dev"
 
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=' --cptpl=1'
+		cmdopts+=("--cptpl=1")
 	fi
 
 	# If our previous key is still registered, then we must use
 	# rrega=2 and iekey.  If our previous key has been removed,
 	# then we must use rrega=0.
 
-	if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
-		if ! nvme resv-register $cmdopts --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
+	if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=0 "$dev" >/dev/null 2>&1; then
+		if ! nvme resv-register "${cmdopts[@]}" --nrkey="$OURKEY" --rrega=2 --iekey "$dev" >/dev/null 2>&1; then
 			logmsg "$cmd register error on $dev"
 			return 1
 		fi
@@ -781,10 +781,10 @@ do_register_scsi() {
 	set_cmd "$dev"
 
 	if [[ $PTPL -eq 1 ]]; then
-		cmdopts+=' --param-aptpl'
+		cmdopts+=("--param-aptpl")
 	fi
 
-	if ! $cmd $cmdopts --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
+	if ! "$cmd" "${cmdopts[@]}" --out --register-ignore --param-sark="$OURKEY" "$dev" >/dev/null 2>&1; then
 		logmsg "$cmd register error on $dev"
 		return 1
 	fi
@@ -809,15 +809,8 @@ do_register() {
 
 do_takeover() {
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
-
-	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
+	require_opt REMKEY removekey
 
 	err=0
 
@@ -876,7 +869,7 @@ do_takeover() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
 		fi
 
 		if [[ "$?" -ne 0 ]]; then
@@ -893,10 +886,7 @@ do_takeover() {
 do_start() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	for dev in "${DEVICES[@]}"; do
 		set_type "$dev"
@@ -953,7 +943,7 @@ do_start() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --rtype="$type" --racqa=0 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --reserve --param-rk="$OURKEY" --prout-type="$type" "$dev" >/dev/null 2>&1
 		fi
 
 		if [[ "$?" -ne 0 ]]; then
@@ -979,10 +969,7 @@ do_start() {
 do_stop() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	# Removing reservation is not needed, we just remove our registration key.
 	# The reservation will go away when the last key is removed.
@@ -995,7 +982,7 @@ do_stop() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-register --crkey="$OURKEY" --rrega=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 
 		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
@@ -1022,10 +1009,7 @@ do_stop() {
 do_clear() {
 	local err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
 
 	# our key must be registered to do clear.
 	# we want to clear any/all PR state that we can find on the devs,
@@ -1066,7 +1050,7 @@ do_clear() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-release --crkey="$OURKEY" --rrela=1 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --clear --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
 		fi
 
 		test $? -eq 0 || logmsg "$cmd clear error on $dev"
@@ -1099,15 +1083,8 @@ do_clear() {
 do_remove() {
 	err=0
 
-	if [[ -z "$OURKEY" ]]; then
-		echo "Missing required option: --ourkey."
-		exit 1
-	fi
-
-	if [[ -z "$REMKEY" ]]; then
-		echo "Missing required option: --removekey."
-		exit 1
-	fi
+	require_opt OURKEY ourkey
+	require_opt REMKEY removekey
 
 	for dev in "${DEVICES[@]}"; do
 		key_is_on_device "$dev" "$OURKEY"
@@ -1141,7 +1118,7 @@ do_remove() {
 		if [[ "$cmd" == "nvme" ]]; then
 			nvme resv-acquire --crkey="$OURKEY" --prkey="$REMKEY" --rtype="$remove_type" --racqa=2 "$dev" >/dev/null 2>&1
 		else
-			$cmd $cmdopts --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
+			"$cmd" "${cmdopts[@]}" --out --preempt-abort --param-sark="$REMKEY" --param-rk="$OURKEY" --prout-type="$remove_type" "$dev" >/dev/null 2>&1
 		fi
 
 		test $? -eq 0 || logmsg "$cmd preempt-abort error on $dev"
