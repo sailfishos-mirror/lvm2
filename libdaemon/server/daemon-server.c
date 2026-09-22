@@ -560,15 +560,22 @@ bad:
 	return 0;
 }
 
-static void _reap(daemon_state s, int waiting)
+/*
+ * Drop client thread state from the daemon list.
+ * shutting_down == 0: remove only threads that finished their request.
+ * shutting_down != 0: remove every thread (daemon is exiting).
+ */
+static void _reap(daemon_state s, int shutting_down)
 {
 	thread_state *last = s.threads, *ts = last->next;
 	void *rv;
 
 	while (ts) {
-		if (waiting || !ts->active) {
+		if (shutting_down || !ts->active) {
 			if (ts->client.thread_id) {
-				if ((errno = pthread_kill(ts->client.thread_id, SIGTERM)) &&
+				/* SIGTERM runs _exit_handler: kick threads only when shutting down. */
+				if (shutting_down &&
+				    (errno = pthread_kill(ts->client.thread_id, SIGTERM)) &&
 				    (errno != ESRCH))
 					ERROR(&s, "pthread_kill failed for thread %ld.",
 					      (long)ts->client.thread_id);
