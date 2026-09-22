@@ -1,5 +1,10 @@
 Version 2.03.43 - 
 ==================
+  Fix lvmpolld shutdown when reaping a finished client thread.
+  Fix dmeventd raid repair after partial replacement or resync completion.
+  Retry failed dmeventd snapshot extension with exponential backoff.
+  Fix dmeventd snapshot threshold advance when lvextend failed.
+  Fix dmeventd snapshot unmount on Invalid/Overflow, not 100% usage alone.
   Reject undersized --pooldatavdo conversion before allocating pool metadata.
   Allow lvchange --refresh and properties on hidden thin and cache pool sub LVs.
   Allow 4K stripe size smaller than page size (except on DAX and MD RAID).
