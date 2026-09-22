@@ -25,6 +25,7 @@ UNIT_SOURCE=\
 	test/unit/dmeventd_raid_t.c \
 	test/unit/dmeventd_thin_t.c \
 	test/unit/dmeventd_vdo_t.c \
+	test/unit/dmeventd_snapshot_t.c \
 	test/unit/framework.c \
 	test/unit/io_engine_t.c \
 	test/unit/matcher_t.c \
