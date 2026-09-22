@@ -28,6 +28,7 @@ void daemon_stray_tests(struct dm_list *all_tests);
 void dm_list_tests(struct dm_list *all_tests);
 void dm_hash_tests(struct dm_list *all_tests);
 void dm_status_tests(struct dm_list *all_tests);
+void dmeventd_mirror_tests(struct dm_list *all_tests);
 void dmeventd_raid_tests(struct dm_list *all_tests);
 void dmeventd_thin_tests(struct dm_list *all_tests);
 void dmeventd_vdo_tests(struct dm_list *all_tests);
@@ -52,6 +53,7 @@ static inline void register_all_tests(struct dm_list *all_tests)
 	dm_list_tests(all_tests);
 	dm_hash_tests(all_tests);
 	dm_status_tests(all_tests);
+	dmeventd_mirror_tests(all_tests);
 	dmeventd_raid_tests(all_tests);
 	dmeventd_thin_tests(all_tests);
 	dmeventd_vdo_tests(all_tests);
