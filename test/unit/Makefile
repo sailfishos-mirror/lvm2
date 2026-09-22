@@ -22,6 +22,7 @@ UNIT_SOURCE=\
 	test/unit/dmhash_t.c \
 	test/unit/dmlist_t.c \
 	test/unit/dmstatus_t.c \
+	test/unit/dmeventd_raid_t.c \
 	test/unit/framework.c \
 	test/unit/io_engine_t.c \
 	test/unit/matcher_t.c \
