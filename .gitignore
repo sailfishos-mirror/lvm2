@@ -64,6 +64,8 @@ test/.lib-dir-stamp
 test/.tests-stamp
 test/lib/dlclose_test
 test/lib/dmsecuretest
+test/lib/dm-wrapper
+test/lib/dmeventd-client
 test/lib/lvchange
 test/lib/lvconvert
 test/lib/lvcreate
