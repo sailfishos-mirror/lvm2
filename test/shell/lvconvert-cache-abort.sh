@@ -20,59 +20,71 @@ aux have_cache 1 3 0 || skip
 
 aux prepare_vg
 
-SIZE_MB=200
+# Slow origin writeback so SIGINT can land during flush (zero origin is instant).
+ORIGIN_DELAY_MS=30
+SECTOR_SIZE=512
+SECTORS_PER_MIB=2048
+# dm-cache kernel status: dirty_blocks is field 14 (0-based index 13).
+DM_CACHE_STATUS_DIRTY_IDX=13
 
-# Use large zero device and later delayed metadata dev1
+ORIGIN_DEV=$dev3
+ORIGIN_PE=$(( $(get pv_field "$ORIGIN_DEV" pv_pe_count) - $(get pv_field "$ORIGIN_DEV" pv_pe_alloc_count) ))
+SIZE_MB=$(( ORIGIN_PE * SECTOR_SIZE / SECTORS_PER_MIB - 4 ))
+test "$SIZE_MB" -gt 8 || SIZE_MB=8
 lvcreate -L$((SIZE_MB * 2))M --type zero -n cpool $vg
 lvconvert -y --type cache-pool --chunksize 32k $vg/cpool "$dev1"
-lvcreate -L$((SIZE_MB * 2))M --type zero -n $lv1 $vg
+lvcreate -l "$ORIGIN_PE" -n $lv1 $vg "$ORIGIN_DEV"
 lvconvert -y -H --chunksize 32k --cachemode writeback --cachepool $vg/cpool $vg/$lv1
 
 #
 # Ensure cache gets promoted blocks
 #
-for i in $(seq 1 2) ; do
+for i in $(seq 1 4) ; do
 dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=$SIZE_MB oflag=direct || true
 dd if="$DM_DEV_DIR/$vg/$lv1" of=/dev/null bs=1M count=$SIZE_MB iflag=direct || true
 done
 
-aux delay_dev "$dev1" 0 100 "$(get first_extent_sector "$dev1"):"
+aux delay_dev "$ORIGIN_DEV" 0 "$ORIGIN_DELAY_MS" "$(get first_extent_sector "$ORIGIN_DEV"):"
 dd if=/dev/zero of="$DM_DEV_DIR/$vg/$lv1" bs=1M count=$SIZE_MB
 
 lvdisplay --maps $vg
-# Delay dev to ensure we have some time to 'capture' interrupt in flush
 
-# TODO, how to make writeback cache dirty
 test "$(get lv_field $vg/$lv1 cache_dirty_blocks)" -gt 0 || {
 	lvdisplay --maps $vg
 	skip "Cannot make a dirty writeback cache LV."
 }
 
-# to be able to trace our command - let's prepare descriptor 3 and reroute output there
-# 'tee'  will mix-in on stdout result with our 'for 0..50' loop
+# Tee lvconvert -vvvv into logconvert and the test log (fd 3).  Do not run
+# other lvm tools while fd 3 is open: they inherit the pipe and may hang/leak.
 exec 3> >(tee logconvert)
 LVM_TEST_TAG="kill_me_$PREFIX" lvconvert -vvvv --splitcache $vg/$lv1 >&3 2>&1 &
 PID_CONVERT=$!
-for i in {1..50}; do
+saw_cleaner=0
+sent_kill=0
+for i in {1..200}; do
 	out=$(dmsetup status --noflush "$vg-$lv1")
-	case "$out" in
-	  *cleaner*) break;;
-	esac
-	echo "$i: Waiting for cleaner policy on $vg/$lv1"
-	sleep .03
+	if [[ "$out" =~ [[:space:]]cleaner[[:space:]] ]]; then
+	    saw_cleaner=1
+	    read -ra st <<< "$out"
+	    dirty=${st[DM_CACHE_STATUS_DIRTY_IDX]:-0}
+	    if test "$dirty" -gt 0; then
+		kill -INT $PID_CONVERT 2>/dev/null || true
+		sent_kill=1
+		break
+	    fi
+	fi
+	kill -0 $PID_CONVERT 2>/dev/null || break
+	sleep 0.01
 done
-test "$i" -ge 49 && die "Waited for cleaner policy on $vg/$lv1 too long!"
+test "$saw_cleaner" -eq 1 || die "Waited for cleaner policy on $vg/$lv1 too long!"
+test "$sent_kill" -eq 1 || die "Cache on $vg/$lv1 became clean before interrupt could be sent"
 
-# While lvconvert updated table to 'cleaner' policy now it
-# should be running in 'Flushing' loop and just 1 KILL should
-# cause abortion of flushing
-kill -INT $PID_CONVERT
 # extra time in case we are in some slow 'flushing' suspend
 sleep 0.5
-aux enable_dev "$dev1"
+aux enable_dev "$ORIGIN_DEV"
 wait "$PID_CONVERT" || true
 # close 'tee' descriptor
-exec 3>$-
+exec 3>&-
 
 #cat logconvert || true
 
