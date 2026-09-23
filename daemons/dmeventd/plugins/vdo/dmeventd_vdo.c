@@ -15,6 +15,7 @@
 #include "lib/misc/lib.h"
 #include "daemons/dmeventd/plugins/lvm2/dmeventd_lvm.h"
 #include "daemons/dmeventd/libdevmapper-event.h"
+#include "daemons/dmeventd/dmeventd_retry.h"
 
 #include <sys/wait.h>
 #include <stdarg.h>
@@ -26,8 +27,6 @@
 /* Do not bother checking VDO pool is less than 50% full. */
 #define CHECK_MINIMUM	(DM_PERCENT_1 * 50)
 
-#define MAX_FAILS	(256)  /* ~42 mins between cmd call retry with 10s delay */
-
 #define VDO_DEBUG 0
 
 struct dso_state {
@@ -35,8 +34,7 @@ struct dso_state {
 	int percent_check;
 	int percent;
 	uint64_t known_data_size;
-	unsigned fails;
-	unsigned max_fails;
+	struct dmeventd_policy_retry policy_retry;
 	int restore_sigset;
 	sigset_t old_sigset;
 	pid_t pid;
@@ -81,7 +79,7 @@ static int _run_command(struct dso_state *state)
 		_exit(errno);
 	} else if (state->pid == -1) {
 		log_error("Can't fork command %s.", state->cmd_str);
-		state->fails = 1;
+		state->policy_retry.fails = 1;
 		return 0;
 	}
 
@@ -98,11 +96,11 @@ static int _use_policy(struct dm_task *dmt, struct dso_state *state)
 
 	if (!dmeventd_lvm2_run_with_lock(state->cmd_str)) {
 		log_error("Failed command for %s.", dm_task_get_name(dmt));
-		state->fails = 1;
+		state->policy_retry.fails = 1;
 		return 0;
 	}
 
-	state->fails = 0;
+	dmeventd_policy_retry_after_success(&state->policy_retry);
 
 	return 1;
 }
@@ -123,12 +121,12 @@ static int _wait_for_pid(struct dso_state *state)
 	if (WIFEXITED(status)) {
 		log_verbose("Child %d exited with status %d.",
 			    state->pid, WEXITSTATUS(status));
-		state->fails = WEXITSTATUS(status) ? 1 : 0;
+		state->policy_retry.fails = WEXITSTATUS(status) ? 1 : 0;
 	} else {
 		if (WIFSIGNALED(status))
 			log_verbose("Child %d was terminated with status %d.",
 				    state->pid, WTERMSIG(status));
-		state->fails = 1;
+		state->policy_retry.fails = 1;
 	}
 
 	state->pid = -1;
@@ -212,7 +210,7 @@ void process_event(struct dm_task *dmt,
 	if (state->known_data_size != vdop.status->total_blocks) {
 		state->percent_check = CHECK_MINIMUM;
 		state->known_data_size = vdop.status->total_blocks;
-		state->fails = 0;
+		dmeventd_policy_retry_after_success(&state->policy_retry);
 	}
 
 	/*
@@ -236,21 +234,10 @@ void process_event(struct dm_task *dmt,
 	} else
 		state->percent_check = CHECK_MINIMUM;
 
-	/* Reduce number of _use_policy() calls by power-of-2 factor till frequency of MAX_FAILS is reached.
-	 * Avoids too high number of error retries, yet shows some status messages in log regularly.
-	 * i.e. PV could have been pvmoved and VG/LV was locked for a while...
-	 */
-	if (state->fails) {
-		if (state->fails++ <= state->max_fails) {
-			log_debug("Postponing frequently failing policy (%u <= %u).",
-				  state->fails - 1, state->max_fails);
-			goto out;
-		}
-		if (state->max_fails < MAX_FAILS)
-			state->max_fails <<= 1;
-		state->fails = needs_policy = 1; /* Retry failing command */
-	} else
-		state->max_fails = 1; /* Reset on success */
+	/* Power-of-2 backoff via dmeventd_retry.h (DMEVENTD_POLICY_MAX_FAILS). */
+	if (dmeventd_policy_retry_should_postpone(&state->policy_retry, "policy"))
+		goto out;
+	needs_policy = state->policy_retry.fails ? 1 : needs_policy;
 
 	if (needs_policy)
 		_use_policy(dmt, state);
@@ -348,7 +335,7 @@ int register_device(const char *device_name,
 	} else /* Unsupported command format */
 		goto inval;
 
-	state->max_fails = 1;
+	dmeventd_policy_retry_after_success(&state->policy_retry);
 	state->pid = -1;
 	state->name = name;
 	*user = state;
