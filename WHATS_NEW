@@ -1,5 +1,6 @@
 Version 2.03.43 - 
 ==================
+  Wipe stale signatures before formatting a VDO data LV on thin storage.
   Warn on non-power-of-2 thin pool chunk size; prompt when --chunksize is used.
   Fix lvmpolld shutdown when reaping a finished client thread.
   Fix dmeventd raid repair after partial replacement or resync completion.
