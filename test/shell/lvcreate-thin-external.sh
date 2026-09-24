@@ -36,7 +36,7 @@ vgcreate $SHARED -s 64K "$vg" "${DEVICES[@]}"
 aux lvmconf 'global/thin_disabled_features = [ "external_origin_extend" ]'
 
 # Test validation for external origin being multiple of thin pool chunk size
-lvcreate -L10M -T $vg/pool192 -c 192k
+lvcreate -y -L10M -T $vg/pool192 -c 192k
 lvcreate -an -pr -Zn -l1 -n $lv1 $vg
 not lvcreate -s $vg/$lv1 --thinpool $vg/pool192
 

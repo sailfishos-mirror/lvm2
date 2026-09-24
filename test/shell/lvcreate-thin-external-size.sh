@@ -49,7 +49,7 @@ dd if=64K of="$d1" bs=8192 seek=45 count=2 conv=fdatasync
 lvchange -an $vg/$lv1
 lvchange -pr $vg/$lv1
 
-lvcreate -L2M -T $vg/pool -c 192K
+lvcreate -y -L2M -T $vg/pool -c 192K
 lvcreate -s $vg/$lv1 --name $lv2 --thinpool $vg/pool
 
 # Check the tail of $lv2 matches $lv1

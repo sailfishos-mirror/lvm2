@@ -36,6 +36,14 @@ lvcreate -an -Zn -L 8 -n $lv3 $vg
 lvcreate -an -Zn -L 8 -n $lv4 $vg
 lvcreate -an -Zn -L 16 -n $lv5 $vg
 
+# non-power-of-2 chunk size is valid for a cache pool and must not
+# print the thin pool chunk size warning
+lvcreate -an -Zn -L 8 -n npow2 $vg
+lvconvert --yes --type cache-pool --chunksize 192 $vg/npow2 2>&1 | tee err
+check lv_field $vg/npow2 chunk_size "192.00k"
+not grep "Thin pool chunk" err
+lvremove -f $vg/npow2
+
 # check validation of cachemode arg works
 invalid lvconvert --yes --type cache-pool --cachemode writethroughX --cachepool $vg/$lv1
 
