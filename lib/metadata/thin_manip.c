@@ -1129,6 +1129,71 @@ int validate_thin_pool_chunk_size(struct cmd_context *cmd, uint32_t chunk_size)
 	return r;
 }
 
+/*
+ * pool_name NULL: thin pool without a known name yet (lvcreate before metadata).
+ * log_warn_once: nameless and named warnings differ; identical text may dedupe.
+ */
+static void _warn_not_pow2_chunk(struct cmd_context *cmd,
+				 const char *pool_name,
+				 uint32_t chunk_size)
+{
+	log_warn_once("WARNING: Thin pool %s%schunk size %s is not a power of 2; "
+		      "fstrim/blkdiscard may be dropped, leaving stale data in the pool.",
+		      pool_name ? : "", pool_name ? " " : "",
+		      display_size(cmd, chunk_size));
+}
+
+int validate_thin_pool_chunk_size_for_activation(struct cmd_context *cmd,
+						 const struct logical_volume *lv,
+						 uint32_t chunk_size,
+						 unsigned thin_target_attr)
+{
+	if (is_power_of_2(chunk_size))
+		return 1;
+
+	if (!(thin_target_attr & THIN_FEATURE_BLOCK_SIZE)) {
+		log_error("Thin pool target does not support %s chunk size (needs"
+			  " kernel >= 3.6).", display_size(cmd, chunk_size));
+		return 0;
+	}
+
+	/* Success still logs a one-time warning (non-fatal). */
+	_warn_not_pow2_chunk(cmd, display_lvname(lv), chunk_size);
+
+	return 1;
+}
+
+void warn_thin_pool_chunk_size_not_pow2(struct cmd_context *cmd,
+					const char *pool_name,
+					uint32_t chunk_size)
+{
+	if (is_power_of_2(chunk_size))
+		return;
+
+	_warn_not_pow2_chunk(cmd, pool_name, chunk_size);
+	log_warn("WARNING: Use a power-of-2 chunk size (64k, 128k, 256k, 512k, 1m) instead.");
+}
+
+int confirm_thin_pool_chunk_size_not_pow2_cmdline(struct cmd_context *cmd,
+						  uint32_t chunk_size,
+						  const char *action)
+{
+	if (is_power_of_2(chunk_size))
+		return 1;
+
+	if (cmd->current_settings.yes)
+		return 1;
+
+	if (yes_no_prompt("Do you really want to %s a thin pool "
+			  "with non-power-of-2 chunk size? [y/n]: ",
+			  action) == 'n') {
+		log_error("Aborted.");
+		return 0;
+	}
+
+	return 1;
+}
+
 uint64_t estimate_thin_pool_metadata_size(uint32_t data_extents, uint32_t extent_size, uint32_t chunk_size)
 {
 	return _estimate_metadata_size(data_extents, extent_size, chunk_size);

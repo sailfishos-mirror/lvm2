@@ -3355,6 +3355,15 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
 			goto bad;
 	}
 
+	if (!to_cachepool) {
+		warn_thin_pool_chunk_size_not_pow2(cmd, display_lvname(lv),
+						   chunk_size);
+		if (arg_is_set(cmd, chunksize_ARG) &&
+		    !confirm_thin_pool_chunk_size_not_pow2_cmdline(cmd, chunk_size,
+								   "convert to"))
+			goto_bad;
+	}
+
 	log_verbose("Pool metadata extents %u chunk_size %u", meta_extents, chunk_size);
 
 	(void) dm_snprintf(converted_names, sizeof(converted_names), "%s%s%s",

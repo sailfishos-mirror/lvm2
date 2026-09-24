@@ -1815,6 +1815,16 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
 	if (!lockd_lvcreate_prepare(cmd, vg, lp))
 		goto_out;
 
+	if (lp->create_pool && segtype_is_thin(lp->segtype)) {
+		/* No pool name yet; prompt only for explicit --chunksize. */
+		warn_thin_pool_chunk_size_not_pow2(vg->cmd, NULL, lp->chunk_size);
+		if (arg_is_set(vg->cmd, chunksize_ARG) &&
+		    !confirm_thin_pool_chunk_size_not_pow2_cmdline(vg->cmd,
+								   lp->chunk_size,
+								   "create"))
+			goto_out;
+	}
+
 	if (!(lv = lv_create_single(vg, lp)))
 		goto_out;
 
