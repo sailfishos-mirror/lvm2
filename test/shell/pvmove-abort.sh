@@ -42,10 +42,11 @@ cmd2=(pvmove -i +2 $backgroundarg $mode "$dev2" "$dev3")
 if test -z "$backgroundarg" ; then
 	"${cmd1[@]}" &
 	PVMOVE1_PID=$!
-	aux wait_pvmove_lv_ready "$vg-pvmove0"
 	"${cmd2[@]}" &
 	PVMOVE2_PID=$!
-	aux wait_pvmove_lv_ready "$vg-pvmove1"
+	# Per-PV abort needs two concurrent pvmoves; do not wait on fixed
+	# pvmove0/pvmove1 names (see wait_pvmove_lv_started_in_vg in aux).
+	aux wait_pvmove_lv_started_in_vg "$vg" "$PVMOVE1_PID" "$PVMOVE2_PID"
 else
 	LVM_TEST_TAG="kill_me_$PREFIX" "${cmd1[@]}"
 	LVM_TEST_TAG="kill_me_$PREFIX" "${cmd2[@]}"
@@ -54,10 +55,10 @@ fi
 # remove specific device
 pvmove --abort "$dev1"
 
-# check if proper pvmove was canceled
-get lv_field $vg name -a | tee out
-not grep -E "^\[?pvmove0" out
-grep -E "^\[?pvmove1" out
+# check if proper pvmove was canceled (by source PV, not pvmove index)
+lvs -a -S 'name=~"^pvmove[0-9]+$"' -o move_pv --noheadings "$vg" | sort -u | tee out
+not grep -F "$(basename -- "$dev1")" out
+grep -F "$(basename -- "$dev2")" out
 
 # remove any remaining pvmoves in progress
 pvmove --abort
@@ -68,8 +69,8 @@ lvremove -ff $vg
 # not required as pvmove would exit with:
 # 'No pvmove in progress - already finished or aborted.'
 if test -z "$backgroundarg" ; then
-	kill "$PVMOVE1_PID" "$PVMOVE2_PID"
-	wait "$PVMOVE1_PID" "$PVMOVE2_PID" || true
+	kill "$PVMOVE1_PID" "$PVMOVE2_PID" 2>/dev/null || true
+	wait "$PVMOVE1_PID" "$PVMOVE2_PID" 2>/dev/null || true
 fi
 aux kill_tagged_processes
 
