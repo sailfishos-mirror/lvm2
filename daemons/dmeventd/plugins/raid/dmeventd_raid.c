@@ -285,7 +285,7 @@ static int _raid_should_run_repair(struct dso_state *state,
 
 static int _process_raid_event(struct dso_state *state, const char *params, const char *device)
 {
-	struct raid_event event = { 0 };
+	struct raid_event event = { { 0 } };
 	struct dm_status_raid *status;
 	int r = 1;
 
