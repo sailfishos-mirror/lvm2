@@ -20,7 +20,7 @@
 # 4. Attempt to create a new raid1 volume - should fail before vgck --updatemetadata
 # 5. After vgck --updatemetadata, lvcreate should work correctly
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux have_raid 1 3 0 || skip
 
