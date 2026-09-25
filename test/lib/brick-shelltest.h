@@ -1036,7 +1036,7 @@ std::string _cgroup_base()
 
 bool _ctrl_enabled( const std::string &base, const char *ctrl )
 {
-    std::ifstream f( base + "/cgroup.controllers" );
+    std::ifstream f( ( base + "/cgroup.controllers" ).c_str() );
     if ( !f )
         return false;
     std::string name;
@@ -1055,9 +1055,9 @@ bool _cgroup_create( std::string &path )
     std::string root = base + "/lvm2-testing";
     if ( mkdir( root.c_str(), 0755 ) != 0 && errno != EEXIST )
         return false;
-    std::ofstream sc1( base + "/cgroup.subtree_control", std::ios::app );
+    std::ofstream sc1( ( base + "/cgroup.subtree_control" ).c_str(), std::ios::app );
     sc1 << "+memory" << std::flush;
-    std::ofstream sc2( root + "/cgroup.subtree_control", std::ios::app );
+    std::ofstream sc2( ( root + "/cgroup.subtree_control" ).c_str(), std::ios::app );
     sc2 << "+memory" << std::flush;
 
     static unsigned count = 0;
@@ -1077,7 +1077,7 @@ bool _cgroup_create( std::string &path )
 
 unsigned long long _cg_current_kb( const std::string &path )
 {
-    std::ifstream f( path + "/memory.current" );
+    std::ifstream f( ( path + "/memory.current" ).c_str() );
     if ( !f )
         return 0;
     unsigned long long bytes = 0;
@@ -1087,7 +1087,7 @@ unsigned long long _cg_current_kb( const std::string &path )
 
 bool _cg_peak_kb( const std::string &path, unsigned long long &kb )
 {
-    std::ifstream f( path + "/memory.peak" );
+    std::ifstream f( ( path + "/memory.peak" ).c_str() );
     if ( !f )
         return false;
     unsigned long long bytes = 0;
@@ -1143,7 +1143,7 @@ struct SysIO {
             return;
         /* move the bash running the test under the cgroup; everything it
          * forks follows, so RAM is charged per-test, not host-wide */
-        std::ofstream procs( cg_path + "/cgroup.procs" );
+        std::ofstream procs( ( cg_path + "/cgroup.procs" ).c_str() );
         procs << getpid();
     }
 
