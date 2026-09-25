@@ -12,7 +12,7 @@
 
 
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux prepare_vg 4
 aux lvmconf 'allocation/maximise_cling = 0' \

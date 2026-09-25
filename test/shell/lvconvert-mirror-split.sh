@@ -12,7 +12,7 @@
 
 # Check --splitmirrors for mirror segtype
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux prepare_vg 3
 

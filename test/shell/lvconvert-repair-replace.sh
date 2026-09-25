@@ -12,7 +12,7 @@
 
 
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux prepare_vg 6
 

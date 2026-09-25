@@ -43,7 +43,7 @@ npvs=0
 pvsz=0
 
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 test "${LVM_VALGRIND:-0}" -eq 0 || skip "Timing is too slow with valgrind."
 
