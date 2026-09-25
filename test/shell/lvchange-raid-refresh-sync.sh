@@ -15,7 +15,13 @@
 
 . lib/inittest --skip-with-lvmpolld
 
-aux have_raid 1 3 0 || skip
+# Injecting "sync" below reloads the table of a *live* raid device.
+# That is only reliable on dm-raid >= 1.14: older kernels construct the
+# new array already at table load (dm_table_add_target() calls the
+# constructor) and hang or oops while the old array is torn down during
+# the resume swap.  Same requirement as the other raid table reload
+# test, lvconvert-raid-reshape-stripes-load-reload.sh.
+aux have_raid 1 14 0 || skip
 aux prepare_vg 2
 
 lvcreate --yes --type raid1 -m 1 -n $lv1 -L 16M $vg
