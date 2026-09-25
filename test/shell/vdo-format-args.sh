@@ -38,7 +38,7 @@ fi
 STATS_CMD=""
 if aux target_at_least dm-vdo 8 2 0; then
 	STATS_CMD="dmvdostats"
-elif which vdostats >/dev/null 2>&1; then
+elif command -v vdostats >/dev/null 2>&1; then
 	STATS_CMD="vdostats"
 fi
 
@@ -119,6 +119,15 @@ test_vdo_format() {
 			die "$format_msg: slab count with 256MB ($LARGE_SLAB_COUNT) should be less than with 128MB ($DENSE_SLABS)"
 	fi
 
+	# Verify the format engine flag is recorded in metadata:
+	# kernel format records use_kernel_format, userspace vdoformat does not.
+	vgcfgbackup -f vgbackup $vg
+	if test "$use_kernel" -eq 1; then
+		grep "use_kernel_format" vgbackup
+	else
+		not grep "use_kernel_format" vgbackup
+	fi
+
 	lvremove -f $vg
 }
 
@@ -188,26 +197,12 @@ VPOOL="$vg-vdopool-vpool"
 if test "$KERNEL_FORMAT" -eq 1; then
 	test_vdo_format 1 "Kernel formatting"
 	test_index_memory_size 1 "Kernel formatting"
-
-	# Verify use_kernel_format is in metadata for kernel-formatted VDO
-	lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
-		--vdosettings "use_kernel_format=1"
-	vgcfgbackup -f vgbackup $vg
-	grep "use_kernel_format" vgbackup
-	lvremove -ff $vg
 fi
 
 if aux have_vdoformat; then
 	# Test userspace vdoformat tool
 	test_vdo_format 0 "Userspace vdoformat"
 	test_index_memory_size 0 "Userspace vdoformat"
-
-	# Verify use_kernel_format is NOT in metadata for userspace-formatted VDO
-	lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
-		--vdosettings "use_kernel_format=0"
-	vgcfgbackup -f vgbackup $vg
-	not grep "use_kernel_format" vgbackup
-	lvremove -ff $vg
 else
 	# Without vdoformat we cannot create VDO volume
 	not lvcreate --vdo -L25G -V50G -n $lv1 $vg/vdopool \
