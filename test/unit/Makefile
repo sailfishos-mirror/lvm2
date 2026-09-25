@@ -52,7 +52,7 @@ libdaemon/client/libdaemonclient.a: libdaemon
 $(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
 	$(SHOW) "    [LD] $@"
 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
-	      -o $@ $+ $(LVMLIBS)
+	      -o $@ $+ $(LVMLIBS) $(PTHREAD_LIBS)
 
 .PHONY: run-unit-test unit-test
 unit-test: $(UNIT_TARGET)
