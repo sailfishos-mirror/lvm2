@@ -939,6 +939,259 @@ struct TestProcess
     }
 };
 
+// System-wide accounting for a single test run: how much I/O hit the
+// leaf storage backends and how much RAM the test's subtree consumed.
+// Per-process getrusage() misses most of a test's I/O (the wait4()ed
+// child only accounts itself; its grandchildren, and the kernel writeback
+// done by flusher threads, never reach ru_inblock/oublock).  Instead we
+// sum block-layer sectors on leaf devices and track the growth of used
+// memory (MemTotal - MemFree) from /proc/meminfo.
+//
+// "Leaf" = top-level block device (not a partition) with no dm/md stack
+// above it (empty or missing /sys/class/block/<dev>/slaves/).  Counting
+// only leaves avoids charging the same bio twice (dm -> backing device).
+//
+// Note that RAM-hosted backend devices (brd -- the default LVM2 test
+// backing) are bio-based and expose NO /proc/diskstats counters; their
+// data pages are plain kernel allocations that only reduce MemFree.
+// Such writes therefore show up in "M ram", not in "M in"/"M out".
+
+bool _sysfs_exists( const std::string &p )
+{
+    struct stat st;
+    return ::stat( p.c_str(), &st ) == 0;
+}
+
+bool _leaf_device( const std::string &name )
+{
+    std::string base = "/sys/class/block/" + name;
+    if ( _sysfs_exists( base + "/partition" ) )
+        return false; // partition: its I/O is also counted on the whole device
+    DIR *d = ::opendir( ( base + "/slaves" ).c_str() );
+    if ( !d )
+        return true; // no slaves/ -> not a dm/md stack, count it
+    bool any = false;
+    for ( struct dirent *e = ::readdir( d ); e; e = ::readdir( d ) )
+        if ( e->d_name[0] != '.' ) {
+            any = true;
+            break;
+        }
+    ::closedir( d );
+    return !any;
+}
+
+bool _scan_blocks( unsigned long long &read, unsigned long long &write )
+{
+    std::ifstream f( "/proc/diskstats" );
+    if ( !f )
+        return false;
+    read = write = 0;
+    std::string line;
+    while ( std::getline( f, line ) ) {
+        std::istringstream ss( line );
+        std::string dev, tok;
+        unsigned long long rs, ws;
+        if ( !( ss >> tok >> tok >> dev ) ) // major minor name
+            continue;
+        ss >> tok >> tok; // reads remerge
+        if ( !( ss >> rs ) ) // sectors read
+            continue;
+        ss >> tok; // ruse
+        ss >> tok >> tok; // writes wmerge
+        if ( !( ss >> ws ) ) // sectors written
+            continue;
+        if ( dev.find( '/' ) != std::string::npos )
+            continue;
+        if ( !_leaf_device( dev ) )
+            continue;
+        read += rs;
+        write += ws;
+    }
+    return true;
+}
+
+/* -- cgroup v2 memory accounting -------------------------------------------- *
+ *
+ * Preferred source for the "M ram" column: the kernel charges not only the
+ * test process tree's anonymous memory but also kernel allocations such as
+ * RAM-hosted backend (brd) data pages to the cgroup that issued the I/O;
+ * memory.peak then gives an exact, per-test peak without the host-wide
+ * noise of /proc/meminfo.
+ *
+ * When cgroup v2 is unavailable (unified hierarchy missing, memory
+ * controller absent, unprivileged) -- or when the RUSAGE env var is set to
+ * a truthy value to force it -- the runner falls back to the original
+ * per-process getrusage-based accounting and reports "0 M ram".
+ */
+
+std::string _cgroup_base()
+{
+    struct stat st;
+    if ( stat( "/sys/fs/cgroup/cgroup.controllers", &st ) != 0 )
+        return "";
+    if ( stat( "/sys/fs/cgroup", &st ) != 0 || !S_ISDIR( st.st_mode ) )
+        return "";
+    return "/sys/fs/cgroup";
+}
+
+bool _ctrl_enabled( const std::string &base, const char *ctrl )
+{
+    std::ifstream f( base + "/cgroup.controllers" );
+    if ( !f )
+        return false;
+    std::string name;
+    while ( f >> name )
+        if ( name == ctrl )
+            return true;
+    return false;
+}
+
+bool _cgroup_create( std::string &path )
+{
+    std::string base = _cgroup_base();
+    if ( base.empty() || !_ctrl_enabled( base, "memory" ) )
+        return false;
+
+    std::string root = base + "/lvm2-testing";
+    if ( mkdir( root.c_str(), 0755 ) != 0 && errno != EEXIST )
+        return false;
+    std::ofstream sc1( base + "/cgroup.subtree_control", std::ios::app );
+    sc1 << "+memory" << std::flush;
+    std::ofstream sc2( root + "/cgroup.subtree_control", std::ios::app );
+    sc2 << "+memory" << std::flush;
+
+    static unsigned count = 0;
+    std::stringstream ss;
+    ss << root << "/run-" << getpid() << "-" << count++;
+    path = ss.str();
+    if ( mkdir( path.c_str(), 0755 ) != 0 )
+        return false;
+    /* the kernel only exposes memory.* in a cgroup once the controller
+     * actually populated the subtree; verify, or bail out silently */
+    if ( access( ( path + "/memory.current" ).c_str(), R_OK ) != 0 ) {
+        (void) rmdir( path.c_str() );
+        return false;
+    }
+    return true;
+}
+
+unsigned long long _cg_current_kb( const std::string &path )
+{
+    std::ifstream f( path + "/memory.current" );
+    if ( !f )
+        return 0;
+    unsigned long long bytes = 0;
+    f >> bytes;
+    return bytes / 1024;
+}
+
+bool _cg_peak_kb( const std::string &path, unsigned long long &kb )
+{
+    std::ifstream f( path + "/memory.peak" );
+    if ( !f )
+        return false;
+    unsigned long long bytes = 0;
+    f >> bytes;
+    kb = bytes / 1024;
+    return true;
+}
+
+void _cgroup_remove( const std::string &path )
+{
+    /* stragglers (daemonized children that outlived the script) keep the
+     * cgroup busy; best effort only, never touch them */
+    (void) rmdir( path.c_str() );
+}
+
+/* -- SysIO ------------------------------------------------------------------ */
+
+struct SysIO {
+    unsigned long long base_read, base_write;
+    unsigned long long end_read, end_write;
+    unsigned long long base_ram_kb, peak_ram_kb;
+    bool has_stats, use_cgroup, rusage_mode;
+    std::string cg_path;
+
+    SysIO() : base_read( 0 ), base_write( 0 ),
+        end_read( 0 ), end_write( 0 ),
+        base_ram_kb( 0 ), peak_ram_kb( 0 ),
+        has_stats( false ), use_cgroup( false ), rusage_mode( false ) {}
+
+    void start()
+    {
+        base_ram_kb = peak_ram_kb = 0;
+        /* RUSAGE env var forces the legacy per-process getrusage
+         * accounting even when a memory cgroup could be used.  Any
+         * truthy value (1, true, yes, on) enables it; RUSAGE=0, an
+         * empty value, or an unset variable all keep the default. */
+        const char *r = getenv( "RUSAGE" );
+        if ( r && *r && strcmp( r, "0" ) && strcmp( r, "no" ) &&
+             strcmp( r, "false" ) && strcmp( r, "off" ) )
+            rusage_mode = true;
+        if ( rusage_mode )
+            return;
+        use_cgroup = _cgroup_create( cg_path );
+        if ( use_cgroup ) {
+            base_ram_kb = _cg_current_kb( cg_path );
+            has_stats = _scan_blocks( base_read, base_write );
+        }
+    }
+
+    void join_child()
+    {
+        if ( !use_cgroup )
+            return;
+        /* move the bash running the test under the cgroup; everything it
+         * forks follows, so RAM is charged per-test, not host-wide */
+        std::ofstream procs( cg_path + "/cgroup.procs" );
+        procs << getpid();
+    }
+
+    void poll()
+    {
+        if ( !use_cgroup )
+            return;
+        /* poll memory.current so kernels without memory.peak (pre-Linux
+         * 5.19) still get a peak via sampling; stop() overrides with
+         * the exact value when memory.peak exists */
+        unsigned long long now = _cg_current_kb( cg_path );
+        if ( now > base_ram_kb ) {
+            now -= base_ram_kb;
+            if ( now > peak_ram_kb )
+                peak_ram_kb = now;
+        }
+    }
+
+    void stop()
+    {
+        if ( use_cgroup ) {
+            unsigned long long pk;
+            if ( _cg_peak_kb( cg_path, pk ) && pk > base_ram_kb ) {
+                pk -= base_ram_kb;
+                if ( pk > peak_ram_kb )
+                    peak_ram_kb = pk;
+            }
+            _cgroup_remove( cg_path );
+            use_cgroup = false;
+        }
+        if ( has_stats )
+            has_stats = _scan_blocks( end_read, end_write );
+    }
+
+    unsigned long long delta_mib( unsigned long long a, unsigned long long b ) const
+    {
+        /* round up so any real I/O below a full MiB still shows as 1 M
+         * instead of a confusing 0 M; a genuine zero delta stays 0 */
+        unsigned long long x = a > b ? a - b : 0;
+        return ( x + 2047 ) / 2048; // 512-byte sectors -> MiB
+    }
+
+    unsigned long long ram_mib() const
+    {
+        return ( peak_ram_kb + 512 ) / 1024;
+    }
+};
+
 struct TestCase {
     TestProcess child;
     std::string name, flavour;
@@ -948,6 +1201,7 @@ struct TestCase {
     struct rusage usage;
     int status;
     bool timeout;
+    SysIO sysio;
     pid_t pid;
 
     Timespec start, silent_start, last_update, last_heartbeat;
@@ -995,6 +1249,7 @@ struct TestCase {
     }
 
     bool monitor() {
+        sysio.poll();
         /* heartbeat */
         if ( last_heartbeat.elapsed().sec() >= 20 && !options.heartbeat.empty() ) {
             std::ofstream hb( options.heartbeat.c_str(), std::fstream::app );
@@ -1033,7 +1288,9 @@ struct TestCase {
                 return false;
             }
 
-        struct timeval wait = (struct timeval) { 0, 500000 /* timeout 0.5s */ };
+        /* 50ms loop: catches short-lived RAM backend (brd) allocation
+         * bursts that a 0.5s poll would miss entirely */
+        struct timeval wait = (struct timeval) { 0, 50000 /* timeout 50ms */ };
         fd_set set;
 
         FD_ZERO( &set );
@@ -1058,13 +1315,38 @@ struct TestCase {
         std::stringstream ss;
         Timespec wall(start.elapsed()), user(usage.ru_utime), system(usage.ru_stime);
         size_t rss = (usage.ru_maxrss + 512) / 1024,
-            inb = (usage.ru_inblock + 1024) / 2048,  // to MiB
-            outb = (usage.ru_oublock + 1024) / 2048; // to MiB
+            inb = (usage.ru_inblock + 1024) / 2048,  // to MiB (fallback)
+            outb = (usage.ru_oublock + 1024) / 2048; // to MiB (fallback)
+
+        // Accounting sources:
+        //   cgroup mode (default, when a memory cgroup is available):
+        //     - M in / M out: leaf-device deltas from /proc/diskstats.  They
+        //       span every process the test forks and also the I/O that never
+        //       reaches a user process, e.g. writeback done by kernel threads.
+        //     - M ram: exact cgroup v2 memory.peak of the test subtree,
+        //       including RAM-hosted backend (brd) data pages and tmpfs
+        //       backing files that no process's RSS accounts for.
+        //   rusage mode (no cgroup, or the RUSAGE env var is truthy):
+        //     - M mem / M in / M out from wait4()/getrusage().  On Linux a
+        //       parent that reaps children accumulates their block I/O into
+        //       its own ru_inblock/ru_oublock, so for a shell test these
+        //       usually track the tree's real I/O; M ram is 0 because
+        //       getrusage has no measure of the tree's memory -- only the
+        //       direct child's own ru_maxrss (M mem).
+        //
+        // Note: RAM-hosted backend devices (brd, some loop setups) are bio-based
+        // and have no /proc/diskstats counters -- their writes appear in "M ram"
+        // above, not in "M in"/"M out".
+        if ( sysio.has_stats ) {
+            inb = sysio.delta_mib( sysio.end_read, sysio.base_read );
+            outb = sysio.delta_mib( sysio.end_write, sysio.base_write );
+        }
 
         ss << wall << " wall " << user << " user " << system << " sys "
             << std::setw( 4 ) << std::setfill( ' ' ) << rss << " M mem "
-            << std::setw( 5 ) << inb << " M in "
-            << std::setw( 5 ) << outb << " M out";
+            << std::setw( 6 ) << inb << " M in "
+            << std::setw( 6 ) << outb << " M out"
+            << std::setw( 6 ) << sysio.ram_mib() << " M ram";
 
         return ss.str();
     }
@@ -1137,6 +1419,10 @@ struct TestCase {
         while ( monitor() )
             /* empty */ ;
 
+        /* stop before FileSink/journal flush the results -- those are the
+         * runner's own writes, not the test's */
+        sysio.stop();
+
         Journal::R r = Journal::UNKNOWN;
 
         if ( timeout ) {
@@ -1184,12 +1470,14 @@ struct TestCase {
     }
 
     void run() {
+        sysio.start();
         pipe();
         pid = kill_pid = fork();
         if (pid < 0) {
             perror("Fork failed.");
             exit(201);
         } else if (pid == 0) {
+            sysio.join_child();
             io.close();
             if ( chdir( options.workdir.c_str() ) )
                 perror( "chdir failed." );
@@ -1228,6 +1516,7 @@ struct TestCase {
 TestCase::TestCase( Journal &j, const Options &opt, const std::string &path, const std::string &_name, const std::string &_flavour ) :
     child( path ), name( _name ), flavour( _flavour ),
     iobuf( NULL ), usage( ( struct rusage ) { { 0 } } ), status( 0 ), timeout( false ),
+    sysio(),
     pid( 0 ), options( opt ), journal( &j )
 { // no inline
 }
@@ -1235,6 +1524,7 @@ TestCase::TestCase( Journal &j, const Options &opt, const std::string &path, con
 TestCase::TestCase( const TestCase &t ) :
     child( t.child ), name( t.name ), flavour( t.flavour),
     io( t.io ), iobuf( t.iobuf ), usage( t.usage ), status( t.status ), timeout( t.timeout ),
+    sysio( t.sysio ),
     pid( t.pid ), start( t.start), silent_start( t.silent_start ),
     last_update( t.last_update ), last_heartbeat( t.last_heartbeat ),
     options( t.options ), journal( t.journal )
