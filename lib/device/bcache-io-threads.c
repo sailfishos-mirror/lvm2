@@ -99,8 +99,11 @@ static struct threads_engine *_to_threads(struct io_engine *e)
 
 /*
  * Pure I/O - no logging, no signal checks.
- * Worker threads have signals blocked, so EINTR is retried unconditionally.
- * All diagnostics are deferred to the main thread via work->errnum and work->done.
+ * All signals are blocked in workers, so none can arrive here.
+ * EINTR is retried unless destroy has set shutdown.
+ * pthread_cancel is enabled by the caller around this function so a
+ * blocked pread/pwrite can be interrupted without holding a mutex.
+ * Diagnostics are deferred to the main thread via work->errnum and work->done.
  */
 static void _do_io(struct thread_slot *slot)
 {
@@ -110,7 +113,11 @@ static void _do_io(struct thread_slot *slot)
 	size_t pos = 0;
 	ssize_t rv;
 
-	while (pos < len) {
+	/* Test hook: cancellation point, so destroy can interrupt a stuck read. */
+	while (_test_hold_io && !slot->shutdown)
+		pause();
+
+	while (pos < len && !slot->shutdown) {
 		if (work->direction == DIR_READ)
 			rv = pread(work->fd, (char *)work->data + pos,
 				   len - pos, offset + pos);
@@ -150,7 +157,15 @@ static void *_worker_fn(void *arg)
 	 * needed here.  The main thread checks sigint_caught() in wait().
 	 * During metadata writes the main thread blocks signals itself,
 	 * so workers are consistent with that.
+	 *
+	 * Cancellation is disabled here so it cannot run while a mutex is
+	 * held, and enabled by the caller only around _do_io().  Blocking
+	 * every signal does not defeat that: glibc's read() wrapper
+	 * unblocks the cancellation signal around the syscall itself, so
+	 * pthread_cancel() still interrupts a blocked pread().
 	 */
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+
 	sigfillset(&set);
 	pthread_sigmask(SIG_SETMASK, &set, NULL);
 
@@ -164,7 +179,9 @@ static void *_worker_fn(void *arg)
 		slot->has_work = 0;
 		pthread_mutex_unlock(&slot->mutex);
 
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 		_do_io(slot);
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
 		pthread_mutex_lock(&e->completed_lock);
 		dm_list_add(&e->completed, &slot->list);
@@ -197,6 +214,14 @@ static bool _threads_destroy(struct io_engine *ioe)
 			pthread_cond_signal(&e->slots[i].cond);
 			pthread_mutex_unlock(&e->slots[i].mutex);
 		}
+
+		/*
+		 * Interrupt a worker blocked in pread/pwrite. Cancel is
+		 * disabled except around _do_io(), so this does not run
+		 * while a worker holds a mutex.
+		 */
+		for (i = 0; i < e->n_threads; i++)
+			pthread_cancel(e->slots[i].thread);
 
 		for (i = 0; i < e->n_threads; i++) {
 			if (pthread_join(e->slots[i].thread, NULL))

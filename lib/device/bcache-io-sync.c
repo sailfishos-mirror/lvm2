@@ -47,6 +47,13 @@ static struct sync_engine *_to_sync(struct io_engine *e)
 static bool _sync_destroy(struct io_engine *ioe)
 {
 	struct sync_engine *e = _to_sync(ioe);
+	struct sync_io *io, *tmp;
+
+	/* issue() can queue a completion that wait() never consumed. */
+	dm_list_iterate_items_safe(io, tmp, &e->complete) {
+		dm_list_del(&io->list);
+		free(io);
+	}
 
 	free(e);
 

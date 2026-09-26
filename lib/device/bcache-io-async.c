@@ -131,10 +131,89 @@ static struct async_engine *_to_async(struct io_engine *e)
 	return container_of(e, struct async_engine, e);
 }
 
+/*
+ * Reap every in-flight request before io_destroy(). A failed flush can
+ * reach destroy with I/O still outstanding: io_destroy() then fails and
+ * bcache frees buffers the kernel is still using.
+ *
+ * Returns true when the context is fully drained, so the buffers are
+ * safe to free.  An interrupt stops the drain without blocking, so
+ * teardown stays interruptible, and returns false; the caller must then
+ * keep the buffers alive.  After fork() the child has no I/O of its own
+ * in flight and must not reap the parent's context.
+ */
+static bool _async_drain(struct async_engine *e)
+{
+	int i, r;
+	unsigned left;
+	struct control_block *cb;
+	struct io_event *ev;
+	struct timespec no_wait = { 0, 0 };
+
+	if (!e->aio_context || !e->cbs)
+		return true;
+
+	if (e->aio_context_pid != getpid())
+		return true;
+
+	while (!dm_list_empty(&e->cbs->allocated)) {
+		left = dm_list_size(&e->cbs->allocated);
+
+		/* Reap completions that are available without blocking. */
+		r = io_getevents(e->aio_context, 0, MAX_EVENT, e->event, &no_wait);
+		while (r == -EINTR && !sigint_caught())
+			r = io_getevents(e->aio_context, 0, MAX_EVENT, e->event, &no_wait);
+
+		if (r < 0) {
+			if (r != -EINTR)
+				log_bcache_sys_warn(_async, "io_getevents", -r);
+			return false;
+		}
+
+		if (!r) {
+			/*
+			 * Nothing ready.  Block only while no interrupt is
+			 * pending; otherwise give up so teardown can finish.
+			 */
+			if (sigint_caught())
+				return false;
+
+			do {
+				r = io_getevents(e->aio_context, 1, MAX_EVENT,
+						 e->event, NULL);
+			} while (r == -EINTR && !sigint_caught());
+
+			if (r < 0) {
+				if (r != -EINTR)
+					log_bcache_sys_warn(_async, "io_getevents", -r);
+				return false;
+			}
+		}
+
+		for (i = 0; i < r; i++) {
+			ev = e->event + i;
+			if (!ev->obj)
+				continue;
+
+			cb = _iocb_to_cb((struct iocb *) ev->obj);
+			_cb_free(e->cbs, cb);
+		}
+
+		/* No progress means the events were not ours. Stop. */
+		if (dm_list_size(&e->cbs->allocated) >= left) {
+			log_warn("WARNING: bcache async drain made no progress.");
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static bool _async_destroy(struct io_engine *ioe)
 {
 	int r;
 	struct async_engine *e = _to_async(ioe);
+	bool drained = _async_drain(e);
 
 	_cb_set_destroy(e->cbs);
 
@@ -155,7 +234,7 @@ static bool _async_destroy(struct io_engine *ioe)
 
 	free(e);
 
-	return true;
+	return drained;
 }
 
 static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
