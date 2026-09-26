@@ -987,6 +987,44 @@ static struct test_suite *_tiny_tests(void)
 	return ts;
 }
 
+static void test_rejected_read_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct block *b;
+
+	/* Exercise both an out-of-range index and an unregistered fd. */
+	T_ASSERT(!bcache_get(f->cache, 4096, 0, 0, &b));
+	bcache_clear_fd(0);
+	T_ASSERT(!bcache_get(f->cache, 0, 0, 0, &b));
+	T_ASSERT(bcache_set_fd(0) == 0);
+
+	/* Rejected requests must not consume the prefetch queue capacity. */
+	_expect_read(f->me, 0, 0);
+	bcache_prefetch(f->cache, 0, 0);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(bcache_get(f->cache, 0, 0, 0, &b));
+	bcache_put(b);
+	_no_outstanding_expectations(f->me);
+}
+
+static void test_rejected_write_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct block *b;
+
+	T_ASSERT(bcache_get(f->cache, 0, 1, GF_ZERO, &b));
+	bcache_put(b);
+	bcache_set_last_byte(f->cache, 0, 512, 512);
+	T_ASSERT(!bcache_flush(f->cache));
+
+	/* Removing the limit must let the same dirty block be retried. */
+	bcache_unset_last_byte(f->cache, 0);
+	_expect_write(f->me, 0, 1);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(bcache_flush(f->cache));
+	_no_outstanding_expectations(f->me);
+}
+
 static struct test_suite *_small_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_small_fixture_init, _small_fixture_exit);
@@ -996,6 +1034,8 @@ static struct test_suite *_small_tests(void)
 	}
 
 	T("get-reads", "bcache_get() triggers read", test_get_triggers_read);
+	T("rejected-read-pending", "rejected reads preserve queue capacity", test_rejected_read_preserves_pending);
+	T("rejected-write-pending", "rejected writes can be retried", test_rejected_write_preserves_pending);
 	T("reads-cached", "repeated reads are cached", test_repeated_reads_are_cached);
 	T("blocks-get-evicted", "block get evicted with many reads", test_block_gets_evicted_with_many_reads);
 	T("prefetch-reads", "prefetch issues a read", test_prefetch_issues_a_read);

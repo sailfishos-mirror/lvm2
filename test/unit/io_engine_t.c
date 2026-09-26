@@ -16,14 +16,17 @@
 #include "lib/device/bcache.h"
 #include "lib/misc/lvm-signal.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <fcntl.h>
 #include <unistd.h>
+
+void bcache_threads_test_hold(int hold);
+void bcache_threads_test_fail_create_after(int count);
 
 //----------------------------------------------------------------
 
@@ -84,8 +87,11 @@ static void *_fix_init(void)
 	struct fixture *f = malloc(sizeof(*f));
 
 	T_ASSERT(f);
+	f->e = NULL;
+#ifdef HAVE_LIBAIO_H
 	f->e = create_async_io_engine(0);
 	T_ASSERT(f->e);
+#endif
 	if (posix_memalign((void **) &f->data, TEST_PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
 		test_fail("posix_memalign failed");
 
@@ -105,6 +111,9 @@ static void *_fix_init(void)
 static void _fix_exit(void *fixture)
 {
 	struct fixture *f = fixture;
+
+	bcache_threads_test_hold(0);
+	bcache_threads_test_fail_create_after(-1);
 
 	if (f) {
 		(void) close(f->fd);
@@ -139,6 +148,7 @@ static void _complete_io(void *context, int io_error)
 	io->error = io_error;
 }
 
+#ifdef HAVE_LIBAIO_H
 static void _test_read(void *fixture)
 {
 	struct fixture *f = fixture;
@@ -335,6 +345,270 @@ static void _test_wait_eintr(void *fixture)
 	/* coverity[leaked_storage] freed by destroy */
 }
 
+#endif /* HAVE_LIBAIO_H */
+
+/*
+ * Read/write sanity for an arbitrary engine.  The engine is destroyed on
+ * success, so callers must not destroy it again.
+ */
+static void _run_engine_rw(struct fixture *f, struct io_engine *e, enum dir d)
+{
+	struct io io;
+	struct bcache *cache;
+
+	T_ASSERT(e);
+
+	cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, e);
+	T_ASSERT(cache);
+
+	f->di = bcache_set_fd(f->fd);
+	T_ASSERT(f->di >= 0);
+
+	_io_init(&io);
+	T_ASSERT(e->issue(e, d, f->fd, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+	T_ASSERT(e->wait(e, _complete_io));
+	T_ASSERT(io.completed);
+	T_ASSERT(!io.error);
+
+	if (d == DIR_READ)
+		_check_buffer(f->data, 123, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
+
+	bcache_destroy(cache);
+}
+
+/*
+ * Issue a read that goes past EOF.  The file holds BLOCK_SIZE_SECTORS
+ * sectors, so reading 2x that must produce a short (but valid) transfer
+ * rather than an I/O error.  This deterministically exercises the
+ * short-read reporting path of an engine.
+ */
+static void _run_engine_short_read(struct io_engine *e, struct fixture *f)
+{
+	struct io io;
+	void *buf;
+
+	T_ASSERT(e);
+
+	if (posix_memalign(&buf, TEST_PAGE_SIZE, 2 * SECTOR_SIZE * BLOCK_SIZE_SECTORS))
+		test_fail("posix_memalign failed");
+
+	_io_init(&io);
+	T_ASSERT(e->issue(e, DIR_READ, f->fd, 0,
+			  2 * BLOCK_SIZE_SECTORS, buf, &io));
+	T_ASSERT(e->wait(e, _complete_io));
+	T_ASSERT(io.completed);
+	/* At least one sector was read, so this is not an error. */
+	T_ASSERT(!io.error);
+
+	free(buf);
+	e->destroy(e);
+}
+
+static void _test_read_threads(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_rw(f, create_threads_io_engine(4), DIR_READ);
+}
+
+static void _test_write_threads(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_rw(f, create_threads_io_engine(4), DIR_WRITE);
+}
+
+static void _test_short_read_sync(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_short_read(create_sync_io_engine(), f);
+}
+
+#ifdef HAVE_LIBAIO_H
+static void _test_short_read_async(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_short_read(create_async_io_engine(0), f);
+}
+#endif
+
+static void _test_short_read_threads(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_short_read(create_threads_io_engine(4), f);
+}
+
+#ifdef HAVE_LIBURING_H
+static void _test_read_uring(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_rw(f, create_uring_io_engine(4), DIR_READ);
+}
+
+static void _test_short_read_uring(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_run_engine_short_read(create_uring_io_engine(4), f);
+}
+#endif
+
+/*
+ * Issue one read and destroy without wait(). Async must reap the
+ * completion or io_destroy fails with the buffer still referenced.
+ * Threads must join the worker. Sync must free the queued completion.
+ * destroy() reports true only when it reaped everything, so the caller
+ * knows the buffers are safe to free.
+ */
+static void _destroy_after_issue(struct io_engine *e, int fd, void *buf)
+{
+	struct io io;
+
+	T_ASSERT(e);
+	_io_init(&io);
+	T_ASSERT(e->issue(e, DIR_READ, fd, 0, BLOCK_SIZE_SECTORS, buf, &io));
+	T_ASSERT(e->destroy(e));
+}
+
+static void _test_destroy_inflight_sync(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_destroy_after_issue(create_sync_io_engine(), f->fd, f->data);
+}
+
+static void _test_destroy_inflight_threads(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_destroy_after_issue(create_threads_io_engine(2), f->fd, f->data);
+}
+
+static void _test_threads_partial_create_failure(void *fixture)
+{
+	struct io_engine *e;
+
+	(void) fixture;
+
+	bcache_threads_test_fail_create_after(1);
+	alarm(5);
+	e = create_threads_io_engine(2);
+	alarm(0);
+	bcache_threads_test_fail_create_after(-1);
+	T_ASSERT(!e);
+
+	/* A later creation must still work after the partially built pool exits. */
+	e = create_threads_io_engine(2);
+	T_ASSERT(e);
+	T_ASSERT(e->destroy(e));
+}
+
+#ifdef HAVE_LIBAIO_H
+static void _test_destroy_inflight_async(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_destroy_after_issue(create_async_io_engine(0), f->fd, f->data);
+}
+#endif
+
+#ifdef HAVE_LIBURING_H
+static void _test_destroy_inflight_uring(void *fixture)
+{
+	struct fixture *f = fixture;
+
+	_destroy_after_issue(create_uring_io_engine(4), f->fd, f->data);
+}
+
+/*
+ * io_uring_wait_cqe() with nothing submitted blocks. SIGINT must make
+ * wait() return false instead of retrying forever.
+ */
+static void _test_uring_wait_eintr(void *fixture)
+{
+	struct io_engine *e;
+	pid_t child;
+	int status;
+
+	(void) fixture;
+
+	e = create_uring_io_engine(4);
+	T_ASSERT(e);
+	sigint_allow();
+
+	child = fork();
+	T_ASSERT(child >= 0);
+	if (!child) {
+		usleep(20000);
+		kill(getppid(), SIGINT);
+		_exit(0);
+	}
+
+	alarm(5);
+	T_ASSERT(!e->wait(e, _complete_io));
+	alarm(0);
+	T_ASSERT(sigint_caught());
+
+	T_ASSERT(waitpid(child, &status, 0) == child);
+	T_ASSERT(WIFEXITED(status) && !WEXITSTATUS(status));
+
+	sigint_restore();
+	sigint_clear();
+	e->destroy(e);
+}
+#endif
+
+/*
+ * bcache_threads_test_hold() makes the worker block in pause(), which is
+ * a cancellation point, before pread. wait() must return on SIGINT, and
+ * destroy() must cancel that wait instead of joining forever.
+ */
+static void _test_threads_inflight_int(void *fixture)
+{
+	struct fixture *f = fixture;
+	struct io_engine *e;
+	struct io io;
+	pid_t child;
+	int status;
+
+	bcache_threads_test_hold(1);
+
+	e = create_threads_io_engine(1);
+	T_ASSERT(e);
+
+	sigint_allow();
+	_io_init(&io);
+	T_ASSERT(e->issue(e, DIR_READ, f->fd, 0, 1, f->data, &io));
+
+	child = fork();
+	T_ASSERT(child >= 0);
+	if (!child) {
+		usleep(20000);
+		kill(getppid(), SIGINT);
+		_exit(0);
+	}
+
+	alarm(5);
+	T_ASSERT(!e->wait(e, _complete_io));
+	alarm(0);
+	T_ASSERT(sigint_caught());
+
+	alarm(5);
+	e->destroy(e);
+	alarm(0);
+
+	T_ASSERT(waitpid(child, &status, 0) == child);
+	T_ASSERT(WIFEXITED(status) && !WEXITSTATUS(status));
+
+	bcache_threads_test_hold(0);
+	sigint_restore();
+	sigint_clear();
+}
+
 //----------------------------------------------------------------
 
 #define T(path, desc, fn) register_test(ts, "/base/device/bcache/io-engine/" path, desc, fn)
@@ -348,11 +622,29 @@ static struct test_suite *_tests(void)
 	}
 
 	T("create-destroy", "simple create/destroy", _test_create);
+#ifdef HAVE_LIBAIO_H
 	T("read", "read sanity check", _test_read);
 	T("write", "write sanity check", _test_write);
 	T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
 	T("destroy-after-fork", "io_destroy skipped in child after fork", _test_destroy_after_fork);
 	T("wait-eintr", "io_getevents interrupted by signal", _test_wait_eintr);
+	T("short-read-async", "short read handled by async engine", _test_short_read_async);
+	T("destroy-inflight-async", "async destroy reaps issued io", _test_destroy_inflight_async);
+#endif
+	T("read-threads", "threads read sanity check", _test_read_threads);
+	T("write-threads", "threads write sanity check", _test_write_threads);
+	T("short-read-sync", "short read handled by sync engine", _test_short_read_sync);
+	T("short-read-threads", "short read handled by threads engine", _test_short_read_threads);
+	T("destroy-inflight-sync", "sync destroy frees issued io", _test_destroy_inflight_sync);
+	T("destroy-inflight-threads", "threads destroy joins issued io", _test_destroy_inflight_threads);
+	T("threads-partial-create-failure", "threads clean up after partial worker creation", _test_threads_partial_create_failure);
+	T("threads-inflight-int", "threads wait and destroy while pread blocked", _test_threads_inflight_int);
+#ifdef HAVE_LIBURING_H
+	T("read-uring", "io_uring read sanity check", _test_read_uring);
+	T("short-read-uring", "short read handled by io_uring engine", _test_short_read_uring);
+	T("destroy-inflight-uring", "uring destroy drains issued io", _test_destroy_inflight_uring);
+	T("uring-wait-eintr", "io_uring wait interrupted by signal", _test_uring_wait_eintr);
+#endif
 
 	return ts;
 }

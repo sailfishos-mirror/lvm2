@@ -103,6 +103,7 @@ static void *_fix_init(struct io_engine *engine)
 	return f;
 }
 
+#ifdef HAVE_LIBAIO_H
 static void *_async_init(void)
 {
 	struct io_engine *e = create_async_io_engine(0);
@@ -110,6 +111,7 @@ static void *_async_init(void)
 	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
 }
+#endif
 
 static void *_sync_init(void)
 {
@@ -399,8 +401,7 @@ static void _test_set_many_boundaries(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
-
+#ifdef HAVE_LIBAIO_H
 static struct test_suite *_async_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
@@ -434,7 +435,7 @@ static struct test_suite *_async_tests(void)
 
 	return ts;
 }
-
+#endif
 
 static struct test_suite *_sync_tests(void)
 {
@@ -472,6 +473,8 @@ static struct test_suite *_sync_tests(void)
 
 void bcache_utils_tests(struct dm_list *all_tests)
 {
+#ifdef HAVE_LIBAIO_H
 	dm_list_add(all_tests, &_async_tests()->list);
+#endif
 	dm_list_add(all_tests, &_sync_tests()->list);
 }
