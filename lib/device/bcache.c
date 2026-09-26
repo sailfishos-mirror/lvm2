@@ -453,6 +453,12 @@ static void _issue_low_level(struct block *b, enum dir d)
 	cache->nr_io_pending++;
 	dm_list_move(&cache->io_pending, &b->list);
 
+	/* Draining was interrupted; fail instead of issuing past max_io. */
+	if (cache->nr_io_pending > cache->max_io) {
+		_complete_io(b, -EIO);
+		return;
+	}
+
 	if (b->di >= _fd_table_size) {
 		log_error("bcache device index %d out of range.", b->di);
 		_complete_io(b, -EIO);
@@ -804,7 +810,7 @@ void bcache_destroy(struct bcache *cache)
 		_exit_free_list(cache);
 	else
 		log_warn("WARNING: bcache leaked %llu blocks with I/O still in flight after interrupted destroy.",
-			 (unsigned long long) cache->nr_cache_blocks);
+			 (unsigned long long) cache->nr_io_pending);
 
 	radix_tree_destroy(cache->rtree);
 	free(cache);
