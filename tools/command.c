@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2024 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -28,6 +28,7 @@
 #include "tools.h"
 #endif /* MAN_PAGE_GENERATOR */
 
+#include "command_opts.h"
 
 /* see cmd_names[] below, one for each unique "ID" in command-lines.in */
 
@@ -1248,71 +1249,20 @@ static int _is_lvm_all_opt(int opt)
 	return 0;
 }
 
-/* Find common options for all variants of each command name. */
-
+/*
+ * Find common options for all variants of each command name.
+ * The fold runs once; the factored flag makes later calls a no-op.
+ */
 void factor_common_options(void)
 {
-	int cn, opt_enum, ci, oo, ro, found;
-	struct command *cmd;
+	static int factored;
 
-	for (cn = 0; cn < LVM_COMMAND_COUNT; ++cn) {
+	if (factored)
+		return;
 
-		if (command_names_args[cn].variants)
-			return; /* already factored */
-
-		for (ci = 0; ci < COMMAND_COUNT; ci++) {
-			cmd = &commands[ci];
-
-			if (cmd->lvm_command_enum != command_names[cn].lvm_command_enum)
-				continue;
-
-			command_names_args[cn].variants++;
-
-			if (cmd->ro_count || cmd->any_ro_count)
-				command_names_args[cn].variant_has_ro = 1;
-			if (cmd->rp_count)
-				command_names_args[cn].variant_has_rp = 1;
-			if (cmd->oo_count)
-				command_names_args[cn].variant_has_oo = 1;
-			if (cmd->op_count)
-				command_names_args[cn].variant_has_op = 1;
-
-			for (ro = 0; ro < cmd->ro_count + cmd->any_ro_count; ro++) {
-				command_names_args[cn].all_options[cmd->required_opt_args[ro].opt] = 1;
-
-				if ((cmd->required_opt_args[ro].opt == size_ARG) && !strncmp(cmd->name, "lv", 2))
-					command_names_args[cn].all_options[extents_ARG] = 1;
-			}
-			for (oo = 0; oo < cmd->oo_count; oo++)
-				command_names_args[cn].all_options[cmd->optional_opt_args[oo].opt] = 1;
-		}
-
-		for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
-
-			for (ci = 0; ci < COMMAND_COUNT; ci++) {
-				cmd = &commands[ci];
-
-				if (cmd->lvm_command_enum != command_names[cn].lvm_command_enum)
-					continue;
-
-				found = 0;
-				for (oo = 0; oo < cmd->oo_count; oo++) {
-					if (cmd->optional_opt_args[oo].opt == opt_enum) {
-						found = 1;
-						break;
-					}
-				}
-
-				if (!found)
-					goto next_opt;
-			}
-
-			/* all commands starting with this name use this option */
-			command_names_args[cn].common_options[opt_enum] = 1;
- next_opt:
-			;
-		}
-	}
+	_command_factor_options(commands, COMMAND_COUNT, command_names,
+				command_names_args);
+	factored = 1;
 }
 
 /* FIXME: use a flag in command_name struct? */
