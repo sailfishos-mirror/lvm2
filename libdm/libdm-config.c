@@ -186,12 +186,15 @@ static int _do_dm_config_parse(struct dm_config_tree *cft, const char *start, co
 {
 	/* TODO? if (start == end) return 1; */
 
+	/* Cut at the first NUL; we never write one, so this bounds hostile input. */
+	const char *nul = memchr(start, '\0', end - start);
+
 	struct parser p = {
 		.mem = cft->mem,
 		.tb = start,
 		.te = start,
 		.fb = start,
-		.fe = end,
+		.fe = nul ? nul : end,
 		.line = 1,
 		.stop_after_section = section,
 		.no_dup_node_check = no_dup_node_check
@@ -957,13 +960,25 @@ static void _get_token(struct parser *p, int tok_prev)
 
 static void _eat_space(struct parser *p)
 {
+	const char *nl;
+
 	while (p->tb != p->fe) {
 		if (!isspace(*p->te)) {
 			if (*p->te != '#')
 				break;
 
-			while ((p->te != p->fe) && (*p->te != '\n') && (*p->te))
-				++p->te;
+			/*
+			 * Skip the comment.  Config files are mostly
+			 * comments, so find the newline in one step
+			 * rather than a byte at a time.  A missing
+			 * newline means the comment runs to the end of
+			 * the buffer, so p->fe is a safe place to stop:
+			 * it is an exclusive bound and is never
+			 * dereferenced.  The range holds no NUL, because
+			 * _do_dm_config_parse() cuts it at the first one.
+			 */
+			nl = memchr(p->te, '\n', p->fe - p->te);
+			p->te = nl ? nl : p->fe;
 		}
 
 		while (p->te != p->fe) {
