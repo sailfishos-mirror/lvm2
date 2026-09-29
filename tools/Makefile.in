@@ -18,6 +18,7 @@ top_builddir = @top_builddir@
 
 SOURCES =\
 	command.c \
+	command_opts.c \
 	dumpconfig.c \
 	formats.c \
 	lvchange.c \

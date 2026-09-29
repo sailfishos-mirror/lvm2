@@ -118,6 +118,7 @@ static inline int headings_arg(struct cmd_context *cmd __attribute__((unused)), 
 #define MAN_PAGE_GENERATOR
 #include "command.h"
 #include "command.c"
+#include "command_opts.c"
 
 /*
  * .TP (#size)
