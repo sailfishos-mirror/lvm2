@@ -19,6 +19,7 @@ UNIT_SOURCE=\
 	test/unit/dev_cache_t.c \
 	test/unit/bcache_utils_t.c \
 	test/unit/bitset_t.c \
+	test/unit/command_opts_t.c \
 	test/unit/config_t.c \
 	test/unit/dmhash_t.c \
 	test/unit/dmlist_t.c \
@@ -53,6 +54,14 @@ libdaemon/client/libdaemonclient.a: libdaemon
 
 # toolcontext.h requires the generated cmds.h.
 test/unit/dev_cache_t.o: | include
+
+# command_opts_t.c textually includes tools/command_opts.c and reaches the
+# generated tools/command-count.h (and cmds.h via tools -> lib -> include);
+# both are produced only by the tools/include builds.
+test/unit/command_opts_t.o: | tools
+
+# out-of-tree: command-count.h is generated under top_builddir/tools
+INCLUDES += -I$(top_builddir)/tools
 
 $(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
 	$(SHOW) "    [LD] $@"
