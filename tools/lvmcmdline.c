@@ -1356,8 +1356,15 @@ static void _unregister_commands(void)
 	_cmdline.num_command_names = 0;
 }
 
-int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
+/*
+ * run_cn is the command_name to be run, or NULL when a shell or a script
+ * may access any command name.  lvm2_main has already resolved it with
+ * find_command_name(), so no lookup is done here.
+ */
+int lvm_register_commands(struct cmd_context *cmd, const struct command_name *run_cn)
 {
+	/* the one name to register, or NULL to register every name */
+	const char *cmd_name = run_cn ? run_cn->name : NULL;
 	int i;
 
 	/* already initialized */
@@ -1368,7 +1375,7 @@ int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
 	 * populate commands[] array with command definitions
 	 * by parsing command-lines.in/command-lines-input.h
 	 */
-	if (!define_commands(cmd, run_name)) {
+	if (!define_commands(cmd, cmd_name)) {
 		log_error(INTERNAL_ERROR "Failed to parse command definitions.");
 		return 0;
 	}
@@ -1379,8 +1386,11 @@ int lvm_register_commands(struct cmd_context *cmd, const char *run_name)
 	for (i = 0; i < COMMAND_COUNT; i++)
 		commands[i].command_index = i;
 
-	for (i = 0; i < LVM_COMMAND_COUNT; i++)
-		_set_valid_args_for_command_name(i);
+	if (cmd_name)
+		_set_valid_args_for_command_name(run_cn->lvm_command_enum);
+	else
+		for (i = 0; i < LVM_COMMAND_COUNT; i++)
+			_set_valid_args_for_command_name(i);
 
 	_cmdline.num_command_names = LVM_COMMAND_COUNT;
 	_cmdline.command_names = command_names;
@@ -3578,7 +3588,7 @@ int lvm2_main(int argc, char **argv)
 	int run_shell = 0;
 	int run_script = 0;
 	const char *run_name;
-	const char *run_command_name = NULL;
+	const struct command_name *run_command_cn = NULL;
 
 	if (!argv)
 		return EINIT_FAILED;
@@ -3661,17 +3671,18 @@ int lvm2_main(int argc, char **argv)
 	 */
 	if (!run_name)
 		run_shell = 1;
-	else if (!find_command_name(run_name))
-		run_script = 1;
-	else
-		run_command_name = run_name;
+	else {
+		run_command_cn = find_command_name(run_name);
+		if (!run_command_cn)
+			run_script = 1;
+	}
 
 	/*
-	 * NULL run_command_name means register all command defs because
+	 * NULL run_command_cn means register all command defs because
 	 * a script or shell needs to access any command name, while a
 	 * single command needs to access only defs for the named command.
 	 */
-	if (!lvm_register_commands(cmd, run_command_name)) {
+	if (!lvm_register_commands(cmd, run_command_cn)) {
 		ret = ECMD_FAILED;
 		goto out;
 	}
