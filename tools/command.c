@@ -1252,71 +1252,81 @@ static int _is_lvm_all_opt(int opt)
 	return 0;
 }
 
-/* Find common options for all variants of each command name. */
+/* bits held by one uint64_t word, and the words needed for one bit per option
+ * in args.h */
+#define ARG_WORD_BITS 64
+#define ARG_WORDS ((ARG_COUNT + ARG_WORD_BITS - 1) / ARG_WORD_BITS)
 
+/* Find common options for all variants of each command name. */
 void factor_common_options(void)
 {
-	int cn, opt_enum, ci, oo, ro, found;
+	int cn, ci, oo, ro, w, opt_enum;
+	int def_cn;	/* name the current def belongs to, distinct from the cn index */
+	uint64_t common[LVM_COMMAND_COUNT][ARG_WORDS] = { { 0 } };
+	uint64_t def_opts[ARG_WORDS];	/* optional opts of the def being folded in */
 	struct command *cmd;
 
-	for (cn = 0; cn < LVM_COMMAND_COUNT; ++cn) {
-
+	for (cn = 0; cn < LVM_COMMAND_COUNT; ++cn)
 		if (command_names_args[cn].variants)
 			return; /* already factored */
 
-		for (ci = 0; ci < COMMAND_COUNT; ci++) {
-			cmd = &commands[ci];
+	/*
+	 * Each def belongs to exactly one name, so a single pass over commands[]
+	 * serves every name.  The union of options goes straight into
+	 * command_names_args[].all_options; only the optional-option
+	 * intersection uses common[][] bit rows (AND across defs).
+	 *
+	 * A row is filled from the first def of its name, and the later defs
+	 * AND their own sets into it.  A name with no def is never written
+	 * to, so it keeps the zero it started with: it has no option common
+	 * to all of its zero defs.  A single command run parses the defs of
+	 * one name only, so most names have no def here.
+	 */
+	for (ci = 0; ci < COMMAND_COUNT; ci++) {
+		cmd = &commands[ci];
+		def_cn = cmd->lvm_command_enum;
 
-			if (cmd->lvm_command_enum != command_names[cn].lvm_command_enum)
-				continue;
+		command_names_args[def_cn].variants++;
 
-			command_names_args[cn].variants++;
+		if (cmd->ro_count || cmd->any_ro_count)
+			command_names_args[def_cn].variant_has_ro = 1;
+		if (cmd->rp_count)
+			command_names_args[def_cn].variant_has_rp = 1;
+		if (cmd->oo_count)
+			command_names_args[def_cn].variant_has_oo = 1;
+		if (cmd->op_count)
+			command_names_args[def_cn].variant_has_op = 1;
 
-			if (cmd->ro_count || cmd->any_ro_count)
-				command_names_args[cn].variant_has_ro = 1;
-			if (cmd->rp_count)
-				command_names_args[cn].variant_has_rp = 1;
-			if (cmd->oo_count)
-				command_names_args[cn].variant_has_oo = 1;
-			if (cmd->op_count)
-				command_names_args[cn].variant_has_op = 1;
+		for (ro = 0; ro < cmd->ro_count + cmd->any_ro_count; ro++) {
+			command_names_args[def_cn].all_options[cmd->required_opt_args[ro].opt] = 1;
 
-			for (ro = 0; ro < cmd->ro_count + cmd->any_ro_count; ro++) {
-				command_names_args[cn].all_options[cmd->required_opt_args[ro].opt] = 1;
-
-				if ((cmd->required_opt_args[ro].opt == size_ARG) && !strncmp(cmd->name, "lv", 2))
-					command_names_args[cn].all_options[extents_ARG] = 1;
-			}
-			for (oo = 0; oo < cmd->oo_count; oo++)
-				command_names_args[cn].all_options[cmd->optional_opt_args[oo].opt] = 1;
+			if ((cmd->required_opt_args[ro].opt == size_ARG) && !strncmp(cmd->name, "lv", 2))
+				command_names_args[def_cn].all_options[extents_ARG] = 1;
 		}
 
-		for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++) {
+		memset(def_opts, 0, sizeof(def_opts));
+		for (oo = 0; oo < cmd->oo_count; oo++) {
+			opt_enum = cmd->optional_opt_args[oo].opt;
 
-			for (ci = 0; ci < COMMAND_COUNT; ci++) {
-				cmd = &commands[ci];
-
-				if (cmd->lvm_command_enum != command_names[cn].lvm_command_enum)
-					continue;
-
-				found = 0;
-				for (oo = 0; oo < cmd->oo_count; oo++) {
-					if (cmd->optional_opt_args[oo].opt == opt_enum) {
-						found = 1;
-						break;
-					}
-				}
-
-				if (!found)
-					goto next_opt;
-			}
-
-			/* all commands starting with this name use this option */
-			command_names_args[cn].common_options[opt_enum] = 1;
- next_opt:
-			;
+			command_names_args[def_cn].all_options[opt_enum] = 1;
+			def_opts[opt_enum / ARG_WORD_BITS] |= 1ULL << (opt_enum % ARG_WORD_BITS);
 		}
+
+		if (command_names_args[def_cn].variants == 1)	/* first def of this name in commands[] order */
+			memcpy(common[def_cn], def_opts, sizeof(def_opts));
+		else
+			for (w = 0; w < ARG_WORDS; ++w)
+				common[def_cn][w] &= def_opts[w];
 	}
+
+	/*
+	 * Only the ARG_COUNT bits are written out.  A name with no def was
+	 * never written to, so its row is still zero.
+	 */
+	for (cn = 0; cn < LVM_COMMAND_COUNT; ++cn)
+		for (opt_enum = 0; opt_enum < ARG_COUNT; opt_enum++)
+			command_names_args[cn].common_options[opt_enum] =
+				(common[cn][opt_enum / ARG_WORD_BITS] >> (opt_enum % ARG_WORD_BITS)) & 1;
 }
 
 /* FIXME: use a flag in command_name struct? */
