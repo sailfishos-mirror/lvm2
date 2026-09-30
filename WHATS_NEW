@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Run mirror repair from dmeventd when dm-mirror reports in-sync with failed legs.
   Fix pvscan autoactivation when DEVLINKS symlinks are not yet created.
 
 Version 2.03.43 - 30th September 2026
