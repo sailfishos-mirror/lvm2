@@ -45,6 +45,9 @@ _prepare_vg() {
 }
 
 _test_fs_with_read_repair() {
+	local max_corrupt=$1 corrupted=0 dev
+	shift
+
 	mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
 
 	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
@@ -60,8 +63,16 @@ _test_fs_with_read_repair() {
 	lvchange -an $vg/$lv1
 
 	for dev in "$@"; do
+		# The pattern may also occur in parity.  Do not corrupt more
+		# members than the RAID layout can recover, even if it matches
+		# on several devices at the same stripe offset.
+		blockdev --flushbufs "$dev"
+		LC_ALL=C grep -q -a -F BBBBBBBBBBBBBBBBB "$dev" || continue
 		aux corrupt_dev "$dev" BBBBBBBBBBBBBBBBB BBBBBBBBCBBBBBBBB
+		corrupted=$((corrupted + 1))
+		test "$corrupted" -lt "$max_corrupt" || break
 	done
+	test "$corrupted" -gt 0
 
 	lvchange -ay $vg/$lv1
 
@@ -136,7 +147,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/$lv1
 lvchange $vg/$lv1 --writemostly "$dev2"
-_test_fs_with_read_repair "$dev1"
+_test_fs_with_read_repair 1 "$dev1"
 lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
 not grep 0 mismatch
 lvs -o integritymismatches $vg/$lv1 |tee mismatch
@@ -155,7 +166,7 @@ aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/$lv1
 lvchange $vg/$lv1 --writemostly "$dev2"
 lvchange $vg/$lv1 --writemostly "$dev3"
-_test_fs_with_read_repair "$dev1" "$dev2"
+_test_fs_with_read_repair 2 "$dev1" "$dev2"
 lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
 not grep 0 mismatch
 lvs -o integritymismatches $vg/$lv1 |tee mismatch
@@ -172,7 +183,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/$lv1
-_test_fs_with_read_repair "$dev1" "$dev2" "$dev3"
+_test_fs_with_read_repair 1 "$dev1" "$dev2" "$dev3"
 lvs -o integritymismatches $vg/${lv1}_rimage_0
 lvs -o integritymismatches $vg/${lv1}_rimage_1
 lvs -o integritymismatches $vg/${lv1}_rimage_2
@@ -190,7 +201,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/$lv1
-_test_fs_with_read_repair "$dev1" "$dev2" "$dev3"
+_test_fs_with_read_repair 1 "$dev1" "$dev2" "$dev3"
 lvs -o integritymismatches $vg/${lv1}_rimage_0
 lvs -o integritymismatches $vg/${lv1}_rimage_1
 lvs -o integritymismatches $vg/${lv1}_rimage_2
@@ -210,7 +221,7 @@ aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/${lv1}_rimage_3
 aux wait_recalc $vg/${lv1}_rimage_4
 aux wait_recalc $vg/$lv1
-_test_fs_with_read_repair "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+_test_fs_with_read_repair 2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
 lvs -o integritymismatches $vg/${lv1}_rimage_0
 lvs -o integritymismatches $vg/${lv1}_rimage_1
 lvs -o integritymismatches $vg/${lv1}_rimage_2
@@ -231,7 +242,7 @@ aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/${lv1}_rimage_3
 aux wait_recalc $vg/$lv1
-_test_fs_with_read_repair "$dev1" "$dev3"
+_test_fs_with_read_repair 2 "$dev1" "$dev3"
 lvs -o integritymismatches $vg/${lv1}_rimage_0
 lvs -o integritymismatches $vg/${lv1}_rimage_1
 lvs -o integritymismatches $vg/${lv1}_rimage_2
@@ -573,7 +584,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/$lv1
 lvchange $vg/$lv1 --writemostly "$dev2"
-_test_fs_with_read_repair "$dev1"
+_test_fs_with_read_repair 1 "$dev1"
 lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
 not grep 0 mismatch
 lvs -o integritymismatches $vg/$lv1 |tee mismatch
@@ -592,7 +603,7 @@ aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/${lv1}_rimage_3
 aux wait_recalc $vg/${lv1}_rimage_4
 aux wait_recalc $vg/$lv1
-_test_fs_with_read_repair "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+_test_fs_with_read_repair 2 "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
 lvs -o integritymismatches $vg/${lv1}_rimage_0
 lvs -o integritymismatches $vg/${lv1}_rimage_1
 lvs -o integritymismatches $vg/${lv1}_rimage_2
