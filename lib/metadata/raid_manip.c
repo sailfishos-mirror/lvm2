@@ -3566,15 +3566,176 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
 	return _raid_recovering_images_rebuild_work(lv, 1, flags_set, NULL);
 }
 
+/*
+ * Integrity image reduction rollback (lvconvert -mN on raid+integrity):
+ * _raid_prepare_integrity_reduction() commits temporary rimage names,
+ * _raid_remove_images() extracts in memory, then commits the reduced
+ * array or _raid_restore_rollback_copy() writes back the copy from
+ * _raid_copy_lv_for_rollback().  _raid_reduction_committed() tells
+ * whether a failed reload already left a reduced array on disk.
+ *
+ * _raid_copy_lv_for_rollback
+ * @lv
+ *
+ * Imports a private copy of the volume group @lv belongs to and returns
+ * the matching LV from it.  Used when integrity image reduction may need
+ * to write back metadata after a committed intermediate rename (not an
+ * LV snapshot in the thin/COW sense).  vg_revert() cannot undo that step
+ * because the pre-flight already committed the temporary names to disk.
+ *
+ * Returns: the LV in the private copy, NULL on failure
+ */
+static struct logical_volume *_raid_copy_lv_for_rollback(struct logical_volume *lv)
+{
+	struct volume_group *rollback_vg;
+	struct logical_volume *rollback_lv;
+	struct dm_config_tree *cft;
+
+	if (!(cft = export_vg_to_config_tree(lv->vg)))
+		return_NULL;
+
+	rollback_vg = import_vg_from_config_tree(lv->vg->cmd, lv->vg->fid, cft);
+	dm_config_destroy(cft);
+
+	if (!rollback_vg)
+		return_NULL;
+
+	if (!(rollback_lv = find_lv(rollback_vg, lv->name))) {
+		release_vg(rollback_vg);
+		return_NULL;
+	}
+
+	return rollback_lv;
+}
+
+/*
+ * _raid_restore_rollback_copy
+ * @rollback_lv: an LV returned by _raid_copy_lv_for_rollback()
+ * @lv: the LV being reduced
+ *
+ * Writes the metadata the array had before the pre-flight back over the live
+ * VG, undoing the temporary names that were committed.
+ *
+ * Returns: 1 on success, 0 (after logging) if the reload failed
+ */
+static int _raid_restore_rollback_copy(struct logical_volume *rollback_lv,
+				       const struct logical_volume *lv)
+{
+	/*
+	 * The private copy was imported before the operation touched the
+	 * live VG, so it still carries the sequence number frozen at export
+	 * time. Adopt the live value so that the update below does not
+	 * write the older one back.
+	 *
+	 * The seqno is only ever incremented on the live VG when it is
+	 * written (vg_write() in metadata.c), so the imported copy cannot
+	 * catch up by itself.  vg_write() then increments it once more, which
+	 * is why the restored metadata ends up with a higher seqno than the
+	 * pre-flight left on disk (integrity-misc.sh checks this).
+	 *
+	 * lv_update_and_reload() also reloads the kernel tables, so the
+	 * temporary _rimage__N names that the pre-flight loaded are replaced
+	 * too, not only the metadata (integrity-misc.sh compares
+	 * 'dmsetup table' before and after a failed reduction for this).
+	 */
+	rollback_lv->vg->seqno = lv->vg->seqno;
+
+	if (!lv_update_and_reload(rollback_lv)) {
+		log_error("Failed to restore original image names for %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * _raid_prepare_integrity_reduction
+ * @lv: the LV to reduce
+ *
+ * dm-integrity image wrappers keep their kernel names across metadata
+ * renames unless the devices are reloaded with temporary names first,
+ * and renaming a remaining image into a vacated index collides otherwise.
+ * Commit the temporary names and keep the complete array so a later
+ * failure can be rolled back.
+ *
+ * The temporary names have to reach the kernel, so this always commits.
+ *
+ * Returns: the rollback metadata copy of @lv, which the caller owns, or
+ *	    NULL on failure after undoing whatever was committed here
+ */
+static struct logical_volume *_raid_prepare_integrity_reduction(struct logical_volume *lv)
+{
+	struct logical_volume *rollback_lv;
+
+	/* Preserve metadata for rollback after the temporary commit. */
+	if (!(rollback_lv = _raid_copy_lv_for_rollback(lv)))
+		return NULL;
+
+	if (!_rename_area_lvs(lv, "_")) {
+		release_vg(rollback_lv->vg);
+		return NULL;
+	}
+
+	if (!lv_update_and_reload(lv)) {
+		/*
+		 * The temporary names may have reached the kernel. A failed
+		 * restore is reported by _raid_restore_rollback_copy() itself,
+		 * and this path fails either way.
+		 */
+		_raid_restore_rollback_copy(rollback_lv, lv);
+		release_vg(rollback_lv->vg);
+		return NULL;
+	}
+
+	return rollback_lv;
+}
+
+/*
+ * _raid_reduction_committed
+ * @lv: the LV being reduced
+ * @new_count: the reduced image count that was being committed
+ *
+ * Committing the reduced array can fail after its metadata was already
+ * written, and the array that is on disk has to be inspected before the
+ * original names are restored over it.  The reduced image count is what
+ * identifies the reduced array, so only a commit of that state may
+ * suppress a rollback: any other committed state means the reduction
+ * did not land, whether or not an earlier commit happened to carry the
+ * full image count too.
+ *
+ * How it knows: vg_read() for writing keeps a private copy of the VG as
+ * it was read (vg->vg_committed) and every vg_commit() replaces that copy
+ * with what it just wrote, so lv_committed() is the state of the last
+ * commit.  Here that is either the full array carrying the pre-flight's
+ * temporary names, or the reduced array.  Both have the same LVs; only
+ * the area count tells them apart.
+ *
+ * Without vg_committed (VG not read for writing) lv_committed() returns
+ * @lv itself, which already holds the in-memory reduced count, and this
+ * would wrongly answer 1.  lvconvert always reads for writing, so that
+ * does not happen for this caller.
+ *
+ * Returns: 1 if the reduced array is the committed state, 0 if not
+ */
+static int _raid_reduction_committed(const struct logical_volume *lv,
+				     uint32_t new_count)
+{
+	struct lv_segment *seg;
+
+	if (!(seg = first_seg(lv_committed(lv))))
+		return_0;
+
+	return seg->area_count == new_count;
+}
+
 static int _raid_remove_images(struct logical_volume *lv, int yes,
 			       uint32_t new_count, struct dm_list *allocate_pvs,
 			       struct dm_list *removal_lvs, int commit)
 {
 	struct dm_list removed_lvs;
-	struct dm_config_tree *saved_cft;
-	struct volume_group *saved_vg = NULL;
-	struct logical_volume *saved_lv = NULL;
-	int integrity_temp_rename = 0;
+	struct logical_volume *rollback_lv = NULL;
+	int r = 0;
 	struct lv_segment *seg;
 	uint32_t s;
 	int rebuild_flags_set = 0;
@@ -3639,29 +3800,33 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	}
 
 	/*
-	 * dm-integrity image wrappers keep their kernel names across metadata
-	 * renames unless the devices are reloaded with temporary names first.
-	 * Renaming remaining images into a vacated index collides otherwise.
+	 * Integrity reduction is commit-only: the pre-flight always commits
+	 * the temporary names, and the only commit == 0 callers (the
+	 * lv_raid_convert() takeovers and reshapes) reject integrity before
+	 * reaching here ("This conversion is not supported for raid with
+	 * integrity").  Enforce that rather than rely on it, so a future
+	 * commit == 0 caller with integrity fails instead of skipping the
+	 * pre-flight and hitting the kernel name collision it prevents.
+	 * new_count == 1 is rejected at the top of the function.
 	 */
 	if (lv_raid_has_integrity(lv)) {
-		/* Preserve the complete array for failures after the temporary commit. */
-		if (!(saved_cft = export_vg_to_config_tree(lv->vg)))
-			return_0;
-		saved_vg = import_vg_from_config_tree(lv->vg->cmd, lv->vg->fid, saved_cft);
-		dm_config_destroy(saved_cft);
-		if (!saved_vg)
-			return_0;
-		if (!(saved_lv = find_lv(saved_vg, lv->name)))
-			goto_bad;
+		if (!commit) {
+			log_error(INTERNAL_ERROR "Integrity image reduction of %s requires a commit.",
+				  display_lvname(lv));
+			return 0;
+		}
 
-		if (!_rename_area_lvs(lv, "_"))
-			goto_bad;
-
-		integrity_temp_rename = 1;
-		if (!lv_update_and_reload(lv))
-			goto_bad;
+		if (!(rollback_lv = _raid_prepare_integrity_reduction(lv)))
+			return_0;
 	}
 
+	/*
+	 * Integrity reduction: (1) pre-flight commits temporary names,
+	 * (2) extract and rename in memory, (3) _lv_update_and_reload_list
+	 * commits the reduced array then cleanup runs.  @rollback_lv is
+	 * metadata from before (1); the out: label below writes it back
+	 * unless (3) landed a reduced array on disk.
+	 */
 	if (!_raid_extract_images(lv, new_count, allocate_pvs, 1,
 				 removal_lvs, removal_lvs)) {
 		log_error("Failed to extract images from %s.",
@@ -3683,46 +3848,58 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	}
 
 	/* Commit the reduced array with final names, including unshifted images. */
-	if (integrity_temp_rename && !_rename_area_lvs(lv, NULL))
+	if (rollback_lv && !_rename_area_lvs(lv, NULL))
 		goto_bad;
 
 	if (!commit) {
-		release_vg(saved_vg);
-		return 1;
+		/* In-memory reduction only; the caller commits later. */
+		r = 1;
+		goto out;
 	}
 
-	if (!_lv_update_and_reload_list(lv, 0, removal_lvs)) {
-		/* Roll back only while the full array is still committed. */
-		if (saved_lv && first_seg(lv_committed(lv))->area_count == first_seg(saved_lv)->area_count)
-			goto_bad;
-		release_vg(saved_vg);
-		return_0;
-	}
-
-	release_vg(saved_vg);
+	if (!_lv_update_and_reload_list(lv, 0, removal_lvs))
+		goto_bad;
 
 	/*
 	 * Eliminate the extracted LVs
 	 */
 	if (!_deactivate_and_remove_lvs(lv->vg, removal_lvs))
-		return_0;
+		goto_bad;
 
 	if (!lv_update_and_reload_origin(lv))
-		return_0;
+		goto_bad;
 
-	if (rebuild_flags_set && !_raid_clear_rebuild_flags(lv))
-		return_0;
+	if (rebuild_flags_set && !_raid_clear_rebuild_flags(lv)) {
+		if (rollback_lv)
+			release_vg(rollback_lv->vg);
+		return 0;
+	}
 
-	return 1;
+	r = 1;
 
 bad:
-	if (integrity_temp_rename && saved_lv) {
-		saved_vg->seqno = lv->vg->seqno;
-		if (!lv_update_and_reload(saved_lv))
-			log_error("Failed to restore original image names for %s.", display_lvname(lv));
+out:
+	if (rollback_lv) {
+		/*
+		 * Reload can fail after the reduced metadata already committed.
+		 * Only restore from @rollback_lv when lv_committed() is not yet
+		 * the reduced array; otherwise we would overwrite a good commit.
+		 * A failed restore is reported by _raid_restore_rollback_copy()
+		 * itself; @r stays 0.
+		 */
+		if (!r) {
+			if (_raid_reduction_committed(lv, new_count))
+				log_error("Image reduction for %s was committed;"
+					  " the original layout was not restored.",
+					  display_lvname(lv));
+			else
+				_raid_restore_rollback_copy(rollback_lv, lv);
+		}
+
+		release_vg(rollback_lv->vg);
 	}
-	release_vg(saved_vg);
-	return 0;
+
+	return r;
 }
 
 /* Check if single SubLV @slv is degraded. */
