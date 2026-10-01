@@ -238,3 +238,89 @@ lvremove $vg/$lv1
 aux enable_dev "$dev2"
 vgremove -ff $vg
 
+# Create a raid1 with per-image integrity over all three devices.
+_create_raid1_with_integrity() {
+	lvcreate --yes --type raid1 -m 2 --nosync -l 8 --raidintegrity y -n $lv1 $vg "$dev1" "$dev2" "$dev3"
+	aux wait_recalc $vg/${lv1}_rimage_0
+	aux wait_recalc $vg/${lv1}_rimage_1
+	aux wait_recalc $vg/${lv1}_rimage_2
+	aux wait_recalc $vg/$lv1
+}
+
+# A reduction that fails once the temporary names are committed must put the
+# original names back, so check that on an array of its own rather than
+# inside the loop over the image being removed.
+_test_extraction_name_collision() {
+	# Reserved component names can only be introduced through metadata,
+	# where the LV name is the key of its block.
+	lvcreate -an -l 1 -n $lv2 $vg "$dev4"
+	vgcfgbackup -f backup $vg
+	sed -e "s/^\(\t*\)$lv2 {/\1${lv1}_rimage__0_extracted {/" backup >backupnew
+	grep "${lv1}_rimage__0_extracted {" backupnew
+	not grep "$lv2 {" backupnew
+	lvchange -an $vg/$lv1
+	vgcfgrestore -f backupnew $vg
+	lvchange -ay $vg/$lv1
+	lvs -a --noheadings -o lv_name,lv_uuid,segtype,devices $vg > before
+	vgs --noheadings -o vg_seqno $vg > before-seqno
+	dmsetup table -S "name=~^$vg-" | sort > before-table
+	test -s before-table
+	not lvconvert --yes -m 1 $vg/$lv1 "$dev1"
+	lvs -a --noheadings -o lv_name,lv_uuid,segtype,devices $vg > after
+	vgs --noheadings -o vg_seqno $vg > after-seqno
+	dmsetup table -S "name=~^$vg-" | sort > after-table
+	diff before after
+	# The temporary names were loaded into the kernel by the pre-flight,
+	# so the rollback has to reload the original names as well.
+	diff before-table after-table
+	# The reduction failed after the pre-flight committed its temporary
+	# names, so the rollback has to write the metadata back and the seqno
+	# moves on. It must not be replayed from the rollback metadata copy, which
+	# would put a lower seqno than the one already on disk.
+	seqno_after=$(cat after-seqno)
+	seqno_before=$(cat before-seqno)
+	test $seqno_after -gt $seqno_before
+	lvremove -ff $vg/${lv1}_rimage__0_extracted
+}
+
+# Reduce raid image count on raid1 with integrity (RHEL-242389)
+pvcreate -ff -y "$dev2"
+_prepare_vg
+
+_create_raid1_with_integrity
+_test_extraction_name_collision
+lvremove -ff $vg/$lv1
+
+for remove_dev in "$dev1" "$dev2" "$dev3"; do
+	_create_raid1_with_integrity
+
+	# Rejected requests must leave names, layout and metadata seqno intact.
+	lvs -a --noheadings -o lv_name,lv_uuid,segtype,devices $vg > before
+	vgs --noheadings -o vg_seqno $vg > before-seqno
+	not lvconvert --yes -m 0 $vg/$lv1
+	not lvconvert --yes -m 1 $vg/$lv1 "$dev4"
+	lvs -a --noheadings -o lv_name,lv_uuid,segtype,devices $vg > after
+	vgs --noheadings -o vg_seqno $vg > after-seqno
+	diff before after
+	diff before-seqno after-seqno
+
+	lvconvert --yes -m 1 $vg/$lv1 "$remove_dev"
+	lvs -a -o+devices $vg | tee out
+	not grep "$remove_dev" out
+	for keep_dev in "$dev1" "$dev2" "$dev3"; do
+		test "$keep_dev" = "$remove_dev" || grep "$keep_dev" out
+	done
+	for index in 0 1; do
+		check lv_field $vg/${lv1}_rimage_$index segtype integrity -a
+		check lv_field $vg/${lv1}_rimage_${index}_imeta segtype linear -a
+		check lv_field $vg/${lv1}_rimage_${index}_iorig segtype linear -a
+		check lv_field $vg/${lv1}_rmeta_$index segtype linear -a
+	done
+	dmsetup info -c -o name > dm-info
+	not grep "${vg}-${lv1}_rimage_.*extracted" dm-info
+	not grep "${vg}-${lv1}_rimage__" dm-info
+	lvchange -an $vg/$lv1
+	lvchange -ay $vg/$lv1
+	lvremove -ff $vg/$lv1
+done
+vgremove -ff $vg
