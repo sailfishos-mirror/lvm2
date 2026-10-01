@@ -11,6 +11,7 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 
+. shell/integrity-basic.sh
 . lib/inittest --skip-with-lvmpolld
 
 aux have_fs ext4 || skip
@@ -23,17 +24,13 @@ mkdir -p "$mnt"
 
 aux prepare_devs 3 40
 
-# Generate standard test data, but use custom fileB pattern for corruption testing
-awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
-awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
+# fileB uses the two-chunk pattern so a corruption lands in file data.
+integrity_make_files 4096
 
 _prepare_vg() {
 	# zero devs so we are sure to find the correct file data
 	# on the underlying devs when corrupting it
-	aux clear_devs "$dev1" "$dev2" "$dev3"
-	vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3"
-	pvs
+	integrity_prepare_vg --clear "$dev1" "$dev2" "$dev3"
 }
 
 _test1() {
@@ -46,14 +43,15 @@ _test1() {
 	cp fileC "$mnt"
 
 	umount "$mnt"
-	lvchange -an $vg/$lv1
 
 	# Corrupting raid1 is simple - 1 leg needs to be modified
 	# For raid5 corrupted block can be places on any of its leg.
-	for i in "$@" ; do
-		aux corrupt_dev "$i" BBBBBBBBBBBBBBBBB BBBBBBBBCBBBBBBBB |& tee out
-		grep -q "copied" out && break  # leg found and corrupted
-	done
+	# raid_corrupt_data() skips the parity member, which a plain pattern
+	# search can otherwise hit: parity reproduces the file data exactly
+	# when the other members of the stripe are zeroed, which _prepare_vg
+	# arranges by clearing the devices.  The LV is left deactivated so the
+	# assertions below run against the damaged array before syncaction.
+	raid_corrupt_data "$vg/$lv1" "" 1 "$@"
 
 	lvchange -ay $vg/$lv1
 

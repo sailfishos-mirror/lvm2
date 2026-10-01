@@ -11,6 +11,7 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 
+. shell/integrity-basic.sh
 . lib/inittest --skip-with-lvmpolld
 
 aux have_fs ext4 || skip
@@ -27,74 +28,11 @@ mkdir -p "$mnt"
 
 aux prepare_devs 6 64
 
-# Use awk instead of anoyingly long log out from printf
-#printf "%0.sA" {1..16384} >> fileA
-awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
-awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
-
-# generate random data
-dd if=/dev/urandom of=randA bs=512K count=2
-dd if=/dev/urandom of=randB bs=512K count=3
-dd if=/dev/urandom of=randC bs=512K count=4
+integrity_make_files
+integrity_make_rand
 
 _prepare_vg() {
-	vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
-	pvs
-}
-
-_add_new_data_to_mnt() {
-	mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
-
-        mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-
-        # add original data
-        cp randA $mnt
-        cp randB $mnt
-        cp randC $mnt
-        mkdir $mnt/1
-        cp fileA $mnt/1
-        cp fileB $mnt/1
-        cp fileC $mnt/1
-        mkdir $mnt/2
-        cp fileA $mnt/2
-        cp fileB $mnt/2
-        cp fileC $mnt/2
-}
-
-_add_more_data_to_mnt() {
-        mkdir $mnt/more
-        cp fileA $mnt/more
-        cp fileB $mnt/more
-        cp fileC $mnt/more
-        cp randA $mnt/more
-        cp randB $mnt/more
-        cp randC $mnt/more
-}
-
-_verify_data_on_mnt() {
-	diff randA $mnt/randA
-	diff randB $mnt/randB
-	diff randC $mnt/randC
-	diff fileA $mnt/1/fileA
-	diff fileB $mnt/1/fileB
-	diff fileC $mnt/1/fileC
-	diff fileA $mnt/2/fileA
-	diff fileB $mnt/2/fileB
-	diff fileC $mnt/2/fileC
-}
-
-_verify_data_on_lv() {
-        lvchange -ay $vg/$lv1
-        mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-        _verify_data_on_mnt
-        rm $mnt/randA
-        rm $mnt/randB
-        rm $mnt/randC
-        rm -rf $mnt/1
-        rm -rf $mnt/2
-        umount $mnt
-        lvchange -an $vg/$lv1
+	integrity_prepare_vg "$dev1" "$dev2" "$dev3" "$dev4"
 }
 
 # Wait for dmeventd repair to complete by checking if specified devices
@@ -134,7 +72,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_for_sync $vg $lv1
-_add_new_data_to_mnt
+integrity_add_new_data_to_mnt
 
 aux disable_dev "$dev2"
 
@@ -146,8 +84,8 @@ lvs -a -o+devices $vg | tee out
 not grep "$dev2" out
 grep "$dev4" out
 
-_add_more_data_to_mnt
-_verify_data_on_mnt
+integrity_add_more_data_to_mnt
+integrity_verify_data_on_mnt
 
 aux enable_dev "$dev2"
 
@@ -159,7 +97,7 @@ grep "$dev3" out
 
 umount "$mnt"
 lvchange -an $vg/$lv1
-_verify_data_on_lv
+integrity_verify_data_on_lv
 lvremove $vg/$lv1
 vgremove -ff $vg
 
@@ -173,7 +111,7 @@ aux wait_recalc $vg/${lv1}_rimage_0
 aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_for_sync $vg $lv1
-_add_new_data_to_mnt
+integrity_add_new_data_to_mnt
 
 aux disable_dev "$dev1" "$dev2"
 
@@ -188,8 +126,8 @@ grep "$dev4" out
 grep "$dev5" out
 grep "$dev3" out
 
-_add_more_data_to_mnt
-_verify_data_on_mnt
+integrity_add_more_data_to_mnt
+integrity_verify_data_on_mnt
 
 aux enable_dev "$dev1" "$dev2"
 
@@ -202,7 +140,7 @@ grep "$dev3" out
 
 umount "$mnt"
 lvchange -an $vg/$lv1
-_verify_data_on_lv
+integrity_verify_data_on_lv
 lvremove $vg/$lv1
 vgremove -ff $vg
 
@@ -218,7 +156,7 @@ aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/${lv1}_rimage_3
 aux wait_recalc $vg/${lv1}_rimage_4
 aux wait_for_sync $vg $lv1
-_add_new_data_to_mnt
+integrity_add_new_data_to_mnt
 
 aux disable_dev "$dev2"
 
@@ -230,8 +168,8 @@ lvs -a -o+devices $vg | tee out
 not grep "$dev2" out
 grep "$dev6" out
 
-_add_more_data_to_mnt
-_verify_data_on_mnt
+integrity_add_more_data_to_mnt
+integrity_verify_data_on_mnt
 
 aux enable_dev "$dev2"
 
@@ -241,7 +179,7 @@ grep "$dev6" out
 
 umount "$mnt"
 lvchange -an $vg/$lv1
-_verify_data_on_lv
+integrity_verify_data_on_lv
 lvremove $vg/$lv1
 vgremove -ff $vg
 
@@ -256,7 +194,7 @@ aux wait_recalc $vg/${lv1}_rimage_1
 aux wait_recalc $vg/${lv1}_rimage_2
 aux wait_recalc $vg/${lv1}_rimage_3
 aux wait_for_sync $vg $lv1
-_add_new_data_to_mnt
+integrity_add_new_data_to_mnt
 
 aux disable_dev "$dev1"
 
@@ -268,8 +206,8 @@ lvs -a -o+devices $vg | tee out
 not grep "$dev1" out
 grep "$dev5" out
 
-_add_more_data_to_mnt
-_verify_data_on_mnt
+integrity_add_more_data_to_mnt
+integrity_verify_data_on_mnt
 
 aux enable_dev "$dev1"
 
@@ -279,6 +217,6 @@ grep "$dev5" out
 
 umount "$mnt"
 lvchange -an $vg/$lv1
-_verify_data_on_lv
+integrity_verify_data_on_lv
 lvremove $vg/$lv1
 vgremove -ff $vg

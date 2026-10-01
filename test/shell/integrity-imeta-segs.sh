@@ -14,6 +14,7 @@
 
 SKIP_WITH_LOW_SPACE=256
 
+. shell/integrity-basic.sh
 . lib/inittest
 
 aux have_integrity 1 5 0 || skip
@@ -22,57 +23,13 @@ aux have_fs ext4 || skip
 mnt="mnt"
 mkdir -p "$mnt"
 
-# Use awk instead of anoyingly long log out from printf
-#printf "%0.sA" {1..16384} >> fileA
-awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
-awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
-
-# generate random data
-dd if=/dev/urandom of=randA bs=512K count=2
-dd if=/dev/urandom of=randB bs=512K count=3
-dd if=/dev/urandom of=randC bs=512K count=4
-
-_prepare_vg() {
-        vgcreate $SHARED $vg "$dev1" "$dev2"
-        pvs
-}
-
-_add_data_to_lv() {
-        mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
-
-        mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-
-        # add original data
-        cp randA $mnt
-        cp randB $mnt
-        cp randC $mnt
-        mkdir $mnt/1
-        cp fileA $mnt/1
-        cp fileB $mnt/1
-        cp fileC $mnt/1
-        mkdir $mnt/2
-        cp fileA $mnt/2
-        cp fileB $mnt/2
-        cp fileC $mnt/2
-
-        umount $mnt
-}
+integrity_make_files
+integrity_make_rand
 
 _verify_data_on_lv() {
-        mount "$DM_DEV_DIR/$vg/$lv1" $mnt
-
-        diff randA $mnt/randA
-        diff randB $mnt/randB
-        diff randC $mnt/randC
-        diff fileA $mnt/1/fileA
-        diff fileB $mnt/1/fileB
-        diff fileC $mnt/1/fileC
-        diff fileA $mnt/2/fileA
-        diff fileB $mnt/2/fileB
-        diff fileC $mnt/2/fileC
-
-        umount $mnt
+	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
+	integrity_verify_data_on_mnt
+	umount "$mnt"
 }
 
 _replace_data_on_lv() {
@@ -135,7 +92,7 @@ pvs -o+pv_free,pv_used
 lvcreate --type raid1 -m1 -n $lv1 -L 120M -an $vg
 
 lvchange -ay $vg/$lv1
-_add_data_to_lv
+integrity_add_data_to_lv
 lvchange -an $vg/$lv1
 
 lvs -a -o+devices,seg_count $vg

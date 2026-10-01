@@ -13,6 +13,7 @@
 # Test integrity block sizes and read repair on scsi_debug
 # devices with LBS 512 and PBS 4K.
 
+. shell/integrity-basic.sh
 . lib/inittest --skip-with-lvmpolld
 
 test "${LVM_VALGRIND:-0}" -eq 0 || skip # too slow for valgrind
@@ -29,26 +30,13 @@ aux kernel_at_least  6 1 || skip
 mnt="mnt"
 mkdir -p "$mnt"
 
-awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
-awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
+integrity_make_files 4096
 
 _test_fs_with_read_repair() {
-	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
-	cp fileA "$mnt"
-	cp fileB "$mnt"
-	cp fileC "$mnt"
-	umount "$mnt"
-	lvchange -an $vg/$lv1
-	for dev in "$@"; do
-		aux corrupt_dev "$dev" BBBBBBBBBBBBBBBBB BBBBBBBBCBBBBBBBB
-	done
-	lvchange -ay $vg/$lv1
-	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
-	cmp -b "$mnt/fileA" fileA
-	cmp -b "$mnt/fileB" fileB
-	cmp -b "$mnt/fileC" fileC
-	umount "$mnt"
+	# This test creates the filesystem itself (to control its block size),
+	# so pass an empty mkfs command; test_fs_with_read_repair() still
+	# mounts, copies the data files and unmounts before deactivating.
+	test_fs_with_read_repair "$vg/$lv1" "$mnt" "" "" "" "" "$@"
 }
 
 LVRAIDSIZE=${LVRAIDSIZE:-300}
@@ -87,8 +75,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
@@ -112,8 +99,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
@@ -135,8 +121,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
@@ -160,8 +145,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
@@ -185,8 +169,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
@@ -208,8 +191,7 @@ umount "$mnt"
 lvchange $vg/$lv1 --writemostly "$dev2"
 _test_fs_with_read_repair "$dev1"
 lvs -a -o+integritymismatches $vg
-lvs -o integritymismatches $vg/$lv1 |tee mismatch
-not grep 0 mismatch
+integrity_not_zero_mismatches $vg/$lv1
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
