@@ -28,7 +28,8 @@ aux prepare_devs 5 64
 # Use awk instead of anoyingly long log out from printf
 #printf "%0.sA" {1..16384} >> fileA
 awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
-awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
+# Cover two 4K chunks so RAID6 can corrupt two data members, excluding parity.
+awk 'BEGIN { while (z++ < 8192) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
 awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
 
 # generate random data
@@ -45,7 +46,8 @@ _prepare_vg() {
 }
 
 _test_fs_with_read_repair() {
-	local max_corrupt=$1 corrupted=0 dev
+	local max_corrupt=$1 corrupted=0 dev i position sector stripe parity nr=0
+	local -a raid_table linear_table image_devs image_offsets image_lengths matches
 	shift
 
 	mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
@@ -60,16 +62,62 @@ _test_fs_with_read_repair() {
 	cp fileC "$mnt"
 
 	umount "$mnt"
+	# Save the member mapping before deactivation removes the DM tables.
+	raid_table=( $(dmsetup table "$vg-$lv1") )
+	case "${raid_table[3]}" in
+	raid4|raid5_ls|raid6_zr)
+		nr=${raid_table[5 + raid_table[4]]}
+		for ((i = 0; i < nr; i++)); do
+			linear_table=( $(dmsetup table "$vg-${lv1}_rimage_${i}_iorig") )
+			test "${#linear_table[@]}" -eq 5 && test "${linear_table[0]}" -eq 0 &&
+				test "${linear_table[2]}" = linear || die "Expected a single linear image segment."
+			image_devs[i]=$(get lv_field "$vg/${lv1}_rimage_${i}_iorig" devices -a)
+			image_devs[i]=${image_devs[i]%%(*}
+			image_offsets[i]=${linear_table[4]}
+			image_lengths[i]=${linear_table[1]}
+		done
+		;;
+	raid1|raid10) ;;
+	*) die "Unsupported read-repair layout: ${raid_table[3]}" ;;
+	esac
 	lvchange -an $vg/$lv1
 
+	printf BBBBBBBBCBBBBBBBB > corrupt.expected
 	for dev in "$@"; do
-		# The pattern may also occur in parity.  Do not corrupt more
-		# members than the RAID layout can recover, even if it matches
-		# on several devices at the same stripe offset.
 		blockdev --flushbufs "$dev"
-		LC_ALL=C grep -q -a -F BBBBBBBBBBBBBBBBB "$dev" || continue
-		aux corrupt_dev "$dev" BBBBBBBBBBBBBBBBB BBBBBBBBCBBBBBBBB
-		corrupted=$((corrupted + 1))
+		if test "$nr" -gt 0; then
+			for ((i = 0; i < nr; i++)); do
+				test "$dev" != "${image_devs[i]}" || break
+			done
+			test "$i" -lt "$nr" || die "No RAID image on $dev."
+		fi
+		matches=( $(LC_ALL=C grep -oba -F BBBBBBBBBBBBBBBBB "$dev" | cut -d: -f1) ) || true
+		for position in "${matches[@]}"; do
+			if test "$nr" -gt 0; then
+				sector=$(((position + 8) / 512 - image_offsets[i]))
+				test "$sector" -ge 0 && test "$sector" -lt "${image_lengths[i]}" || continue
+				stripe=$((sector / raid_table[5]))
+				# dm-raid's raid4 uses fixed first parity; raid5_ls
+				# rotates left; raid6_zr rotates P right, with Q next.
+				# These are the rules in md's raid5_compute_sector().
+				case "${raid_table[3]}" in
+				raid4) parity=0 ;;
+				raid5_ls) parity=$((nr - 1 - stripe % nr)) ;;
+				raid6_zr)
+					parity=$((stripe % nr))
+					test "$i" -ne "$(((parity + 1) % nr))" || continue
+					;;
+				esac
+				test "$i" -ne "$parity" || continue
+			fi
+			# Write the selected match, not an earlier parity match.
+			dd if=corrupt.expected of="$dev" bs=1 seek="$position" conv=notrunc,fdatasync
+			blockdev --flushbufs "$dev"
+			dd if="$dev" of=corrupt.actual bs=1 skip="$position" count=17
+			cmp corrupt.expected corrupt.actual
+			corrupted=$((corrupted + 1))
+			break
+		done
 		test "$corrupted" -lt "$max_corrupt" || break
 	done
 	test "$corrupted" -gt 0
