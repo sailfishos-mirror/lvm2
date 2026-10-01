@@ -31,6 +31,7 @@ typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
 static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
 						      struct dm_list *removal_lvs,
 						      int vg_write_requested);
+static int _rename_area_lvs(struct logical_volume *lv, const char *suffix);
 
 static int _check_restriping(uint32_t new_stripes, struct logical_volume *lv)
 {
@@ -911,6 +912,60 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
 }
 
 /*
+ * Set integrity iorig/imeta LV names to match @rimage_name.
+ *
+ * The iorig/imeta sub-LVs are named after their rimage and do not follow it
+ * when the rimage is renamed, so every place that renames an image that may
+ * carry integrity has to call this: _shift_and_rename_image_components(),
+ * _extract_image_components() and _rename_area_lvs().  The replace path in
+ * _lv_raid_rebuild_or_replace() does the same inline.
+ */
+static int _set_integrity_sublv_names(struct logical_volume *lv_image,
+				      const char *rimage_name)
+{
+	struct logical_volume *lv_imeta, *lv_iorig;
+	struct lv_segment *seg;
+	char name_buf[NAME_LEN], *name_dup;
+
+	if (!lv_is_integrity(lv_image))
+		return 1;
+
+	if (!(seg = first_seg(lv_image)) ||
+	    !(lv_imeta = seg->integrity_meta_dev) ||
+	    !(lv_iorig = seg_lv(seg, 0))) {
+		log_error(INTERNAL_ERROR "Inconsistent LV structure in %s.",
+			  display_lvname(lv_image));
+		return 0;
+	}
+
+	if (dm_snprintf(name_buf, sizeof(name_buf), "%s_imeta", rimage_name) < 0) {
+		log_error("Failed to generate sublv name for %s.",
+			  display_lvname(lv_image));
+		return 0;
+	}
+
+	if (!(name_dup = dm_pool_strdup(lv_image->vg->vgmem, name_buf)))
+		return_0;
+
+	if (!lv_set_name(lv_imeta, name_dup))
+		return_0;
+
+	if (dm_snprintf(name_buf, sizeof(name_buf), "%s_iorig", rimage_name) < 0) {
+		log_error("Failed to generate sublv name for %s.",
+			  display_lvname(lv_image));
+		return 0;
+	}
+
+	if (!(name_dup = dm_pool_strdup(lv_image->vg->vgmem, name_buf)))
+		return_0;
+
+	if (!lv_set_name(lv_iorig, name_dup))
+		return_0;
+
+	return 1;
+}
+
+/*
  * _shift_and_rename_image_components
  * @seg: Top-level RAID segment
  *
@@ -970,6 +1025,9 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
 			return 0;
 		}
 
+		if (!_set_integrity_sublv_names(seg_lv(seg, s), lv_name))
+			return_0;
+
 		seg->areas[s - missing] = seg->areas[s];
 		seg->meta_areas[s - missing] = seg->meta_areas[s];
 	}
@@ -978,13 +1036,11 @@ static int _shift_and_rename_image_components(struct lv_segment *seg)
 	return 1;
 }
 
-/* Generate raid subvolume name and validate it */
-static char *_generate_raid_name(struct logical_volume *lv,
-				 const char *suffix, int count)
+/* Format raid subvolume name, without validating it */
+static char *_format_raid_name(const struct logical_volume *lv, const char *suffix,
+			       int count)
 {
-	char name[NAME_LEN], *lvname;
-	int historical;
-	char count_suffix[16] = { 0 };
+	char name[NAME_LEN], count_suffix[16] = { 0 };
 
 	if (count >= 0)
 		snprintf(count_suffix, sizeof(count_suffix), "_%u", (unsigned)count);
@@ -996,23 +1052,48 @@ static char *_generate_raid_name(struct logical_volume *lv,
 		return NULL;
 	}
 
+	return dm_pool_strdup(lv->vg->vgmem, name);
+}
+
+/*
+ * _validate_raid_name
+ * @lv: the VG @name has to be free in
+ * @name: a name returned by _format_raid_name()
+ *
+ * Returns: 1 if it is a valid and unused LV name, 0 (after logging)
+ *	    if it is not
+ */
+static int _validate_raid_name(struct logical_volume *lv, const char *name)
+{
+	int historical;
+
 	if (!validate_name(name)) {
 		log_error("New logical volume name \"%s\" is not valid.", name);
-		return NULL;
+		return 0;
 	}
 
 	if (lv_name_is_used_in_vg(lv->vg, name, &historical)) {
 		log_error("%sLogical Volume %s already exists in volume group %s.",
 			  historical ? "historical " : "", name, lv->vg->name);
-		return NULL;
+		return 0;
 	}
 
-	if (!(lvname = dm_pool_strdup(lv->vg->vgmem, name))) {
-		log_error("Failed to allocate new name.");
-		return NULL;
-	}
+	return 1;
+}
 
-	return lvname;
+/* Generate raid subvolume name and validate it */
+static char *_generate_raid_name(struct logical_volume *lv,
+				 const char *suffix, int count)
+{
+	char *name;
+
+	if (!(name = _format_raid_name(lv, suffix, count)))
+		return NULL;
+
+	if (!_validate_raid_name(lv, name))
+		return NULL;
+
+	return name;
 }
 
 /*
@@ -2958,6 +3039,9 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
 	    !lv_set_name(meta_lv, meta_lv_name))
 		return_0;
 
+	if (!_set_integrity_sublv_names(data_lv, data_lv_name))
+		return_0;
+
 	*extracted_rmeta = meta_lv;
 	*extracted_rimage = data_lv;
 
@@ -3059,9 +3143,172 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
 						      int *flags_set);
 
 /*
+ * _raid_image_is_error
+ * @seg: Top-level RAID segment
+ * @s: Area index
+ *
+ * Returns: 1 if the image at index @s, or its metadata, has an error
+ * segment and must therefore be extracted before any other image.
+ */
+static int _raid_image_is_error(struct lv_segment *seg, uint32_t s,
+				const struct segment_type *error_segtype)
+{
+	return (first_seg(seg_lv(seg, s))->segtype == error_segtype) ||
+	       (first_seg(seg_metalv(seg, s))->segtype == error_segtype);
+}
+
+static int _raid_image_extract_candidate(struct lv_segment *seg, uint32_t s,
+					 int error_pass,
+					 const struct segment_type *error_segtype,
+					 struct dm_list *target_pvs)
+{
+	if (seg_type(seg, s) == AREA_UNASSIGNED)
+		return 0;
+
+	if (error_pass) {
+		if (!_raid_image_is_error(seg, s, error_segtype))
+			return 0;
+		return 1;
+	}
+
+	if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
+	    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+		return 0;
+
+	return 1;
+}
+
+static int _raid_enough_extractable_images(struct logical_volume *lv,
+					   uint32_t want,
+					   struct dm_list *target_pvs,
+					   const struct segment_type *error_segtype)
+{
+	int ss;
+	uint32_t s, found = 0;
+	struct lv_segment *seg = first_seg(lv);
+	unsigned char *taken;
+
+	if (!want)
+		return 1;
+
+	if (!(taken = dm_pool_zalloc(lv->vg->vgmem, seg->area_count)))
+		return_0;
+
+	for (ss = (seg->area_count * 2) - 1; (ss >= 0) && (found < want); ss--) {
+		s = (uint32_t) (ss % seg->area_count);
+
+		if (taken[s])
+			continue;
+
+		if (!_raid_image_extract_candidate(seg, s, ss / (int) seg->area_count,
+						   error_segtype, target_pvs))
+			continue;
+
+		taken[s] = 1;
+		found++;
+	}
+
+	return found >= want;
+}
+
+/*
+ * _raid_pvs_usable_with_error_images
+ * Images with error segments must be removed first, so a list of PVs
+ * requested by the user cannot be honoured while the array still has any.
+ *
+ * Returns: 1 if @target_pvs may be used, 0 (after logging) if not
+ */
+static int _raid_pvs_usable_with_error_images(struct logical_volume *lv,
+					       struct dm_list *target_pvs,
+					       const struct segment_type *error_segtype)
+{
+	struct lv_segment *seg = first_seg(lv);
+	uint32_t s;
+
+	if (dm_list_empty(target_pvs) || (target_pvs == &lv->vg->pvs))
+		return 1;
+
+	for (s = 0; s < seg->area_count; s++) {
+		if (!_raid_image_is_error(seg, s, error_segtype))
+			continue;
+
+		log_error("%s has components with error targets"
+			  " that must be removed first: %s.",
+			  display_lvname(lv),
+			  display_lvname(seg_lv(seg, s)));
+
+		log_error("Try removing the PV list and rerun the command.");
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
+ * _raid_check_images
+ * @lv
+ * @new_count:  The absolute count of images (e.g. '2' for a 2-way mirror)
+ * @target_pvs:  The list of PVs that are candidates for removal
+ *
+ * Checks that enough images can be extracted to satisfy the request
+ * without touching the array, so an impossible request is rejected before
+ * any component gets renamed.  Images with error segments are extracted
+ * before any other image and are only counted once here.
+ *
+ * _raid_enough_extractable_images() must predict exactly what the loop in
+ * _raid_extract_images() will extract: both walk the areas in the same order
+ * and share _raid_image_extract_candidate().  Extraction does not make an
+ * image a candidate that was not one, and shifting only renumbers the
+ * remaining images, so the up-front count equals what the loop extracts.
+ * If the candidate rule is changed, change it in that one function.
+ * This was checked by modelling both loops (with and without shifting)
+ * over every combination of up to 6 images, error and PV-match flags and
+ * request sizes; it is not proved from the code.
+ *
+ * Callers: _raid_remove_images() (lvconvert -mN, shift), lv_raid_split()
+ * (rejects integrity before it gets here) and
+ * _lv_raid_rebuild_or_replace() (no shift).
+ *
+ * Returns: 1 if the request can be satisfied, 0 if not
+ */
+static int _raid_check_images(struct logical_volume *lv,
+			      uint32_t new_count,
+			      struct dm_list *target_pvs)
+{
+	int extract;
+	struct lv_segment *seg = first_seg(lv);
+	struct segment_type *error_segtype;
+
+	extract = seg->area_count - new_count;
+
+	if (!_raid_allow_extraction(lv, extract, target_pvs))
+		return_0;
+
+	if ((int) dm_list_size(target_pvs) < extract) {
+		log_error("Unable to remove %d images: Only %u device%s given.",
+			  extract, dm_list_size(target_pvs),
+			  (dm_list_size(target_pvs) == 1) ? "" : "s");
+		return 0;
+	}
+
+	if (!(error_segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_ERROR)))
+		return_0;
+
+	if (!_raid_pvs_usable_with_error_images(lv, target_pvs, error_segtype))
+		return_0;
+
+	if (!_raid_enough_extractable_images(lv, (uint32_t) extract, target_pvs,
+					     error_segtype)) {
+		log_error("Unable to extract enough images to satisfy request.");
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
  * _raid_extract_images
  * @lv
- * @force: force a replacement in case of primary mirror leg
  * @new_count:  The absolute count of images (e.g. '2' for a 2-way mirror)
  * @target_pvs:  The list of PVs that are candidates for removal
  * @shift:  If set, use _shift_and_rename_image_components().
@@ -3075,14 +3322,13 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
  *
  * This function extracts _both_ portions of the indexed image.  It
  * does /not/ commit the results.  (IOW, erroring-out requires no unwinding
- * of operations.)
+ * of operations.)  Call _raid_check_images() first.
  *
  * Returns: 1 on success, 0 on failure
  */
 static int _raid_extract_images(struct logical_volume *lv,
-				int force, uint32_t new_count,
+				uint32_t new_count,
 				struct dm_list *target_pvs, int shift,
-				int *rebuild_flags_set,
 				struct dm_list *extracted_meta_lvs,
 				struct dm_list *extracted_data_lvs)
 {
@@ -3093,32 +3339,16 @@ static int _raid_extract_images(struct logical_volume *lv,
 	struct segment_type *error_segtype;
 
 	extract = seg->area_count - new_count;
-	if (rebuild_flags_set)
-		*rebuild_flags_set = 0;
-
-	if (!_raid_allow_extraction(lv, extract, target_pvs))
-		return_0;
 
 	log_verbose("Extracting %d %s from %s.", extract,
 		    (extract > 1) ? "images" : "image",
 		    display_lvname(lv));
-	if ((int) dm_list_size(target_pvs) < extract) {
-		log_error("Unable to remove %d images: Only %u device%s given.",
-			  extract, dm_list_size(target_pvs),
-			  (dm_list_size(target_pvs) == 1) ? "" : "s");
-		return 0;
-	}
 
 	if (!(lvl_array = dm_pool_alloc(lv->vg->vgmem,
 					sizeof(*lvl_array) * extract * 2)))
 		return_0;
 
 	if (!(error_segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_ERROR)))
-		return_0;
-
-	/* Use the sync state after extraction validation and any status retries. */
-	if (rebuild_flags_set &&
-	    !_raid_apply_recovering_image_rebuild_flags(lv, rebuild_flags_set))
 		return_0;
 
 	/*
@@ -3129,37 +3359,14 @@ static int _raid_extract_images(struct logical_volume *lv,
 	for (ss = (seg->area_count * 2) - 1; (ss >= 0) && extract; ss--) {
 		s = ss % seg->area_count;
 
-		if (ss / seg->area_count) {
-			/* Conditions for first pass */
-			if ((first_seg(seg_lv(seg, s))->segtype != error_segtype) &&
-			    (first_seg(seg_metalv(seg, s))->segtype != error_segtype))
-				continue;
+		if (!_raid_image_extract_candidate(seg, s, ss / seg->area_count,
+						   error_segtype, target_pvs))
+			continue;
 
-			if (!dm_list_empty(target_pvs) &&
-			    (target_pvs != &lv->vg->pvs)) {
-				/*
-				 * User has supplied a list of PVs, but we
-				 * cannot honor that list because error LVs
-				 * must come first.
-				 */
-				log_error("%s has components with error targets"
-					  " that must be removed first: %s.",
-					  display_lvname(lv),
-					  display_lvname(seg_lv(seg, s)));
-
-				log_error("Try removing the PV list and rerun."
-					  " the command.");
-				return 0;
-			}
+		if (ss / seg->area_count)
 			log_debug("LVs with error segments to be removed: %s %s",
 				  display_lvname(seg_metalv(seg, s)),
 				  display_lvname(seg_lv(seg, s)));
-		} else {
-			/* Conditions for second pass */
-			if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
-			    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
-				continue;
-		}
 
 		if (!_extract_image_components(seg, s, &rmeta_lv, &rimage_lv)) {
 			log_error("Failed to extract %s from %s.",
@@ -3180,8 +3387,11 @@ static int _raid_extract_images(struct logical_volume *lv,
 
 		extract--;
 	}
+
+	/* _raid_check_images() has already counted these. */
 	if (extract) {
-		log_error("Unable to extract enough images to satisfy request.");
+		log_error(INTERNAL_ERROR "Extracted %d fewer image(s) than"
+			  " requested from %s.", extract, display_lvname(lv));
 		return 0;
 	}
 
@@ -3361,12 +3571,21 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 			       struct dm_list *removal_lvs, int commit)
 {
 	struct dm_list removed_lvs;
+	struct dm_config_tree *saved_cft;
+	struct volume_group *saved_vg = NULL;
+	struct logical_volume *saved_lv = NULL;
+	int integrity_temp_rename = 0;
 	struct lv_segment *seg;
 	uint32_t s;
 	int rebuild_flags_set = 0;
 
 	if (new_count == 1) {
 		seg = first_seg(lv);
+
+		if (lv_raid_has_integrity(lv)) {
+			log_error("Integrity must be removed before converting raid to linear.");
+			return 0;
+		}
 
 		if (!seg_is_raid1(seg)) {
 			log_error("%s called on non-raid1 LV.", display_lvname(lv));
@@ -3398,43 +3617,89 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	if (!archive(lv->vg))
 		return_0;
 
-	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1,
-				 (commit && (new_count > 1)) ? &rebuild_flags_set : NULL,
+	/*
+	 * The check has to run before the pre-flight, which commits temporary
+	 * names, and cannot be folded into the extraction the way the split
+	 * and rebuild callers do it: this is the one call site where the two
+	 * cannot be adjacent, so it keeps them as two steps and says so.
+	 */
+	if (!_raid_check_images(lv, new_count, allocate_pvs))
+		return_0;
+
+	if (commit && (new_count > 1) &&
+	    !_raid_apply_recovering_image_rebuild_flags(lv, &rebuild_flags_set))
+		return_0;
+
+	if (new_count == 1 && !yes &&
+	    yes_no_prompt("Are you sure you want to convert %s LV %s to type %s losing all resilience? [y/n]: ",
+			  lvseg_name(first_seg(lv)), display_lvname(lv), SEG_TYPE_NAME_LINEAR) == 'n') {
+		log_error("Logical volume %s NOT converted to \"%s\".",
+			  display_lvname(lv), SEG_TYPE_NAME_LINEAR);
+		return 0;
+	}
+
+	/*
+	 * dm-integrity image wrappers keep their kernel names across metadata
+	 * renames unless the devices are reloaded with temporary names first.
+	 * Renaming remaining images into a vacated index collides otherwise.
+	 */
+	if (lv_raid_has_integrity(lv)) {
+		/* Preserve the complete array for failures after the temporary commit. */
+		if (!(saved_cft = export_vg_to_config_tree(lv->vg)))
+			return_0;
+		saved_vg = import_vg_from_config_tree(lv->vg->cmd, lv->vg->fid, saved_cft);
+		dm_config_destroy(saved_cft);
+		if (!saved_vg)
+			return_0;
+		if (!(saved_lv = find_lv(saved_vg, lv->name)))
+			goto_bad;
+
+		if (!_rename_area_lvs(lv, "_"))
+			goto_bad;
+
+		integrity_temp_rename = 1;
+		if (!lv_update_and_reload(lv))
+			goto_bad;
+	}
+
+	if (!_raid_extract_images(lv, new_count, allocate_pvs, 1,
 				 removal_lvs, removal_lvs)) {
 		log_error("Failed to extract images from %s.",
 			  display_lvname(lv));
-		return 0;
+		goto bad;
 	}
 
 	first_seg(lv)->area_count = new_count;
 
 	/* Convert to linear? */
 	if (new_count == 1) {
-		if (lv_raid_has_integrity(lv)) {
-			log_error("Integrity must be removed before converting raid to linear.");
-			return 0;
-		}
-
-		if (!yes && yes_no_prompt("Are you sure you want to convert %s LV %s to type %s losing all resilience? [y/n]: ",
-					  lvseg_name(first_seg(lv)), display_lvname(lv), SEG_TYPE_NAME_LINEAR) == 'n') {
-			log_error("Logical volume %s NOT converted to \"%s\".",
-				  display_lvname(lv), SEG_TYPE_NAME_LINEAR);
-			return 0;
-		}
 		if (!_raid_remove_top_layer(lv, removal_lvs)) {
 			log_error("Failed to remove RAID layer "
 				  "after linear conversion.");
-			return 0;
+			goto bad;
 		}
 		lv->status &= ~(LV_NOTSYNCED | LV_WRITEMOSTLY);
 		first_seg(lv)->writebehind = 0;
 	}
 
-	if (!commit)
-		return 1;
+	/* Commit the reduced array with final names, including unshifted images. */
+	if (integrity_temp_rename && !_rename_area_lvs(lv, NULL))
+		goto_bad;
 
-	if (!_lv_update_and_reload_list(lv, 0, removal_lvs))
+	if (!commit) {
+		release_vg(saved_vg);
+		return 1;
+	}
+
+	if (!_lv_update_and_reload_list(lv, 0, removal_lvs)) {
+		/* Roll back only while the full array is still committed. */
+		if (saved_lv && first_seg(lv_committed(lv))->area_count == first_seg(saved_lv)->area_count)
+			goto_bad;
+		release_vg(saved_vg);
 		return_0;
+	}
+
+	release_vg(saved_vg);
 
 	/*
 	 * Eliminate the extracted LVs
@@ -3449,6 +3714,15 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 		return_0;
 
 	return 1;
+
+bad:
+	if (integrity_temp_rename && saved_lv) {
+		saved_vg->seqno = lv->vg->seqno;
+		if (!lv_update_and_reload(saved_lv))
+			log_error("Failed to restore original image names for %s.", display_lvname(lv));
+	}
+	release_vg(saved_vg);
+	return 0;
 }
 
 /* Check if single SubLV @slv is degraded. */
@@ -3653,8 +3927,11 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 			return_0;
 	}
 
-	if (!_raid_extract_images(lv, 0, new_count, splittable_pvs, 1, NULL,
-				 &removal_lvs, &data_list)) {
+	if (!_raid_check_images(lv, new_count, splittable_pvs))
+		return_0;
+
+	if (!_raid_extract_images(lv, new_count, splittable_pvs, 1,
+				  &removal_lvs, &data_list)) {
 		log_error("Failed to extract images from %s.",
 			  display_lvname(lv));
 		return 0;
@@ -5352,10 +5629,11 @@ static int _clear_meta_lvs(struct logical_volume *lv)
 #define	SLV_COUNT	2
 static int _rename_area_lvs(struct logical_volume *lv, const char *suffix)
 {
-	uint32_t s;
+	uint32_t s, t;
 	size_t sz = sizeof("rimage") - 1 + (suffix ? strlen(suffix) : 0) + 1;
 	char *sfx[SLV_COUNT] = { NULL, NULL };
 	struct lv_segment *seg = first_seg(lv);
+	struct logical_volume *slv;
 	const char *lv_name;
 
 	/* Create _generate_raid_name() suffixes w/ or w/o passed in @suffix */
@@ -5366,13 +5644,30 @@ static int _rename_area_lvs(struct logical_volume *lv, const char *suffix)
 
 	/* Change names (temporarily) to be able to shift numerical name suffixes */
 	for (s = 0; s < seg->area_count; s++) {
-		if (!(lv_name = _generate_raid_name(lv, sfx[0], s)) ||
-		    !lv_set_name(seg_lv(seg, s), lv_name))
-			return_0;
-		if (seg->meta_areas &&
-		    (!(lv_name = _generate_raid_name(lv, sfx[1], s)) ||
-		     !lv_set_name(seg_metalv(seg, s), lv_name)))
-			return_0;
+		for (t = 0; t < SLV_COUNT; t++) {
+			if (t && !seg->meta_areas)
+				continue;
+
+			slv = t ? seg_metalv(seg, s) : seg_lv(seg, s);
+			if (!(lv_name = _format_raid_name(lv, sfx[t], s)))
+				return_0;
+
+			/*
+			 * Shifting may already have assigned the final name.
+			 * The comparison has to happen before the validation,
+			 * which rejects a name that is still in use - which is
+			 * exactly the name slv already carries here.
+			 */
+			if (!strcmp(slv->name, lv_name))
+				continue;
+
+			if (!_validate_raid_name(lv, lv_name) ||
+			    !lv_set_name(slv, lv_name))
+				return_0;
+
+			if (!t && !_set_integrity_sublv_names(slv, lv_name))
+				return_0;
+		}
 	}
 
 	return 1;
@@ -7086,7 +7381,6 @@ static int _lv_raid_has_primary_failure_on_recover(struct logical_volume *lv)
  * new SubLVS are allocated on PVs on list @allocate_pvs.
  */
 static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
-				       int force,
 				       struct dm_list *remove_pvs,
 				       struct dm_list *allocate_pvs,
 				       int rebuild)
@@ -7095,6 +7389,7 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 	uint32_t s, sd, match_count = 0;
 	struct dm_list old_lvs;
 	struct dm_list new_meta_lvs, new_data_lvs;
+	struct dm_list *extract_pvs;
 	struct lv_segment *raid_seg = first_seg(lv);
 	struct lv_list *lvl;
 	char **tmp_names;
@@ -7310,10 +7605,15 @@ try_again:
 	 *   supplied - knowing that only the image with the error target
 	 *   will be affected.
 	 */
-	if (!_raid_extract_images(lv, force,
-				  raid_seg->area_count - match_count,
-				  (partial_segment_removed || dm_list_empty(remove_pvs)) ?
-				  &lv->vg->pvs : remove_pvs, 0, NULL,
+	extract_pvs = (partial_segment_removed || dm_list_empty(remove_pvs)) ?
+		      &lv->vg->pvs : remove_pvs;
+
+	if (!_raid_check_images(lv, raid_seg->area_count - match_count,
+				extract_pvs))
+		return_0;
+
+	if (!_raid_extract_images(lv, raid_seg->area_count - match_count,
+				  extract_pvs, 0,
 				  &old_lvs, &old_lvs)) {
 		log_error("Failed to remove the specified images from %s.",
 			  display_lvname(lv));
@@ -7466,7 +7766,7 @@ skip_alloc:
 int lv_raid_rebuild(struct logical_volume *lv,
 		    struct dm_list *rebuild_pvs)
 {
-	return _lv_raid_rebuild_or_replace(lv, 0, rebuild_pvs, NULL, 1);
+	return _lv_raid_rebuild_or_replace(lv, rebuild_pvs, NULL, 1);
 }
 
 /*
@@ -7483,7 +7783,7 @@ int lv_raid_replace(struct logical_volume *lv,
 		    struct dm_list *remove_pvs,
 		    struct dm_list *allocate_pvs)
 {
-	return _lv_raid_rebuild_or_replace(lv, force, remove_pvs, allocate_pvs, 0);
+	return _lv_raid_rebuild_or_replace(lv, remove_pvs, allocate_pvs, 0);
 }
 
 /*
