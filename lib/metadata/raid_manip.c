@@ -7923,7 +7923,6 @@ int lv_raid_rebuild(struct logical_volume *lv,
  * allocating new SubLVs from PVs on list @allocate_pvs.
  */
 int lv_raid_replace(struct logical_volume *lv,
-		    int force,
 		    struct dm_list *remove_pvs,
 		    struct dm_list *allocate_pvs)
 {

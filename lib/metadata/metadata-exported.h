@@ -1318,7 +1318,7 @@ int lv_raid_convert(struct logical_volume *lv,
 		    const uint32_t new_region_size,
 		    struct dm_list *allocate_pvs);
 int lv_raid_rebuild(struct logical_volume *lv, struct dm_list *rebuild_pvs);
-int lv_raid_replace(struct logical_volume *lv, int force,
+int lv_raid_replace(struct logical_volume *lv,
 		    struct dm_list *remove_pvs, struct dm_list *allocate_pvs);
 int lv_raid_remove_missing(struct logical_volume *lv);
 int partial_raid_lv_supports_degraded_activation(const struct logical_volume *clv);

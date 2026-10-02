@@ -3985,7 +3985,7 @@ static int _lvconvert_repair_pvs_raid(struct cmd_context *cmd, struct logical_vo
 		if (!(failed_pvs = _failed_pv_list(lv->vg)))
 			return_0;
 
-		if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), failed_pvs, use_pvh)) {
+		if (!lv_raid_replace(lv, failed_pvs, use_pvh)) {
 			log_error("Failed to replace faulty devices in %s.",
 				  display_lvname(lv));
 			return 0;
@@ -4166,7 +4166,7 @@ static int _lvconvert_replace_pv_single(struct cmd_context *cmd, struct logical_
 	if (!(replace_pvh = create_pv_list(cmd->mem, lv->vg, replace_pv_count, replace_pvs, 0)))
 		return_ECMD_FAILED;
 
-	if (!lv_raid_replace(lv, arg_count(cmd, force_ARG), replace_pvh, use_pvh))
+	if (!lv_raid_replace(lv, replace_pvh, use_pvh))
 		return_ECMD_FAILED;
 
 	return ECMD_PROCESSED;
