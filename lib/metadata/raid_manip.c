@@ -5807,16 +5807,15 @@ static int _clear_meta_lvs(struct logical_volume *lv)
 static int _rename_area_lvs(struct logical_volume *lv, const char *suffix)
 {
 	uint32_t s, t;
-	size_t sz = sizeof("rimage") - 1 + (suffix ? strlen(suffix) : 0) + 1;
-	char *sfx[SLV_COUNT] = { NULL, NULL };
+	char sfx[SLV_COUNT][NAME_LEN];
 	struct lv_segment *seg = first_seg(lv);
 	struct logical_volume *slv;
 	const char *lv_name;
 
-	/* Create _generate_raid_name() suffixes w/ or w/o passed in @suffix */
+	/* Create _format_raid_name() suffixes w/ or w/o passed in @suffix */
 	for (s = 0; s < SLV_COUNT; s++)
-		if (!(sfx[s] = dm_pool_alloc(lv->vg->cmd->mem, sz)) ||
-		    dm_snprintf(sfx[s], sz, "%s%s", (s) ? "rmeta" : "rimage", (suffix) ? : "") < 0)
+		if (dm_snprintf(sfx[s], sizeof(sfx[s]), "%s%s",
+				(s) ? "rmeta" : "rimage", (suffix) ? : "") < 0)
 			return_0;
 
 	/* Change names (temporarily) to be able to shift numerical name suffixes */
