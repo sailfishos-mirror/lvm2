@@ -3142,6 +3142,18 @@ static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv);
 static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
 						      int *flags_set);
 
+#define RAID_IMAGE_EXTRACT_PASSES 2
+
+static int _raid_image_extract_ss_initial(uint32_t area_count)
+{
+	return (int) (area_count * RAID_IMAGE_EXTRACT_PASSES) - 1;
+}
+
+static int _raid_image_extract_error_pass(int ss, uint32_t area_count)
+{
+	return ss / (int) area_count;
+}
+
 /*
  * _raid_image_is_error
  * @seg: Top-level RAID segment
@@ -3194,13 +3206,15 @@ static int _raid_enough_extractable_images(struct logical_volume *lv,
 	if (!(taken = dm_pool_zalloc(lv->vg->vgmem, seg->area_count)))
 		return_0;
 
-	for (ss = (seg->area_count * 2) - 1; (ss >= 0) && (found < want); ss--) {
+	for (ss = _raid_image_extract_ss_initial(seg->area_count);
+	     (ss >= 0) && (found < want); ss--) {
 		s = (uint32_t) (ss % seg->area_count);
 
 		if (taken[s])
 			continue;
 
-		if (!_raid_image_extract_candidate(seg, s, ss / (int) seg->area_count,
+		if (!_raid_image_extract_candidate(seg, s,
+						   _raid_image_extract_error_pass(ss, seg->area_count),
 						   error_segtype, target_pvs))
 			continue;
 
@@ -3256,11 +3270,9 @@ static int _raid_pvs_usable_with_error_images(struct logical_volume *lv,
  * before any other image and are only counted once here.
  *
  * _raid_enough_extractable_images() must predict exactly what the loop in
- * _raid_extract_images() will extract: both walk the areas in the same order
- * and share _raid_image_extract_candidate().  Extraction does not make an
- * image a candidate that was not one, and shifting only renumbers the
- * remaining images, so the up-front count equals what the loop extracts.
- * If the candidate rule is changed, change it in that one function.
+ * _raid_extract_images() will extract: both use
+ * _raid_image_extract_ss_initial() and _raid_image_extract_error_pass()
+ * and share _raid_image_extract_candidate().
  * This was checked by modelling both loops (with and without shifting)
  * over every combination of up to 6 images, error and PV-match flags and
  * request sizes; it is not proved from the code.
@@ -3352,18 +3364,20 @@ static int _raid_extract_images(struct logical_volume *lv,
 		return_0;
 
 	/*
-	 * We make two passes over the devices.
+	 * We make RAID_IMAGE_EXTRACT_PASSES over the devices.
 	 * - The first pass we look for error LVs
 	 * - The second pass we look for PVs that match target_pvs
 	 */
-	for (ss = (seg->area_count * 2) - 1; (ss >= 0) && extract; ss--) {
+	for (ss = _raid_image_extract_ss_initial(seg->area_count);
+	     (ss >= 0) && extract; ss--) {
 		s = ss % seg->area_count;
 
-		if (!_raid_image_extract_candidate(seg, s, ss / seg->area_count,
+		if (!_raid_image_extract_candidate(seg, s,
+						   _raid_image_extract_error_pass(ss, seg->area_count),
 						   error_segtype, target_pvs))
 			continue;
 
-		if (ss / seg->area_count)
+		if (_raid_image_extract_error_pass(ss, seg->area_count))
 			log_debug("LVs with error segments to be removed: %s %s",
 				  display_lvname(seg_metalv(seg, s)),
 				  display_lvname(seg_lv(seg, s)));
