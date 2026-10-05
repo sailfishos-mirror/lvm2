@@ -917,8 +917,8 @@ static int _reorder_raid10_near_seg_areas(struct lv_segment *seg, enum raid0_rai
  * The iorig/imeta sub-LVs are named after their rimage and do not follow it
  * when the rimage is renamed, so every place that renames an image that may
  * carry integrity has to call this: _shift_and_rename_image_components(),
- * _extract_image_components() and _rename_area_lvs().  The replace path in
- * _lv_raid_rebuild_or_replace() does the same inline.
+ * _extract_image_components(), _rename_area_lvs() and
+ * _lv_raid_rebuild_or_replace().
  */
 static int _set_integrity_sublv_names(struct logical_volume *lv_image,
 				      const char *rimage_name)
@@ -7393,8 +7393,6 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 	struct lv_segment *raid_seg = first_seg(lv);
 	struct lv_list *lvl;
 	char **tmp_names;
-	char tmp_name_buf[NAME_LEN];
-	char *tmp_name_dup;
 	const char *action_str = rebuild ? "rebuild" : "replace";
 	int has_integrity;
 
@@ -7714,39 +7712,8 @@ skip_alloc:
 				    !lv_set_name(lv_image, tmp_names[sd]))
 					return_0;
 
-				if (lv_is_integrity(lv_image)) {
-					struct logical_volume *lv_imeta;
-					struct logical_volume *lv_iorig;
-					struct lv_segment *seg_image;
-
-					seg_image = first_seg(lv_image);
-					lv_imeta = seg_image->integrity_meta_dev;
-					lv_iorig = seg_lv(seg_image, 0);
-
-					if (dm_snprintf(tmp_name_buf, NAME_LEN, "%s_imeta", lv_image->name) < 0) {
-						stack;
-						continue;
-					}
-					if (!(tmp_name_dup = dm_pool_strdup(lv->vg->vgmem, tmp_name_buf))) {
-						stack;
-						continue;
-					}
-
-					if (!lv_set_name(lv_imeta, tmp_name_dup))
-						return_0;
-
-					if (dm_snprintf(tmp_name_buf, NAME_LEN, "%s_iorig", lv_image->name) < 0) {
-						stack;
-						continue;
-					}
-					if (!(tmp_name_dup = dm_pool_strdup(lv->vg->vgmem, tmp_name_buf))) {
-						stack;
-						continue;
-					}
-
-					if (!lv_set_name(lv_iorig, tmp_name_dup))
-						return_0;
-				}
+				if (!_set_integrity_sublv_names(lv_image, lv_image->name))
+					return_0;
 			}
 		}
 
