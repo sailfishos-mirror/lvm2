@@ -216,6 +216,8 @@ unhex_escape() {
 }
 
 device_umount_one() {
+	local split_out
+
 	test -z "$mnt" && return 0
 
 	if test -z "${SKIP_UMOUNT_LIST["$mnt"]}" && test "$DO_UMOUNT" -eq 1; then
@@ -234,6 +236,11 @@ device_umount_one() {
 		# is not a failure of this script.
 		echo "  [SKIP]: unmount of $name ($kname) mounted on $mnt"
 		add_device_to_mounted_list
+		if test "$devtype" = "lvm" && test "$LVM_DO_WHOLE_VG" -eq 1 &&
+		   split_out=$("$DMSETUP" splitname --nameprefixes --noheadings --rows "$name" LVM 2>&8); then
+			eval "$split_out"
+			add_vg_to_mounted_list
+		fi
 	fi
 }
 
