@@ -789,6 +789,7 @@ convert2lvm_() {
 
 	# Check list of devices in VDO configuration file for their major:minor
 	# and match with given $DEVICE devmajor:devminor
+	local i
 	while read -r i; do
 		local DEV
 		local MAJORMINOR
