@@ -324,6 +324,7 @@ deactivate_dm() {
 
 deactivate_lvm() {
 	local DM_VG_NAME DM_LV_NAME lv_list lv split_out
+	local devices holder_rc lv_kname
 
 	# Skip LVM device deactivation if DM tools missing.
 	test "$DMSETUP_AVAILABLE" -eq 0 && {
@@ -376,11 +377,9 @@ deactivate_lvm() {
 			return 1
 		}
 		for lv in $lv_list; do
-			local lv_kname lv_devtype lv_name lv_mnt holder_rc
-
 			test -b "$DEV_DIR/$DM_VG_NAME/$lv" || continue
 			if devices=$("${LSBLK[@]}" --nodeps "$DEV_DIR/$DM_VG_NAME/$lv"); then
-				read -r lv_devtype lv_kname lv_name lv_mnt <<< "$devices"
+				read -r _ lv_kname _ _ <<< "$devices"
 				test -z "${MOUNTED_DEVICE_LIST["$lv_kname"]}" || {
 					add_vg_to_mounted_list
 					return 0
