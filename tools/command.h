@@ -76,7 +76,8 @@ struct command_name_args {
  * required options (+args), optional options (+args),
  * required positional args, optional positional args.
  *
- * A positional arg always has non-zero pos_arg.def.types.
+ * A positional arg always has a non-zero pos_arg.def_idx index into the
+ * arg_def table, whose entry has non-zero val_bits.
  * The first positional arg has pos_arg.pos of 1.
  */
 
@@ -125,18 +126,29 @@ struct arg_def {
 	uint16_t num;        /* a literal number for constnum_VAL */
 };
 
+/*
+ * Interned value definitions.  Every opt/pos entry stores only an index
+ * into a shared table instead of embedding a full struct arg_def (32 B)
+ * in each slot.  Entry 0 is the all-zero "no value" definition, so entries
+ * that are never given a value need no special handling.
+ *
+ * The table is private to command.c, populated at runtime by
+ * define_commands(); arg_def_of() is the only accessor.
+ */
+const struct arg_def *arg_def_of(uint16_t idx);
+
 /* Description of an option and the value that follows it. */
 
 struct opt_arg {
-	int opt;             /* option, e.g. foo_ARG */
-	struct arg_def def;  /* defines accepted values */
+	uint16_t opt;        /* option, e.g. foo_ARG */
+	uint16_t def_idx;    /* index into the arg_def table; 0 = no value */
 };
 
 /* Description of a position and the value that exists there. */
 
 struct pos_arg {
-	int pos;             /* position, e.g. first is 1 */
-	struct arg_def def;  /* defines accepted values */
+	uint16_t pos;        /* position, e.g. first is 1 */
+	uint16_t def_idx;    /* index into the arg_def table */
 };
 
 /*

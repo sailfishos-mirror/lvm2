@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2024-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -571,10 +571,10 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 	if (cmd->rp_count) {
 		sep = 0;
 		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (cmd->required_pos_args[rp].def.val_bits) {
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits) {
                                 if (sep++)
 					printf(" ");
-				_print_def_man(cname, 0, &cmd->required_pos_args[rp].def, 1, NULL);
+				_print_def_man(cname, 0, arg_def_of(cmd->required_pos_args[rp].def_idx), 1, NULL);
 			}
 		}
 
@@ -611,9 +611,9 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 				 */
 				_print_man_option(cmd->name, opt_enum);
 
-				if (cmd->required_opt_args[ro].def.val_bits) {
+				if (arg_def_of(cmd->required_opt_args[ro].def_idx)->val_bits) {
 					printf(" ");
-					_print_def_man(cname, opt_enum, &cmd->required_opt_args[ro].def, 1,
+					_print_def_man(cname, opt_enum, arg_def_of(cmd->required_opt_args[ro].def_idx), 1,
 						       lv_type_bits ? NULL : &lv_type_bits);
 				}
 				printf("\n");
@@ -640,11 +640,11 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 	if (cmd->rp_count) {
 		sep = 0;
 		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (cmd->required_pos_args[rp].def.val_bits) {
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits) {
 				if (sep++)
 					printf(" ");
 				/* Only print lv_type_bits for one LV arg (no cases exist with more) */
-				_print_def_man(cname, 0, &cmd->required_pos_args[rp].def, 1,
+				_print_def_man(cname, 0, arg_def_of(cmd->required_pos_args[rp].def_idx), 1,
 					       lv_type_bits ? NULL : &lv_type_bits);
 			}
 		}
@@ -706,9 +706,9 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 
 					_print_man_option(cmd->name, opt_enum);
 
-					if (cmd->optional_opt_args[oo].def.val_bits) {
+					if (arg_def_of(cmd->optional_opt_args[oo].def_idx)->val_bits) {
 						printf(" ");
-						_print_def_man(cname, opt_enum, &cmd->optional_opt_args[oo].def, 1, NULL);
+						_print_def_man(cname, opt_enum, arg_def_of(cmd->optional_opt_args[oo].def_idx), 1, NULL);
 					}
 					printf("\n]\n");
                                         break;
@@ -728,9 +728,9 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 		       "[");
 
 		for (op = 0; op < cmd->op_count; op++) {
-			if (cmd->optional_pos_args[op].def.val_bits) {
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits) {
 				printf(" ");
-				_print_def_man(cname, 0, &cmd->optional_pos_args[op].def, 1, NULL);
+				_print_def_man(cname, 0, arg_def_of(cmd->optional_pos_args[op].def_idx), 1, NULL);
 			}
 		}
 
@@ -993,42 +993,42 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 			continue;
 
 		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(vg_VAL))
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits & val_enum_to_bit(vg_VAL))
 				has_vg_val = 1;
 
-			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(lv_VAL)) {
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits & val_enum_to_bit(lv_VAL)) {
 				has_lv_val = 1;
-				if (cmd->required_pos_args[rp].def.lvt_bits)
+				if (arg_def_of(cmd->required_pos_args[rp].def_idx)->lvt_bits)
 					has_lv_type = 1;
 			}
 
-			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(pv_VAL))
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits & val_enum_to_bit(pv_VAL))
 				has_pv_val = 1;
 
-			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(tag_VAL))
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits & val_enum_to_bit(tag_VAL))
 				has_tag_val = 1;
 
-			if (cmd->required_pos_args[rp].def.val_bits & val_enum_to_bit(select_VAL))
+			if (arg_def_of(cmd->required_pos_args[rp].def_idx)->val_bits & val_enum_to_bit(select_VAL))
 				has_select_val = 1;
 		}
 
 		for (op = 0; op < cmd->op_count; op++) {
-			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(vg_VAL))
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits & val_enum_to_bit(vg_VAL))
 				has_vg_val = 1;
 
-			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(lv_VAL)) {
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits & val_enum_to_bit(lv_VAL)) {
 				has_lv_val = 1;
-				if (cmd->optional_pos_args[op].def.lvt_bits)
+				if (arg_def_of(cmd->optional_pos_args[op].def_idx)->lvt_bits)
 					has_lv_type = 1;
 			}
 
-			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(pv_VAL))
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits & val_enum_to_bit(pv_VAL))
 				has_pv_val = 1;
 
-			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(tag_VAL))
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits & val_enum_to_bit(tag_VAL))
 				has_tag_val = 1;
 
-			if (cmd->optional_pos_args[op].def.val_bits & val_enum_to_bit(select_VAL))
+			if (arg_def_of(cmd->optional_pos_args[op].def_idx)->val_bits & val_enum_to_bit(select_VAL))
 				has_select_val = 1;
 		}
 	}
@@ -2055,7 +2055,10 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 
 	/* different types of required pos items means different cmds */
 	for (i = 0; i < cmd1->rp_count; i++) {
-		if (cmd1->required_pos_args[i].def.val_bits != cmd2->required_pos_args[i].def.val_bits)
+		const struct arg_def *def1 = arg_def_of(cmd1->required_pos_args[i].def_idx);
+		const struct arg_def *def2 = arg_def_of(cmd2->required_pos_args[i].def_idx);
+
+		if (def1->val_bits != def2->val_bits)
 			return 1;
 	}
 
@@ -2067,7 +2070,7 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 		opt_list_1[opt_count_1++] = cmd1->required_opt_args[i].opt;
 
 		if (cmd1->required_opt_args[i].opt == type_ARG)
-			cmd1_type_str = cmd1->required_opt_args[i].def.str;
+			cmd1_type_str = arg_def_of(cmd1->required_opt_args[i].def_idx)->str;
 	}
 
 	/* create opt list from cmd2 */
@@ -2078,7 +2081,7 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 		opt_list_2[opt_count_2++] = cmd2->required_opt_args[i].opt;
 
 		if (cmd2->required_opt_args[i].opt == type_ARG)
-			cmd2_type_str = cmd2->required_opt_args[i].def.str;
+			cmd2_type_str = arg_def_of(cmd2->required_opt_args[i].def_idx)->str;
 	}
 
 	/* "--type foo" and "--type bar" are different */
@@ -2105,8 +2108,8 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 
 		/* cmd1 "--type foo" and cmd2 OO "--type bar" are different */
 		if (cmd2->optional_opt_args[i].opt == type_ARG) {
-			if (cmd2->optional_opt_args[i].def.str && cmd1_type_str &&
-			    strcmp(cmd2->optional_opt_args[i].def.str, cmd1_type_str))
+			if (arg_def_of(cmd2->optional_opt_args[i].def_idx)->str && cmd1_type_str &&
+			    strcmp(arg_def_of(cmd2->optional_opt_args[i].def_idx)->str, cmd1_type_str))
 				return 1;
 		}
 
@@ -2131,13 +2134,13 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 	if (!cmd1_type_str) {
 		for (i = 0; i < cmd1->oo_count; i++) {
 			if (cmd1->optional_opt_args[i].opt == type_ARG)
-				cmd1_type_str = cmd1->optional_opt_args[i].def.str;
+				cmd1_type_str = arg_def_of(cmd1->optional_opt_args[i].def_idx)->str;
 		}
 	}
 	if (!cmd2_type_str) {
 		for (j = 0; j < cmd2->oo_count; j++) {
 			if (cmd2->optional_opt_args[j].opt == type_ARG)
-				cmd2_type_str = cmd2->optional_opt_args[j].def.str;
+				cmd2_type_str = arg_def_of(cmd2->optional_opt_args[j].def_idx)->str;
 		}
 	}
 

@@ -573,6 +573,70 @@ static int _is_id_line(char *str)
 }
 
 /*
+ * Interned value-definition table shared by every opt/pos entry.
+ * Entry 0 is the all-zero "no value" definition.  Only about 120
+ * distinct definitions exist across the whole command table, so sharing
+ * them lets the per-slot entries shrink to an index.
+ *
+ * The table is private to this file; arg_def_of() is the only accessor.
+ */
+
+#define CMD_ARG_DEF_MAX 512
+
+static struct arg_def cmd_arg_defs[CMD_ARG_DEF_MAX];
+static unsigned cmd_arg_def_count;
+
+const struct arg_def *arg_def_of(uint16_t idx)
+{
+	return &cmd_arg_defs[idx];
+}
+
+static int _arg_def_equal(const struct arg_def *a, const struct arg_def *b)
+{
+	if (a->val_bits != b->val_bits ||
+	    a->lvt_bits != b->lvt_bits ||
+	    a->flags != b->flags ||
+	    a->num != b->num)
+		return 0;
+
+	if (a->str && b->str)
+		return !strcmp(a->str, b->str);
+	return a->str == b->str;
+}
+
+/*
+ * Returns the index of the entry equal to def, adding def when it is new.
+ * An empty def maps to index 0.  When the table is full the command is
+ * flagged CMD_FLAG_PARSE_ERROR and 0 is returned, so the def is not
+ * silently replaced by another one; the flag makes the command fail.
+ *
+ * Linear search is kept on purpose: there are only about 120 distinct
+ * defs, and the scan only matters when the whole command table is parsed
+ * (lvm --help, lvm help), so a hash index would add code for little gain.
+ */
+static uint16_t _intern_arg_def(struct command *cmd, const struct arg_def *def)
+{
+	unsigned i;
+
+	if (!def->val_bits && !def->lvt_bits && !def->str &&
+	    !def->flags && !def->num)
+		return 0;
+
+	for (i = 1; i < cmd_arg_def_count; i++)
+		if (_arg_def_equal(&cmd_arg_defs[i], def))
+			return (uint16_t) i;
+
+	if (cmd_arg_def_count >= CMD_ARG_DEF_MAX) {
+		log_error("Too many distinct command arg definitions, increase CMD_ARG_DEF_MAX.");
+		cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+		return 0;
+	}
+
+	cmd_arg_defs[cmd_arg_def_count] = *def;
+	return (uint16_t) cmd_arg_def_count++;
+}
+
+/*
  * Save a positional arg in a struct arg_def.
  * Parse str for anything that can appear in a position,
  * like VG, VG|LV, VG|LV_linear|LV_striped, etc.
@@ -826,7 +890,7 @@ static void _add_opt_arg(struct command *cmd, char *str,
 	int i;
 
 	/* opt_arg.opt set here */
-	/* opt_arg.def will be set in _update_prev_opt_arg() if needed */
+	/* opt_arg.def_idx will be set in _update_prev_opt_arg() if needed */
 
 	if ((comma = strchr(str, ',')))
 		*comma = '\0';
@@ -893,13 +957,14 @@ skip:
 }
 
 /*
- * After --option has been seen, this function sets opt_args.def value
+ * After --option has been seen, this function sets opt_args.def_idx value
  * for the value that appears after --option.
  */
 
 static void _update_prev_opt_arg(struct cmd_context *cmdtool, struct command *cmd, char *str, int required)
 {
 	struct arg_def def = { 0 };
+	uint16_t *slot;
 	char *comma;
 
 	if (str[0] == '-') {
@@ -908,7 +973,7 @@ static void _update_prev_opt_arg(struct cmd_context *cmdtool, struct command *cm
 		return;
 	}
 
-	/* opt_arg.def set here */
+	/* opt_arg.def_idx set here */
 	/* opt_arg.opt was previously set in _add_opt_arg() when --foo was read */
 
 	if ((comma = strchr(str, ',')))
@@ -917,23 +982,25 @@ static void _update_prev_opt_arg(struct cmd_context *cmdtool, struct command *cm
 	_set_opt_def(cmdtool, cmd, str, &def);
 
 	if (required > 0)
-		cmd->required_opt_args[cmd->ro_count-1].def = def;
+		slot = &cmd->required_opt_args[cmd->ro_count-1].def_idx;
 	else if (!required)
-		cmd->optional_opt_args[cmd->oo_count-1].def = def;
+		slot = &cmd->optional_opt_args[cmd->oo_count-1].def_idx;
 	else /* required < 0 */
-		cmd->ignore_opt_args[cmd->io_count-1].def = def;
+		slot = &cmd->ignore_opt_args[cmd->io_count-1].def_idx;
+
+	*slot = _intern_arg_def(cmd, &def);
 }
 
 /*
  * When an position arg is seen, add a new pos_args entry for it.
- * This function sets the pos_args.pos and pos_args.def.
+ * This function sets the pos_args.pos and pos_args.def_idx.
  */
 
 static void _add_pos_arg(struct command *cmd, char *str, int required)
 {
 	struct arg_def def = { 0 };
 
-	/* pos_arg.pos and pos_arg.def are set here */
+	/* pos_arg.pos and pos_arg.def_idx are set here */
 
 	_set_pos_def(cmd, str, &def);
 
@@ -944,7 +1011,7 @@ static void _add_pos_arg(struct command *cmd, char *str, int required)
 			return;
 		}
 		cmd->required_pos_args[cmd->rp_count].pos = cmd->pos_count++;
-		cmd->required_pos_args[cmd->rp_count].def = def;
+		cmd->required_pos_args[cmd->rp_count].def_idx = _intern_arg_def(cmd, &def);
 		cmd->rp_count++;
 	} else {
 		if (cmd->op_count >= CMD_OP_ARGS) {
@@ -953,7 +1020,7 @@ static void _add_pos_arg(struct command *cmd, char *str, int required)
 			return;
 		}
 		cmd->optional_pos_args[cmd->op_count].pos = cmd->pos_count++;
-		cmd->optional_pos_args[cmd->op_count].def = def;
+		cmd->optional_pos_args[cmd->op_count].def_idx = _intern_arg_def(cmd, &def);
 		cmd->op_count++;
 	}
 }
@@ -962,18 +1029,22 @@ static void _add_pos_arg(struct command *cmd, char *str, int required)
 
 static void _update_prev_pos_arg(struct command *cmd, const char *str, int required)
 {
-	struct arg_def *def;
+	uint16_t *idx;
+	struct arg_def def;
 
-	/* a previous pos_arg.def is modified here */
+	/* a previous pos_arg.def_idx is modified here */
 
 	if (required)
-		def = &cmd->required_pos_args[cmd->rp_count-1].def;
+		idx = &cmd->required_pos_args[cmd->rp_count-1].def_idx;
 	else
-		def = &cmd->optional_pos_args[cmd->op_count-1].def;
+		idx = &cmd->optional_pos_args[cmd->op_count-1].def_idx;
 
-	if (!strcmp(str, "..."))
-		def->flags |= ARG_DEF_FLAG_MAY_REPEAT;
-	else {
+	if (!strcmp(str, "...")) {
+		/* Copy, modify and re-intern: the old definition is shared. */
+		def = *arg_def_of(*idx);
+		def.flags |= ARG_DEF_FLAG_MAY_REPEAT;
+		*idx = _intern_arg_def(cmd, &def);
+	} else {
 		log_error("Parsing command defs: unknown pos arg: %s.", str);
 		cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
 		return;
@@ -1387,6 +1458,10 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
 	if (commands[0].name)
 		memset(&commands, 0, sizeof(commands));
 
+	/* Reset the shared value-definition table; entry 0 is the zero def. */
+	cmd_arg_defs[0] = (struct arg_def) { 0 };
+	cmd_arg_def_count = 1;
+
 	if (run_name && !strcmp(run_name, "help"))
 		run_name = NULL;
 
@@ -1396,6 +1471,10 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
 	/* Process each line of command-lines-input.h (from command-lines.in) */
 
 	while ((line_orig_len = _copy_line(&line_orig, MAX_LINE, &copy_pos)) > 0) {
+		/* Stop parsing once the current def has failed, e.g. on overflow. */
+		if (cmd && (cmd->cmd_flags & CMD_FLAG_PARSE_ERROR))
+			return 0;
+
 		if (line_orig[0] == '-' && line_orig[1] == '-' &&
 		    (!line_orig[2] || (line_orig[2] == '-' && !line_orig[3])))
 			continue; /* "---"  or "--" */
@@ -1759,10 +1838,14 @@ static void _print_val_usage(struct command *cmd, int opt_enum, int val_enum)
 		printf("%s", val_names[val_enum].name);
 }
 
-static void _print_usage_def(struct command *cmd, int opt_enum, struct arg_def *def)
+static void _print_usage_def(struct command *cmd, int opt_enum, uint16_t idx)
 {
+	const struct arg_def *def = arg_def_of(idx);
 	int val_enum;
 	int sep = 0;
+
+	if (!def->val_bits)
+		return;
 
 	printf(" ");
 	for (val_enum = 0; val_enum < VAL_COUNT; val_enum++) {
@@ -1846,9 +1929,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 		for (ro = 0; ro < cmd->ro_count; ro++) {
 			opt_enum = cmd->required_opt_args[ro].opt;
 			_print_opt(opt_enum);
-
-			if (cmd->required_opt_args[ro].def.val_bits)
-				_print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
+			_print_usage_def(cmd, opt_enum, cmd->required_opt_args[ro].def_idx);
 		}
 
 		/* one required option in a set */
@@ -1872,9 +1953,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 				first = 0;
 
 				_print_aligned_opt(opt_enum);
-
-				if (cmd->required_opt_args[ro].def.val_bits)
-					_print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
+				_print_usage_def(cmd, opt_enum, cmd->required_opt_args[ro].def_idx);
 			}
 		}
 
@@ -1888,17 +1967,14 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 				include_extents = 1;
 
 			_print_opt(opt_enum);
-
-			if (cmd->required_opt_args[ro].def.val_bits)
-				_print_usage_def(cmd, opt_enum, &cmd->required_opt_args[ro].def);
+			_print_usage_def(cmd, opt_enum, cmd->required_opt_args[ro].def_idx);
 		}
 
 	if (cmd->rp_count) {
 		if (any_req)
 			printf("\t");
 		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (cmd->required_pos_args[rp].def.val_bits)
-				_print_usage_def(cmd, 0, &cmd->required_pos_args[rp].def);
+			_print_usage_def(cmd, 0, cmd->required_pos_args[rp].def_idx);
 		}
 	}
 
@@ -1954,8 +2030,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 
 				_print_aligned_opt(opt_enum);
 
-				if (cmd->optional_opt_args[oo].def.val_bits)
-					_print_usage_def(cmd, opt_enum, &cmd->optional_opt_args[oo].def);
+				_print_usage_def(cmd, opt_enum, cmd->optional_opt_args[oo].def_idx);
 
 				printf(" ]");
 			}
@@ -1968,8 +2043,7 @@ void print_usage(struct command *cmd, int longhelp, int desc_first)
 		printf("\n\t[");
 
 		for (op = 0; op < cmd->op_count; op++)
-			if (cmd->optional_pos_args[op].def.val_bits)
-				_print_usage_def(cmd, 0, &cmd->optional_pos_args[op].def);
+			_print_usage_def(cmd, 0, cmd->optional_pos_args[op].def_idx);
 
 		printf(" ]");
 	}
@@ -2003,8 +2077,7 @@ void print_usage_common_lvm(const struct command_name *cname, struct command *cm
 
 			_print_aligned_opt(opt_enum);
 
-			if (lvm_all.optional_opt_args[oo].def.val_bits)
-				_print_usage_def(cmd, opt_enum, &lvm_all.optional_opt_args[oo].def);
+			_print_usage_def(cmd, opt_enum, lvm_all.optional_opt_args[oo].def_idx);
 
 			printf(" ]");
 		}
@@ -2064,8 +2137,7 @@ void print_usage_common_cmd(const struct command_name *cname, struct command *cm
 
 				_print_aligned_opt(opt_enum);
 
-				if (cmd->optional_opt_args[oo].def.val_bits)
-					_print_usage_def(cmd, opt_enum, &cmd->optional_opt_args[oo].def);
+				_print_usage_def(cmd, opt_enum, cmd->optional_opt_args[oo].def_idx);
 
 				break;
 			}
