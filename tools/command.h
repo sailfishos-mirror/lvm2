@@ -110,18 +110,34 @@ struct arg_def {
 	uint16_t num;        /* a literal number for constnum_VAL */
 };
 
+/*
+ * Interned value definitions.  Every opt/pos entry stores only an index
+ * into this shared table instead of embedding a full struct arg_def (32 B)
+ * in each slot.  Entry 0 is the all-zero "no value" definition, so entries
+ * that are never given a value need no special handling.
+ *
+ * The table is populated at runtime by define_commands().
+ */
+extern struct arg_def cmd_arg_defs[];
+extern unsigned cmd_arg_def_count;
+
+static inline const struct arg_def *arg_def_of(uint16_t idx)
+{
+	return &cmd_arg_defs[idx];
+}
+
 /* Description of an option and the value that follows it. */
 
 struct opt_arg {
-	int opt;             /* option, e.g. foo_ARG */
-	struct arg_def def;  /* defines accepted values */
+	uint16_t opt;        /* option, e.g. foo_ARG */
+	uint16_t def;        /* index into cmd_arg_defs[]; 0 = no value */
 };
 
 /* Description of a position and the value that exists there. */
 
 struct pos_arg {
-	int pos;             /* position, e.g. first is 1 */
-	struct arg_def def;  /* defines accepted values */
+	uint16_t pos;        /* position, e.g. first is 1 */
+	uint16_t def;        /* index into cmd_arg_defs[] */
 };
 
 /*

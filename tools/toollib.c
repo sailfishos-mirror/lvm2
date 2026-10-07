@@ -3150,22 +3150,25 @@ static int _lv_props_match(struct cmd_context *cmd, struct logical_volume *lv, u
 
 static int _check_lv_types(struct cmd_context *cmd, struct logical_volume *lv, int pos)
 {
+	const struct arg_def *def;
 	int ret;
 
 	if (!pos)
 		return 1;
 
-	if (!cmd->command->required_pos_args[pos-1].def.lvt_bits)
+	def = arg_def_of(cmd->command->required_pos_args[pos-1].def);
+
+	if (!def->lvt_bits)
 		return 1;
 
-	if (!val_bit_is_set(cmd->command->required_pos_args[pos-1].def.val_bits, lv_VAL)) {
+	if (!val_bit_is_set(def->val_bits, lv_VAL)) {
 		log_error(INTERNAL_ERROR "Command %d:%s arg position %d does not permit an LV (%llx)",
 			  cmd->command->command_index, command_enum(cmd->command->command_enum),
-			  pos, (unsigned long long)cmd->command->required_pos_args[pos-1].def.val_bits);
+			  pos, (unsigned long long)def->val_bits);
 		return 0;
 	}
 
-	ret = _lv_types_match(cmd, lv, cmd->command->required_pos_args[pos-1].def.lvt_bits, NULL, NULL);
+	ret = _lv_types_match(cmd, lv, def->lvt_bits, NULL, NULL);
 	if (!ret) {
 		int lvt_enum = get_lvt_enum(lv);
 		const struct lv_type *type = get_lv_type(lvt_enum);
@@ -3383,7 +3386,7 @@ static int _find_lv_arg_position(struct cmd_context *cmd, struct logical_volume 
 		if (i == cmd->command->rp_count)
 			break;
 
-		if (!val_bit_is_set(cmd->command->required_pos_args[i].def.val_bits, lv_VAL))
+		if (!val_bit_is_set(arg_def_of(cmd->command->required_pos_args[i].def)->val_bits, lv_VAL))
 			continue;
 
 		if ((sep = strstr(cmd->position_argv[i], "/")))
@@ -3403,7 +3406,7 @@ static int _find_lv_arg_position(struct cmd_context *cmd, struct logical_volume 
 	 */
 	if (i == cmd->command->rp_count) {
 		int last_pos = cmd->command->rp_count;
-		if (val_bit_is_set(cmd->command->required_pos_args[last_pos-1].def.val_bits, lv_VAL))
+		if (val_bit_is_set(arg_def_of(cmd->command->required_pos_args[last_pos-1].def)->val_bits, lv_VAL))
 			return last_pos;
 	}
 

@@ -1425,37 +1425,19 @@ static int _opt_synonym_is_set(struct cmd_context *cmd, int opt_std)
 	return opt_syn && arg_is_set(cmd, opt_syn);
 }
 
-static int _command_optional_opt_matches(struct cmd_context *cmd, int ci, int oo)
+static int _command_opt_arg_matches(struct cmd_context *cmd, const struct opt_arg *arg)
 {
-	int opt_enum = commands[ci].optional_opt_args[oo].opt;
+	int opt_enum = arg->opt;
+	const struct arg_def *def = arg_def_of(arg->def);
 
-	if (val_bit_is_set(commands[ci].optional_opt_args[oo].def.val_bits, conststr_VAL)) {
-		if (!strcmp(commands[ci].optional_opt_args[oo].def.str, arg_str_value(cmd, opt_enum, "")))
+	if (val_bit_is_set(def->val_bits, conststr_VAL)) {
+		if (!strcmp(def->str, arg_str_value(cmd, opt_enum, "")))
 			return 1;
 		return 0;
 	}
 
-	if (val_bit_is_set(commands[ci].optional_opt_args[oo].def.val_bits, constnum_VAL)) {
-		if (commands[ci].optional_opt_args[oo].def.num == arg_uint64_value(cmd, opt_enum, 0))
-			return 1;
-		return 0;
-	}
-
-	return 1;
-}
-
-static int _command_ignore_opt_matches(struct cmd_context *cmd, int ci, int io)
-{
-	int opt_enum = commands[ci].ignore_opt_args[io].opt;
-
-	if (val_bit_is_set(commands[ci].ignore_opt_args[io].def.val_bits, conststr_VAL)) {
-		if (!strcmp(commands[ci].ignore_opt_args[io].def.str, arg_str_value(cmd, opt_enum, "")))
-			return 1;
-		return 0;
-	}
-
-	if (val_bit_is_set(commands[ci].ignore_opt_args[io].def.val_bits, constnum_VAL)) {
-		if (commands[ci].ignore_opt_args[io].def.num == arg_uint64_value(cmd, opt_enum, 0))
+	if (val_bit_is_set(def->val_bits, constnum_VAL)) {
+		if (def->num == arg_uint64_value(cmd, opt_enum, 0))
 			return 1;
 		return 0;
 	}
@@ -1466,6 +1448,7 @@ static int _command_ignore_opt_matches(struct cmd_context *cmd, int ci, int io)
 static int _command_required_opt_matches(struct cmd_context *cmd, int ci, int ro)
 {
 	int opt_enum = commands[ci].required_opt_args[ro].opt;
+	const struct arg_def *def;
 
 	if (arg_is_set(cmd, opt_enum) || _opt_synonym_is_set(cmd, opt_enum))
 		goto check_val;
@@ -1486,20 +1469,22 @@ static int _command_required_opt_matches(struct cmd_context *cmd, int ci, int ro
 	 */
 
 check_val:
-	if (val_bit_is_set(commands[ci].required_opt_args[ro].def.val_bits, conststr_VAL)) {
-		if (!strcmp(commands[ci].required_opt_args[ro].def.str, arg_str_value(cmd, opt_enum, "")))
+	def = arg_def_of(commands[ci].required_opt_args[ro].def);
+
+	if (val_bit_is_set(def->val_bits, conststr_VAL)) {
+		if (!strcmp(def->str, arg_str_value(cmd, opt_enum, "")))
 			return 1;
 
 		/* Special case: "raid0" (any raid<N>), matches command def "raid" */
-		if (!strcmp(commands[ci].required_opt_args[ro].def.str, "raid") &&
+		if (!strcmp(def->str, "raid") &&
 		    !strncmp(arg_str_value(cmd, opt_enum, ""), "raid", 4))
 			return 1;
 
 		return 0;
 	}
 
-	if (val_bit_is_set(commands[ci].required_opt_args[ro].def.val_bits, constnum_VAL)) {
-		if (commands[ci].required_opt_args[ro].def.num == arg_uint64_value(cmd, opt_enum, 0))
+	if (val_bit_is_set(def->val_bits, constnum_VAL)) {
+		if (def->num == arg_uint64_value(cmd, opt_enum, 0))
 			return 1;
 		return 0;
 	}
@@ -1509,6 +1494,7 @@ check_val:
 
 static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp, char **argv)
 {
+	const struct arg_def *def = arg_def_of(commands[ci].required_pos_args[rp].def);
 	unsigned i;
 
 	/*
@@ -1526,7 +1512,7 @@ static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp
 	 * If Select is specified as a pos arg, then that pos arg can be
 	 * empty if --select is used.
 	 */
-	if ((val_bit_is_set(commands[ci].required_pos_args[rp].def.val_bits, select_VAL)) &&
+	if ((val_bit_is_set(def->val_bits, select_VAL)) &&
 	    arg_is_set(cmd, select_ARG))
 		return 1;
 
@@ -1540,7 +1526,7 @@ static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp
 	 */
 	if (!strcmp(cmd->name, "lvcreate") &&
 	    (rp == 0) &&
-	    val_bit_is_set(commands[ci].required_pos_args[rp].def.val_bits, vg_VAL)) {
+	    val_bit_is_set(def->val_bits, vg_VAL)) {
 		const char *names[] = {
 			arg_str_value(cmd, name_ARG, NULL),
 			arg_str_value(cmd, thinpool_ARG, NULL),
@@ -1561,59 +1547,53 @@ static int _command_required_pos_matches(struct cmd_context *cmd, int ci, int rp
 }
 
 /*
+ * Return 1 if the value in def accepts type_arg, 0 if it rules it out.
+ */
+
+static int _def_matches_type_arg(const struct arg_def *def, const char *type_arg)
+{
+	/* SegType keyword in command def matches any type_arg */
+	if (val_bit_is_set(def->val_bits, segtype_VAL))
+		return 1;
+
+	if (!def->str)
+		return 1;
+
+	if (!strcmp(def->str, type_arg))
+		return 1;
+
+	if (!strncmp(def->str, "raid", 4) &&
+	    !strncmp(type_arg, "raid", 4))
+		return 1;
+
+	return 0;
+}
+
+/*
  * Return 1 if we should skip this command from consideration.
  * This would happen if the command does not include a --type
  * option that does not match type_arg.
  */
 
-static int _command_skip_for_type_arg(struct cmd_context *cmd, int ci, const char *type_arg)
+static int _command_skip_for_type_arg(int ci, const char *type_arg)
 {
-	int ro, oo, opt_enum;
+	const struct arg_def *def;
+	int ro, oo;
 
 	for (ro = 0; ro < (commands[ci].ro_count + commands[ci].any_ro_count); ro++) {
-		opt_enum = commands[ci].required_opt_args[ro].opt;
-
-		if (opt_enum != type_ARG)
+		if (commands[ci].required_opt_args[ro].opt != type_ARG)
 			continue;
 
-		/* SegType keyword in command def matches any type_arg */
-		if (val_bit_is_set(commands[ci].required_opt_args[ro].def.val_bits, segtype_VAL))
-			return 0;
-
-		if (!commands[ci].required_opt_args[ro].def.str)
-			return 0;
-
-		if (!strcmp(commands[ci].required_opt_args[ro].def.str, type_arg))
-			return 0;
-
-		if (!strncmp(commands[ci].required_opt_args[ro].def.str, "raid", 4) &&
-		    !strncmp(type_arg, "raid", 4))
-			return 0;
-
-		return 1;
+		def = arg_def_of(commands[ci].required_opt_args[ro].def);
+		return !_def_matches_type_arg(def, type_arg);
 	}
 
 	for (oo = 0; oo < commands[ci].oo_count; oo++) {
-		opt_enum = commands[ci].optional_opt_args[oo].opt;
-
-		if (opt_enum != type_ARG)
+		if (commands[ci].optional_opt_args[oo].opt != type_ARG)
 			continue;
 
-		/* SegType keyword in command def matches any type_arg */
-		if (val_bit_is_set(commands[ci].optional_opt_args[oo].def.val_bits, segtype_VAL))
-			return 0;
-
-		if (!commands[ci].optional_opt_args[oo].def.str)
-			return 0;
-
-		if (!strcmp(commands[ci].optional_opt_args[oo].def.str, type_arg))
-			return 0;
-
-		if (!strncmp(commands[ci].optional_opt_args[oo].def.str, "raid", 4) &&
-		    !strncmp(type_arg, "raid", 4))
-			return 0;
-
-		return 1;
+		def = arg_def_of(commands[ci].optional_opt_args[oo].def);
+		return !_def_matches_type_arg(def, type_arg);
 	}
 
 	return 1;
@@ -1717,7 +1697,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 		 * on *other* (non-type) options, and then at the end complain that
 		 * the user's --type is not accepted.
 		 */
-		if (type_arg && _command_skip_for_type_arg(cmd, i, type_arg))
+		if (type_arg && _command_skip_for_type_arg(i, type_arg))
 			continue;
 
 		match_required = 0;	/* required parameters that match */
@@ -1832,7 +1812,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 
 			for (j = 0; j < commands[i].oo_count; j++) {
 				if ((commands[i].optional_opt_args[j].opt == opt_enum) &&
-				    _command_optional_opt_matches(cmd, i, j)) {
+				    _command_opt_arg_matches(cmd, &commands[i].optional_opt_args[j])) {
 					accepted = 1;
 					break;
 				}
@@ -1840,7 +1820,7 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 
 			for (j = 0; j < commands[i].io_count; j++) {
 				if ((commands[i].ignore_opt_args[j].opt == opt_enum) &&
-				    _command_ignore_opt_matches(cmd, i, j)) {
+				    _command_opt_arg_matches(cmd, &commands[i].ignore_opt_args[j])) {
 					accepted = 1;
 					break;
 				}
@@ -1929,11 +1909,11 @@ static struct command *_find_command(struct cmd_context *cmd, const char *path, 
 	 */
 
 	count = commands[best_i].rp_count;
-	if (count && (commands[best_i].required_pos_args[count - 1].def.flags & ARG_DEF_FLAG_MAY_REPEAT))
+	if (count && (arg_def_of(commands[best_i].required_pos_args[count - 1].def)->flags & ARG_DEF_FLAG_MAY_REPEAT))
 		goto out;
 
 	count = commands[best_i].op_count;
-	if (count && (commands[best_i].optional_pos_args[count - 1].def.flags & ARG_DEF_FLAG_MAY_REPEAT))
+	if (count && (arg_def_of(commands[best_i].optional_pos_args[count - 1].def)->flags & ARG_DEF_FLAG_MAY_REPEAT))
 		goto out;
 
 	for (count = 0; ; count++) {
