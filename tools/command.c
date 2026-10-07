@@ -247,22 +247,26 @@ static int _val_str_to_num(char *str)
 
 static int _opt_str_to_num(struct command *cmd, const char *str)
 {
-	char long_name[MAX_LONG_OPT_NAME_LEN];
-	char *p = NULL;
+	char buf[MAX_LONG_OPT_NAME_LEN];
+	const char *long_name = str;
+	const char *p = NULL;
 	int i;
 	int first = 0, last = ARG_COUNT - 1, middle;
 
-	if (!_dm_strncpy(long_name, str, sizeof(long_name)))
-		goto err;
-
-	if ((p = strstr(long_name, "_long")))
+	if ((p = strstr(str, "_long"))) {
 		/*
 		 * --foo_long means there are two args entries
 		 * for --foo, one with a short option and one
 		 * without, and we want the one without the
 		 * short option (== 0).
 		 */
-		*p = '\0';
+		if (!_dm_strncpy(buf, str, sizeof(buf))) {
+			p = NULL;
+			goto err;
+		}
+		buf[p - str] = '\0';
+		long_name = buf;
+	}
 
 	/* Binary search in sorted array of long options (with duplicates) */
 	while (first <= last) {
