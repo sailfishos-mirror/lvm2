@@ -28,6 +28,7 @@ void blkio_engine_tests(struct dm_list *all_tests);
 void blkio_tests(struct dm_list *all_tests);
 void blkio_byterange_tests(struct dm_list *all_tests);
 void bitset_tests(struct dm_list *all_tests);
+void command_intern_tests(struct dm_list *all_tests);
 void command_opts_tests(struct dm_list *all_tests);
 void config_tests(struct dm_list *all_tests);
 void config_cascade_tests(struct dm_list *all_tests);
@@ -60,6 +61,7 @@ static inline void register_all_tests(struct dm_list *all_tests)
 	blkio_tests(all_tests);
 	blkio_byterange_tests(all_tests);
 	bitset_tests(all_tests);
+	command_intern_tests(all_tests);
 	command_opts_tests(all_tests);
 	config_tests(all_tests);
 	config_cascade_tests(all_tests);
