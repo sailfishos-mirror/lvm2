@@ -82,6 +82,7 @@ static uint32_t _dm_device_major = 0;
 
 static int _control_fd = -1;
 static int _hold_control_fd_open = 0;
+static int _control_denied_nonroot = 0; /* control node open denied to non-root */
 /* Mutex, not pthread_once: fd can be closed and reopened */
 static pthread_mutex_t _control_fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int _version_ok = 1;
@@ -451,10 +452,16 @@ static void _close_control_fd(void)
 static int _open_and_assign_control_fd(const char *control)
 {
 	if ((_control_fd = open(control, O_RDWR)) < 0) {
-		log_sys_error("open", control);
+		/* Expected failure for an unprivileged user: keep it quiet. */
+		if ((errno == EACCES || errno == EPERM) && geteuid()) {
+			_control_denied_nonroot = 1;
+			log_verbose("%s: open failed: %s", control, strerror(errno));
+		} else
+			log_sys_error("open", control);
 		return 0;
 	}
 
+	_control_denied_nonroot = 0;
 	return 1;
 }
 #endif
@@ -505,6 +512,10 @@ static int _open_control(void)
 	return 1;
 
 bad:
+	if (_control_denied_nonroot) {
+		log_verbose("Failure to communicate with kernel device-mapper driver.");
+		return 0;
+	}
 	log_error("Failure to communicate with kernel device-mapper driver.");
 	if (!geteuid())
 		log_error("Check that device-mapper is available in the kernel.");
@@ -642,8 +653,12 @@ static void _init_version(void)
 
 	dm_get_library_version(libversion, sizeof(libversion));
 
-	log_error("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
-		  *libversion ? libversion : "(unknown version)");
+	if (_control_denied_nonroot)
+		log_verbose("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
+			    *libversion ? libversion : "(unknown version)");
+	else
+		log_error("Failed to communicate with device-mapper kernel driver (libdevmapper %s).",
+			  *libversion ? libversion : "(unknown version)");
 
 	_version_ok = 0;
 }
