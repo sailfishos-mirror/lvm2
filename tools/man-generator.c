@@ -12,15 +12,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <sys/types.h>
-#include <stdint.h>
-#include <string.h>
-#include <stdlib.h>
-#include <getopt.h>
-#include <unistd.h>
-
-
-#define stack
+#include "command_standalone.h"
 
 static const char _OPTION_PREFIX[] = "O_";
 static const char _TAB_NAME[] = "TT";
@@ -28,92 +20,6 @@ static const char _2TAB_NAME[] = "DTT";
 
 /* When set, wrap conditional entries with CONDITION_BEGIN/END markers */
 static int _condition_markers;
-
-struct cmd_context {
-	void *libmem;
-};
-
-#define log_error(fmt, args...) \
-do { \
-	fprintf(stderr, fmt "\n", ##args); \
-} while (0)
-
-#define dm_snprintf snprintf
-
-static int dm_strncpy(char *dest, const char *src, size_t n)
-{
-	if (memccpy(dest, src, 0, n))
-		return 1;
-
-	if (n > 0)
-		dest[n - 1] = '\0';
-
-	return 0;
-}
-
-static inline int _dm_strncpy(char *dest, const char *src, size_t n) {
-	return dm_strncpy(dest, src, n);
-}
-
-static char *dm_pool_strdup(void *p, const char *str)
-{
-	return strdup(str);
-}
-
-static void *dm_pool_alloc(void *p, size_t size)
-{
-	return malloc(size);
-}
-
-/* needed to include args.h */
-#define ARG_COUNTABLE 0x00000001
-#define ARG_GROUPABLE 0x00000002
-#define ARG_NONINTERACTIVE 0x00000004
-#define ARG_LONG_OPT  0x00000008
-struct arg_values;
-
-/* needed to include vals.h */
-static inline int yes_no_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int activation_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int cachemetadataformat_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int cachemode_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int discards_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int mirrorlog_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int size_kb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int ssize_kb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int size_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int ssize_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int psize_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int nsize_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int int_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int uint32_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int int_arg_with_sign(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int int_arg_with_plus(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int extents_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int sextents_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int pextents_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int nextents_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int string_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int tag_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int permission_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int metadatatype_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int segtype_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int alloc_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int locktype_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int readahead_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int regionsize_mb_arg(struct cmd_context *cmd, struct arg_values *av) { return 0; }
-static inline int vgmetadatacopies_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int pvmetadatacopies_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int metadatacopies_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int polloperation_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int writemostly_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int syncaction_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int reportformat_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int configreport_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int configtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int repairtype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int dumptype_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
-static inline int headings_arg(struct cmd_context *cmd __attribute__((unused)), struct arg_values *av) { return 0; }
 
 #define MAN_PAGE_GENERATOR
 #include "command.h"
@@ -496,15 +402,43 @@ static void _print_man_all_options_list_string(const struct command_name *cname)
 	}
 }
 
+/*
+ * Print the required position args of cmd, separated by a space.
+ * lv_type_bits, when given, collects the type of the first LV arg only --
+ * _print_def_man() resets it on every call.  Returns 1 if anything was
+ * printed, 0 if the caller has to finish the line itself.
+ */
+static int _print_required_pos_args(const struct command_name *cname,
+				    const struct command *cmd,
+				    uint64_t *lv_type_bits)
+{
+	int rp, sep = 0;
+	const struct arg_def *def;
+
+	for (rp = 0; rp < cmd->rp_count; rp++) {
+		def = arg_def_of(cmd->required_pos_args[rp].def);
+
+		if (def->val_bits) {
+			if (sep++)
+				printf(" ");
+			_print_def_man(cname, 0, def, 1,
+				       lv_type_bits && !*lv_type_bits ? lv_type_bits : NULL);
+		}
+	}
+
+	return sep;
+}
+
 static void _print_man_usage(char *lvmname, struct command *cmd)
 {
 	const struct command_name *cname = &command_names[cmd->lvm_command_enum];
 	const struct command_name_args *cna = &command_names_args[cmd->lvm_command_enum];
 	int any_req = (cmd->cmd_flags & CMD_FLAG_ANY_REQUIRED_OPT) ? 1 : 0;
-	int ro, rp, oo, op, opt_enum, sep, short_opts, indented = 0;
+	int ro, oo, op, opt_enum, sep, short_opts, indented = 0;
 	int include_extents = 0;
 	int lvt_enum;
 	uint64_t lv_type_bits = 0;
+	const struct arg_def *def;
 
 	_was_hyphen = 0;
 	printf(".B %s\n", lvmname);
@@ -570,14 +504,7 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 
 	/* print required position args on a new line after the any_req set */
 	if (cmd->rp_count) {
-		sep = 0;
-		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits) {
-                                if (sep++)
-					printf(" ");
-				_print_def_man(cname, 0, arg_def_of(cmd->required_pos_args[rp].def), 1, NULL);
-			}
-		}
+		sep = _print_required_pos_args(cname, cmd, NULL);
 
 		if (sep)
 			printf("\n.br\n");
@@ -612,9 +539,11 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 				 */
 				_print_man_option(cmd->name, opt_enum);
 
-				if (arg_def_of(cmd->required_opt_args[ro].def)->val_bits) {
+				def = arg_def_of(cmd->required_opt_args[ro].def);
+
+				if (def->val_bits) {
 					printf(" ");
-					_print_def_man(cname, opt_enum, arg_def_of(cmd->required_opt_args[ro].def), 1,
+					_print_def_man(cname, opt_enum, def, 1,
 						       lv_type_bits ? NULL : &lv_type_bits);
 				}
 				printf("\n");
@@ -639,16 +568,7 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 
 	/* print required position args on the same line as the required options */
 	if (cmd->rp_count) {
-		sep = 0;
-		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits) {
-				if (sep++)
-					printf(" ");
-				/* Only print lv_type_bits for one LV arg (no cases exist with more) */
-				_print_def_man(cname, 0, arg_def_of(cmd->required_pos_args[rp].def), 1,
-					       lv_type_bits ? NULL : &lv_type_bits);
-			}
-		}
+		sep = _print_required_pos_args(cname, cmd, &lv_type_bits);
 
 		if (sep) {
 			/* Finish line and if we are already in 'section' do a .br
@@ -707,9 +627,11 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 
 					_print_man_option(cmd->name, opt_enum);
 
-					if (arg_def_of(cmd->optional_opt_args[oo].def)->val_bits) {
+					def = arg_def_of(cmd->optional_opt_args[oo].def);
+
+					if (def->val_bits) {
 						printf(" ");
-						_print_def_man(cname, opt_enum, arg_def_of(cmd->optional_opt_args[oo].def), 1, NULL);
+						_print_def_man(cname, opt_enum, def, 1, NULL);
 					}
 					printf("\n]\n");
                                         break;
@@ -729,9 +651,11 @@ static void _print_man_usage(char *lvmname, struct command *cmd)
 		       "[");
 
 		for (op = 0; op < cmd->op_count; op++) {
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits) {
+			def = arg_def_of(cmd->optional_pos_args[op].def);
+
+			if (def->val_bits) {
 				printf(" ");
-				_print_def_man(cname, 0, arg_def_of(cmd->optional_pos_args[op].def), 1, NULL);
+				_print_def_man(cname, 0, def, 1, NULL);
 			}
 		}
 
@@ -976,16 +900,26 @@ static void _print_man_all_options_desc(const struct command_name *cname)
 	}
 }
 
+/*
+ * Accumulate the value types accepted by one positional arg.
+ * LV type bits are tracked only for a position that accepts an LV.
+ */
+static void _track_pos_bits(uint16_t idx, uint64_t *val_bits, uint64_t *lvt_bits)
+{
+	const struct arg_def *def = arg_def_of(idx);
+
+	*val_bits |= def->val_bits;
+
+	if (def->val_bits & val_enum_to_bit(lv_VAL))
+		*lvt_bits |= def->lvt_bits;
+}
+
 static void _print_man_all_positions_desc(const struct command_name *cname)
 {
 	struct command *cmd;
+	uint64_t val_bits = 0;
+	uint64_t lvt_bits = 0;
 	int ci, rp, op;
-	int has_vg_val = 0;
-	int has_lv_val = 0;
-	int has_pv_val = 0;
-	int has_tag_val = 0;
-	int has_select_val = 0;
-	int has_lv_type = 0;
 
 	for (ci = 0; ci < COMMAND_COUNT; ci++) {
 		cmd = &commands[ci];
@@ -993,48 +927,14 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 		if (strcmp(cmd->name, cname->name))
 			continue;
 
-		for (rp = 0; rp < cmd->rp_count; rp++) {
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits & val_enum_to_bit(vg_VAL))
-				has_vg_val = 1;
+		for (rp = 0; rp < cmd->rp_count; rp++)
+			_track_pos_bits(cmd->required_pos_args[rp].def, &val_bits, &lvt_bits);
 
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits & val_enum_to_bit(lv_VAL)) {
-				has_lv_val = 1;
-				if (arg_def_of(cmd->required_pos_args[rp].def)->lvt_bits)
-					has_lv_type = 1;
-			}
-
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits & val_enum_to_bit(pv_VAL))
-				has_pv_val = 1;
-
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits & val_enum_to_bit(tag_VAL))
-				has_tag_val = 1;
-
-			if (arg_def_of(cmd->required_pos_args[rp].def)->val_bits & val_enum_to_bit(select_VAL))
-				has_select_val = 1;
-		}
-
-		for (op = 0; op < cmd->op_count; op++) {
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits & val_enum_to_bit(vg_VAL))
-				has_vg_val = 1;
-
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits & val_enum_to_bit(lv_VAL)) {
-				has_lv_val = 1;
-				if (arg_def_of(cmd->optional_pos_args[op].def)->lvt_bits)
-					has_lv_type = 1;
-			}
-
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits & val_enum_to_bit(pv_VAL))
-				has_pv_val = 1;
-
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits & val_enum_to_bit(tag_VAL))
-				has_tag_val = 1;
-
-			if (arg_def_of(cmd->optional_pos_args[op].def)->val_bits & val_enum_to_bit(select_VAL))
-				has_select_val = 1;
-		}
+		for (op = 0; op < cmd->op_count; op++)
+			_track_pos_bits(cmd->optional_pos_args[op].def, &val_bits, &lvt_bits);
 	}
 
-	if (has_vg_val) {
+	if (val_bit_is_set(val_bits, vg_VAL)) {
 		printf(".\n.TP\n");
 
 		printf(".I %s\n", val_names[vg_VAL].name);
@@ -1046,20 +946,20 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 			       "e.g. --name VG/LV.\n");
 	}
 
-	if (has_lv_val) {
+	if (val_bit_is_set(val_bits, lv_VAL)) {
 		printf(".\n.TP\n");
 
 		printf(".I %s\n", val_names[lv_VAL].name);
 		printf("Logical Volume name.  See \\fBlvm\\fP(8) for valid names.\n"
 		       "An LV positional arg generally includes the VG name and LV name, e.g. VG/LV.\n");
 
-		if (has_lv_type)
+		if (lvt_bits)
 			printf("LV1 indicates the LV must have a specific type, where the\n"
 			       "accepted LV types are listed. (raid represents raid<N> type).\n");
 
 	}
 
-	if (has_pv_val) {
+	if (val_bit_is_set(val_bits, pv_VAL)) {
 		printf(".\n.TP\n");
 
 		printf(".I %s\n", val_names[pv_VAL].name);
@@ -1076,7 +976,7 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 		       "\\fIPV\\fP[\\fB:\\fP\\fIPE\\fP\\fB+\\fP\\fIPE\\fP]\\ .\\|.\\|.\\&\n");
 	}
 
-	if (has_tag_val) {
+	if (val_bit_is_set(val_bits, tag_VAL)) {
 		printf(".\n.TP\n");
 
 		printf(".I %s\n", val_names[tag_VAL].name);
@@ -1084,7 +984,7 @@ static void _print_man_all_positions_desc(const struct command_name *cname)
 		       "in place of a VG, LV or PV.\n");
 	}
 
-	if (has_select_val) {
+	if (val_bit_is_set(val_bits, select_VAL)) {
 		printf(".\n.TP\n");
 
 		printf(".I %s\n", val_names[select_VAL].name);
@@ -2106,8 +2006,9 @@ static int _compare_cmds(struct command *cmd1, struct command *cmd2, int *all_re
 
 		/* cmd1 "--type foo" and cmd2 OO "--type bar" are different */
 		if (cmd2->optional_opt_args[i].opt == type_ARG) {
-			if (arg_def_of(cmd2->optional_opt_args[i].def)->str && cmd1_type_str &&
-			    strcmp(arg_def_of(cmd2->optional_opt_args[i].def)->str, cmd1_type_str))
+			const struct arg_def *def = arg_def_of(cmd2->optional_opt_args[i].def);
+
+			if (def->str && cmd1_type_str && strcmp(def->str, cmd1_type_str))
 				return 1;
 		}
 

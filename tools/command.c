@@ -713,9 +713,6 @@ static void _set_opt_def(struct cmd_context *cmdtool, struct command *cmd, char 
 			def->num = (uint64_t)atoi(name);
 
 		if (val_enum == conststr_VAL) {
-#ifdef MAN_PAGE_GENERATOR
-			free((void*)def->str);
-#endif
 			def->str = dm_pool_strdup(cmdtool->libmem, name);
 
 			if (!def->str) {
@@ -1523,9 +1520,6 @@ int define_commands(struct cmd_context *cmdtool, const char *run_name)
 				}
 
 				snprintf(newdesc, newlen, "%s%s", cmd->desc, line_orig);
-#ifdef MAN_PAGE_GENERATOR
-				free((void*)cmd->desc);
-#endif
 				cmd->desc = newdesc;
 			} else if (!(cmd->desc = dm_pool_strdup(cmdtool->libmem, line_orig))) {
 				/* FIXME */
