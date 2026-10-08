@@ -3169,25 +3169,23 @@ static int _raid_image_is_error(struct lv_segment *seg, uint32_t s,
 	       (first_seg(seg_metalv(seg, s))->segtype == error_segtype);
 }
 
-static int _raid_image_extract_candidate(struct lv_segment *seg, uint32_t s,
-					 int error_pass,
-					 const struct segment_type *error_segtype,
-					 struct dm_list *target_pvs)
+static int _raid_image_extract_error_candidate(struct lv_segment *seg, uint32_t s,
+					       const struct segment_type *error_segtype)
 {
 	if (seg_type(seg, s) == AREA_UNASSIGNED)
 		return 0;
 
-	if (error_pass) {
-		if (!_raid_image_is_error(seg, s, error_segtype))
-			return 0;
-		return 1;
-	}
+	return _raid_image_is_error(seg, s, error_segtype);
+}
 
-	if (!lv_is_on_pvs(seg_lv(seg, s), target_pvs) &&
-	    !lv_is_on_pvs(seg_metalv(seg, s), target_pvs))
+static int _raid_image_extract_pv_candidate(struct lv_segment *seg, uint32_t s,
+					    struct dm_list *target_pvs)
+{
+	if (seg_type(seg, s) == AREA_UNASSIGNED)
 		return 0;
 
-	return 1;
+	return lv_is_on_pvs(seg_lv(seg, s), target_pvs) ||
+	       lv_is_on_pvs(seg_metalv(seg, s), target_pvs);
 }
 
 static int _raid_enough_extractable_images(struct logical_volume *lv,
@@ -3213,9 +3211,10 @@ static int _raid_enough_extractable_images(struct logical_volume *lv,
 		if (taken[s])
 			continue;
 
-		if (!_raid_image_extract_candidate(seg, s,
-						   _raid_image_extract_error_pass(ss, seg->area_count),
-						   error_segtype, target_pvs))
+		if (_raid_image_extract_error_pass(ss, seg->area_count)) {
+			if (!_raid_image_extract_error_candidate(seg, s, error_segtype))
+				continue;
+		} else if (!_raid_image_extract_pv_candidate(seg, s, target_pvs))
 			continue;
 
 		taken[s] = 1;
@@ -3272,10 +3271,10 @@ static int _raid_pvs_usable_with_error_images(struct logical_volume *lv,
  * _raid_enough_extractable_images() must predict exactly what the loop in
  * _raid_extract_images() will extract: both use
  * _raid_image_extract_ss_initial() and _raid_image_extract_error_pass()
- * and share _raid_image_extract_candidate().
+ * and share the candidate predicates for error and PV matches.
  * This was checked by modelling both loops (with and without shifting)
- * over every combination of up to 6 images, error and PV-match flags and
- * request sizes; it is not proved from the code.
+ * over every combination of up to 6 images, error and PV-match selections
+ * and request sizes; it is not proved from the code.
  *
  * Callers: _raid_remove_images() (lvconvert -mN, shift), lv_raid_split()
  * (rejects integrity before it gets here) and
@@ -3372,9 +3371,10 @@ static int _raid_extract_images(struct logical_volume *lv,
 	     (ss >= 0) && extract; ss--) {
 		s = ss % seg->area_count;
 
-		if (!_raid_image_extract_candidate(seg, s,
-						   _raid_image_extract_error_pass(ss, seg->area_count),
-						   error_segtype, target_pvs))
+		if (_raid_image_extract_error_pass(ss, seg->area_count)) {
+			if (!_raid_image_extract_error_candidate(seg, s, error_segtype))
+				continue;
+		} else if (!_raid_image_extract_pv_candidate(seg, s, target_pvs))
 			continue;
 
 		if (_raid_image_extract_error_pass(ss, seg->area_count))
