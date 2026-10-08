@@ -164,6 +164,10 @@ liblvm2cmd.$(LIB_SUFFIX).$(LIB_VERSION): liblvm2cmd.$(LIB_SUFFIX)
 		$(EGREP) -v '^ *(|#.*|config|devtypes|dumpconfig|formats|fullreport|help|lastlog|lvmchange|lvpoll|pvdata|segtypes|systemid|tags|version) *$$' > .commands
 
 .DELETE_ON_ERROR:
+# MAX_COMMAND_VARIANTS is the largest number of command-line definitions
+# that share one leading name in command-lines.in: the variant count of the
+# widest command name.  The unit-test fixture in test/unit/command_opts_t.c
+# sizes its defs[] array by it.
 command-count.h: $(srcdir)/command-lines.in $(srcdir)/license.inc Makefile
 	$(SHOW) "    [GEN] $@"
 	$(Q) \
