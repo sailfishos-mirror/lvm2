@@ -120,7 +120,8 @@ daemon_reply daemon_send(daemon_handle h, daemon_request rq)
 	}
 
 	if (buffer_read(h.socket_fd, &reply.buffer)) {
-		reply.cft = config_tree_from_string_without_dup_node_check(reply.buffer.mem);
+		reply.cft = config_tree_from_string_without_dup_node_check(reply.buffer.mem,
+									   (size_t) reply.buffer.used + 1);
 		if (!reply.cft)
 			reply.error = EPROTO;
 	} else

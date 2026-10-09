@@ -466,7 +466,8 @@ static void *_client_thread(void *state)
 		if (!buffer_read(ts->client.socket_fd, &req.buffer))
 			goto fail;
 
-		req.cft = config_tree_from_string_without_dup_node_check(req.buffer.mem);
+		req.cft = config_tree_from_string_without_dup_node_check(req.buffer.mem,
+									 (size_t) req.buffer.used + 1);
 
 		if (!req.cft) {
 			fprintf(stderr, "error parsing request:\n %s\n", req.buffer.mem);

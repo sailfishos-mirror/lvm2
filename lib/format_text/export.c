@@ -1086,13 +1086,14 @@ struct dm_config_tree *export_vg_to_config_tree(struct volume_group *vg)
 {
 	char *buf = NULL;
 	struct dm_config_tree *vg_cft;
+	size_t size;
 
-	if (!_export_vg_to_buffer(vg, &buf)) {
+	if (!(size = _export_vg_to_buffer(vg, &buf))) {
 		log_error("Could not format metadata for VG %s.", vg->name);
 		return NULL;
 	}
 
-	if (!(vg_cft = config_tree_from_string_without_dup_node_check(buf))) {
+	if (!(vg_cft = config_tree_from_string_without_dup_node_check(buf, size))) {
 		log_error("Error parsing metadata for VG %s.", vg->name);
 		free(buf);
 		return NULL;
