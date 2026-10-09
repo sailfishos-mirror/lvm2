@@ -4178,7 +4178,7 @@ static int _stats_create_group(struct dm_stats *dms, dm_bitset_t regions,
 
 	/* force an update of the group tag stored in aux_data */
 	if (!_stats_set_aux(dms, *group_id, dms->regions[*group_id].aux_data))
-		goto bad;
+		goto_bad;
 
 	return 1;
 bad:
@@ -4368,7 +4368,7 @@ int dm_stats_create_group(struct dm_stats *dms, const char *members,
 		log_very_verbose("Creating group with overlapping regions.");
 
 	if (!_stats_create_group(dms, regions, alias, group_id))
-		goto bad;
+		goto_bad;
 
 	return 1;
 
@@ -4542,7 +4542,7 @@ static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
 	}
 
 	if (!_stats_group_tag_fill(dms, regions, members, buflen))
-		goto bad;
+		goto_bad;
 
 	/*
 	 * overlaps should not be possible: overlapping file extents
@@ -4552,7 +4552,7 @@ static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
 		log_very_verbose("Creating group with overlapping regions.");
 
 	if (!_stats_create_group(dms, regions, alias, &group_id))
-		goto bad;
+		goto_bad;
 
 	dm_free(members);
 	return 1;
@@ -5085,7 +5085,7 @@ uint64_t *dm_stats_create_regions_from_fd(struct dm_stats *dms, int fd,
 	if (!(regions = _stats_map_file_regions(dms, fd, bounds, precise,
 						DM_STATS_GROUP_NOT_PRESENT,
 						&count, &regroup)))
-		return NULL;
+		return_NULL;
 
 	if (!group)
 		return regions;
