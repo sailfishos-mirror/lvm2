@@ -111,9 +111,9 @@ if [ $v1_9_0 -eq 1 ] ; then
 	# linear -> RAID1 upconverts as "recover" not "resync"
 	# The LVM code now checks the dm-raid version when
 	# upconverting and if 1.9.0+ is found, it uses "recover"
-	check raid_leg_status $vg1 $lv1 "Aa"
+	check raid_leg_status $vg1 $lv1 "Aa" "AA"
 else
-	check raid_leg_status $vg1 $lv1 "aa"
+	check raid_leg_status $vg1 $lv1 "aa" "AA"
 fi
 lvremove -ff $vg1
 
