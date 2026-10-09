@@ -1166,6 +1166,10 @@ static int _stats_load_list_rows(struct dm_stats *dms, FILE *list_rows)
 		if (!_stats_parse_list_region(dms, &cur, line))
 			return_0;
 
+		if (cur.region_id > dms->max_region)
+			/* failure validated  _stats_scan_list_response_ids() */
+			continue;
+
 		if (cur.aux_data &&
 		    !_parse_aux_data_group(dms, &cur,
 					   &dms->groups[cur.region_id])) {
@@ -4534,7 +4538,7 @@ static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
 	if (!members) {
 		log_error("Cannot map file: failed to allocate group "
 			  "descriptor.");
-		return 0;
+		goto bad;
 	}
 
 	if (!_stats_group_tag_fill(dms, regions, members, buflen))
@@ -4554,6 +4558,7 @@ static int _stats_group_file_regions(struct dm_stats *dms, uint64_t *region_ids,
 	return 1;
 bad:
 	dm_free(members);
+	dm_pool_free(dms->mem, regions);
 	return 0;
 }
 
