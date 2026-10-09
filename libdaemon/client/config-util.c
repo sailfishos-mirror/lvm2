@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011-2012 Red Hat, Inc.
+ * Copyright (C) 2011-2026 Red Hat, Inc.
  *
  * This file is part of LVM2.
  *
@@ -159,14 +159,18 @@ void chain_node(struct dm_config_node *cn,
 
 }
 
-struct dm_config_tree *config_tree_from_string_without_dup_node_check(const char *config_settings)
+/* Parse at most size bytes of config data.
+ * Parsing stops at the first NUL within the range. */
+struct dm_config_tree *config_tree_from_string_without_dup_node_check(const char *config_settings,
+								      size_t size)
 {
 	struct dm_config_tree *cft;
 
 	if (!(cft = dm_config_create()))
 		return_NULL;
 
-	if (!dm_config_parse_without_dup_node_check(cft, config_settings, config_settings + strlen(config_settings))) {
+	if (!dm_config_parse_without_dup_node_check(cft, config_settings,
+						    config_settings + size)) {
 		dm_config_destroy(cft);
 		return_NULL;
 	}

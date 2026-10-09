@@ -184,8 +184,6 @@ static struct dm_config_node *_config_reverse(struct dm_config_node *head)
 static int _do_dm_config_parse(struct dm_config_tree *cft, const char *start, const char *end,
 			       int no_dup_node_check, const char *section)
 {
-	/* TODO? if (start == end) return 1; */
-
 	/* Cut at the first NUL; we never write one, so this bounds hostile input. */
 	const char *nul = memchr(start, '\0', end - start);
 
