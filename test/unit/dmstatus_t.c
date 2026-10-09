@@ -75,6 +75,32 @@ static void _test_raid_status(void *fixture)
 	struct dm_pool *mem = fixture;
 	struct dm_status_raid *s = NULL;
 
+	/* dm-raid < 1.5.0 does not report sync_action or mismatch_count. */
+	T_ASSERT(dm_get_status_raid(mem,
+				    "raid1 2 AA 48/68",
+				    &s));
+	if (s) {
+		T_ASSERT_EQUAL(s->total_regions, 68);
+		T_ASSERT_EQUAL(s->insync_regions, 48);
+		T_ASSERT_EQUAL(s->dev_count, 2);
+		T_ASSERT(!s->sync_action);
+		T_ASSERT_EQUAL(s->mismatch_count, 0);
+		T_ASSERT_EQUAL(s->data_offset, 0);
+	}
+
+	/* dm-raid 1.5.0 status may report a full ratio while recovering. */
+	T_ASSERT(dm_get_status_raid(mem,
+				    "raid1 2 Aa 68/68 recover 0",
+				    &s));
+	if (s) {
+		T_ASSERT_EQUAL(s->total_regions, 68);
+		T_ASSERT_EQUAL(s->insync_regions, 67);
+		T_ASSERT_EQUAL(s->dev_count, 2);
+		T_ASSERT(!strcmp(s->sync_action, "recover"));
+		T_ASSERT_EQUAL(s->mismatch_count, 0);
+		T_ASSERT_EQUAL(s->data_offset, 0);
+	}
+
 	T_ASSERT(dm_get_status_raid(mem,
 				    "raid6_zr 5 AAAAA 48/68 idle 10 20 -",
 				    &s));
