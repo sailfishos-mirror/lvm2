@@ -443,10 +443,15 @@ sysfs() {
 		die "$1: $P = $val differs from expected value $3!"
 }
 
-# check raid_leg_status $vg $lv "Aaaaa"
+# check raid_leg_status $vg $lv "Aaaaa" [completed_status]
+# Optional completed_status is accepted only when sync_action is idle and the
+# synchronization ratio confirms completion.
 raid_leg_status() {
 	local st
 	local val
+	local completed_status=${4-}
+	local sync_done
+	local sync_total
 
 	# Ignore inconsistent raid status 0/xxxxx idle
 	for i in {100..0} ; do
@@ -454,6 +459,20 @@ raid_leg_status() {
 			die "Unable to get status of $1/$2"
 		case "${st[7]}" in
 			"resync"|"recover") [ "${st[5]}" = "$3" ] && return 0 ;;
+			"idle")
+				# Older targets cannot distinguish a completed ratio from the
+				# transient full ratio during startup.
+				if [[ -n "$completed_status" && "${st[5]}" = "$completed_status" ]]; then
+					# Split done/total; a nonzero numeric total matching done
+					# confirms that synchronization has completed.
+					sync_done=${st[6]%%/*}
+					sync_total=${st[6]##*/}
+					if [[ "$sync_total" != "${st[6]}" && "$sync_total" != 0 &&
+					      "$sync_done" = "$sync_total" && "$sync_total" != *[!0-9]* ]]; then
+						return 0
+					fi
+				fi
+				;;
 		esac
 		[ "${st[6]%%/*}" = "0" ] || {
 			[[ "${st[5]}" = "$3" ]] || break
