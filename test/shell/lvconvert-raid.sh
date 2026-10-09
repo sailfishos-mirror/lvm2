@@ -24,6 +24,13 @@ get_image_pvs() {
 	lvs --noheadings -a -o devices "${images[@]}" | sed s/\(.\)//
 }
 
+# Delay PV extents, but leave the PV/VG metadata area undelayed.
+delay_pv_pe_area() {
+	local dev=$1
+
+	aux delay_dev "$dev" 0 100 "$(get first_extent_sector "$dev"):"
+}
+
 ########################################################
 # MAIN
 ########################################################
@@ -217,7 +224,7 @@ done
 #  - don't allow removal of primary while syncing
 #  - DO allow removal of secondaries while syncing
 ###########################################
-aux delay_dev "$dev2" 0 100
+delay_pv_pe_area "$dev2"
 lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
 lvconvert -y -m 1 $vg/$lv1 \
 	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
@@ -232,7 +239,7 @@ lvremove -ff $vg
 #  - DO allow removal of primary while syncing
 #  - DO allow removal of secondaries while syncing
 ###########################################
-aux delay_dev "$dev2" 0 100
+delay_pv_pe_area "$dev2"
 lvcreate --type raid1 -m 2 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
 case "$(uname -r)" in
 4.8.14*)
@@ -260,7 +267,7 @@ lvremove -ff $vg
 ###########################################
 lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2"
 aux wait_for_sync $vg $lv1
-aux delay_dev "$dev3" 0 100
+delay_pv_pe_area "$dev3"
 lvconvert --yes -m +1 $vg/$lv1 "$dev3"
 # should allow 1st primary to be removed
 lvconvert --yes -m -1 $vg/$lv1 "$dev1"
@@ -278,7 +285,7 @@ lvremove -ff $vg
 ###########################################
 lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2"
 aux wait_for_sync $vg $lv1
-aux delay_dev "$dev3" 0 100
+delay_pv_pe_area "$dev3"
 lvconvert --yes -m +1 $vg/$lv1 "$dev3"
 # should NOT allow both primaries to be removed
 not lvconvert -m 0 $vg/$lv1 "$dev1" "$dev2"
@@ -297,6 +304,11 @@ for i in {1..3}; do
 
 	for j in $(seq $(( i + 1 ))); do # The number of devs to replace at once
 	for o in $(seq 0 $i); do        # The offset into the device list
+		# Replacing all devices is the same set for every offset.
+		if [ "$j" -eq $(( i + 1 )) ] && [ "$o" -gt 0 ]; then
+			continue
+		fi
+
 		replace=()
 
 		devices=( $(get_image_pvs $vg $lv1) )
