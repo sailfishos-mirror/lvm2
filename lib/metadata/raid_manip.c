@@ -422,9 +422,16 @@ static int _raid_in_sync(const struct logical_volume *lv)
 
 		if (sync_percent > DM_PERCENT_0)
 			break;
+		/*
+		 * A 0% in_sync right after a reload, upconvert or recover
+		 * completion is an expected transient in dm-raid status
+		 * (linux/drivers/md/dm-raid.c rs_get_progress(); kernel
+		 * commits 4102d9de6d37 and 41dcf197ad53), not a user-visible
+		 * problem.  Log it for debugging only and reread.
+		 */
 		if (retries == _RAID_IN_SYNC_RETRIES)
-			log_warn("WARNING: Sync status for %s is inconsistent.",
-				 display_lvname(lv));
+			log_debug("Sync status for %s is inconsistent, rereading.",
+				  display_lvname(lv));
 		if (!sigint_usleep(500000))
 			return_0;
 	} while (--retries);
