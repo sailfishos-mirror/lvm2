@@ -2839,13 +2839,44 @@ fail:
 	return 0;
 }
 
+/*
+ * Remove LV_REBUILD from RAID image components after a reload has
+ * applied rebuild to the kernel, and commit when any flag was cleared.
+ */
+static int _raid_clear_rebuild_flags(struct logical_volume *lv)
+{
+	struct lv_segment *seg = first_seg(lv);
+	uint32_t s;
+	int cleared = 0;
+
+	for (s = 0; s < seg->area_count; s++) {
+		if ((seg_type(seg, s) == AREA_LV) &&
+		    (seg_lv(seg, s)->status & LV_REBUILD)) {
+			seg_lv(seg, s)->status &= ~LV_REBUILD;
+			cleared = 1;
+		}
+		if (seg->meta_areas && (seg_metatype(seg, s) == AREA_LV) &&
+		    (seg_metalv(seg, s)->status & LV_REBUILD)) {
+			seg_metalv(seg, s)->status &= ~LV_REBUILD;
+			cleared = 1;
+		}
+	}
+
+	if (cleared && (!vg_write(lv->vg) || !vg_commit(lv->vg))) {
+		log_error("Failed to clear REBUILD flag for %s components.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	return 1;
+}
+
 static int _raid_add_images(struct logical_volume *lv,
 			    uint32_t new_count, struct dm_list *pvs,
 			    int commit, int use_existing_area_len)
 {
-	int rebuild_flag_cleared = 0;
 	struct lv_segment *seg = first_seg(lv);
-	uint32_t region_size = seg->region_size, s;
+	uint32_t region_size = seg->region_size;
 
 	if (!_raid_add_images_without_commit(lv, new_count, pvs, use_existing_area_len))
 		return_0;
@@ -2858,27 +2889,9 @@ static int _raid_add_images(struct logical_volume *lv,
 	if (!lv_update_and_reload_origin(lv))
 		return_0;
 
-	/*
-	 * Now that the 'REBUILD' has made its way to the kernel, we must
-	 * remove the flag so that the individual devices are not rebuilt
-	 * upon every activation.
-	 */
-	seg = first_seg(lv);
-	for (s = 0; s < seg->area_count; s++) {
-		if ((seg_lv(seg, s)->status & LV_REBUILD) ||
-		    (seg_metalv(seg, s)->status & LV_REBUILD)) {
-			seg_metalv(seg, s)->status &= ~LV_REBUILD;
-			seg_lv(seg, s)->status &= ~LV_REBUILD;
-			rebuild_flag_cleared = 1;
-		}
-	}
-	if (rebuild_flag_cleared) {
-		if (!vg_write(lv->vg) || !vg_commit(lv->vg)) {
-			log_error("Failed to clear REBUILD flag for %s components.",
-				  display_lvname(lv));
-			return 0;
-		}
-	}
+	/* REBUILD must not persist in metadata after the kernel has seen it. */
+	if (!_raid_clear_rebuild_flags(lv))
+		return_0;
 
 	return 1;
 }
@@ -2945,6 +2958,17 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
 }
 
 /*
+ * dm-raid sync actions where RAID1 image removal may proceed while
+ * recovery is active (see also transient "idle" before recover starts).
+ */
+static int _raid_sync_action_allows_image_change(const char *sync_action)
+{
+	return !strcmp(sync_action, "recover") ||
+	       !strcmp(sync_action, "rebuild") ||
+	       !strcmp(sync_action, "idle");
+}
+
+/*
  * _raid_allow_extraction
  * @lv
  * @extract_count
@@ -2994,11 +3018,7 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 		return 0;
 	}
 
-	/* If anything other than "recover", rebuild or "idle" */
-	/* Targets reports for a while 'idle' state, before recover starts */
-	if (strcmp("recover", sync_action) &&
-	    strcmp("rebuild", sync_action) &&
-	    strcmp("idle", sync_action)) {
+	if (!_raid_sync_action_allows_image_change(sync_action)) {
 		log_error("Unable to remove RAID image while array"
 			  " is performing \"%s\"", sync_action);
 		return 0;
@@ -3146,15 +3166,145 @@ static int _raid_extract_images(struct logical_volume *lv,
 	return 1;
 }
 
+/*
+ * dm-raid per-device health char for a raid set component that is alive
+ * but not in-sync (e.g. still recovering).  See dm-raid.c status docs:
+ * 'A' = alive and in-sync, 'a' = alive but not in-sync, 'D' = dead.
+ */
+#define RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC	'a'
+
+/*
+ * An image added immediately before a RAID1 reduction may still be
+ * recovering.  For legacy dm-raid (see lvconvert-raid1.sh), temporarily
+ * re-mark legs whose kernel dev_health is 'a' (alive but not in-sync,
+ * not 'A').  Legs whose data or metadata LV already has
+ * LV_REBUILD in VG metadata are skipped; the rest are flagged.
+ *
+ * This is not a persistent progress marker: dm-raid's "rebuild <idx>"
+ * option resets that device's recovery offset; without it, the offset
+ * is restored from the superblock.  Also, 'a' health may describe all
+ * devices during array-wide resync, not just an individual rebuild.
+ * Recheck this behavior before broadening the workaround.  See
+ * dm-raid.c:parse_raid_params()/super_load() and kernel commits
+ * 11e472320668 (copy active progress without rebuild) and
+ * 38b0bd0cda07 (remove that copy to avoid stale reshape state).
+ *
+ * Sets @flags_set when LV_REBUILD would be added to any component.
+ * Use _raid_probe_recovering_images() before prompting and
+ * _raid_apply_recovering_image_rebuild_flags() to update metadata.
+ */
+static int _raid_target_rebuild_keeps_recovery(const struct logical_volume *lv)
+{
+	struct lv_segment *seg = first_seg(lv);
+	unsigned attrs = 0;
+
+	if (!seg->segtype->ops->target_present ||
+	    !seg->segtype->ops->target_present(lv->vg->cmd, NULL, &attrs))
+		return 0;
+
+	return (attrs & RAID_FEATURE_REBUILD_KEEPS_RECOVERY) ? 1 : 0;
+}
+
+static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
+						int apply_flags,
+						int *flags_set,
+						dm_percent_t *sync_percent)
+{
+	struct lv_segment *seg = first_seg(lv);
+	struct lv_status_raid *raid_status;
+	struct dm_status_raid *raid;
+	uint32_t s;
+	int r = 0;
+
+	*flags_set = 0;
+	if (sync_percent)
+		*sync_percent = DM_PERCENT_INVALID;
+
+	if (!seg_is_raid1(seg))
+		return 1;
+
+	if (_raid_target_rebuild_keeps_recovery(lv))
+		return 1;
+
+	/* Recovery state exists only on a live device */
+	if (!lv_is_active(lv))
+		return 1;
+
+	if (!lv_raid_status(lv, &raid_status)) {
+		log_error("Unable to read RAID status of %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	raid = raid_status->raid;
+	if (!raid->sync_action || !raid->dev_health) {
+		log_error("RAID status is missing sync action or device health for %s.",
+			  display_lvname(lv));
+		goto bad;
+	}
+
+	if (_raid_sync_action_allows_image_change(raid->sync_action)) {
+		if (strlen(raid->dev_health) != seg->area_count) {
+			log_error("Active raid has a wrong number of raid images!");
+			goto bad;
+		}
+
+		for (s = 0; s < seg->area_count; s++) {
+			if (raid->dev_health[s] !=
+			    RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC)
+				continue;
+
+			/* Leave legs that already carry the flag untouched */
+			if ((seg_type(seg, s) == AREA_LV) &&
+			    !(seg_lv(seg, s)->status & LV_REBUILD)) {
+				*flags_set = 1;
+				if (apply_flags)
+					seg_lv(seg, s)->status |= LV_REBUILD;
+			}
+			if (seg->meta_areas &&
+			    (seg_metatype(seg, s) == AREA_LV) &&
+			    !(seg_metalv(seg, s)->status & LV_REBUILD)) {
+				*flags_set = 1;
+				if (apply_flags)
+					seg_metalv(seg, s)->status |= LV_REBUILD;
+			}
+		}
+	}
+
+	if (*flags_set && sync_percent)
+		*sync_percent = raid_status->in_sync;
+
+	r = 1;
+bad:
+	dm_pool_destroy(raid_status->mem);
+
+	return r;
+}
+
+static int _raid_probe_recovering_images(struct logical_volume *lv,
+					 int *flags_set,
+					 dm_percent_t *sync_percent)
+{
+	return _raid_recovering_images_rebuild_work(lv, 0, flags_set, sync_percent);
+}
+
+static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
+						      int *flags_set)
+{
+	return _raid_recovering_images_rebuild_work(lv, 1, flags_set, NULL);
+}
+
 static int _raid_remove_images(struct logical_volume *lv, int yes,
 			       uint32_t new_count, struct dm_list *allocate_pvs,
 			       struct dm_list *removal_lvs, int commit)
 {
 	struct dm_list removed_lvs;
+	struct lv_segment *seg;
+	uint32_t s;
+	int rebuild_flags_set = 0;
 
 	if (new_count == 1) {
-		uint32_t s;
-		struct lv_segment *seg = first_seg(lv);
+		seg = first_seg(lv);
 
 		if (!seg_is_raid1(seg)) {
 			log_error("%s called on non-raid1 LV.", display_lvname(lv));
@@ -3184,6 +3334,10 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	}
 
 	if (!archive(lv->vg))
+		return_0;
+
+	if (commit && (new_count > 1) &&
+	    !_raid_apply_recovering_image_rebuild_flags(lv, &rebuild_flags_set))
 		return_0;
 
 	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1,
@@ -3230,6 +3384,9 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 		return_0;
 
 	if (!lv_update_and_reload_origin(lv))
+		return_0;
+
+	if (rebuild_flags_set && !_raid_clear_rebuild_flags(lv))
 		return_0;
 
 	return 1;
@@ -3310,6 +3467,8 @@ int lv_raid_change_image_count(struct logical_volume *lv, int yes, uint32_t new_
 	struct lv_segment *seg = first_seg(lv);
 	const char *level = seg->area_count == 1 ? "raid1 with " : "";
 	const char *resil = new_count < seg->area_count ? "reducing" : "enhancing";
+	int rebuild_workaround_needed = 0;
+	dm_percent_t sync_percent = DM_PERCENT_INVALID;
 
 	/* LV must be active to perform raid conversion operations */
 	if (!lv_is_active(lv)) {
@@ -3324,11 +3483,25 @@ int lv_raid_change_image_count(struct logical_volume *lv, int yes, uint32_t new_
 		return 1;
 	}
 
-	if (new_count != 1 && /* Already prompted for in _raid_remove_images() */
-	    !yes && yes_no_prompt("Are you sure you want to convert %s LV %s to %s%u images %s resilience? [y/n]: ",
-				  lvseg_name(first_seg(lv)), display_lvname(lv), level, new_count, resil) == 'n') {
-		log_error("Logical volume %s NOT converted.", display_lvname(lv));
-		return 0;
+	/* Include recovery loss in the existing confirmation, before changing metadata. */
+	if (!yes && (new_count > 1) && (new_count < seg->area_count) &&
+	    !_raid_probe_recovering_images(lv, &rebuild_workaround_needed, &sync_percent))
+		return_0;
+
+	if (new_count != 1 && !yes) {
+		char recovery_note[256] = "";
+
+		if (rebuild_workaround_needed)
+			(void) snprintf(recovery_note, sizeof(recovery_note),
+					" dm-raid reports recovery at %s%%; if recovery is still active when the reload begins, it will restart from 0%%.",
+					display_percent(lv->vg->cmd, sync_percent));
+
+		if ('n' == yes_no_prompt("Are you sure you want to convert %s LV %s to %s%u images %s resilience?%s [y/n]: ",
+					 lvseg_name(first_seg(lv)), display_lvname(lv), level,
+					 new_count, resil, recovery_note)) {
+			log_error("Logical volume %s NOT converted.", display_lvname(lv));
+			return 0;
+		}
 	}
 	if (new_region_size) {
 		seg->region_size = new_region_size;
@@ -6829,7 +7002,8 @@ static int _lv_raid_has_primary_failure_on_recover(struct logical_volume *lv)
 	    !lv_raid_dev_health(lv, &tmp_dev_health))
 		return_0;
 
-	if (!strcmp(tmp_sync_action, "idle") && strchr(tmp_dev_health, 'a'))
+	if (!strcmp(tmp_sync_action, "idle") &&
+	    strchr(tmp_dev_health, RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC))
 		return 1;
 
 	return 0;

@@ -530,6 +530,7 @@ static int _raid_target_present(struct cmd_context *cmd,
 		{ 1, 9, 0, RAID_FEATURE_NEW_DEVICES_ACCEPT_REBUILD, "rebuild+emptymeta" },
 		{ 1, 9, 2, RAID_FEATURE_FIXED_HEALTH_CHARS, "fixedhealthchars" },
 		{ 1, 12, 0, RAID_FEATURE_RESHAPE, "reshaping" },
+		{ 1, 14, 0, RAID_FEATURE_REBUILD_KEEPS_RECOVERY, "rebuildkeepsrecovery" },
 	};
 
 	static int _raid_checked = 0;
