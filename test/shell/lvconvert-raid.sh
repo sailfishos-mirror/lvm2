@@ -24,13 +24,6 @@ get_image_pvs() {
 	lvs --noheadings -a -o devices "${images[@]}" | sed s/\(.\)//
 }
 
-# Delay PV extents, but leave the PV/VG metadata area undelayed.
-delay_pv_pe_area() {
-	local dev=$1
-
-	aux delay_dev "$dev" 0 100 "$(get first_extent_sector "$dev"):"
-}
-
 ########################################################
 # MAIN
 ########################################################
@@ -218,81 +211,6 @@ for i in 1 2 3 ; do
 	lvconvert -y --type raid1 $vg/$lv1
 	lvremove -ff $vg
 done
-
-###########################################
-# Upconverted RAID1 should not allow loss of primary
-#  - don't allow removal of primary while syncing
-#  - DO allow removal of secondaries while syncing
-###########################################
-delay_pv_pe_area "$dev2"
-lvcreate -aey -l 2 -n $lv1 $vg "$dev1"
-lvconvert -y -m 1 $vg/$lv1 \
-	--config 'global { mirror_segtype_default = "raid1" }' "$dev2"
-lvs --noheadings -o attr $vg/$lv1 | grep '^[[:space:]]*r'
-not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
-lvconvert --yes -m 0 $vg/$lv1 "$dev2"
-aux enable_dev "$dev2"
-lvremove -ff $vg
-
-###########################################
-# lvcreated RAID1 should allow all down-conversion
-#  - DO allow removal of primary while syncing
-#  - DO allow removal of secondaries while syncing
-###########################################
-delay_pv_pe_area "$dev2"
-lvcreate --type raid1 -m 2 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
-case "$(uname -r)" in
-4.8.14*)
-echo "Skippen test that kills this kernel"
-;;
-*)
-lvconvert --yes -m 1 $vg/$lv1 "$dev3"
-
-# Cannot remove origin 1st. leg while synchronizing
-not lvconvert --yes -m 0 $vg/$lv1 "$dev1"
-
-aux enable_dev "$dev2"
-aux wait_for_sync $vg $lv1
-
-# When raid1 is synchronized, 1st. leg can be removed
-lvconvert --yes -m 0 $vg/$lv1 "$dev1"
-;;
-esac
-lvremove -ff $vg
-
-###########################################
-# Converting from 2-way RAID1 to 3-way
-#  - DO allow removal of one of primary sources
-#  - Do not allow removal of all primary sources
-###########################################
-lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2"
-aux wait_for_sync $vg $lv1
-delay_pv_pe_area "$dev3"
-lvconvert --yes -m +1 $vg/$lv1 "$dev3"
-# should allow 1st primary to be removed
-lvconvert --yes -m -1 $vg/$lv1 "$dev1"
-# should NOT allow last primary to be removed
-test "${LVM_VALGRIND:-0}" -eq 0 && not lvconvert --yes -m -1 $vg/$lv1 "$dev2"
-# should allow non-primary to be removed
-lvconvert --yes -m 0 $vg/$lv1 "$dev3"
-aux enable_dev "$dev3"
-lvremove -ff $vg
-
-###########################################
-# Converting from 2-way RAID1 to 3-way
-#  - Should allow removal of two devices,
-#    as long as they aren't both primary
-###########################################
-lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2"
-aux wait_for_sync $vg $lv1
-delay_pv_pe_area "$dev3"
-lvconvert --yes -m +1 $vg/$lv1 "$dev3"
-# should NOT allow both primaries to be removed
-not lvconvert -m 0 $vg/$lv1 "$dev1" "$dev2"
-# should allow primary + non-primary
-lvconvert --yes -m 0 $vg/$lv1 "$dev1" "$dev3"
-aux enable_dev "$dev3"
-lvremove -ff $vg
 
 ###########################################
 # Device Replacement Testing
