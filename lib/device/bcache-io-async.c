@@ -34,11 +34,6 @@
 
 static const char _async[] = "async";
 
-static const char *_async_dir(int opcode)
-{
-	return (opcode == IO_CMD_PREAD) ? "read" : "write";
-}
-
 // Assumes the list is not empty.
 static inline struct dm_list *_list_pop(struct dm_list *head)
 {
@@ -209,6 +204,8 @@ static bool _async_issue(struct io_engine *ioe, enum dir d, int fd,
 static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 {
 	int i, r;
+	enum dir d;
+	int io_error;
 	struct control_block *cb;
 	struct io_event *ev;
 	struct async_engine *e = _to_async(ioe);
@@ -234,32 +231,13 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
 	for (i = 0; i < r; i++) {
 		ev = e->event + i;
 		cb = _iocb_to_cb((struct iocb *) ev->obj);
+		d = (cb->cb.aio_lio_opcode == IO_CMD_PREAD) ? DIR_READ : DIR_WRITE;
 
-		if ((int) ev->res < 0) {
-			log_warn("WARNING: bcache async %s device offset %llu len %llu: %s.",
-				 _async_dir(cb->cb.aio_lio_opcode),
-				 (unsigned long long)cb->cb.u.c.offset,
-				 (unsigned long long)cb->cb.u.c.nbytes,
-				 strerror(-(int)ev->res));
-			fn(cb->context, (int) ev->res);
-		} else if (ev->res >= cb->cb.u.c.nbytes) {
-			fn(cb->context, 0);
-		} else if (ev->res >= (1 << SECTOR_SHIFT)) {
-			/* minimum acceptable read is 1 sector */
-			log_debug_devs("bcache async %s offset %llu requested %llu got %llu.",
-				       _async_dir(cb->cb.aio_lio_opcode),
-				       (unsigned long long)cb->cb.u.c.offset,
-				       (unsigned long long)cb->cb.u.c.nbytes,
-				       (unsigned long long)ev->res);
-			fn(cb->context, 0);
-		} else {
-			log_warn("WARNING: bcache async %s offset %llu requested %llu got %llu.",
-				 _async_dir(cb->cb.aio_lio_opcode),
-				 (unsigned long long)cb->cb.u.c.offset,
-				 (unsigned long long)cb->cb.u.c.nbytes,
-				 (unsigned long long)ev->res);
-			fn(cb->context, -ENODATA);
-		}
+		io_error = bcache_io_completion_status(_async, d,
+						       cb->cb.u.c.offset,
+						       cb->cb.u.c.nbytes,
+						       (int64_t) ev->res);
+		fn(cb->context, io_error);
 
 		_cb_free(e->cbs, cb);
 	}
