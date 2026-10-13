@@ -325,7 +325,15 @@ struct dm_status_mirror {
 int dm_get_status_mirror(struct dm_pool *mem, const char *params,
 			 struct dm_status_mirror **status);
 
-/* Parse params from STATUS call for raid target */
+/*
+ * Parse params from STATUS call for raid target.
+ *
+ * With upstream dm-raid target versions 1.9.0 and 1.9.1, a failed component
+ * may be omitted from the health string.  This was fixed in target 1.9.2
+ * (upstream Linux 4.11).  For the affected versions, dev_count may be smaller
+ * than the advertised RAID device count; callers mapping those chars to RAID
+ * slots must handle the mismatch.
+ */
 struct dm_status_raid {
 	uint64_t reserved;
 	uint64_t total_regions;		/* sectors */
@@ -338,6 +346,7 @@ struct dm_status_raid {
 	/* idle, frozen, resync, recover, check, repair */
 	char *sync_action;
 	uint64_t data_offset; /* RAID out-of-place reshaping */
+	uint32_t advertised_dev_count; /* #devs field in status */
 };
 
 int dm_get_status_raid(struct dm_pool *mem, const char *params,
