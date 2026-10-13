@@ -2965,8 +2965,8 @@ static int _extract_image_components(struct lv_segment *seg, uint32_t idx,
 }
 
 /*
- * dm-raid sync actions where RAID1 image removal may proceed while
- * recovery is active (see also transient "idle" before recover starts).
+ * dm-raid sync actions where RAID1 image removal may proceed.  Targets may
+ * briefly report "idle" before starting either recovery or resync.
  */
 static int _raid_sync_action_allows_image_change(const char *sync_action)
 {
@@ -3054,6 +3054,10 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 	return 1;
 }
 
+static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv);
+static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
+						      int *flags_set);
+
 /*
  * _raid_extract_images
  * @lv
@@ -3063,6 +3067,9 @@ static int _raid_allow_extraction(struct logical_volume *lv,
  * @shift:  If set, use _shift_and_rename_image_components().
  *	  Otherwise, leave the [meta_]areas as AREA_UNASSIGNED and
  *	  seg->area_count unchanged.
+ * @rebuild_flags_set:  If non-NULL, mark recovering RAID1 images after
+ *		      extraction has been validated and return whether any
+ *		      LV_REBUILD flags were set.
  * @extracted_[meta|data]_lvs:  The LVs removed from the array.  If 'shift'
  *			      is set, then there will likely be name conflicts.
  *
@@ -3075,6 +3082,7 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 static int _raid_extract_images(struct logical_volume *lv,
 				int force, uint32_t new_count,
 				struct dm_list *target_pvs, int shift,
+				int *rebuild_flags_set,
 				struct dm_list *extracted_meta_lvs,
 				struct dm_list *extracted_data_lvs)
 {
@@ -3085,6 +3093,8 @@ static int _raid_extract_images(struct logical_volume *lv,
 	struct segment_type *error_segtype;
 
 	extract = seg->area_count - new_count;
+	if (rebuild_flags_set)
+		*rebuild_flags_set = 0;
 
 	if (!_raid_allow_extraction(lv, extract, target_pvs))
 		return_0;
@@ -3104,6 +3114,11 @@ static int _raid_extract_images(struct logical_volume *lv,
 		return_0;
 
 	if (!(error_segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_ERROR)))
+		return_0;
+
+	/* Use the sync state after extraction validation and any status retries. */
+	if (rebuild_flags_set &&
+	    !_raid_apply_recovering_image_rebuild_flags(lv, rebuild_flags_set))
 		return_0;
 
 	/*
@@ -3184,7 +3199,10 @@ static int _raid_extract_images(struct logical_volume *lv,
  * An image added immediately before a RAID1 reduction may still be
  * recovering.  For legacy dm-raid (see lvconvert-raid1.sh), temporarily
  * re-mark legs whose kernel dev_health is 'a' (alive but not in-sync,
- * not 'A').  Legs whose data or metadata LV already has
+ * not 'A') while the target explicitly reports "recover" or "rebuild".
+ * An "idle" action with out-of-sync legs is retried because it may be a
+ * transient state before recovery, rebuild or array-wide resync; the latter
+ * rejects a rebuild parameter.  Legs whose data or metadata LV already has
  * LV_REBUILD in VG metadata are skipped; the rest are flagged.
  *
  * This is not a persistent progress marker: dm-raid's "rebuild <idx>"
@@ -3222,6 +3240,7 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	struct dm_status_raid *raid;
 	uint32_t s;
 	int r = 0;
+	int retries = _RAID_IN_SYNC_RETRIES;
 
 	*flags_set = 0;
 	if (sync_percent)
@@ -3237,25 +3256,60 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	if (!lv_is_active(lv))
 		return 1;
 
-	if (!lv_raid_status(lv, &raid_status)) {
-		log_error("Unable to read RAID status of %s.",
-			  display_lvname(lv));
-		return 0;
-	}
+	for (;;) {
+		if (!lv_raid_status(lv, &raid_status))
+			return_0;
 
-	raid = raid_status->raid;
-	if (!raid->sync_action || !raid->dev_health) {
-		log_error("RAID status is missing sync action or device health for %s.",
-			  display_lvname(lv));
-		goto bad;
-	}
+		raid = raid_status->raid;
+		if (!raid->sync_action || !raid->dev_health)
+			goto_bad;
 
-	if (_raid_sync_action_allows_image_change(raid->sync_action)) {
-		if (strlen(raid->dev_health) != seg->area_count) {
+		if (raid->dev_count != seg->area_count) {
+			/*
+			 * An in-sync degraded array can reach this workaround after
+			 * _raid_allow_extraction() has accepted it.  Only treat a short
+			 * health string as omitted failed components when the target's
+			 * advertised count matches metadata slots and metadata records
+			 * a failed component.  The shortened string cannot be mapped to
+			 * metadata slots, so skip only rebuild marking and let extraction
+			 * remove known failed components first.
+			 */
+			if ((raid->advertised_dev_count == seg->area_count) &&
+			    (raid->dev_count < raid->advertised_dev_count) &&
+			    _lv_get_nr_failed_components(lv)) {
+				log_debug("Skipping RAID rebuild marking for degraded %s.",
+					  display_lvname(lv));
+				goto out;
+			}
+
 			log_error("Active raid has a wrong number of raid images!");
 			goto bad;
 		}
 
+		/* "idle" with out-of-sync legs may precede recover, rebuild or resync. */
+		if (strcmp(raid->sync_action, "idle") ||
+		    !strchr(raid->dev_health, RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC))
+			break;
+
+		if (!retries) {
+			log_error("RAID status for %s remained idle with out-of-sync images "
+				  "after %d retries (%d ms).",
+				  display_lvname(lv), _RAID_IN_SYNC_RETRIES,
+				  _RAID_IN_SYNC_RETRIES * 500);
+			goto bad;
+		}
+		retries--;
+
+		log_debug("RAID status for %s remains idle with out-of-sync images; "
+			  "retrying in 500 ms.",
+			  display_lvname(lv));
+		dm_pool_destroy(raid_status->mem);
+		if (!sigint_usleep(500000))
+			return_0;
+	}
+
+	if (!strcmp(raid->sync_action, "recover") ||
+	    !strcmp(raid->sync_action, "rebuild")) {
 		for (s = 0; s < seg->area_count; s++) {
 			if (raid->dev_health[s] !=
 			    RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC)
@@ -3281,6 +3335,7 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	if (*flags_set && sync_percent)
 		*sync_percent = raid_status->in_sync;
 
+out:
 	r = 1;
 bad:
 	dm_pool_destroy(raid_status->mem);
@@ -3343,11 +3398,8 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	if (!archive(lv->vg))
 		return_0;
 
-	if (commit && (new_count > 1) &&
-	    !_raid_apply_recovering_image_rebuild_flags(lv, &rebuild_flags_set))
-		return_0;
-
 	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1,
+				 (commit && (new_count > 1)) ? &rebuild_flags_set : NULL,
 				 removal_lvs, removal_lvs)) {
 		log_error("Failed to extract images from %s.",
 			  display_lvname(lv));
@@ -3492,8 +3544,10 @@ int lv_raid_change_image_count(struct logical_volume *lv, int yes, uint32_t new_
 
 	/* Include recovery loss in the existing confirmation, before changing metadata. */
 	if (!yes && (new_count > 1) && (new_count < seg->area_count) &&
-	    !_raid_probe_recovering_images(lv, &rebuild_workaround_needed, &sync_percent))
-		return_0;
+	    !_raid_probe_recovering_images(lv, &rebuild_workaround_needed, &sync_percent)) {
+		log_error("Unable to determine sync status of %s.", display_lvname(lv));
+		return 0;
+	}
 
 	if (new_count != 1 && !yes) {
 		char recovery_note[256] = "";
@@ -3599,7 +3653,7 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 			return_0;
 	}
 
-	if (!_raid_extract_images(lv, 0, new_count, splittable_pvs, 1,
+	if (!_raid_extract_images(lv, 0, new_count, splittable_pvs, 1, NULL,
 				 &removal_lvs, &data_list)) {
 		log_error("Failed to extract images from %s.",
 			  display_lvname(lv));
@@ -7259,7 +7313,7 @@ try_again:
 	if (!_raid_extract_images(lv, force,
 				  raid_seg->area_count - match_count,
 				  (partial_segment_removed || dm_list_empty(remove_pvs)) ?
-				  &lv->vg->pvs : remove_pvs, 0,
+				  &lv->vg->pvs : remove_pvs, 0, NULL,
 				  &old_lvs, &old_lvs)) {
 		log_error("Failed to remove the specified images from %s.",
 			  display_lvname(lv));

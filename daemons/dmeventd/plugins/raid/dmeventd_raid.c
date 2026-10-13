@@ -53,6 +53,8 @@ struct dso_state {
 	unsigned warned;
 	/* Set once per idle primary-source episode after lvconvert is tried. */
 	unsigned idle_primary_attempted;
+	/* Warn once while the kernel reports an incomplete health string. */
+	unsigned incomplete_warned;
 	/* Whether the preceding event reported a complete sync ratio. */
 	unsigned in_sync;
 	/* Device count the positional state above belongs to; a change
@@ -302,6 +304,19 @@ static int _process_raid_event(struct dso_state *state, const char *params, cons
 		r = 0;
 		goto out;
 	}
+
+	if (status->dev_count < status->advertised_dev_count) {
+		if (!state->incomplete_warned) {
+			state->incomplete_warned = 1;
+			log_warn("WARNING: RAID device %s has incomplete health status (%u of %u"
+				 " chars); skipping positional handling and automatic repair."
+				 " dm-raid 1.9.0/1.9.1 has a known short-health bug; check the"
+				 " target version and upgrade if affected.",
+				 device, status->dev_count, status->advertised_dev_count);
+		}
+		goto out;
+	}
+	state->incomplete_warned = 0;
 
 	/* New dev_count: leg indexes changed; forget positional repair state. */
 	_raid_reset_epoch(state, status, device);
