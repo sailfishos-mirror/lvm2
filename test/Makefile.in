@@ -401,7 +401,7 @@ lib/version-expected: $(top_srcdir)/VERSION .lib-dir-stamp
 lib/dm-version-expected: $(top_srcdir)/VERSION_DM .lib-dir-stamp
 	$(Q) cut -f 1 -d ' ' <$< >$@
 
-CMDS := lvm $(shell cat $(abs_top_builddir)/tools/.commands 2>/dev/null)
+CMDS := lvm $(shell cat $(top_builddir)/tools/.commands 2>/dev/null)
 LIB := $(addprefix lib/, $(LVM_SCRIPTS) $(LIB_SHARED) $(LIB_LOCAL) $(LIB_EXEC) $(LIB_LINK_NOT) $(LIB_DATA))
 
 .tests-stamp: .lib-dir-stamp $(LIB) $(SUBDIRS)
@@ -413,7 +413,7 @@ endif
 	$(Q) $(MKDIR_P) -m a=rwx $(LVM_TEST_RESULTS)
 	$(Q) touch $@
 
-.lib-dir-stamp: unit/unit-test
+.lib-dir-stamp: unit/unit-test $(top_builddir)/tools/.commands
 	$(SHOW) "    [LIB-DIR-STAMP]"
 	$(Q) $(MKDIR_P) api lib unit
 	$(Q) $(RM) lib/clvmd

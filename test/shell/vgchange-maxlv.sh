@@ -27,7 +27,15 @@ vgremove -ff $vg
 vgcreate $SHARED -l 3 "$vg" "${DEVICES[@]}"
 lvcreate -aey -n one -l 1 $vg
 # to better understand weird race on some old system
-ls -Rla /dev/dm* "$DM_DEV_DIR"
+ls -Rla /dev/dm* "$DM_DEV_DIR" || {
+	echo "## dm device listing failed; process snapshot follows"
+	ps auxww || true
+	if command -v pstree >/dev/null 2>&1; then
+		pstree -alp || true
+	else
+		echo "## pstree is not installed"
+	fi
+}
 lvcreate -n snap -s -l 1 $vg/one
 lvcreate -n two -l 1 $vg
 not lvcreate -n three -l 1 $vg
