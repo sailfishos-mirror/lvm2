@@ -113,6 +113,17 @@ static void _test_raid_status(void *fixture)
 		T_ASSERT(!strcmp(s->sync_action, "idle"));
 		T_ASSERT_EQUAL(s->mismatch_count, 10);
 		T_ASSERT_EQUAL(s->data_offset, 20);
+		T_ASSERT_EQUAL(s->advertised_dev_count, 5);
+	}
+
+	/* Omitted health char: dev_count is the health length, advertised is #devs. */
+	T_ASSERT(dm_get_status_raid(mem,
+				    "raid1 3 AD 100/100 idle 0",
+				    &s));
+	if (s) {
+		T_ASSERT_EQUAL(s->dev_count, 2);
+		T_ASSERT_EQUAL(s->advertised_dev_count, 3);
+		T_ASSERT(!strcmp(s->dev_health, "AD"));
 	}
 
 	/* remap aa  to Aa */

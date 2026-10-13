@@ -149,11 +149,32 @@ static void _idle_incomplete(void *fixture)
 	_event(fixture, "raid1 3 Aaa 100/100 idle 0", 1);
 }
 
+/* A short health string has no reliable slot mapping, so skip repair. */
+static void _incomplete_status(void *fixture)
+{
+	struct dso_state *state = fixture;
+	/* This D must not be mistaken for a positional failure. */
+	_event(fixture, "raid1 3 AD 100/100 idle 0", 0);
+	T_ASSERT(state->incomplete_warned);
+	_event(fixture, "raid1 3 AD 100/100 idle 0", 0);
+
+	/* Matching advertised count ends the incomplete-status episode. */
+	_event(fixture, "raid1 3 AAA 100/100 idle 0", 0);
+	T_ASSERT(!state->incomplete_warned);
+
+	/* A new incomplete episode warns again and still does not repair. */
+	_event(fixture, "raid1 3 AA 100/100 idle 0", 0);
+
+	/* Unparsable status is left to the normal path. */
+	_event(fixture, "raid1", 0);
+}
+
 void dmeventd_raid_tests(struct dm_list *all_tests)
 {
 	struct test_suite *ts = test_suite_create(_init, _fixture_exit);
 
 	T_ASSERT(ts);
+	register_test(ts, "/dmeventd/raid/incomplete-status", "skip incomplete status until it recovers", _incomplete_status);
 	register_test(ts, "/dmeventd/raid/unchanged", "suppress duplicate repairs", _unchanged);
 	register_test(ts, "/dmeventd/raid/partial", "finish partial replacement", _partial_repair);
 	register_test(ts, "/dmeventd/raid/coalesced", "observe only completed replacement", _coalesced_repair);
