@@ -68,6 +68,17 @@ struct io_engine *bcache_create_io_engine(const char *hint);
 #define log_bcache_sys_warn(en, x, y) \
 	log_warn("WARNING: bcache %s %s failed: %s", en, x, strerror(y))
 
+/*
+ * Shared completion reporting for bcache I/O backends.  Return values are
+ * suitable for io_complete_fn (0, negative errno, or -ENODATA).
+ */
+int bcache_io_completion_errno(const char *backend, enum dir d,
+			       uint64_t offset, uint64_t remaining,
+			       int errnum);
+int bcache_io_completion_status(const char *backend, enum dir d,
+				uint64_t offset, uint64_t requested,
+				int64_t result);
+
 /*----------------------------------------------------------------*/
 
 struct bcache;

@@ -17,7 +17,54 @@
 #include "lib/log/lvm-logging.h"
 #include "lib/misc/lvm-globals.h"
 
+#include <errno.h>
 #include <string.h>
+
+#define BCACHE_IO_SECTOR_BYTES 512u
+
+int bcache_io_completion_errno(const char *backend, enum dir d,
+			       uint64_t offset, uint64_t remaining,
+			       int errnum)
+{
+	const char *op = (d == DIR_READ) ? "read" : "write";
+
+	log_warn("WARNING: bcache %s %s device offset %llu len %llu: %s.",
+		 backend, op,
+		 (unsigned long long) offset,
+		 (unsigned long long) remaining,
+		 strerror(errnum));
+	return -errnum;
+}
+
+int bcache_io_completion_status(const char *backend, enum dir d,
+				uint64_t offset, uint64_t requested,
+				int64_t result)
+{
+	const char *op = (d == DIR_READ) ? "read" : "write";
+
+	if (result < 0)
+		return bcache_io_completion_errno(backend, d, offset,
+						 requested, (int) -result);
+
+	if ((uint64_t) result >= requested)
+		return 0;
+
+	if (result >= BCACHE_IO_SECTOR_BYTES) {
+		log_debug_devs("bcache %s %s offset %llu requested %llu got %llu.",
+			       backend, op,
+			       (unsigned long long) offset,
+			       (unsigned long long) requested,
+			       (unsigned long long) result);
+		return 0;
+	}
+
+	log_warn("WARNING: bcache %s %s offset %llu requested %llu got %llu.",
+		 backend, op,
+		 (unsigned long long) offset,
+		 (unsigned long long) requested,
+		 (unsigned long long) result);
+	return -ENODATA;
+}
 
 /*
  * Create I/O engine with backend selection.
