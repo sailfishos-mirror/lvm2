@@ -92,8 +92,9 @@ static unsigned _count_fields(const char *p)
  * Versions 1.9.0+  (7 fields):
  *   <raid_type> <#devs> <health_str> <sync_ratio> <sync_action> <mismatch_cnt> <data_offset>
  */
-int dm_get_status_raid(struct dm_pool *mem, const char *params,
-		       struct dm_status_raid **status)
+DM_EXPORT_NEW_SYMBOL(int, dm_get_status_raid, 1_02_218)
+	(struct dm_pool *mem, const char *params,
+	 struct dm_status_raid **status)
 {
 	int i;
 	unsigned num_fields;
@@ -120,8 +121,17 @@ int dm_get_status_raid(struct dm_pool *mem, const char *params,
 	if (!(pp = _skip_fields(p, 1)))
 		goto_bad;
 
-	/* Raid target can actually report more than real number of legs in a case
-	 * raid legs have been removed during initial raid array resynchronization */
+	s->advertised_dev_count = i;
+
+	/* dm-raid 1.9.0 and 1.9.1 emitted health chars by iterating its internal
+	 * rdev list, omitting failed components removed from that list. For a
+	 * three-slot table with "- -" at slot 0, it could report
+	 * "raid1 3 AA ..." rather than the slot-preserving "raid1 3 -AA ...".
+	 * Kernel commit c63ede3b4211 (upstream Linux 4.11, target 1.9.2) fixed this
+	 * by retaining the failed slots in status output. The status text has no
+	 * slot identifiers, so libdm cannot reconstruct omitted positions; preserve
+	 * the actual length for callers that know the RAID component layout.
+	 */
 	if (i > (pp - p - 1))
 		i = pp - p - 1;
 
@@ -666,3 +676,19 @@ out:
 
 	return 0;
 }
+
+#if defined(GNU_SYMVER)
+/*
+ * Binaries built before struct dm_status_raid gained advertised_dev_count
+ * keep working: libdm allocates the struct and returns a pointer, and the
+ * new field is only appended, so their offsets are unchanged.
+ */
+DM_EXPORT_SYMBOL_BASE(dm_get_status_raid)
+int dm_get_status_raid_base(struct dm_pool *mem, const char *params,
+			    struct dm_status_raid **status);
+int dm_get_status_raid_base(struct dm_pool *mem, const char *params,
+			    struct dm_status_raid **status)
+{
+	return dm_get_status_raid(mem, params, status);
+}
+#endif
