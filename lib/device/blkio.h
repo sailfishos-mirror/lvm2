@@ -19,6 +19,7 @@
 #include "base/memory/container_of.h"
 
 #include <linux/fs.h>
+#include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -92,8 +93,28 @@ struct io_engine *blkio_create_io_engine(const char *hint);
  */
 bool blkio_engine_is_forked(pid_t creator_pid);
 
-#define log_blkio_sys_warn(en, x, y) \
-	log_warn("WARNING: %s io engine %s failed: %s.", en, x, strerror(y))
+#define log_blkio_sys_warn(engine, call, errnum) \
+	log_warn("WARNING: %s io engine %s failed: %s.", engine, call, strerror(errnum))
+
+/*
+ * Shared completion reporting for blkio I/O engines.  Return values are
+ * suitable for io_complete_fn (0, negative errno, or -ENODATA).
+ */
+int blkio_completion_errno(const char *engine, enum dir d,
+			   uint64_t offset, uint64_t remaining,
+			   int errnum);
+int blkio_completion_status(const char *engine, enum dir d,
+			    uint64_t offset, uint64_t requested,
+			    int64_t result);
+
+struct blkio_rw_result {
+	size_t done;
+	int errnum;
+};
+
+struct blkio_rw_result blkio_rw_loop(int fd, enum dir d, void *data,
+				     size_t len, off_t offset,
+				     bool (*stop)(void *), void *stop_arg);
 
 /*----------------------------------------------------------------*/
 

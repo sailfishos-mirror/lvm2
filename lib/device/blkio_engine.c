@@ -16,6 +16,7 @@
 #include "lib/log/lvm-logging.h"
 #include "lib/misc/lvm-globals.h"
 
+#include <errno.h>
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
@@ -28,6 +29,98 @@ bool blkio_engine_is_forked(pid_t creator_pid)
 }
 
 //----------------------------------------------------------------
+
+struct blkio_rw_result blkio_rw_loop(int fd, enum dir d, void *data,
+				     size_t len, off_t offset,
+				     bool (*stop)(void *), void *stop_arg)
+{
+	struct blkio_rw_result result = { 0 };
+	ssize_t rv;
+
+	while (result.done < len && !(stop && stop(stop_arg))) {
+		if (d == DIR_READ)
+			rv = pread(fd, (char *) data + result.done,
+				   len - result.done,
+				   offset + (off_t) result.done);
+		else
+			rv = pwrite(fd, (char *) data + result.done,
+				    len - result.done,
+				    offset + (off_t) result.done);
+
+		if (rv < 0) {
+			if (errno == EAGAIN)
+				continue;
+
+			if (errno == EINTR) {
+				if (stop && stop(stop_arg)) {
+					result.errnum = EINTR;
+					break;
+				}
+				continue;
+			}
+
+			result.errnum = errno;
+			break;
+		}
+
+		if (rv == 0)
+			break;
+
+		result.done += rv;
+	}
+
+	return result;
+}
+
+int blkio_completion_errno(const char *engine, enum dir d,
+			   uint64_t offset, uint64_t remaining,
+			   int errnum)
+{
+	const char *op = (d == DIR_READ) ? "read" : "write";
+
+	log_warn("WARNING: %s io engine %s device offset %llu len %llu: %s.",
+		 engine, op,
+		 (unsigned long long) offset,
+		 (unsigned long long) remaining,
+		 strerror(errnum));
+	return -errnum;
+}
+
+int blkio_completion_status(const char *engine, enum dir d,
+			    uint64_t offset, uint64_t requested,
+			    int64_t result)
+{
+	const char *op = (d == DIR_READ) ? "read" : "write";
+
+	if (result < 0)
+		return blkio_completion_errno(engine, d, offset,
+					      requested, (int) -result);
+
+	if ((uint64_t) result >= requested)
+		return 0;
+
+	/*
+	 * A short read is acceptable as long as at least one sector was
+	 * read; this is the long-standing async engine behaviour.  A short
+	 * write means part of the dirty block was not persisted, so it is
+	 * always an error.
+	 */
+	if ((d == DIR_READ) && (result >> SECTOR_SHIFT)) {
+		log_debug_devs("%s io engine %s offset %llu requested %llu got %llu.",
+			       engine, op,
+			       (unsigned long long) offset,
+			       (unsigned long long) requested,
+			       (unsigned long long) result);
+		return 0;
+	}
+
+	log_warn("WARNING: %s io engine %s offset %llu requested %llu got %llu.",
+		 engine, op,
+		 (unsigned long long) offset,
+		 (unsigned long long) requested,
+		 (unsigned long long) result);
+	return (d == DIR_READ) ? -ENODATA : -EIO;
+}
 
 /*
  * Create an I/O engine selected by hint.

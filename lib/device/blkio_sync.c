@@ -16,13 +16,11 @@
 #include "lib/device/blkio.h"
 #include "lib/misc/lvm-signal.h"
 
-#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <unistd.h>
 
 //----------------------------------------------------------------
 
@@ -59,19 +57,20 @@ static bool _sync_destroy(struct io_engine *ioe)
 	return true;
 }
 
-static const char *_sync_dir(enum dir d)
+static const char _sync[] = "sync";
+
+static bool _sync_stop(void *arg)
 {
-	return (d == DIR_READ) ? "read" : "write";
+	return sigint_caught();
 }
 
 static int _sync_issue(struct io_engine *ioe, enum dir d, int fd,
 		       sector_t sb, sector_t se, void *data, void *context)
 {
-	ssize_t rv;
-	off_t offset;
-	uint64_t pos = 0;
-	uint64_t len;
+	struct blkio_rw_result rw;
 	struct blkio_byte_range range;
+	off_t offset;
+	size_t len;
 	struct sync_engine *e = _to_sync(ioe);
 	struct sync_io *io = malloc(sizeof(*io));
 	int io_error = 0;
@@ -84,46 +83,14 @@ static int _sync_issue(struct io_engine *ioe, enum dir d, int fd,
 	range = blkio_sector_range_bytes(sb, se);
 	offset = range.offset;
 	len = range.len;
+	rw = blkio_rw_loop(fd, d, data, len, offset, _sync_stop, NULL);
 
-	while (pos < len) {
-		if (d == DIR_READ)
-			rv = pread(fd, (char *)data + pos, len - pos, offset + pos);
-		else
-			rv = pwrite(fd, (char *)data + pos, len - pos, offset + pos);
-
-		if (rv < 0) {
-			if (errno == EAGAIN)
-				continue;
-			if (errno == EINTR && !sigint_caught())
-				continue;
-
-			log_warn("WARNING: blkio sync %s device offset %llu len %llu: %s.",
-				 _sync_dir(d), (unsigned long long)offset,
-				 (unsigned long long)(len - pos),
-				 strerror(errno));
-			io_error = -errno;
-			break;
-		}
-
-		if (rv == 0)
-			break;
-
-		pos += rv;
-	}
-
-	if (!io_error && pos < len) {
-		if (pos >= (1 << SECTOR_SHIFT)) {
-			/* minimum acceptable read is 1 sector */
-			log_debug_devs("blkio sync %s offset %llu requested %llu got %llu.",
-				       _sync_dir(d), (unsigned long long)offset,
-				       (unsigned long long)len, (unsigned long long)pos);
-		} else {
-			log_warn("WARNING: blkio sync %s offset %llu requested %llu got %llu.",
-				 _sync_dir(d), (unsigned long long)offset,
-				 (unsigned long long)len, (unsigned long long)pos);
-			io_error = -ENODATA;
-		}
-	}
+	if (rw.errnum)
+		io_error = blkio_completion_errno(_sync, d, offset + rw.done,
+						  len - rw.done, rw.errnum);
+	else if (rw.done < len)
+		io_error = blkio_completion_status(_sync, d, offset, len,
+						   (int64_t) rw.done);
 
 	/* Always queue completion - errors reported via callback in wait() */
 	io->context = context;
