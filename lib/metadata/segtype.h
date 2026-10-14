@@ -338,9 +338,14 @@ struct segment_type *init_unknown_segtype(struct cmd_context *cmd,
  * kernel commit c44a5ee803d2 ("dm raid: fix rebuild of specific devices
  * by updating superblock") and later, which is target version 1.14.0.
  *
- * Targets without this bit restart the sync on 'rebuild', so LV_REBUILD
- * is only re-marked for them, and only when needed to avoid the reload
- * rejection.
+ * Targets without this bit restart the sync on 'rebuild', so only they
+ * warn about lost progress before the reload.  LV_REBUILD is still
+ * re-marked on targets with this bit: a leg whose recovery was
+ * committed but has not really started yet has no valid superblock to
+ * resume from, and dm-raid rejects the reload without 'rebuild' -
+ * there is no way to exclude any target version.  Telling the cases
+ * apart would require evaluating the MD superblocks on the _rmeta LVs
+ * from user space; not worth the complexity.
  */
 #define RAID_FEATURE_REBUILD_KEEPS_RECOVERY	(1U << 8) /* version 1.14.0 */
 

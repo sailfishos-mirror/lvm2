@@ -3197,13 +3197,24 @@ static int _raid_extract_images(struct logical_volume *lv,
 
 /*
  * An image added immediately before a RAID1 reduction may still be
- * recovering.  For legacy dm-raid (see lvconvert-raid1.sh), temporarily
- * re-mark legs whose kernel dev_health is 'a' (alive but not in-sync,
- * not 'A') while the target explicitly reports "recover" or "rebuild".
+ * recovering.  Temporarily re-mark legs whose kernel dev_health is 'a'
+ * (alive but not in-sync, not 'A') while the target explicitly reports
+ * "recover" or "rebuild".  Legacy dm-raid restarts recovery from 0%; newer
+ * targets keep the progress, but still require the marker when the new leg
+ * does not yet have a valid superblock (see lvconvert-raid1.sh).
  * An "idle" action with out-of-sync legs is retried because it may be a
  * transient state before recovery, rebuild or array-wide resync; the latter
  * rejects a rebuild parameter.  Legs whose data or metadata LV already has
  * LV_REBUILD in VG metadata are skipped; the rest are flagged.
+ *
+ * Targets that keep recovery progress (dm-raid 1.14.0+) cannot be excluded
+ * from re-marking either: a leg whose recovery was committed but has not
+ * really started yet has no valid superblock to resume from, so dm-raid
+ * rejects the reload injecting it into an existing set without 'rebuild'.
+ * Distinguishing that from an already running recovery would require
+ * evaluating the MD superblocks on the _rmeta LVs from user space -
+ * complexity not worth avoiding a parameter those targets handle without
+ * losing progress.
  *
  * This is not a persistent progress marker: dm-raid's "rebuild <idx>"
  * option resets that device's recovery offset; without it, the offset
@@ -3249,7 +3260,11 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	if (!seg_is_raid1(seg))
 		return 1;
 
-	if (_raid_target_rebuild_keeps_recovery(lv))
+	/*
+	 * Only legacy targets need the pre-prompt warning about lost
+	 * progress; the marker below still applies to every target.
+	 */
+	if (!apply_flags && _raid_target_rebuild_keeps_recovery(lv))
 		return 1;
 
 	/* Recovery state exists only on a live device */
