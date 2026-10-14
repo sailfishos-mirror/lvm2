@@ -58,7 +58,7 @@ test/unit/dev_cache_t.o: | include
 $(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
 	$(SHOW) "    [LD] $@"
 	$(Q) $(CC) $(CFLAGS) $(LDFLAGS) $(EXTRA_EXEC_LDFLAGS) \
-	      -o $@ $+ $(LVMLIBS) $(PTHREAD_LIBS)
+	      -o $@ $+ $(LVMLIBS) $(PTHREAD_LIBS) $(DL_LIBS)
 
 .PHONY: run-unit-test unit-test
 unit-test: $(UNIT_TARGET)
