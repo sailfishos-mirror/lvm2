@@ -294,12 +294,17 @@ static void test_client_read_oversized(void *fixture)
 	close(fds[1]);
 }
 
+struct delayed_write {
+	int fd;
+	ssize_t result;
+};
+
 static void *_write_delayed_body(void *arg)
 {
-	int fd = *(int *) arg;
+	struct delayed_write *delayed = arg;
 
 	usleep(1500000);
-	(void) write(fd, "hello", 5);
+	delayed->result = write(delayed->fd, "hello", 5);
 	return NULL;
 }
 
@@ -308,6 +313,7 @@ static void test_client_read_delayed_body(void *fixture)
 {
 	struct dm_event_daemon_message msg = { 0 };
 	struct dm_event_fifos fifos = { .client_path = "test" };
+	struct delayed_write delayed = { .fd = -1, .result = -1 };
 	uint32_t header[] = { htonl(DM_EVENT_CMD_HELLO), htonl(5) };
 	pthread_t writer;
 	int fds[2], ret;
@@ -315,12 +321,14 @@ static void test_client_read_delayed_body(void *fixture)
 	T_ASSERT(!pipe(fds));
 	T_ASSERT(!fcntl(fds[0], F_SETFL, O_NONBLOCK));
 	fifos.client = fds[0];
+	delayed.fd = fds[1];
 	T_ASSERT_EQUAL(write(fds[1], header, sizeof(header)), (ssize_t) sizeof(header));
-	T_ASSERT(!pthread_create(&writer, NULL, _write_delayed_body, &fds[1]));
+	T_ASSERT(!pthread_create(&writer, NULL, _write_delayed_body, &delayed));
 	ret = _client_read(&fifos, &msg);
 	T_ASSERT(!pthread_join(writer, NULL));
 	close(fds[0]);
 	close(fds[1]);
+	T_ASSERT_EQUAL(delayed.result, (ssize_t) 5);
 	T_ASSERT(ret);
 	T_ASSERT(msg.data && !strcmp(msg.data, "hello"));
 	free(msg.data);
