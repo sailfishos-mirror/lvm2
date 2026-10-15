@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Reject cache pool resize with a clear error instead of failing internally.
   Fix out-of-bounds read when parsing short dmeventd client messages.
   Reject malformed numeric fields in dmeventd client registration messages.
   Reject dmeventd registrations without a plugin or device name.
