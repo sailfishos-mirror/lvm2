@@ -379,6 +379,149 @@ static int _get_dev_health(struct logical_volume *lv, uint32_t *kernel_devs,
 }
 
 /*
+ * dm-raid per-device health char for a raid set component that is alive
+ * but not in-sync (e.g. still recovering).  See dm-raid.c status docs:
+ * 'A' = alive and in-sync, 'a' = alive but not in-sync, 'D' = dead.
+ */
+#define RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC	'a'
+
+/*
+ * Retry a no-progress status with an exponential backoff -- 50, 100, 200,
+ * 400 ms, ... -- for a ~3 s window in total.  The first probe is quick so an
+ * already-completing transient is caught almost at once, while the doubling
+ * keeps the number of status ioctls (and their debug lines) low when the
+ * target stays stuck for the whole window.
+ */
+#define RAID_IDLE_STATUS_RETRIES	6
+#define RAID_IDLE_STATUS_RETRY_MS	50
+
+/*
+ * Outcome of _raid_status_read_stable().
+ *
+ * RAID_READ_STUCK means the target kept reporting an "idle" action with
+ * out-of-sync legs for the whole retry window instead of starting a
+ * recover, rebuild or resync.  That is either the dead-primary state
+ * _lv_raid_rebuild_or_replace() looks for or a transient the caller
+ * must not act on.  A persistent 0% in-sync with all legs alive is
+ * *not* STUCK: it is handed back as RAID_READ_OK for the caller to judge.
+ */
+enum raid_read_result {
+	RAID_READ_ERROR = 0,	/* read/validation failed; caller reports it */
+	RAID_READ_OK,		/* usable status returned; caller owns the pool */
+	RAID_READ_STUCK,	/* idle + out-of-sync persisted past the retries */
+};
+
+/*
+ * Read RAID status, retrying while the target reports no sync progress: an
+ * "idle" action with out-of-sync legs, or 0% in-sync.  The first may be a
+ * recover, rebuild or resync a moment away from starting (or the
+ * dead-primary state _lv_raid_rebuild_or_replace() looks for);
+ * the second is the 0% dm-raid can report right after a reload while the
+ * legs are already in sync (linux/drivers/md/dm-raid.c rs_get_progress(),
+ * kernel commits 4102d9de6d37 and 41dcf197ad53), and equally a recover or
+ * resync that has not advanced yet.  Only a status whose health string
+ * covers all @expected_count slots is retried: a shorter string omits failed
+ * components, so its 'a' positions cannot be mapped to RAID slots and it is
+ * returned as-is for the caller to reject or skip.
+ *
+ * The caller still validates that the device count matches its segment,
+ * since a mismatched count is handled differently by each caller (skip
+ * versus reject).
+ *
+ * On RAID_READ_OK the caller owns @raid_status and must destroy its pool;
+ * on the other results the pool has already been released.  RAID_READ_ERROR
+ * is not always logged, so the caller must report it.
+ *
+ * Returns: enum raid_read_result.
+ */
+static enum raid_read_result
+_raid_status_read_stable(const struct logical_volume *lv, uint32_t expected_count,
+			 struct lv_status_raid **raid_status)
+{
+	struct dm_status_raid *raid;
+	int retries = RAID_IDLE_STATUS_RETRIES;
+	int out_of_sync;
+	int stuck_candidate;
+	unsigned retry_ms = RAID_IDLE_STATUS_RETRY_MS;
+
+	for (;;) {
+		if (!lv_raid_status(lv, raid_status)) {
+			stack;
+			return RAID_READ_ERROR;
+		}
+
+		raid = (*raid_status)->raid;
+		if (!raid->sync_action || !raid->dev_health) {
+			log_error("Unable to determine RAID sync action or device health.");
+			dm_pool_destroy((*raid_status)->mem);
+			return RAID_READ_ERROR;
+		}
+
+		if (raid->dev_count != expected_count)
+			return RAID_READ_OK;
+
+		out_of_sync = (strchr(raid->dev_health,
+				      RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC) != NULL);
+		stuck_candidate = (!strcmp(raid->sync_action, "idle") && out_of_sync);
+
+		if (!stuck_candidate && ((*raid_status)->in_sync != DM_PERCENT_0))
+			return RAID_READ_OK;
+
+		if (!retries) {
+			/*
+			 * Only an idle target with out-of-sync legs is a stuck
+			 * recover; a bare 0% is merely not in sync yet and is
+			 * handed back for the caller to judge.
+			 */
+			if (!stuck_candidate)
+				return RAID_READ_OK;
+
+			log_error("RAID status for %s is idle with out-of-sync devices "
+				  "and did not start a sync after %d retries.",
+				  display_lvname(lv), RAID_IDLE_STATUS_RETRIES);
+			dm_pool_destroy((*raid_status)->mem);
+			return RAID_READ_STUCK;
+		}
+		retries--;
+
+		log_debug("RAID status for %s reports no sync progress; "
+			  "retrying in %u ms.",
+			  display_lvname(lv), retry_ms);
+		dm_pool_destroy((*raid_status)->mem);
+
+		if (!sigint_usleep(retry_ms * 1000)) {
+			stack;
+			return RAID_READ_ERROR;
+		}
+
+		retry_ms *= 2;
+	}
+}
+
+/*
+ * Read one stable RAID status snapshot for a caller that only needs the
+ * sync percentage, and release it: on RAID_READ_OK *sync_percent is set
+ * from the snapshot; on the other results the snapshot is already
+ * released and *sync_percent is left untouched.
+ */
+static enum raid_read_result
+_raid_stable_sync_percent(const struct logical_volume *lv,
+			  uint32_t expected_count,
+			  dm_percent_t *sync_percent)
+{
+	struct lv_status_raid *raid_status;
+	enum raid_read_result read_result;
+
+	read_result = _raid_status_read_stable(lv, expected_count, &raid_status);
+	if (read_result == RAID_READ_OK) {
+		*sync_percent = raid_status->in_sync;
+		dm_pool_destroy(raid_status->mem);
+	}
+
+	return read_result;
+}
+
+/*
  * _raid_in_sync
  * @lv
  *
@@ -388,12 +531,10 @@ static int _get_dev_health(struct logical_volume *lv, uint32_t *kernel_devs,
  *
  * Returns: 1 if in-sync, 0 otherwise.
  */
-#define _RAID_IN_SYNC_RETRIES  6
 static int _raid_in_sync(const struct logical_volume *lv)
 {
-	int retries = _RAID_IN_SYNC_RETRIES;
+	enum raid_read_result read_result;
 	dm_percent_t sync_percent;
-	struct lv_status_raid *raid_status;
 
 	if (seg_is_striped(first_seg(lv)))
 		return 1;
@@ -405,36 +546,22 @@ static int _raid_in_sync(const struct logical_volume *lv)
 				  display_lvname(lv));
 			return 0;
 		}
-	} else do {
+	} else {
 		/*
-		 * FIXME We repeat the status read here to workaround an
-		 * unresolved kernel bug when we see 0 even though the
-		 * the array is 100% in sync.
-		 * https://bugzilla.redhat.com/1210637
+		 * A single stable snapshot: _raid_status_read_stable()
+		 * waits out both the 0% in_sync transient (RHBZ 1210637)
+		 * and the idle-with-out-of-sync-legs ambiguity.
 		 */
-		if (!lv_raid_status(lv, &raid_status)) {
-			log_error("Unable to determine sync status of %s.",
-				  display_lvname(lv));
+		read_result = _raid_stable_sync_percent(lv, first_seg(lv)->area_count,
+							&sync_percent);
+		if (read_result != RAID_READ_OK) {
+			if (read_result == RAID_READ_ERROR)
+				log_error("Unable to determine sync status of %s.",
+					  display_lvname(lv));
+			/* RAID_READ_STUCK is already reported. */
 			return 0;
 		}
-		sync_percent = raid_status->in_sync;
-		dm_pool_destroy(raid_status->mem);
-
-		if (sync_percent > DM_PERCENT_0)
-			break;
-		/*
-		 * A 0% in_sync right after a reload, upconvert or recover
-		 * completion is an expected transient in dm-raid status
-		 * (linux/drivers/md/dm-raid.c rs_get_progress(); kernel
-		 * commits 4102d9de6d37 and 41dcf197ad53), not a user-visible
-		 * problem.  Log it for debugging only and reread.
-		 */
-		if (retries == _RAID_IN_SYNC_RETRIES)
-			log_debug("Sync status for %s is inconsistent, rereading.",
-				  display_lvname(lv));
-		if (!sigint_usleep(500000))
-			return_0;
-	} while (--retries);
+	}
 
 	return (sync_percent == DM_PERCENT_100) ? 1 : 0;
 }
@@ -2989,12 +3116,14 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 {
 	int redundancy = 0;
 	unsigned s;
+	int r = 0;
 	char *dev_health;
 	char *sync_action;
+	struct lv_status_raid *raid_status;
 	struct lv_segment *seg = first_seg(lv);
 
-	/* If in-sync or handling repairs, allow to proceed. */
-	if (_raid_in_sync(lv) || lv->vg->cmd->handles_missing_pvs)
+	/* If handling repairs, allow to proceed. */
+	if (lv->vg->cmd->handles_missing_pvs)
 		return 1;
 
 	/*
@@ -3009,32 +3138,47 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 		return 1;
 
 	/*
-	 * We can allow extracting images if the array is performing a
-	 * sync operation as long as it is "recover" and the image is not
-	 * a primary image or if "resync".
+	 * Base the whole decision on a single status snapshot instead of a
+	 * separate in-sync probe followed by a second read: the array may
+	 * change between two reads, so acting on a secondary, possibly
+	 * conflicting view would be wrong.  _raid_status_read_stable() waits
+	 * out the ambiguous idle/0% states before returning.
+	 *
+	 * We can allow extracting images if the array is performing a sync
+	 * operation as long as it is "recover" and the image is not a primary
+	 * image or if "resync".
 	 */
-	if (!lv_raid_sync_action(lv, &sync_action) ||
-	    !lv_raid_dev_health(lv, &dev_health))
+	if (_raid_status_read_stable(lv, seg->area_count, &raid_status) != RAID_READ_OK)
 		return_0;
+
+	/* If in-sync allow to proceed. */
+	if (raid_status->in_sync == DM_PERCENT_100) {
+		dm_pool_destroy(raid_status->mem);
+		return 1;
+	}
+
+	sync_action = raid_status->raid->sync_action;
+	dev_health = raid_status->raid->dev_health;
 
 	if (!strcmp("resync", sync_action)) {
 		if (!lv_is_on_pvs(seg_lv(seg, 0), target_pvs) &&
 		    !lv_is_on_pvs(seg_metalv(seg, 0), target_pvs))
-			return 1;
+			goto out;
+
 		log_error("Unable to remove primary RAID image while array resyncing.");
-		return 0;
+		goto bad;
 	}
 
 	if (!_raid_sync_action_allows_image_change(sync_action)) {
 		log_error("Unable to remove RAID image while array"
 			  " is performing \"%s\"", sync_action);
-		return 0;
+		goto bad;
 	}
 
 	if (seg->area_count != strlen(dev_health)) {
 		log_error(INTERNAL_ERROR
 			  "RAID LV area_count differs from number of health characters");
-		return 0;
+		goto bad;
 	}
 
 	for (s = 0; s < seg->area_count; s++)
@@ -3047,11 +3191,16 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 			continue;
 		if ((dev_health[s] == 'A') && !--redundancy) {
 			log_error("Unable to remove all primary source devices");
-			return 0;
+			goto bad;
 		}
 		extract_count--;
 	}
-	return 1;
+out:
+	r = 1;
+bad:
+	dm_pool_destroy(raid_status->mem);
+
+	return r;
 }
 
 static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv);
@@ -3189,13 +3338,6 @@ static int _raid_extract_images(struct logical_volume *lv,
 }
 
 /*
- * dm-raid per-device health char for a raid set component that is alive
- * but not in-sync (e.g. still recovering).  See dm-raid.c status docs:
- * 'A' = alive and in-sync, 'a' = alive but not in-sync, 'D' = dead.
- */
-#define RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC	'a'
-
-/*
  * An image added immediately before a RAID1 reduction may still be
  * recovering.  Temporarily re-mark legs whose kernel dev_health is 'a'
  * (alive but not in-sync, not 'A') while the target explicitly reports
@@ -3251,7 +3393,6 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	struct dm_status_raid *raid;
 	uint32_t s;
 	int r = 0;
-	int retries = _RAID_IN_SYNC_RETRIES;
 
 	*flags_set = 0;
 	if (sync_percent)
@@ -3271,56 +3412,30 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	if (!lv_is_active(lv))
 		return 1;
 
-	for (;;) {
-		if (!lv_raid_status(lv, &raid_status))
-			return_0;
+	if (_raid_status_read_stable(lv, seg->area_count, &raid_status) != RAID_READ_OK)
+		return_0;
 
-		raid = raid_status->raid;
-		if (!raid->sync_action || !raid->dev_health)
-			goto_bad;
-
-		if (raid->dev_count != seg->area_count) {
-			/*
-			 * An in-sync degraded array can reach this workaround after
-			 * _raid_allow_extraction() has accepted it.  Only treat a short
-			 * health string as omitted failed components when the target's
-			 * advertised count matches metadata slots and metadata records
-			 * a failed component.  The shortened string cannot be mapped to
-			 * metadata slots, so skip only rebuild marking and let extraction
-			 * remove known failed components first.
-			 */
-			if ((raid->advertised_dev_count == seg->area_count) &&
-			    (raid->dev_count < raid->advertised_dev_count) &&
-			    _lv_get_nr_failed_components(lv)) {
-				log_debug("Skipping RAID rebuild marking for degraded %s.",
-					  display_lvname(lv));
-				goto out;
-			}
-
-			log_error("Active raid has a wrong number of raid images!");
-			goto bad;
+	raid = raid_status->raid;
+	if (raid->dev_count != seg->area_count) {
+		/*
+		 * An in-sync degraded array can reach this workaround after
+		 * _raid_allow_extraction() has accepted it.  Only treat a short
+		 * health string as omitted failed components when the target's
+		 * advertised count matches metadata slots and metadata records
+		 * a failed component.  The shortened string cannot be mapped to
+		 * metadata slots, so skip only rebuild marking and let extraction
+		 * remove known failed components first.
+		 */
+		if ((raid->advertised_dev_count == seg->area_count) &&
+		    (raid->dev_count < raid->advertised_dev_count) &&
+		    _lv_get_nr_failed_components(lv)) {
+			log_debug("Skipping RAID rebuild marking for degraded %s.",
+				  display_lvname(lv));
+			goto out;
 		}
 
-		/* "idle" with out-of-sync legs may precede recover, rebuild or resync. */
-		if (strcmp(raid->sync_action, "idle") ||
-		    !strchr(raid->dev_health, RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC))
-			break;
-
-		if (!retries) {
-			log_error("RAID status for %s remained idle with out-of-sync images "
-				  "after %d retries (%d ms).",
-				  display_lvname(lv), _RAID_IN_SYNC_RETRIES,
-				  _RAID_IN_SYNC_RETRIES * 500);
-			goto bad;
-		}
-		retries--;
-
-		log_debug("RAID status for %s remains idle with out-of-sync images; "
-			  "retrying in 500 ms.",
-			  display_lvname(lv));
-		dm_pool_destroy(raid_status->mem);
-		if (!sigint_usleep(500000))
-			return_0;
+		log_error("Active raid has a wrong number of raid images!");
+		goto bad;
 	}
 
 	if (!strcmp(raid->sync_action, "recover") ||
@@ -7064,25 +7179,28 @@ has_enough_space:
  * primary source that cannot be marked dead by the kernel b/c
  * it is the only source for the remainder of data.
  *
- * This function helps to detect that condition.
+ * This function helps to detect that condition.  The idle state is only
+ * accepted after it has persisted for the retry window of
+ * _raid_status_read_stable(), so a recover that is merely slow to start is
+ * not mistaken for a dead primary.
  *
- * Returns: 1 if the state is detected, 0 otherwise.
- * FIXME: would be better to return -1,0,1 to allow error report.
+ * Returns: RAID_READ_STUCK if the state is detected, RAID_READ_OK if
+ *          not, RAID_READ_ERROR if it cannot be determined (the status
+ *          was unreadable or the retry loop was interrupted); an error
+ *          is already reported.
  */
-static int _lv_raid_has_primary_failure_on_recover(struct logical_volume *lv)
+static enum raid_read_result
+_lv_raid_has_primary_failure_on_recover(struct logical_volume *lv)
 {
-	char *tmp_dev_health;
-	char *tmp_sync_action;
+	struct lv_status_raid *raid_status;
+	enum raid_read_result result;
 
-	if (!lv_raid_sync_action(lv, &tmp_sync_action) ||
-	    !lv_raid_dev_health(lv, &tmp_dev_health))
-		return_0;
+	result = _raid_status_read_stable(lv, first_seg(lv)->area_count,
+					  &raid_status);
+	if (result == RAID_READ_OK)
+		dm_pool_destroy(raid_status->mem);
 
-	if (!strcmp(tmp_sync_action, "idle") &&
-	    strchr(tmp_dev_health, RAID_DEV_HEALTH_ALIVE_NOT_IN_SYNC))
-		return 1;
-
-	return 0;
+	return result;
 }
 
 /*
@@ -7117,6 +7235,7 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 	char *tmp_name_dup;
 	const char *action_str = rebuild ? "rebuild" : "replace";
 	int has_integrity;
+	enum raid_read_result read_result;
 
 	tmp_names = alloca(raid_seg->area_count * 2 * sizeof(*tmp_names));
 
@@ -7160,18 +7279,25 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 		return 0;
 	}
 
-	if (_lv_raid_has_primary_failure_on_recover(lv)) {
+	read_result = _lv_raid_has_primary_failure_on_recover(lv);
+	if (read_result == RAID_READ_ERROR) {
+		log_error("Unable to determine sync status of %s.",
+			  display_lvname(lv));
+		return 0;
+	}
+
+	if (read_result == RAID_READ_STUCK) {
 		/*
 		 * I hate having multiple error lines, but this
 		 * seems to work best for syslog and CLI.
 		 */
-		log_error("Unable to repair %s/%s.  Source devices failed"
+		log_error("Unable to repair %s.  Source devices failed"
 			  " before the RAID could synchronize.",
-			  lv->vg->name, lv->name);
+			  display_lvname(lv));
 		log_error("You should choose one of the following:");
-		log_error("  1) deactivate %s/%s, revive failed "
+		log_error("  1) deactivate %s, revive failed "
 			  "device, re-activate LV, and proceed.",
-			  lv->vg->name, lv->name);
+			  display_lvname(lv));
 		log_error("  2) remove the LV (all data is lost).");
 		log_error("  3) Seek expert advice to attempt to salvage any"
 			  " data from remaining devices.");
