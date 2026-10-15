@@ -125,7 +125,7 @@ aux wait_for_sync $vg $lv1
 delay_pv_pe_area "$dev3"
 lvconvert --yes -m +1 $vg/$lv1 "$dev3"
 a=( $(dmsetup status --noflush "$vg-$lv1") ) || die "Unable to get status of $vg/$lv1"
-[[ "${a[5]}" = "AAa" ]] || die "New RAID1 image is not out-of-sync: ${a[*]}"
+[[ ${#a[5]} -eq 3 && "${a[5]:2:1}" = "a" ]] || die "New RAID1 image is not out-of-sync: ${a[*]}"
 echo "Reducing with out-of-sync RAID1 image: ${a[*]}"
 # should allow 1st primary to be removed
 lvconvert --yes -m -1 $vg/$lv1 "$dev1"
