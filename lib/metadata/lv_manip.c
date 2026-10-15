@@ -6810,6 +6810,25 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
 		return_0;
 
 	/*
+	 * Resizing the caching device is not supported for any cache type
+	 * LVM supports, i.e. cache pool, cachevol or writecache.  A cache
+	 * pool would additionally require resizing its metadata device and
+	 * keeping the embedded-metadata layout in sync.
+	 *
+	 * Cachevol and writecache cache devices are hidden sub-LVs and are
+	 * already rejected as internal LVs below.  An unused cache pool is
+	 * a nameable visible LV and would otherwise reach allocation with a
+	 * cache-pool segment and fail there with an internal error, so
+	 * reject it here for a clear message.
+	 */
+	if (lv_is_cache_pool(lv) ||
+	    lv_is_cache_pool_data(lv) ||
+	    lv_is_cache_pool_metadata(lv)) {
+		log_error("Resize of cache pool %s is not supported.", display_lvname(lv));
+		return 0;
+	}
+
+	/*
 	 * The only types of !visible/internal/non-top LVs that can be directly
 	 * resized via the command arg.  Other internal LVs are resized
 	 * indirectly when resizing a top LV.
