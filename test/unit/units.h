@@ -42,6 +42,7 @@ void dmeventd_vdo_tests(struct dm_list *all_tests);
 void dmeventd_snapshot_tests(struct dm_list *all_tests);
 void io_engine_tests(struct dm_list *all_tests);
 void metadata_security_tests(struct dm_list *all_tests);
+void parse_rx_tests(struct dm_list *all_tests);
 void percent_tests(struct dm_list *all_tests);
 void radix_tree_tests(struct dm_list *all_tests);
 void regex_tests(struct dm_list *all_tests);
@@ -70,6 +71,7 @@ static inline void register_all_tests(struct dm_list *all_tests)
 	dmeventd_snapshot_tests(all_tests);
 	io_engine_tests(all_tests);
 	metadata_security_tests(all_tests);
+	parse_rx_tests(all_tests);
 	percent_tests(all_tests);
 	radix_tree_tests(all_tests);
 	regex_tests(all_tests);
