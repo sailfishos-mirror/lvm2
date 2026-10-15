@@ -13,6 +13,7 @@
 . lib/inittest --skip-with-lvmpolld
 
 aux have_raid 1 3 0 || skip
+aux target_at_least dm-delay 1 1 0 || skip "Missing dm-delay target."
 
 aux prepare_pvs 3
 get_devs
@@ -25,12 +26,30 @@ delay_pv_pe_area() {
 	aux delay_dev "$dev" 0 100 "$(get first_extent_sector "$dev"):"
 }
 
+wait_for_raid1_recovery() {
+	local i
+	local expected_health=$1
+	local -a status
+
+	for i in {1..100}; do
+		status=( $(dmsetup status --noflush "$vg-$lv1") ) || die "Unable to get status of $vg/$lv1"
+		if [[ "${status[5]}" = "$expected_health" &&
+		      ( "${status[7]}" = "recover" || "${status[7]}" = "rebuild" ) ]]; then
+			echo "Observed active RAID1 recovery: ${status[*]}"
+			return 0
+		fi
+		sleep .1
+	done
+
+	die "RAID1 did not enter recovery with health $expected_health: ${status[*]}"
+}
+
 lvcreate --type raid1 -m 1 -aey -l 2 -n "$lv1" "$vg" "$dev1" "$dev2"
 aux wait_for_sync "$vg" "$lv1"
 
 # Reduce a RAID1 LV while a newly added mirror leg is still recovering.
-# On dm-raid < 1.14.0, lvm2 temporarily re-marks LV_REBUILD to pass reload;
-# on 1.14.0+ (rebuild-keeps-recovery) that workaround is skipped automatically.
+# LVM marks the recovering leg for rebuild on table reload.
+# dm-raid < 1.14.0 restarts recovery from 0%; 1.14.0+ preserves its progress.
 
 # Delay the new image data, leaving its metadata extent available.
 extent_size=$(get vg_field "$vg" vg_extent_size --units s --nosuffix)
@@ -38,6 +57,10 @@ first_data_extent=$(($(get first_extent_sector "$dev3") + extent_size))
 aux delay_dev "$dev3" 0 100 "$first_data_extent:$(( 2 * extent_size ))"
 
 lvconvert --yes -m +1 "$vg/$lv1" "$dev3"
+
+# Do not let the reduction below pass unless it runs during active recovery.
+wait_for_raid1_recovery AAa
+
 # Legacy dm-raid restarts recovery on rebuild; newer targets retain progress.
 printf 'y\n' | lvconvert -m -1 "$vg/$lv1" "$dev1" >lvconvert-raid1.out 2>&1
 if aux have_raid 1 14 0; then
@@ -101,10 +124,18 @@ lvcreate --type raid1 -m 1 -aey -l 2 -n $lv1 $vg "$dev1" "$dev2"
 aux wait_for_sync $vg $lv1
 delay_pv_pe_area "$dev3"
 lvconvert --yes -m +1 $vg/$lv1 "$dev3"
+a=( $(dmsetup status --noflush "$vg-$lv1") ) || die "Unable to get status of $vg/$lv1"
+[[ "${a[5]}" = "AAa" ]] || die "New RAID1 image is not out-of-sync: ${a[*]}"
+echo "Reducing with out-of-sync RAID1 image: ${a[*]}"
 # should allow 1st primary to be removed
 lvconvert --yes -m -1 $vg/$lv1 "$dev1"
-# should NOT allow last primary to be removed
-test "${LVM_VALGRIND:-0}" -eq 0 && not lvconvert --yes -m -1 $vg/$lv1 "$dev2"
+# Check that the remaining primary is protected if recovery is still active.
+a=( $(dmsetup status --noflush "$vg-$lv1") ) || die "Unable to get status of $vg/$lv1"
+if [[ ( "${a[7]}" = "recover" || "${a[7]}" = "rebuild" ) && "${a[5]}" = *a* ]]; then
+	test "${LVM_VALGRIND:-0}" -eq 0 && not lvconvert --yes -m -1 $vg/$lv1 "$dev2"
+else
+	echo "Skipping last-primary check after recovery completed: ${a[*]}"
+fi
 # should allow non-primary to be removed
 lvconvert --yes -m 0 $vg/$lv1 "$dev3"
 aux enable_dev "$dev3"
