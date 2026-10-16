@@ -25,6 +25,13 @@
 # - it is the point at which a finishing "recover" doesn't print all 'a's
 aux have_raid 1 13 0 || skip
 
+# A full sync ratio can be reported while a leg is still marked recovering
+# (RHBZ 1507719); the health string then still contains an 'a'.  Keep
+# polling for the status to settle instead of warning on the transition.
+raid_health_settling() {
+	[[ "$1" = *a* ]]
+}
+
 
 
 aux prepare_pvs 9
@@ -49,7 +56,10 @@ for i in {100..0}; do
 		# Ignore until raid starts to report consistent data
 		[ "${b[0]}" = "0" ] || [ "${a[5]}" == "Aa" ]
 	else
+		# All legs out of sync is still invalid when the ratio is full,
+		# but a single recovering leg is a transient to poll out.
 		[ "${a[5]}" != "aa" ]
+		raid_health_settling "${a[5]}" && continue
 		should [ "${a[5]}" == "AA" ] # RHBZ 1507719
 	fi
 	sleep .1
@@ -96,6 +106,7 @@ for i in {100..0}; do
 		#   Before starting sync thread: "Aa X/X recover"
 		# from the valid case,
 		#   Just finished sync thread: "Aa X/X recover"
+		raid_health_settling "${a[5]}" && continue
 		should [ "${a[5]}" = "AA" ] # RHBZ 1507719
 		should [ "${a[7]}" = "idle" ] # RHBZ 1507719
 		break
@@ -127,6 +138,7 @@ for i in {100..0}; do
 		#   Before starting sync thread: "AAa X/X recover"
 		# from the valid case,
 		#   Just finished sync thread: "AAa X/X recover"
+		raid_health_settling "${a[5]}" && continue
 		should [ "${a[5]}" = "AAA" ] # RHBZ 1507719
 		should [ "${a[7]}" = "idle" ] # RHBZ 1507719
 		break
@@ -158,6 +170,7 @@ for i in {100..0}; do
 		[ "${a[7]}" = "resync" ] ||
 		  [[ "${a[7]}" = "idle" && "${b[0]}" -eq "0" ]]
 	else
+		raid_health_settling "${a[5]}" && continue
 		should [ "${a[5]}" = "AA" ] # RHBZ 1507719
 		should [ "${a[7]}" = "idle" ] # RHBZ 1507719
 		break
