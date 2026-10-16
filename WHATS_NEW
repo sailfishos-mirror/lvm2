@@ -1,5 +1,8 @@
 Version 2.03.44 - 
 ==================
+  Preserve RAID1 recovery state and rebuild markers when reducing images.
+  Accept transient or incomplete dm-raid status during repair and reduction.
+  Report the dead-primary RAID repair advice instead of refusing a rebuild.
   Fix out-of-bounds read when parsing short dmeventd client messages.
   Reject malformed numeric fields in dmeventd client registration messages.
   Reject dmeventd registrations without a plugin or device name.
