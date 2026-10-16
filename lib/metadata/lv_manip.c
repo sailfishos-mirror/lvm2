@@ -5580,7 +5580,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 					lp->stripe_size = seg_stripesize;
 				} else {
 					lp->stripe_size =
-						find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
+						(uint64_t) find_config_tree_int(cmd, metadata_stripesize_CFG, NULL) * 2;
 					log_print_unless_silent("Using default stripesize %s.",
 								display_size(cmd, (uint64_t) lp->stripe_size));
 				}
