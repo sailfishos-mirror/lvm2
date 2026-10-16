@@ -3107,6 +3107,9 @@ static int _raid_sync_action_allows_image_change(const char *sync_action)
  * @lv
  * @extract_count
  * @target_pvs
+ * @known_in_sync:  The caller has already read the status and found the
+ *		    array fully in sync, so the read can be skipped; only
+ *		    honored when @out_status is NULL.
  * @out_status:  If non-NULL, set to NULL on entry and, on success, to the
  *		 status snapshot the caller then owns and must release
  *		 with dm_pool_destroy(status->mem); when NULL the
@@ -3117,6 +3120,7 @@ static int _raid_sync_action_allows_image_change(const char *sync_action)
 static int _raid_allow_extraction(struct logical_volume *lv,
 				  int extract_count,
 				  struct dm_list *target_pvs,
+				  int known_in_sync,
 				  struct lv_status_raid **out_status)
 {
 	int redundancy = 0;
@@ -3142,6 +3146,16 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 	 * stripe set while upconverting to RAID5/6.)
 	 */
 	if (!segtype_is_raid1(seg->segtype))
+		return 1;
+
+	/*
+	 * The caller has already established the array is fully in sync
+	 * (e.g. the split path called _raid_in_sync()), so a 100% in-sync
+	 * array passes every check below unconditionally and the read can
+	 * be skipped.  A requested snapshot is still read for: the caller
+	 * explicitly asked for it, so the read is not optional.
+	 */
+	if (known_in_sync && !out_status)
 		return 1;
 
 	/*
@@ -3228,6 +3242,8 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
  * @shift:  If set, use _shift_and_rename_image_components().
  *	  Otherwise, leave the [meta_]areas as AREA_UNASSIGNED and
  *	  seg->area_count unchanged.
+ * @known_in_sync:  Passed to _raid_allow_extraction(); set when the caller
+ *		    has already established the array is fully in sync.
  * @rebuild_flags_set:  If non-NULL, mark recovering RAID1 images after
  *		      extraction has been validated and return whether any
  *		      LV_REBUILD flags were set.  Also requests the status
@@ -3245,6 +3261,7 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
 static int _raid_extract_images(struct logical_volume *lv,
 				int force, uint32_t new_count,
 				struct dm_list *target_pvs, int shift,
+				int known_in_sync,
 				int *rebuild_flags_set,
 				struct dm_list *extracted_meta_lvs,
 				struct dm_list *extracted_data_lvs)
@@ -3280,7 +3297,7 @@ static int _raid_extract_images(struct logical_volume *lv,
 	 * the recovering-image rebuild marking below reuses the same view
 	 * instead of taking a second, possibly conflicting one.
 	 */
-	if (!_raid_allow_extraction(lv, extract, target_pvs,
+	if (!_raid_allow_extraction(lv, extract, target_pvs, known_in_sync,
 				    rebuild_flags_set ? &raid_status : NULL))
 		return_0;
 
@@ -3563,7 +3580,7 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
 	if (!archive(lv->vg))
 		return_0;
 
-	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1,
+	if (!_raid_extract_images(lv, 0, new_count, allocate_pvs, 1, 0,
 				 (commit && (new_count > 1)) ? &rebuild_flags_set : NULL,
 				 removal_lvs, removal_lvs)) {
 		log_error("Failed to extract images from %s.",
@@ -3818,7 +3835,7 @@ int lv_raid_split(struct logical_volume *lv, int yes, const char *split_name,
 			return_0;
 	}
 
-	if (!_raid_extract_images(lv, 0, new_count, splittable_pvs, 1, NULL,
+	if (!_raid_extract_images(lv, 0, new_count, splittable_pvs, 1, 1, NULL,
 				 &removal_lvs, &data_list)) {
 		log_error("Failed to extract images from %s.",
 			  display_lvname(lv));
@@ -7270,6 +7287,7 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 	char *tmp_name_dup;
 	const char *action_str = rebuild ? "rebuild" : "replace";
 	int has_integrity;
+	int known_in_sync;
 	enum raid_read_result read_result;
 
 	tmp_names = alloca(raid_seg->area_count * 2 * sizeof(*tmp_names));
@@ -7338,6 +7356,15 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 			  " data from remaining devices.");
 		return 0;
 	}
+
+	/*
+	 * Reaching here means the in-sync gate above found the array fully
+	 * in sync, and the LV is not reloaded before _raid_extract_images(),
+	 * so the extraction path may skip its own status read.  If the gate
+	 * is ever relaxed (see its FIXME), this must be derived from
+	 * 'sync_percent' instead of being hard-coded.
+	 */
+	known_in_sync = 1;
 
 	/*
 	 * How many sub-LVs are being removed?
@@ -7489,7 +7516,7 @@ try_again:
 	if (!_raid_extract_images(lv, force,
 				  raid_seg->area_count - match_count,
 				  (partial_segment_removed || dm_list_empty(remove_pvs)) ?
-				  &lv->vg->pvs : remove_pvs, 0, NULL,
+				  &lv->vg->pvs : remove_pvs, 0, known_in_sync, NULL,
 				  &old_lvs, &old_lvs)) {
 		log_error("Failed to remove the specified images from %s.",
 			  display_lvname(lv));
