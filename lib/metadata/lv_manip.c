@@ -7667,6 +7667,8 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 	uint32_t raid_multiple;
 	struct lv_segment *seg = first_seg(lv);
 	struct lv_segment *src_seg;
+	struct logical_volume *search_lv;
+	uint32_t search_le, search_len;
 
 	if (!(parallel_areas = dm_pool_alloc(lv->vg->vgmem, sizeof(*parallel_areas)))) {
 		log_error("parallel_areas allocation failed");
@@ -7697,12 +7699,19 @@ struct dm_list *build_parallel_areas_from_lv(struct logical_volume *lv,
 
 		src_seg = use_pvmove_parent_lv ? seg->pvmove_source_seg : NULL;
 
+		search_lv = lv;
+		search_le = current_le;
+		search_len = spvs->len;
+
+		if (src_seg) {
+			search_lv = src_seg->lv;
+			search_le = src_seg->le;
+			search_len = spvs->len * _calc_area_multiple(src_seg->segtype, src_seg->area_count, 0);
+		}
+
 		/* Find next segment end */
 		/* FIXME Unnecessary nesting! */
-		if (!_for_each_pv(cmd, src_seg ? src_seg->lv : lv,
-				  src_seg ? src_seg->le : current_le,
-				  src_seg ? spvs->len * _calc_area_multiple(src_seg->segtype, src_seg->area_count, 0) : spvs->len,
-				  src_seg,
+		if (!_for_each_pv(cmd, search_lv, search_le, search_len, src_seg,
 				  &spvs->len,
 				  0, 0, -1, 0, _add_pvs, (void *) spvs))
 			return_NULL;
