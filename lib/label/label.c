@@ -794,7 +794,7 @@ int label_scan_setup_bcache(void)
 	if (cache_blocks > MAX_BCACHE_BLOCKS)
 		cache_blocks = MAX_BCACHE_BLOCKS;
 
-	_current_bcache_size_bytes = cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
+	_current_bcache_size_bytes = (uint64_t)cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
 
 	if (use_aio()) {
 		if (!(ioe = create_async_io_engine())) {
