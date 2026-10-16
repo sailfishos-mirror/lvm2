@@ -7219,43 +7219,6 @@ has_enough_space:
 }
 
 /*
- * _lv_raid_has_primary_failure_on_recover
- * @lv
- *
- * The kernel behaves strangely in the presence of a primary failure
- * during a "recover" sync operation.  It's not technically a bug, I
- * suppose, but the output of the status line can make it difficult
- * to determine that we are in this state.  The sync ratio will be
- * 100% and the sync action will be "idle", but the health characters
- * will be e.g. "Aaa" or "Aa", where the 'A' is the dead
- * primary source that cannot be marked dead by the kernel b/c
- * it is the only source for the remainder of data.
- *
- * This function helps to detect that condition.  The idle state is only
- * accepted after it has persisted for the retry window of
- * _raid_status_read_stable(), so a recover that is merely slow to start is
- * not mistaken for a dead primary.
- *
- * Returns: RAID_READ_STUCK if the state is detected, RAID_READ_OK if
- *          not, RAID_READ_ERROR if it cannot be determined (the status
- *          was unreadable or the retry loop was interrupted); an error
- *          is already reported.
- */
-static enum raid_read_result
-_lv_raid_has_primary_failure_on_recover(struct logical_volume *lv)
-{
-	struct lv_status_raid *raid_status;
-	enum raid_read_result result;
-
-	result = _raid_status_read_stable(lv, first_seg(lv)->area_count,
-					  &raid_status);
-	if (result == RAID_READ_OK)
-		dm_pool_destroy(raid_status->mem);
-
-	return result;
-}
-
-/*
  * Helper:
  *
  * _lv_raid_rebuild_or_replace
@@ -7289,6 +7252,7 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 	int has_integrity;
 	int known_in_sync;
 	enum raid_read_result read_result;
+	dm_percent_t sync_percent = DM_PERCENT_INVALID;
 
 	tmp_names = alloca(raid_seg->area_count * 2 * sizeof(*tmp_names));
 
@@ -7317,22 +7281,19 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 		return 0;
 	}
 
-	if (!_raid_in_sync(lv)) {
-		/*
-		 * FIXME: There is a bug in the kernel that prevents 'rebuild'
-		 *        from being specified when the array is not in-sync.
-		 *        There are conditions where this should be allowed,
-		 *        but only when we are doing a repair - as indicated by
-		 *        'lv->vg->cmd->handles_missing_pvs'.  The above
-		 *        conditional should be:
-		 (!lv->vg->cmd->handles_missing_pvs && !_raid_in_sync(lv))
-		 */
-		log_error("Unable to replace devices in %s while it is "
-			  "not in-sync.", display_lvname(lv));
-		return 0;
-	}
-
-	read_result = _lv_raid_has_primary_failure_on_recover(lv);
+	/*
+	 * One status read decides both whether the array is in sync and
+	 * whether it is stuck in the dead-primary-after-"recover" state;
+	 * that state and the retry rules are documented at
+	 * _raid_status_read_stable().
+	 *
+	 * This unifies the two reads that used to answer these questions (the
+	 * in-sync gate and the dead-primary probe).  The verdict is the same,
+	 * but a single query cannot report inconsistent results when the
+	 * array changes in between.
+	 */
+	read_result = _raid_stable_sync_percent(lv, raid_seg->area_count,
+						&sync_percent);
 	if (read_result == RAID_READ_ERROR) {
 		log_error("Unable to determine sync status of %s.",
 			  display_lvname(lv));
@@ -7354,6 +7315,38 @@ static int _lv_raid_rebuild_or_replace(struct logical_volume *lv,
 		log_error("  2) remove the LV (all data is lost).");
 		log_error("  3) Seek expert advice to attempt to salvage any"
 			  " data from remaining devices.");
+		return 0;
+	}
+
+	if (sync_percent != DM_PERCENT_100) {
+		/*
+		 * FIXME: There is a bug in the kernel that prevents 'rebuild'
+		 *        from being specified when the array is not in-sync.
+		 *        There are conditions where this should be allowed,
+		 *        but only when we are doing a repair - as indicated by
+		 *        'lv->vg->cmd->handles_missing_pvs'.  The above
+		 *        conditional should be:
+		 (!lv->vg->cmd->handles_missing_pvs &&
+		  sync_percent != DM_PERCENT_100)
+		 *
+		 * Left as-is for now; if it is ever enabled, note:
+		 *        - 'handles_missing_pvs' is a broad "tolerate absent
+		 *          PVs" flag set by many commands.  Only lvconvert
+		 *          --repair sets it among the callers reaching here,
+		 *          so the effect is scoped to repair today, but the
+		 *          'force' argument is the real opt-in and the safer
+		 *          gate.
+		 *        - 'known_in_sync' passed to _raid_extract_images()
+		 *          below hard-codes that this gate proved the array
+		 *          in-sync.  With the gate relaxed that claim is no
+		 *          longer true, so it must be derived from
+		 *          'sync_percent' instead (and the comment above the
+		 *          call updated).
+		 *        - the kernel refusal referenced here must be
+		 *          re-verified against the kernel in use first.
+		 */
+		log_error("Unable to replace devices in %s while it is "
+			  "not in-sync.", display_lvname(lv));
 		return 0;
 	}
 

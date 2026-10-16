@@ -82,7 +82,7 @@ DM_EVENT_LOG_FN("raid")
  *
  * This is simply the way the kernel works...
  *
- * Two signatures are known (see _lv_raid_has_primary_failure_on_recover in
+ * Two signatures are known (see _lv_raid_rebuild_or_replace in
  * lib/metadata/raid_manip.c): the array is not in-sync yet and a leg is the
  * leading 'a' -- or the kernel gave up on the recover and reports the ratio
  * as complete while a leg has not reached 'A'.  There is no 'D' to key on in
@@ -210,7 +210,7 @@ static int _raid_run_repair(struct dso_state *state,
 
 /*
  * Idle primary-source failure during linear->raid recover (see
- * _lv_raid_has_primary_failure_on_recover in lib/metadata/raid_manip.c).
+ * _lv_raid_rebuild_or_replace in lib/metadata/raid_manip.c).
  */
 static enum raid_idle_primary_result _raid_handle_idle_primary(struct dso_state *state,
 							       const struct dm_status_raid *status,
