@@ -2384,7 +2384,8 @@ static int _exec_command(const char *name)
 			return 0;
 		}
 
-		args[argc++] = path;
+		args[argc] = path;
+		argc++;
 		args[argc] = NULL;
 	}
 
