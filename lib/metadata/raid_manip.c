@@ -3107,20 +3107,27 @@ static int _raid_sync_action_allows_image_change(const char *sync_action)
  * @lv
  * @extract_count
  * @target_pvs
+ * @out_status:  If non-NULL, set to NULL on entry and, on success, to the
+ *		 status snapshot the caller then owns and must release
+ *		 with dm_pool_destroy(status->mem); when NULL the
+ *		 snapshot is released here.
  *
  * returns: 0 if no, 1 if yes
  */
 static int _raid_allow_extraction(struct logical_volume *lv,
 				  int extract_count,
-				  struct dm_list *target_pvs)
+				  struct dm_list *target_pvs,
+				  struct lv_status_raid **out_status)
 {
 	int redundancy = 0;
 	unsigned s;
-	int r = 0;
 	char *dev_health;
 	char *sync_action;
 	struct lv_status_raid *raid_status;
 	struct lv_segment *seg = first_seg(lv);
+
+	if (out_status)
+		*out_status = NULL;
 
 	/* If handling repairs, allow to proceed. */
 	if (lv->vg->cmd->handles_missing_pvs)
@@ -3152,10 +3159,8 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 		return_0;
 
 	/* If in-sync allow to proceed. */
-	if (raid_status->in_sync == DM_PERCENT_100) {
-		dm_pool_destroy(raid_status->mem);
-		return 1;
-	}
+	if (raid_status->in_sync == DM_PERCENT_100)
+		goto out;
 
 	sync_action = raid_status->raid->sync_action;
 	dev_health = raid_status->raid->dev_health;
@@ -3196,16 +3201,23 @@ static int _raid_allow_extraction(struct logical_volume *lv,
 		extract_count--;
 	}
 out:
-	r = 1;
+	if (out_status) {
+		/* Hand the snapshot to the caller, which owns the pool. */
+		*out_status = raid_status;
+		return 1;
+	}
+	dm_pool_destroy(raid_status->mem);
+	return 1;
+
 bad:
 	dm_pool_destroy(raid_status->mem);
-
-	return r;
+	return 0;
 }
 
 static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv);
 static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
-						      int *flags_set);
+						      int *flags_set,
+						      struct lv_status_raid *raid_status);
 
 /*
  * _raid_extract_images
@@ -3218,7 +3230,9 @@ static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
  *	  seg->area_count unchanged.
  * @rebuild_flags_set:  If non-NULL, mark recovering RAID1 images after
  *		      extraction has been validated and return whether any
- *		      LV_REBUILD flags were set.
+ *		      LV_REBUILD flags were set.  Also requests the status
+ *		      snapshot from _raid_allow_extraction(), which this
+ *		      function then owns and releases.
  * @extracted_[meta|data]_lvs:  The LVs removed from the array.  If 'shift'
  *			      is set, then there will likely be name conflicts.
  *
@@ -3236,7 +3250,9 @@ static int _raid_extract_images(struct logical_volume *lv,
 				struct dm_list *extracted_data_lvs)
 {
 	int ss, s, extract, lvl_idx = 0;
+	int ok;
 	struct lv_list *lvl_array;
+	struct lv_status_raid *raid_status = NULL;
 	struct lv_segment *seg = first_seg(lv);
 	struct logical_volume *rmeta_lv, *rimage_lv;
 	struct segment_type *error_segtype;
@@ -3245,12 +3261,6 @@ static int _raid_extract_images(struct logical_volume *lv,
 	if (rebuild_flags_set)
 		*rebuild_flags_set = 0;
 
-	if (!_raid_allow_extraction(lv, extract, target_pvs))
-		return_0;
-
-	log_verbose("Extracting %d %s from %s.", extract,
-		    (extract > 1) ? "images" : "image",
-		    display_lvname(lv));
 	if ((int) dm_list_size(target_pvs) < extract) {
 		log_error("Unable to remove %d images: Only %u device%s given.",
 			  extract, dm_list_size(target_pvs),
@@ -3265,10 +3275,27 @@ static int _raid_extract_images(struct logical_volume *lv,
 	if (!(error_segtype = get_segtype_from_string(lv->vg->cmd, SEG_TYPE_NAME_ERROR)))
 		return_0;
 
-	/* Use the sync state after extraction validation and any status retries. */
-	if (rebuild_flags_set &&
-	    !_raid_apply_recovering_image_rebuild_flags(lv, rebuild_flags_set))
+	/*
+	 * _raid_allow_extraction() reads one status snapshot; hand it on so
+	 * the recovering-image rebuild marking below reuses the same view
+	 * instead of taking a second, possibly conflicting one.
+	 */
+	if (!_raid_allow_extraction(lv, extract, target_pvs,
+				    rebuild_flags_set ? &raid_status : NULL))
 		return_0;
+
+	log_verbose("Extracting %d %s from %s.", extract,
+		    (extract > 1) ? "images" : "image",
+		    display_lvname(lv));
+
+	/* Reuse the snapshot taken during extraction validation. */
+	if (raid_status) {
+		ok = _raid_apply_recovering_image_rebuild_flags(lv, rebuild_flags_set,
+								raid_status);
+		dm_pool_destroy(raid_status->mem);
+		if (!ok)
+			return_0;
+	}
 
 	/*
 	 * We make two passes over the devices.
@@ -3329,6 +3356,7 @@ static int _raid_extract_images(struct logical_volume *lv,
 
 		extract--;
 	}
+
 	if (extract) {
 		log_error("Unable to extract enough images to satisfy request.");
 		return 0;
@@ -3386,10 +3414,11 @@ static int _raid_target_rebuild_keeps_recovery(const struct logical_volume *lv)
 static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 						int apply_flags,
 						int *flags_set,
-						dm_percent_t *sync_percent)
+						dm_percent_t *sync_percent,
+						struct lv_status_raid *raid_status)
 {
 	struct lv_segment *seg = first_seg(lv);
-	struct lv_status_raid *raid_status;
+	struct lv_status_raid *own_status = NULL;
 	struct dm_status_raid *raid;
 	uint32_t s;
 	int r = 0;
@@ -3412,8 +3441,11 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 	if (!lv_is_active(lv))
 		return 1;
 
-	if (_raid_status_read_stable(lv, seg->area_count, &raid_status) != RAID_READ_OK)
-		return_0;
+	if (!raid_status) {
+		if (_raid_status_read_stable(lv, seg->area_count, &raid_status) != RAID_READ_OK)
+			return_0;
+		own_status = raid_status;
+	}
 
 	raid = raid_status->raid;
 	if (raid->dev_count != seg->area_count) {
@@ -3468,7 +3500,8 @@ static int _raid_recovering_images_rebuild_work(struct logical_volume *lv,
 out:
 	r = 1;
 bad:
-	dm_pool_destroy(raid_status->mem);
+	if (own_status)
+		dm_pool_destroy(own_status->mem);
 
 	return r;
 }
@@ -3477,13 +3510,15 @@ static int _raid_probe_recovering_images(struct logical_volume *lv,
 					 int *flags_set,
 					 dm_percent_t *sync_percent)
 {
-	return _raid_recovering_images_rebuild_work(lv, 0, flags_set, sync_percent);
+	return _raid_recovering_images_rebuild_work(lv, 0, flags_set, sync_percent, NULL);
 }
 
 static int _raid_apply_recovering_image_rebuild_flags(struct logical_volume *lv,
-						      int *flags_set)
+						      int *flags_set,
+						      struct lv_status_raid *raid_status)
 {
-	return _raid_recovering_images_rebuild_work(lv, 1, flags_set, NULL);
+	/* Reuse @raid_status when the caller already read one; it owns the pool. */
+	return _raid_recovering_images_rebuild_work(lv, 1, flags_set, NULL, raid_status);
 }
 
 static int _raid_remove_images(struct logical_volume *lv, int yes,
