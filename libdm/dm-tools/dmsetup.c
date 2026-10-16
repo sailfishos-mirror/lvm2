@@ -6100,7 +6100,7 @@ out:
 	return r;
 }
 
-#define VDO_WALK_MAX_DEPTH 64
+#define VDO_WALK_MAX_DEPTH 64U
 #define VDO_WALK_MAX_SEEN 256
 
 /* State threaded through the recursive dependency-tree descent below. */

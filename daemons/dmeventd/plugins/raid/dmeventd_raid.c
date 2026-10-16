@@ -267,8 +267,8 @@ static int _raid_should_run_repair(struct dso_state *state,
 	}
 
 	if (!_raid_has_repair_transition(state, event)) {
-		log_debug("RAID %s: no repair transition (in_sync=%u resynced=%d "
-			  "recovered=%d).", device, state->in_sync,
+		log_debug("RAID %s: no repair transition (in_sync=%u resynced=%u "
+			  "recovered=%u).", device, state->in_sync,
 			  event->resynced, event->recovered);
 		return 0;
 	}

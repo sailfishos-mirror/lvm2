@@ -70,6 +70,8 @@ static uint64_t _cow_extra_chunks(struct cmd_context *cmd, uint64_t n_chunks)
 
 static uint64_t _cow_max_size(struct cmd_context *cmd, uint64_t origin_size, uint32_t chunk_size)
 {
+	uint64_t origin_chunks, chunks_per_metadata_area, metadata_chunks, n_chunks;
+
 	/* Snapshot disk layout:
 	 *    COW is divided into chunks
 	 *        1st. chunk is reserved for header
@@ -83,15 +85,15 @@ static uint64_t _cow_max_size(struct cmd_context *cmd, uint64_t origin_size, uin
 		return 0;
 	}
 
-	uint64_t origin_chunks = (origin_size + chunk_size - 1) / chunk_size;
-	uint64_t chunks_per_metadata_area = (uint64_t)chunk_size << (SECTOR_SHIFT - 4);
+	origin_chunks = (origin_size + chunk_size - 1) / chunk_size;
+	chunks_per_metadata_area = (uint64_t)chunk_size << (SECTOR_SHIFT - 4);
 
 	/*
 	 * Note: if origin_chunks is divisible by chunks_per_metadata_area, we
 	 * need one extra metadata chunk as a terminator.
 	 */
-	uint64_t metadata_chunks = (origin_chunks + chunks_per_metadata_area) / chunks_per_metadata_area;
-	uint64_t n_chunks = 1 + origin_chunks + metadata_chunks;
+	metadata_chunks = (origin_chunks + chunks_per_metadata_area) / chunks_per_metadata_area;
+	n_chunks = 1 + origin_chunks + metadata_chunks;
 
 	return (n_chunks + _cow_extra_chunks(cmd, n_chunks)) * chunk_size;
 }
