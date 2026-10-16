@@ -45,7 +45,7 @@
 #  define BLKSIZE_SHIFT 0
 #endif
 
-#ifdef O_DIRECT_SUPPORT
+#if defined(O_DIRECT_SUPPORT) && !defined(__CPPCHECK__)
 #  ifndef O_DIRECT
 #    error O_DIRECT support configured but O_DIRECT definition not found in headers
 #  endif

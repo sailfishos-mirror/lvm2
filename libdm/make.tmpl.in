@@ -447,6 +447,7 @@ CPPCHECK_SUPPRESS ?= missingIncludeSystem unusedFunction \
 ifneq ("$(CPPCHECK_SOURCES)", " ")
 cppcheck:
 	$(CPPCHECK_CMD) --enable=$(CPPCHECK_ENABLE) \
+	 -D__CPPCHECK__ \
 	 $(CPPCHECK_FLAGS) \
 	 $(addprefix --suppress=,$(CPPCHECK_SUPPRESS)) \
 	 $(CPPCHECK_INCLUDES) $(DEFS) $(CPPCHECK_SOURCES)
