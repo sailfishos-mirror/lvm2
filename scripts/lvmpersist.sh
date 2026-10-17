@@ -1373,6 +1373,18 @@ DO_READKEYS=0
 DO_READRESERVATION=0
 DO_READ=0
 
+# Option values are set from command-line options below.  Initialize them
+# so variables of the same name in the caller's environment are not used.
+OURKEY=""
+KEY=""
+REMKEY=""
+PTPL=0
+ACCESS=""
+PRTYPE_ARG=""
+LAST_DEVICE=""
+DEVICES=()
+VGNAME=""
+
 CMD=$1
 shift
 
