@@ -32,6 +32,13 @@ not lvchange -aey $vg/$lv2 # check that activation is refused
 
 not lvchange -aey $vg/$lv3 # check that activation is refused
 
+# vgcfgbackup may handle unknown segments, but the next command
+# run by the same lvm process must still refuse to change the VG
+printf '#!lvm\nvgcfgbackup -f bak %s\nlvcreate -an -Zn -l 1 -n %s %s\n' $vg $lv4 $vg > cmds
+not lvm cmds 2>&1 | tee err
+grep "unknown segments" err
+check lv_not_exists $vg $lv4
+
 vgcfgbackup -f bak1 $vg
 cat bak1
 sed -e 's,unstriped,striped,;s,unmirror,mirror,;s,zero+NEWFLAG,zero,' -i.orig bak1
