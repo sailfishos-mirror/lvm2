@@ -15,6 +15,26 @@
 
 #include "tools.h"
 
+/*
+ * Template is passed to dm_snprintf() as its format string with
+ * the VG name as the only argument, so allow only a single %s
+ * (and %% for a literal %) and refuse any other conversion.
+ */
+static int _valid_filename_template(const char *template)
+{
+	int vg_names = 0;
+
+	for (; (template = strchr(template, '%')); template += 2) {
+		if (template[1] == '%')
+			continue;
+
+		if ((template[1] != 's') || vg_names++)
+			return 0;
+	}
+
+	return 1;
+}
+
 __attribute__((nonnull(1, 2, 3)))
 static int _expand_filename(const char *template, const char *vg_name,
 			    char *last_filename)
@@ -27,6 +47,13 @@ static int _expand_filename(const char *template, const char *vg_name,
 			return 0;
 		}
 		goto out;
+	}
+
+	if (!_valid_filename_template(template)) {
+		log_error("Invalid filename template %s. "
+			  "Use single %%s for VG name and %%%% for literal %%.",
+			  template);
+		return 0;
 	}
 
 	/* coverity[non_const_printf_format_string] */
