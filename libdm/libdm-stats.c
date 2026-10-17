@@ -783,9 +783,10 @@ static int _parse_aux_data_group(struct dm_stats *dms,
 	 * string to pass to dm_bitset_parse_list().
 	 */
 	end = strstr(c, DMS_AUX_SEP);
-	if (!end)
-		end = c + strlen(c);
-	*(end++) = '\0';
+	if (end)
+		*(end++) = '\0';
+	else
+		end = c + strlen(c); /* no user aux_data */
 
 	if (!(regions = dm_bitset_parse_list(c, dms->mem, 0)))
 		goto_bad;
