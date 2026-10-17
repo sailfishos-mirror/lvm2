@@ -40,6 +40,14 @@ aux lvmconf "backup/archive = 1"
 vgcfgbackup -f "bak-%s" >out
 grep "Volume group \"$vg1\" successfully backed up." out
 grep "Volume group \"$vg2\" successfully backed up." out
+
+# filename template accepts only a single %s and %%
+fail vgcfgbackup -f "bak-%n" $vg1
+fail vgcfgbackup -f "bak-%s-%s" $vg1
+fail vgcfgbackup -f "bak-%" $vg1
+vgcfgbackup -f "bak%%-%s" $vg1
+test -e "bak%-$vg1"
+
 # increase seqno
 lvcreate -an -Zn -l1 $vg1
 
