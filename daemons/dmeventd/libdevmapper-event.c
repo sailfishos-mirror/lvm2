@@ -297,10 +297,17 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 	struct pollfd pfd;
 	size_t bytes = 0;
 	size_t size = 2 * sizeof(uint32_t) + msg->size;
-	uint32_t *header = alloca(size);
-	char *buf = (char *)header;
+	uint32_t *header;
+	char *buf;
 	char drainbuf[128];
 
+	/* Message size is not bounded here, keep the copy off the stack. */
+	if (!(header = malloc(size))) {
+		log_error("Unable to allocate message buffer.");
+		return 0;
+	}
+
+	buf = (char *)header;
 	header[0] = htonl(msg->cmd);
 	header[1] = htonl(msg->size);
 	memcpy(buf + 2 * sizeof(uint32_t), msg->data, msg->size);
@@ -315,7 +322,7 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 			if (errno == EINTR)
 				continue;
 			log_error("Unable to talk to event daemon.");
-			return 0;
+			goto out;
 		}
 		if (ret == 0)
 			break;
@@ -324,7 +331,7 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 			if ((errno == EINTR) || (errno == EAGAIN))
 				continue;
 			log_error("Unable to talk to event daemon.");
-			return 0;
+			goto out;
 		}
 	}
 
@@ -336,14 +343,14 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 
 		if ((ret < 0) && (errno != EINTR)) {
 			log_error("Unable to talk to event daemon.");
-			return 0;
+			goto out;
 		}
 
 		if (ret < 1) {
 			if (++retries > 3000) {
 				/* ~30s elapsed with no progress */
 				log_error("Unable to talk to event daemon.");
-				return 0;
+				goto out;
 			}
 			continue;
 		}
@@ -355,11 +362,14 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 				continue;
 
 			log_error("Unable to talk to event daemon.");
-			return 0;
+			goto out;
 		}
 
 		bytes += ret;
 	}
+
+out:
+	free(header);
 
 	return bytes == size;
 }
