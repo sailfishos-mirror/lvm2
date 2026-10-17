@@ -1855,9 +1855,17 @@ struct device *dev_cache_get_by_pvid(struct cmd_context *cmd, const char *pvid)
 
 struct dev_iter *dev_iter_create(struct dev_filter *f, int unused)
 {
-	struct dev_iter *di = malloc(sizeof(*di));
+	struct dev_iter *di;
 
-	if (!di) {
+	/*
+	 * Nothing to iterate when the dev cache does not exist,
+	 * e.g. a previous refresh_toolcontext() failed after dev_cache_exit()
+	 * and the next one is dropping the scan again.
+	 */
+	if (!_cache.devices)
+		return NULL;
+
+	if (!(di = malloc(sizeof(*di)))) {
 		log_error("dev_iter allocation failed.");
 		return NULL;
 	}
