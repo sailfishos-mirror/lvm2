@@ -516,6 +516,15 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
 		return 0;
 	}
 
+	if ((uint64_t) vg->extent_count + (new_pe_count - old_pe_count) > MAX_EXTENT_COUNT) {
+		log_error("Unable to extend %s in %s: new extent count (%"
+			  PRIu64 ") exceeds limit (%u).",
+			  pv_dev_name(pv), vg->name,
+			  (uint64_t) vg->extent_count + (new_pe_count - old_pe_count),
+			  MAX_EXTENT_COUNT);
+		return 0;
+	}
+
 	if (!(peg = _alloc_pv_segment(vg->vgmem, pv,
 				      old_pe_count,
 				      new_pe_count - old_pe_count,
@@ -539,6 +548,7 @@ static int _extend_pv(struct physical_volume *pv, struct volume_group *vg,
 static int _pv_resize(struct physical_volume *pv, struct volume_group *vg, uint64_t size)
 {
 	uint32_t old_pe_count, new_pe_count;
+	uint64_t pe_count;
 
 	if (size < pv_min_size()) {
 		log_error("Size must exceed minimum of %" PRIu64 " sectors on PV %s.",
@@ -568,7 +578,14 @@ static int _pv_resize(struct physical_volume *pv, struct volume_group *vg, uint6
 	if (vg && !is_orphan_vg(vg->name)) {
 		/* FIXME: Maybe PE calculation should go into pv->fmt->resize?
 		          (like it is for pv->fmt->setup) */
-		if (!(new_pe_count = pv_size(pv) / vg->extent_size)) {
+		if ((pe_count = pv_size(pv) / vg->extent_size) > UINT32_MAX) {
+			log_error("PV %s too large for extent size %s.",
+				  pv_dev_name(pv),
+				  display_size(vg->cmd, (uint64_t) vg->extent_size));
+			return 0;
+		}
+
+		if (!(new_pe_count = (uint32_t) pe_count)) {
 			log_error("Size must leave space for at least one physical "
 				  "extent of %" PRIu32 " sectors on PV %s.",
 				   vg->extent_size, pv_dev_name(pv));
