@@ -33,6 +33,37 @@ static void test_dmlist_splice(void *fixture)
 	T_ASSERT(dm_list_size(&list2) == 10);
 }
 
+static void test_dm_device_list_equal(void *fixture)
+{
+	unsigned i;
+	struct dm_active_device a[3], b[3];
+	struct dm_list list1;
+	struct dm_list list2;
+
+	dm_list_init(&list1);
+	dm_list_init(&list2);
+
+	T_ASSERT(dm_device_list_equal(NULL, NULL));
+	T_ASSERT(!dm_device_list_equal(&list1, NULL));
+	T_ASSERT(dm_device_list_equal(&list1, &list2));
+
+	for (i = 0; i < DM_ARRAY_SIZE(a); i++) {
+		a[i].devno = b[i].devno = i;
+		a[i].uuid = b[i].uuid = "";
+
+		/* One list is a proper prefix of the other one */
+		dm_list_add(&list2, &b[i].list);
+		T_ASSERT(!dm_device_list_equal(&list1, &list2));
+		T_ASSERT(!dm_device_list_equal(&list2, &list1));
+
+		dm_list_add(&list1, &a[i].list);
+		T_ASSERT(dm_device_list_equal(&list1, &list2));
+	}
+
+	b[1].uuid = "differs";
+	T_ASSERT(!dm_device_list_equal(&list1, &list2));
+}
+
 #define T(path, desc, fn) register_test(ts, "/base/data-struct/list/" path, desc, fn)
 
 void dm_list_tests(struct dm_list *all_tests)
@@ -44,6 +75,7 @@ void dm_list_tests(struct dm_list *all_tests)
 	}
 
 	T("splice", "joining lists together", test_dmlist_splice);
+	T("device-list-equal", "comparing lists of active DM devices", test_dm_device_list_equal);
 
 	dm_list_add(all_tests, &ts->list);
 }
