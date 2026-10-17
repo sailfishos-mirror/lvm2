@@ -1694,13 +1694,20 @@ fi
 get_devices_from_vg() {
 	local IFS=:
 	local ALL_DEVS
+	local REPORT
+	# lvm also prints messages to stdout (e.g. "Retrying metadata scan."),
+	# -qq turns them off without affecting the report.
+	if ! REPORT=$("$LVM" vgs -qq --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME"); then
+		die "failed to get devices from VG $VGNAME."
+	fi
+	# The report is a single line, anything printed before it
+	# must not become a part of the first PV name.
+	REPORT=${REPORT##*$'\n'}
 	# Split on ':' without pathname expansion, so a PV name containing
 	# a glob character is not expanded against the filesystem.
 	set -f
-	# shellcheck disable=SC2207 # intentional split of device list
-	if ! ALL_DEVS=( $("$LVM" vgs --nolocking --noheadings --separator : --sort pv_uuid --o pv_name --rows --config log/prefix=\"\" "$VGNAME") ); then
-		die "failed to get devices from VG $VGNAME."
-	fi
+	# shellcheck disable=SC2206 # intentional split of device list
+	ALL_DEVS=( $REPORT )
 	set +f
 
 	DEVICES=()
