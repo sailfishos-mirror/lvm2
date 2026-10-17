@@ -292,9 +292,15 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
 	if (ret == ECMD_FAILED) {
 		/*
 		 * Error from setting up devices file or label_scan,
-		 * _vgimportdevices_single does not return an error.
+		 * or from vg_read of a VG that could not be processed
+		 * (e.g. a read-only VG), _vgimportdevices_single does
+		 * not return an error.  With --rootvg, only the root
+		 * VG is wanted, so once its devices have been added,
+		 * a failure to read some other VG is not an error.
 		 */
-		goto_out;
+		if (!vp.root_vg_found || !vp.added_devices)
+			goto_out;
+		ret = ECMD_PROCESSED;
 	}
 
 	if (!vp.added_devices) {
