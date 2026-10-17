@@ -297,6 +297,13 @@ out:
 
 int dev_is_md_component(struct cmd_context *cmd, struct device *dev, uint64_t *offset_found, int full)
 {
+	/*
+	 * The dev struct is kept in dev-cache between commands (lvm shell,
+	 * dmeventd), so the flag must reflect the current check and not
+	 * a superblock found by an earlier command.
+	 */
+	dev->flags &= ~DEV_IS_MD_COMPONENT;
+
 	if (_dev_is_md_component_native(dev, offset_found, full) == 1)
 		goto found;
 
