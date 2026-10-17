@@ -77,7 +77,7 @@ static char *_list_args(const char *text, int state)
 		len = strlen(text);
 
 		/* Find start of first word in line buffer */
-		while (isspace(*s))
+		while (isspace((unsigned char) *s))
 			s++;
 
 		/* Look for word in list of command names */
@@ -136,7 +136,7 @@ static char **_completion(const char *text, int start_pos,
 	char **match_list = NULL;
 	int p = 0;
 
-	while (isspace((int) *(rl_line_buffer + p)))
+	while (isspace((unsigned char) *(rl_line_buffer + p)))
 		p++;
 
 	/* First word should be one of our commands */

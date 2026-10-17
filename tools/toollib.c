@@ -1263,7 +1263,7 @@ static int _compare_vdo_option(const char *b1, const char *b2)
 		b1 += 3;
 
 	while (*b1 && *b2) {
-		if (tolower(*b1) == tolower(*b2)) {
+		if (tolower((unsigned char) *b1) == tolower((unsigned char) *b2)) {
 			++b1;
 			++b2;
 			continue;	// matching char
@@ -6471,4 +6471,3 @@ int persist_start_include(struct cmd_context *cmd, struct volume_group *vg,
 
 	return 1;
 }
-

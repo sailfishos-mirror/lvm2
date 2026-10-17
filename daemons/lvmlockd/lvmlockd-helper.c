@@ -113,7 +113,7 @@ static void exec_command(char *cmd_str)
 				arg[arg_len++] = cmd_str[i];
 				continue;
 			}
-			if (isspace(cmd_str[i])) {
+			if (isspace((unsigned char) cmd_str[i])) {
 				arg[arg_len++] = cmd_str[i];
 				continue;
 			} else {
@@ -121,9 +121,10 @@ static void exec_command(char *cmd_str)
 			}
 		}
 
-		if (isalnum(cmd_str[i]) || ispunct(cmd_str[i])) {
+		if (isalnum((unsigned char) cmd_str[i]) ||
+		    ispunct((unsigned char) cmd_str[i])) {
 			arg[arg_len++] = cmd_str[i];
-		} else if (isspace(cmd_str[i])) {
+		} else if (isspace((unsigned char) cmd_str[i])) {
 			if (arg_len)
 				av[av_count++] = strdup(arg);
 

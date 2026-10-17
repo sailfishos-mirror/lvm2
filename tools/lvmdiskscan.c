@@ -54,7 +54,7 @@ static void _count(struct device *dev, int *disks, int *parts)
 {
 	int c = dev_name(dev)[strlen(dev_name(dev)) - 1];
 
-	if (!isdigit(c))
+	if (!isdigit((unsigned char) c))
 		(*disks)++;
 	else
 		(*parts)++;

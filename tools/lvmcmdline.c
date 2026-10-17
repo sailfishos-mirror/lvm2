@@ -562,7 +562,7 @@ static int _get_int_arg(struct arg_values *av, char **ptr)
 		av->sign = SIGN_NONE;
 	}
 
-	if (!isdigit(*val))
+	if (!isdigit((unsigned char) *val))
 		return 0;
 
 	errno = 0;
@@ -635,7 +635,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
 		return 0;
 	}
 
-	if (!isdigit(*val) && (*val != '.') && (*val != radixchar[0])) {
+	if (!isdigit((unsigned char) *val) && (*val != '.') && (*val != radixchar[0])) {
 		log_error("Size requires number argument.");
 		return 0;
 	}
@@ -669,7 +669,7 @@ static int _size_arg(struct cmd_context *cmd __attribute__((unused)),
 		}
 	} else if (*ptr) {
 		for (i = sizeof(_suffixes) - 1; i >= 0; --i)
-			if (_suffixes[i] == tolower((int) *ptr))
+			if (_suffixes[i] == tolower((unsigned char) *ptr))
 				break;
 
 		if (i < 0) {
@@ -3365,7 +3365,7 @@ int lvm_split(char *str, int *argc, char **argv, unsigned max)
 	*argc = 0;
 
 	while (*b) {
-		while (*b && isspace(*b))
+		while (*b && isspace((unsigned char) *b))
 			b++;
 
 		if ((!*b) || (*b == '#'))
@@ -3377,7 +3377,7 @@ int lvm_split(char *str, int *argc, char **argv, unsigned max)
 		}
 
 		e = b;
-		while (*e && (quote ? *e != quote : !isspace(*e)))
+		while (*e && (quote ? *e != quote : !isspace((unsigned char) *e)))
 			e++;
 
 		argv[(*argc)++] = b;

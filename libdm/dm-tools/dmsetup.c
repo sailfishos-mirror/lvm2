@@ -346,13 +346,13 @@ static int _parse_line(struct dm_task *dmt, char *buffer, const char *file,
 
 	/* trim trailing space */
 	for (ptr = buffer + strlen(buffer) - 1; ptr >= buffer; ptr--)
-		if (!isspace((int) *ptr))
+		if (!isspace((unsigned char) *ptr))
 			break;
 	ptr++;
 	*ptr = '\0';
 
 	/* trim leading space */
-	for (ptr = buffer; *ptr && isspace((int) *ptr); ptr++)
+	for (ptr = buffer; *ptr && isspace((unsigned char) *ptr); ptr++)
 		;
 
 	if (!*ptr || *ptr == '#')
@@ -1337,7 +1337,7 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 			fields[++f] = n;
 
 			/* Skip any whitespace after field-separating commas */
-			while(isspace(*c))
+			while (isspace((unsigned char) *c))
 				c++;
 
 			continue;
@@ -1406,7 +1406,7 @@ static int _create_concise(const struct command *cmd, int argc, char **argv)
 			fields[1] = fields[2] = fields[3] = fields[4] = NULL;
 
 			/* Skip any whitespace after semi-colons */
-			while(isspace(*c))
+			while (isspace((unsigned char) *c))
 				c++;
 
 			continue;
@@ -2362,12 +2362,12 @@ static int _exec_command(const char *name)
 	if (!argc) {
 		c = _command_to_exec;
 		while (argc < ARGS_MAX) {
-			while (*c && isspace(*c))
+			while (*c && isspace((unsigned char) *c))
 				c++;
 			if (!*c)
 				break;
 			args[argc++] = c;
-			while (*c && !isspace(*c))
+			while (*c && !isspace((unsigned char) *c))
 				c++;
 			if (*c)
 				*c++ = '\0';
@@ -7146,7 +7146,7 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 			else if (!strcasecmp(optarg, "none"))
 				_int_args[READAHEAD_ARG] = DM_READ_AHEAD_NONE;
 			else {
-				for (s = optarg; isspace(*s); s++)
+				for (s = optarg; isspace((unsigned char) *s); s++)
 					;
 				if (*s == '+')
 					_read_ahead_flags = DM_READ_AHEAD_MINIMUM_FLAG;

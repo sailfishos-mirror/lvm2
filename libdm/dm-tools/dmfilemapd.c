@@ -223,7 +223,7 @@ static int _is_open(const char *path)
 	if (!proc_d)
 		return 0;
 	while ((proc_dp = readdir(proc_d)) != NULL) {
-		if (!isdigit(proc_dp->d_name[0]))
+		if (!isdigit((unsigned char) proc_dp->d_name[0]))
 			continue;
 		errno = 0;
 		pid = (pid_t) strtol(proc_dp->d_name, NULL, 10);

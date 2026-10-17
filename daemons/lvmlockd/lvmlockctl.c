@@ -935,7 +935,7 @@ static void _run_command_pipe(const char *cmd_str, pid_t *pid_out, FILE **fp_out
 				arg[arg_len++] = cmd_str[i];
 				continue;
 			}
-			if (isspace(cmd_str[i])) {
+			if (isspace((unsigned char) cmd_str[i])) {
 				arg[arg_len++] = cmd_str[i];
 				continue;
 			} else {
@@ -943,9 +943,10 @@ static void _run_command_pipe(const char *cmd_str, pid_t *pid_out, FILE **fp_out
 			}
 		}
 
-		if (isalnum(cmd_str[i]) || ispunct(cmd_str[i])) {
+		if (isalnum((unsigned char) cmd_str[i]) ||
+		    ispunct((unsigned char) cmd_str[i])) {
 			arg[arg_len++] = cmd_str[i];
-		} else if (isspace(cmd_str[i])) {
+		} else if (isspace((unsigned char) cmd_str[i])) {
 			if (arg_len) {
 				if (!(arg_dup = strdup(arg)))
 					goto out;

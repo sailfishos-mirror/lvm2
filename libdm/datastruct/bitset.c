@@ -171,7 +171,7 @@ scan:
 			old_c = c;
 			c = *str++;
 			len--;
-			if (isspace(c))
+			if (isspace((unsigned char) c))
 				continue;
 
 			/* A '\0' or a ',' signal the end of a value or range */
@@ -186,7 +186,7 @@ scan:
 			* as c was ',' or '\0',
 			* the last code line has broken the current loop.
 			*/
-			if ((totaldigits != ndigits) && isspace(old_c))
+			if ((totaldigits != ndigits) && isspace((unsigned char) old_c))
 				goto_bad;
 
 			if (c == '-') {
@@ -198,7 +198,7 @@ scan:
 				continue;
 			}
 
-			if (!isdigit(c))
+			if (!isdigit((unsigned char) c))
 				goto_bad;
 
 			b = b * 10 + (c - '0');

@@ -926,7 +926,7 @@ static void _get_token(struct parser *p, int tok_prev)
 	case '-':
 		if (values_allowed) {
 			for (; te != p->fe; ++te) {
-				if (!isdigit((int) *te)) {
+				if (!isdigit((unsigned char) *te)) {
 					if (*te == '.') {
 						if (p->t != TOK_FLOAT) {
 							p->t = TOK_FLOAT;
@@ -942,7 +942,7 @@ static void _get_token(struct parser *p, int tok_prev)
 
 	default:
 		p->t = TOK_IDENTIFIER;
-		while ((te != p->fe) && ((c = *te)) && !isspace(c) &&
+		while ((te != p->fe) && ((c = *te)) && !isspace((unsigned char) c) &&
 		       (c != '#') && (c != '=') &&
 		       (c != SECTION_B_CHAR) &&
 		       (c != SECTION_E_CHAR))
@@ -958,7 +958,7 @@ static void _get_token(struct parser *p, int tok_prev)
 static void _eat_space(struct parser *p)
 {
 	while (p->tb != p->fe) {
-		if (!isspace(*p->te)) {
+		if (!isspace((unsigned char) *p->te)) {
 			if (*p->te != '#')
 				break;
 
@@ -969,7 +969,7 @@ static void _eat_space(struct parser *p)
 		while (p->te != p->fe) {
 			if (*p->te == '\n')
 				++p->line;
-			else if (!isspace(*p->te))
+			else if (!isspace((unsigned char) *p->te))
 				break;
 			++p->te;
 		}

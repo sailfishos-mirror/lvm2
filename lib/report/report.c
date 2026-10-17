@@ -414,7 +414,7 @@ static int _is_time_month(time_id_t id)
 
 static const char *_skip_space(const char *s)
 {
-	while (*s && isspace(*s))
+	while (*s && isspace((unsigned char) *s))
 		s++;
 	return s;
 }
@@ -423,13 +423,14 @@ static const char *_skip_space(const char *s)
 static const char *_move_till_item_end(const char *s)
 {
 	char c = *s;
-	int is_num = isdigit(c);
+	int is_num = isdigit((unsigned char) c);
 
 	/*
 	 * Allow numbers to be attached to next token, for example
 	 * it's correct to write "12 hours" as well as "12hours".
 	 */
-	while (c && !isspace(c) && (is_num ? (is_num = isdigit(c)) : 1))
+	while (c && !isspace((unsigned char) c) &&
+	       (is_num ? (is_num = isdigit((unsigned char) c)) : 1))
 		c = *++s;
 
 	return s;
@@ -536,14 +537,14 @@ static int _preparse_fuzzy_time(const char *s, struct time_info *info)
 		 * it's standard YYYY-MM-DD HH:MM:SS +-HH:MM format
 		 * and that is parsable by libdm directly.
 		 */
-		if (!(isdigit(c) || (c == '-') || (c == ':') || (c == '+')))
+		if (!(isdigit((unsigned char) c) || (c == '-') || (c == ':') || (c == '+')))
 			fuzzy = 1;
 
 		end = _move_till_item_end(s);
 
-		if (isalpha(c))
+		if (isalpha((unsigned char) c))
 			id = TIME_STR;
-		else if (isdigit(c)) {
+		else if (isdigit((unsigned char) c)) {
 			if (*end == ':') {
 				/* we have time */
 				if (!_get_time(info->mem, &s, list, 0))

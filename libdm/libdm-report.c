@@ -1432,7 +1432,7 @@ static char *_toupperstr(char *str)
 	char *u = str;
 
 	do
-		*u = toupper(*u);
+		*u = toupper((unsigned char) *u);
 	while (*u++);
 
 	return str;
@@ -2444,7 +2444,7 @@ int dm_report_object_is_selected(struct dm_report *rh, void *object, int do_outp
 
 static const char * _skip_space(const char *s)
 {
-	while (*s && isspace(*s))
+	while (*s && isspace((unsigned char) *s))
 		s++;
 	return s;
 }
@@ -2514,7 +2514,7 @@ static const char *_tok_value_number(const char *s,
 	int is_float = 0;
 
 	*begin = s;
-	while ((!is_float && (*s == '.') && ++is_float) || isdigit(*s))
+	while ((!is_float && (*s == '.') && ++is_float) || isdigit((unsigned char) *s))
 		s++;
 	*end = s;
 
@@ -3088,7 +3088,7 @@ static char *_get_date(char *str, struct tm *tm, time_range_t *range)
 	char *s = str, *end;
 	size_t len = 0;
 
-	if (!isdigit(*s))
+	if (!isdigit((unsigned char) *s))
 		/* we need a year at least */
 		return NULL;
 
@@ -3099,7 +3099,7 @@ static char *_get_date(char *str, struct tm *tm, time_range_t *range)
 	if (*end == DELIM_DATE) {
 		len += (4 - (end - s)); /* diff in length from standard YYYY */
 		s = end + 1;
-		if (isdigit(*s)) {
+		if (isdigit((unsigned char) *s)) {
 			n2 = strtol(s, &end, 10);
 			len += (2 - (end - s)); /* diff in length from standard MM */
 			if (*end == DELIM_DATE) {
@@ -3176,7 +3176,7 @@ static char *_get_time(char *str, struct tm *tm, time_range_t *range)
 	char *s = str, *end;
 	size_t len = 0;
 
-	if (!isdigit(*s)) {
+	if (!isdigit((unsigned char) *s)) {
 		/* time is not compulsory */
 		tm->tm_hour = tm->tm_min = tm->tm_sec = 0;
 		return (char *) _skip_space(s);
@@ -3186,7 +3186,7 @@ static char *_get_time(char *str, struct tm *tm, time_range_t *range)
 	if (*end == DELIM_TIME) {
 		len += (2 - (end - s)); /* diff in length from standard HH */
 		s = end + 1;
-		if (isdigit(*s)) {
+		if (isdigit((unsigned char) *s)) {
 			n2 = strtol(s, &end, 10);
 			len += (2 - (end - s)); /* diff in length from standard MM */
 			if (*end == DELIM_TIME) {
@@ -3275,7 +3275,7 @@ static char *_get_tz(char *str, int *tz_supplied, int *offset)
 	*tz_supplied = 0;
 	*offset = 0;
 
-	if (!isdigit(*s)) {
+	if (!isdigit((unsigned char) *s)) {
 		if (*s == '+')  {
 			sign = 1;
 			s = s + 1;
@@ -3290,7 +3290,7 @@ static char *_get_tz(char *str, int *tz_supplied, int *offset)
 	if (*end == DELIM_TIME) {
 		len = (2 - (end - s)); /* diff in length from standard HH */
 		s = end + 1;
-		if (isdigit(*s)) {
+		if (isdigit((unsigned char) *s)) {
 			n2 = strtol(s, &end, 10);
 			len = (2 - (end - s)); /* diff in length from standard MM */
 		}
@@ -3662,7 +3662,7 @@ static const char *_tok_field_name(const char *s,
 
 	*begin = s;
 	while ((c = *s) &&
-	       (isalnum(c) || c == '_' || c == '-'))
+	       (isalnum((unsigned char) c) || c == '_' || c == '-'))
 		s++;
 	*end = s;
 

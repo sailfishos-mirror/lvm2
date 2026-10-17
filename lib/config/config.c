@@ -570,7 +570,8 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
 	if (!(dev->flags & DEV_REGULAR)) {
 		strncpy(namebuf, buf, sizeof(namebuf) - 1);
 
-		while (namebuf[namelen] && !isspace(namebuf[namelen]) && namebuf[namelen] != '{' && namelen < (NAME_LEN - 1))
+		while (namebuf[namelen] && !isspace((unsigned char) namebuf[namelen]) &&
+		       namebuf[namelen] != '{' && namelen < (NAME_LEN - 1))
 			namelen++;
 		namebuf[namelen] = '\0';
 
@@ -806,7 +807,7 @@ static struct dm_config_value *_get_def_array_values(struct cmd_context *cmd,
 		if (!array)
 			array = v;
 
-		switch (toupper(token[0])) {
+		switch (toupper((unsigned char) token[0])) {
 			case 'I':
 			case 'B':
 				errno = 0;

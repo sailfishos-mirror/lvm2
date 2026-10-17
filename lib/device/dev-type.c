@@ -344,42 +344,42 @@ struct dev_types *create_dev_types(const char *proc_dir,
 			; /* skip space */
 
 		/* Major is SCSI device */
-		if (!strncmp("sd", line + i, 2) && isspace(*(line + i + 2)))
+		if (!strncmp("sd", line + i, 2) && isspace((unsigned char) *(line + i + 2)))
 			dt->dev_type_array[line_maj].flags |= PARTITION_SCSI_DEVICE;
 
-		else if (!strncmp("loop", line + i, 4) && isspace(*(line + i + 4)))
+		else if (!strncmp("loop", line + i, 4) && isspace((unsigned char) *(line + i + 4)))
 			dt->loop_major = line_maj;
 
 		/* Look for device-mapper device */
 		/* FIXME Cope with multiple majors */
-		else if (!strncmp("device-mapper", line + i, 13) && isspace(*(line + i + 13)))
+		else if (!strncmp("device-mapper", line + i, 13) && isspace((unsigned char) *(line + i + 13)))
 			dt->device_mapper_major = line_maj;
 
 		/* Look for md device */
-		else if (!strncmp("md", line + i, 2) && isspace(*(line + i + 2)))
+		else if (!strncmp("md", line + i, 2) && isspace((unsigned char) *(line + i + 2)))
 			dt->md_major = line_maj;
 
 		/* Look for blkext device */
-		else if (!strncmp("blkext", line + i, 6) && isspace(*(line + i + 6)))
+		else if (!strncmp("blkext", line + i, 6) && isspace((unsigned char) *(line + i + 6)))
 			dt->blkext_major = line_maj;
 
 		/* Look for drbd device */
-		else if (!strncmp("drbd", line + i, 4) && isspace(*(line + i + 4)))
+		else if (!strncmp("drbd", line + i, 4) && isspace((unsigned char) *(line + i + 4)))
 			dt->drbd_major = line_maj;
 
 		/* Look for DASD */
-		else if (!strncmp("dasd", line + i, 4) && isspace(*(line + i + 4)))
+		else if (!strncmp("dasd", line + i, 4) && isspace((unsigned char) *(line + i + 4)))
 			dt->dasd_major = line_maj;
 
 		/* Look for EMC powerpath */
-		else if (!strncmp("emcpower", line + i, 8) && isspace(*(line + i + 8)))
+		else if (!strncmp("emcpower", line + i, 8) && isspace((unsigned char) *(line + i + 8)))
 			dt->emcpower_major = line_maj;
 
 		/* Look for Veritas Dynamic Multipathing */
-		else if (!strncmp("VxDMP", line + i, 5) && isspace(*(line + i + 5)))
+		else if (!strncmp("VxDMP", line + i, 5) && isspace((unsigned char) *(line + i + 5)))
 			dt->vxdmp_major = line_maj;
 
-		else if (!strncmp("power2", line + i, 6) && isspace(*(line + i + 6)))
+		else if (!strncmp("power2", line + i, 6) && isspace((unsigned char) *(line + i + 6)))
 			dt->power2_major = line_maj;
 
 
@@ -389,7 +389,7 @@ struct dev_types *create_dev_types(const char *proc_dir,
 			dev_len = strlen(dev_known_types[j].name);
 			if (dev_len <= strlen(line + i) &&
 			    !strncmp(dev_known_types[j].name, line + i, dev_len) &&
-			    (!line[i + dev_len] || isspace(line[i + dev_len])) &&
+			    (!line[i + dev_len] || isspace((unsigned char) line[i + dev_len])) &&
 			    (line_maj < NUMBER_OF_MAJORS)) {
 				dt->dev_type_array[line_maj].max_partitions =
 					dev_known_types[j].max_partitions;
