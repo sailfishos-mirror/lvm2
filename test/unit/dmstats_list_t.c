@@ -145,6 +145,21 @@ static void test_list_group_alias_with_spaces(void *fixture)
 	T_ASSERT(!strcmp(dm_stats_get_region_aux_data(dms, 0), ""));
 }
 
+/*
+ * A group tag not followed by '#' carries no user aux_data.  The tag and
+ * its NUL fill 24 bytes, so the member bitset, starting with its size
+ * 16706 ("BA"), is the next allocation in the pool.
+ */
+static void test_list_group_without_aux_separator(void *fixture)
+{
+	struct dm_stats *dms = fixture;
+	static const char resp[] =
+		"0: 0+512 1 test DMS_GROUP='abc':0,16705\n";
+
+	T_ASSERT(dm_stats_read_list(dms, resp));
+	T_ASSERT(!strcmp(dm_stats_get_region_aux_data(dms, 0), ""));
+}
+
 /* A row must be rejected whole, not partially applied. */
 static void test_list_leaves_handle_usable_after_error(void *fixture)
 {
@@ -317,6 +332,8 @@ void dmstats_list_tests(struct dm_list *all_tests)
 	  test_list_group_aux_data_with_spaces);
 	T("group-alias-spaces", "parse a quoted group alias with spaces",
 	  test_list_group_alias_with_spaces);
+	T("group-no-aux-separator", "parse a group tag without user aux_data separator",
+	  test_list_group_without_aux_separator);
 	T("usable-after-error", "handle still works after a rejected response",
 	  test_list_leaves_handle_usable_after_error);
 	T("empty", "accept an empty @stats_list response",
