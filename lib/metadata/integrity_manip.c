@@ -612,6 +612,9 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct dm_integrity_sett
 			unsigned int pbs = 0;
 			unsigned int lbs = 0;
 
+			if (!pvl->pv->dev)
+				continue;
+
 			if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs))
 				continue;
 			if (lbs == 4096)
