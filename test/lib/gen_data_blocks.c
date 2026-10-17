@@ -121,7 +121,7 @@ static void dumpBlock(void *buf, const char *label)
   for (i = 0; i < TAG_SIZE; i++) {
     if (tag[i] == '\0') {
       tag[i] = ' ';
-    } else if (!isprint(tag[i])) {
+    } else if (!isprint((unsigned char) tag[i])) {
       tag[i] = '.';
     }
   }
