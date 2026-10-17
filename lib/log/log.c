@@ -190,6 +190,21 @@ int reopen_standard_stream(FILE **stream, const char *mode)
 		return 0;
 	}
 
+	if (!(new_stream = fdopen(fd, mode))) {
+		log_sys_error("fdopen", name);
+		if (close(fd_copy) < 0)
+			log_sys_error("close", name);
+		return 0;
+	}
+
+	/*
+	 * Install the new stream before closing the old one, so that
+	 * errors logged below never go through the closed (freed) FILE.
+	 * The new stream only refers to fd, which dup2() restores below.
+	 */
+	_check_and_replace_standard_log_streams(old_stream, new_stream);
+	*stream = new_stream;
+
 	if (fclose(old_stream))
 		log_sys_error("fclose", name);
 
@@ -201,14 +216,6 @@ int reopen_standard_stream(FILE **stream, const char *mode)
 	if (close(fd_copy) < 0)
 		log_sys_error("close", name);
 
-	if (!(new_stream = fdopen(fd, mode))) {
-		log_sys_error("fdopen", name);
-		return 0;
-	}
-
-	_check_and_replace_standard_log_streams(*stream, new_stream);
-
-	*stream = new_stream;
 	return 1;
 }
 
