@@ -5760,9 +5760,18 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 
 		/* Segment size in extents must be divisible by stripes */
 		stripes_extents = lp->stripes;
-		if (lp->stripe_size > vg->extent_size)
+		if (lp->stripe_size > vg->extent_size) {
+			/* Stripe size of existing segment is not limited by extent size */
+			if ((lp->stripe_size / vg->extent_size) > (MAX_EXTENT_COUNT / lp->stripes)) {
+				log_error("Unable to resize %s with %u stripes of size %s: exceeds limit (%u extents).",
+					  display_lvname(lv), lp->stripes,
+					  display_size(cmd, (uint64_t) lp->stripe_size),
+					  MAX_EXTENT_COUNT);
+				return 0;
+			}
 			/* Strip size is bigger than extent size needs more extents */
 			stripes_extents *= (lp->stripe_size / vg->extent_size);
+		}
 
 		size_rest = seg_size % stripes_extents;
 		/* Round toward the original size. */
@@ -5771,6 +5780,12 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
 		     !lp->percent ||
 		     (vg->free_count >= (lp->extents - existing_logical_extents - size_rest +
 					 stripes_extents)))) {
+			if ((stripes_extents - size_rest) > (MAX_EXTENT_COUNT - lp->extents)) {
+				log_error("Unable to round size of %s (%u extents) up to stripe "
+					  "boundary: exceeds limit (%u extents).",
+					  display_lvname(lv), lp->extents, MAX_EXTENT_COUNT);
+				return 0;
+			}
 			log_print_unless_silent("Rounding size (%u extents) up to stripe "
 						"boundary size for segment (%u extents).",
 						lp->extents,

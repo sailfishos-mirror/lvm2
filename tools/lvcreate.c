@@ -250,7 +250,7 @@ static int _update_extents_params(struct volume_group *vg,
 	uint32_t pv_extent_count;
 	struct logical_volume *origin_lv = NULL;
 	uint32_t size_rest;
-	uint32_t stripesize_extents;
+	uint64_t stripesize_extents; /* 64bit, gets multiplied by stripes */
 	uint32_t extents;
 	uint32_t base_calc_extents = 0;
 	uint32_t vdo_pool_max_extents;
