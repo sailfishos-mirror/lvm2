@@ -1392,6 +1392,7 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 	uint64_t devsize, pvsize;
 	int do_check_size, do_check_name;
 	int md_check_start;
+	int last_info;
 
 	/*
 	 * use_full_md_check: if set then no more needs to be done here,
@@ -1425,9 +1426,6 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 	 */
 
 	dm_list_iterate_items_safe(vginfo, vginfo2, &_vginfos) {
-		char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
-		memcpy(vgid, vginfo->vgid, ID_LEN);
-
 		dm_list_iterate_items_safe(info, info2, &vginfo->infos) {
 			dev = info->dev;
 			pvs = _find_pvsummary(dev->pvid);
@@ -1480,12 +1478,18 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
 				log_debug("Ignoring PV from md component %s with PVID %s (metadata %s %llu)",
 					  dev_name(dev), dev->pvid, device_hint ?: "none", (unsigned long long)pvsize);
 				dev->flags &= ~DEV_SCAN_FOUND_LABEL;
-				/* lvmcache_del will also delete vginfo if info was last one */
+				/*
+				 * Check before deleting: lvmcache_del() may free vginfo when
+				 * this is its last info. Looking it up by VGID afterward is
+				 * unreliable because distinct VGs may share an ID; the safe
+				 * iterator does not preserve the lifetime of the list head.
+				 */
+				last_info = dm_list_end(&vginfo->infos, &info->list);
 				lvmcache_del(info);
 				cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
 
-				/* If vginfo was deleted don't continue using vginfo->infos */
-				if (!_search_vginfos_list(NULL, vgid))
+				/* Do not continue through vginfo->infos if vginfo was freed. */
+				if (last_info)
 					break;
 			}
 		}
@@ -3307,4 +3311,3 @@ const char *devname_error_reason(const char *devname)
 
 	return "device not found";
 }
-
