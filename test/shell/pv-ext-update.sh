@@ -182,3 +182,17 @@ check pv_field "$dev1" pv_ext_vsn 2
 check pv_field "$dev1" pv_in_use "used"
 check pv_field "$dev1" vg_name "$VG_NAME"
 lvs "$VG_NAME"/"$LV_NAME"
+
+# a refused VG write that has already updated the PV header must keep the old metadata
+create_pv_with_ext_vsn1_and_vg "$dev1"
+check pv_field "$dev1" pv_ext_vsn 1
+
+# 600 tags of 1000 chars do not fit into the metadata area
+tags=()
+for i in {1..600}; do
+	tags+=( --addtag "$(printf "t%0999d" "$i")" )
+done
+not vgchange "${tags[@]}" $VG_NAME
+check pv_field "$dev1" pv_in_use "used"
+check pv_field "$dev1" vg_name "$VG_NAME"
+lvs "$VG_NAME"/"$LV_NAME"
