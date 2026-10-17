@@ -416,6 +416,17 @@ static int _read_mda_header_and_metadata(const struct format_type *fmt,
 			log_print_unless_silent("Retrying metadata scan.");
 			retries++;
 			dev_invalidate(mdac->area.dev);
+
+			/*
+			 * Start the retry from a clean summary.  A vgname
+			 * left behind by the failed parse would make
+			 * read_metadata_location_summary treat the text
+			 * as already known and accept it after checking
+			 * only its checksum, without parsing it again.
+			 */
+			memset(vgsummary, 0, sizeof(*vgsummary));
+			dm_list_init(&vgsummary->pvsummaries);
+			vgsummary->mda_num = mda->mda_num;
 			goto retry;
 		}
 
