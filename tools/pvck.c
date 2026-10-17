@@ -27,6 +27,8 @@
 #define PRINT_ALL 2
 
 #define ID_STR_SIZE 40 /* uuid formatted with dashes is 38 chars */
+#define VG_UUID_TEXT_LEN (ID_STR_SIZE - 2)
+#define VG_ID_LINE_UUID_OFF sizeof("id = ")
 
 /*
  * command line input from --settings
@@ -2967,11 +2969,12 @@ static int _check_metadata_file(struct cmd_context *cmd, struct metadata_file *m
 		log_warn("WARNING: Unexpected final bytes of raw metadata, expected \\n\\n\\0.");
 
 	if (_check_vgname_start(text_buf, &namelen)) {
-		if (!(vgid = strstr(text_buf, "id = "))) {
+		if (!(vgid = strstr(text_buf, "id = ")) ||
+		    (size_t)(vgid - text_buf) + VG_ID_LINE_UUID_OFF + VG_UUID_TEXT_LEN > text_size) {
 			log_error("Invalid raw text metadata in file.  (No VG UUID found.)");
 			return 0;
 		}
-		memcpy(mf->vgid_str, vgid + 6, 38);
+		memcpy(mf->vgid_str, vgid + VG_ID_LINE_UUID_OFF, VG_UUID_TEXT_LEN);
 		return 1;
 	}
 
