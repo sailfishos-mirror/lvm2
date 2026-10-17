@@ -3556,6 +3556,28 @@ int dm_stats_get_current_region_precise_timestamps(const struct dm_stats *dms)
  * Histogram access methods.
  */
 
+/*
+ * Compare histogram bounds h1 and h2, and return 1 if they match (i.e.
+ * have the same number of bins and identical bin boundary values), or 0
+ * otherwise.
+ */
+static int _stats_check_histogram_bounds(struct dm_histogram *h1,
+					 struct dm_histogram *h2)
+{
+	int i;
+
+	if (!h1 || !h2)
+		return 0;
+
+	if (h1->nr_bins != h2->nr_bins)
+		return 0;
+
+	for (i = 0; i < h1->nr_bins; i++)
+		if (h1->bins[i].upper != h2->bins[i].upper)
+			return 0;
+	return 1;
+}
+
 static void _sum_histogram_bins(const struct dm_stats *dms,
 				struct dm_histogram *dmh_aggr,
 				uint64_t region_id, uint64_t area_id)
@@ -3612,6 +3634,18 @@ static struct dm_histogram *_aggregate_histogram(const struct dm_stats *dms,
 
 		if (!dms->regions[group_id].bounds)
 			return_NULL;
+
+		/*
+		 * Group membership is read back from the leader's aux_data
+		 * and need not satisfy the dm_stats_create_group() checks:
+		 * the group has a histogram only if every member has one
+		 * with the leader's bounds, since the sum below indexes
+		 * each member's bins by the leader's.
+		 */
+		_foreach_group_region(dms, group_id, i)
+			if (!_stats_check_histogram_bounds(dms->regions[group_id].bounds,
+							   dms->regions[i].bounds))
+				return_NULL;
 
 		if (!dms->regions[group_id].counters)
 			return dms->regions[group_id].bounds;
@@ -4271,28 +4305,6 @@ static void _stats_copy_histogram_bounds(struct dm_histogram *to,
 
 	for (i = 0; i < to->nr_bins; i++)
 		to->bins[i].upper = from->bins[i].upper;
-}
-
-/*
- * Compare histogram bounds h1 and h2, and return 1 if they match (i.e.
- * have the same number of bins and identical bin boundary values), or 0
- * otherwise.
- */
-static int _stats_check_histogram_bounds(struct dm_histogram *h1,
-					 struct dm_histogram *h2)
-{
-	int i;
-
-	if (!h1 || !h2)
-		return 0;
-
-	if (h1->nr_bins != h2->nr_bins)
-		return 0;
-
-	for (i = 0; i < h1->nr_bins; i++)
-		if (h1->bins[i].upper != h2->bins[i].upper)
-			return 0;
-	return 1;
 }
 
 /*
