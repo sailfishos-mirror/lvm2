@@ -2967,7 +2967,8 @@ static int _check_metadata_file(struct cmd_context *cmd, struct metadata_file *m
 		log_warn("WARNING: Unexpected final bytes of raw metadata, expected \\n\\n\\0.");
 
 	if (_check_vgname_start(text_buf, &namelen)) {
-		if (!(vgid = strstr(text_buf, "id = "))) {
+		if (!(vgid = strstr(text_buf, "id = ")) ||
+		    (size_t)(vgid - text_buf) + 6 + 38 > text_size) {
 			log_error("Invalid raw text metadata in file.  (No VG UUID found.)");
 			return 0;
 		}
