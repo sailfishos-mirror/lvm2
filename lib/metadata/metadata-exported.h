@@ -68,7 +68,7 @@
 #define LV_NOAUTOACTIVATE	UINT64_C(0x0000000000000010)   /* LV - also a PV flag */
 #define NOAUTOACTIVATE		UINT64_C(0x0000000000000010)   /* VG - also a PV flag */
 
-//#define BADBLOCK_ON		UINT64_C(0x0000000000000020)	/* LV */
+//#define POSTORDER_FLAG		UINT64_C(0x0000000000000020)	/* LV - reserved, see metadata.h */
 #define VISIBLE_LV		UINT64_C(0x0000000000000040)	/* LV */
 #define FIXED_MINOR		UINT64_C(0x0000000000000080)	/* LV */
 
@@ -112,6 +112,7 @@
 #define RAID			UINT64_C(0x0000000100000000)	/* LV - Internal use only */
 #define RAID_META		UINT64_C(0x0000000200000000)	/* LV - Internal use only */
 #define RAID_IMAGE		UINT64_C(0x0000000400000000)	/* LV - Internal use only */
+//#define POSTORDER_OPEN_FLAG	UINT64_C(0x0000000800000000)	/* LV - reserved, see metadata.h */
 
 #define THIN_VOLUME		UINT64_C(0x0000001000000000)	/* LV - Internal use only */
 #define THIN_POOL		UINT64_C(0x0000002000000000)	/* LV - Internal use only */
