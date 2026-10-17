@@ -617,10 +617,10 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
 	return 1;
 
 bad:
-	if (saved_vg) {
-		release_vg(saved_vg);
-		saved_vg = NULL;
-	}
+	/*
+	 * saved_vg is released by _pvscan_aa() after the activation,
+	 * the caller is still using vgname which points into saved_vg.
+	 */
 	return 0;
 }
 
