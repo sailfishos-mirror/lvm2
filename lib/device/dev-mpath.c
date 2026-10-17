@@ -565,6 +565,7 @@ static int _dev_in_wwid_file(struct cmd_context *cmd, struct device *dev,
 {
 	char idbuf[DEV_WWID_SIZE] = { 0 };
 	struct dev_wwid *dw;
+	struct device *dev_primary;
 	char *wwid, *full_wwid;
 
 	if (!_wwid_hash_tab)
@@ -572,13 +573,20 @@ static int _dev_in_wwid_file(struct cmd_context *cmd, struct device *dev,
 
 	/*
 	 * Check the primary device, not the partition.
+	 *
+	 * Commands that do not scan /dev (pvscan --cache dev, vgchange -aay
+	 * --autoactivation event) only add the devices they use to dev-cache,
+	 * so the primary device may be missing from it.  Continue with the
+	 * partition in that case: read_sys_block() falls back to the sysfs
+	 * dir of the primary device when given a partition, so the wwids
+	 * are still read from the whole device.
 	 */
 	if (primary_result == 2) {
-		if (!(dev = dev_cache_get_by_devt(cmd, primary_dev))) {
-			log_debug("dev_is_mpath_component %s (%u:%u) no primary dev.",
+		if ((dev_primary = dev_cache_get_by_devt(cmd, primary_dev)))
+			dev = dev_primary;
+		else
+			log_debug("dev_is_mpath_component %s primary dev %u:%u not in dev cache.",
 				  dev_name(dev), MAJOR(primary_dev), MINOR(primary_dev));
-			return 0;
-		}
 	}
 
 	/*
