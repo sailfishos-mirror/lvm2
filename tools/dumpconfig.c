@@ -164,6 +164,8 @@ static int _do_def_check(struct config_def_tree_spec *spec,
 static int _merge_config_cascade(struct cmd_context *cmd, struct dm_config_tree *cft_cascaded,
 				 struct dm_config_tree **cft_merged)
 {
+	struct dm_config_tree cft_copy;
+
 	if (!cft_cascaded)
 		return 1;
 
@@ -173,7 +175,19 @@ static int _merge_config_cascade(struct cmd_context *cmd, struct dm_config_tree 
 	if (!_merge_config_cascade(cmd, cft_cascaded->cascade, cft_merged))
 		return_0;
 
-	return merge_config_tree(cmd, *cft_merged, cft_cascaded, CONFIG_MERGE_TYPE_RAW);
+	/*
+	 * merge_config_tree moves nodes from source into destination.
+	 * The cascade stays in use after this command (lvm shell) and
+	 * its trees have different lifetimes, so merge a copy of nodes
+	 * which is owned by and destroyed together with the merged tree.
+	 */
+	cft_copy = *cft_cascaded;
+
+	if (cft_copy.root &&
+	    !(cft_copy.root = dm_config_clone_node(*cft_merged, cft_cascaded->root, 1)))
+		return_0;
+
+	return merge_config_tree(cmd, *cft_merged, &cft_copy, CONFIG_MERGE_TYPE_RAW);
 }
 
 static int _config_validate(struct cmd_context *cmd, struct dm_config_tree *cft)
