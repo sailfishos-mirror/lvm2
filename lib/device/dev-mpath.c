@@ -613,6 +613,22 @@ lookup:
 	if (!(dev->flags & DEV_ADDED_VPD_WWIDS) && dev_read_vpd_wwids(cmd, dev))
 		goto lookup;
 
+	/*
+	 * SCSI sysfs wwids are stored in dev->wwids (see dev_read_sys_wwid()),
+	 * but NVMe sysfs wwids are returned only in idbuf and are not added to
+	 * dev->wwids (device_id.c).  Multipath stores NVMe WWIDs in the same
+	 * format as sysfs (no naa./eui. prefix), so match idbuf here instead
+	 * of the dev->wwids loop above.
+	 */
+	if (dev_is_nvme(dev)) {
+		if (dev_read_sys_wwid(cmd, dev, idbuf, sizeof(idbuf), NULL) &&
+		    dm_hash_lookup_binary(_wwid_hash_tab, idbuf, strlen(idbuf))) {
+			full_wwid = idbuf;
+			goto found;
+		}
+		return 0;
+	}
+
 	if (!(dev->flags & DEV_ADDED_SYS_WWID) && dev_read_sys_wwid(cmd, dev, idbuf, sizeof(idbuf), &dw)) {
 		if (dw->scsi_type == 1 || dw->scsi_type == 2 || dw->scsi_type == 3)
 			wwid = &dw->id[4];
