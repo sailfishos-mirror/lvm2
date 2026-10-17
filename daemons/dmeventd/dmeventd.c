@@ -100,9 +100,6 @@ static const time_t DMEVENTD_IDLE_EXIT_TIMEOUT = 60 * 60;
 /* Default grace period for thread cleanup 10 seconds */
 #define DMEVENTD_DEFAULT_GRACE_PERIOD 10
 
-/* Sanity limit for client message size */
-#define DM_EVENT_MAX_MSG_SIZE (16 * 1024 * 1024)
-
 /* Maximum time (seconds) to wait for the rest of a partially received
  * client message before discarding it */
 #define DM_EVENT_MSG_READ_TIMEOUT 5

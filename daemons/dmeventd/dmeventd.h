@@ -24,6 +24,9 @@
 
 #define DM_EVENT_DEFAULT_TIMEOUT 10
 
+/* Sanity limit for size of message passed between client and daemon */
+#define DM_EVENT_MAX_MSG_SIZE (16 * 1024 * 1024)
+
 /* Commands for the daemon passed in the message below. */
 enum dm_event_command {
 	DM_EVENT_CMD_ACTIVE = 1,

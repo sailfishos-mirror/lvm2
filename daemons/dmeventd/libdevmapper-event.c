@@ -267,6 +267,11 @@ static int _daemon_read(struct dm_event_fifos *fifos,
 				goto bad;
 			}
 
+			if (msg->size > DM_EVENT_MAX_MSG_SIZE) {
+				log_error("Invalid event server response size %u.", msg->size);
+				goto bad;
+			}
+
 			/* coverity[tainted_scalar] message size comes from the root-owned dmeventd daemon */
 			if (!(buf = msg->data = malloc(msg->size + 1))) {
 				log_error("Unable to allocate message data.");
