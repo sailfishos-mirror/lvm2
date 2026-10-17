@@ -87,6 +87,16 @@ struct ddf_header {
 	char padding[472];
 };
 
+/*
+ * DDF headers use the standard CRC-32 (mdadm: zlib crc32(0, buf, len)),
+ * i.e. seeded with ~0 and inverted at the end, which calc_crc() alone
+ * does not do.
+ */
+static uint32_t _ddf_crc(const struct ddf_header *hdr)
+{
+	return ~calc_crc(~0U, (const uint8_t *)hdr, sizeof(*hdr));
+}
+
 static int _dev_has_ddf_magic(struct device *dev, uint64_t devsize_sectors, uint64_t *sb_offset)
 {
 	struct ddf_header hdr;
@@ -107,7 +117,7 @@ static int _dev_has_ddf_magic(struct device *dev, uint64_t devsize_sectors, uint
 	    (hdr.magic == htole32(DDF_MAGIC))) {
 		crc = hdr.crc;
 		hdr.crc = 0xffffffff;
-		our_crc = calc_crc(0, (const uint8_t *)&hdr, 512);
+		our_crc = _ddf_crc(&hdr);
 
 		if ((htobe32(our_crc) == crc) ||
 		    (htole32(our_crc) == crc)) {
@@ -130,7 +140,7 @@ static int _dev_has_ddf_magic(struct device *dev, uint64_t devsize_sectors, uint
 	    (hdr.magic == htole32(DDF_MAGIC))) {
 		crc = hdr.crc;
 		hdr.crc = 0xffffffff;
-		our_crc = calc_crc(0, (const uint8_t *)&hdr, 512);
+		our_crc = _ddf_crc(&hdr);
 
 		if ((htobe32(our_crc) == crc) ||
 		    (htole32(our_crc) == crc)) {
