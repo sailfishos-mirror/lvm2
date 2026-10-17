@@ -68,6 +68,17 @@ static void _test_mirror_status(void *fixture)
 		T_ASSERT_EQUAL(s->log_count, 0);
 		T_ASSERT(!strcmp(s->log_type, "core"));
 	}
+
+	/* Fewer health chars than announced images or log devices. */
+	T_ASSERT(!dm_get_status_mirror(mem,
+				       "4 253:1 253:2 253:3 253:4 10/10 1 AD",
+				       &s));
+	T_ASSERT(!dm_get_status_mirror(mem,
+				       "2 253:1 253:2 80/81 1 AD 6 disk 253:0 253:3 253:4 253:5",
+				       &s));
+	T_ASSERT(!dm_get_status_mirror(mem,
+				       "2 253:1 253:2 80/81 1 AD 4 disk 253:0 253:3 A",
+				       &s));
 }
 
 static void _test_raid_status(void *fixture)
