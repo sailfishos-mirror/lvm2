@@ -381,6 +381,35 @@ static void test_client_write(void *fixture)
 	close(fds[1]);
 }
 
+static void test_client_write_oversized(void *fixture)
+{
+	static const char expected[] = "Reply exceeds maximum message size.";
+	struct dm_event_daemon_message msg = {
+		.cmd = DM_EVENT_CMD_GET_STATUS,
+		.data = (char *) "x",
+		.size = DM_EVENT_MAX_MSG_SIZE + 1
+	};
+	struct dm_event_fifos fifos = { .server_path = "test" };
+	uint32_t header[2];
+	char payload[sizeof(expected)];
+	int fds[2];
+
+	T_ASSERT(!pipe(fds));
+	fifos.server = fds[1];
+
+	T_ASSERT(_client_write(&fifos, &msg));
+	T_ASSERT_EQUAL(msg.cmd, (uint32_t) DM_EVENT_CMD_GET_STATUS);
+	T_ASSERT_EQUAL(read(fds[0], header, sizeof(header)), (ssize_t) sizeof(header));
+	T_ASSERT_EQUAL(ntohl(header[0]), (uint32_t) -E2BIG);
+	T_ASSERT_EQUAL(ntohl(header[1]), (uint32_t) (sizeof(expected) - 1));
+	T_ASSERT_EQUAL(read(fds[0], payload, sizeof(expected) - 1),
+		       (ssize_t) (sizeof(expected) - 1));
+	T_ASSERT(!memcmp(payload, expected, sizeof(expected) - 1));
+
+	close(fds[1]);
+	close(fds[0]);
+}
+
 /*
  * Preloaded (systemd) fifos must be fifos with the attributes
  * _open_fifo() requires and get O_NONBLOCK set.
@@ -461,6 +490,8 @@ void dmeventd_tests(struct dm_list *all_tests)
 	}
 	T("fifo/client-write", "write a reply",
 	  test_client_write);
+	T("fifo/client-write-oversized", "reject oversized reply before writing",
+	  test_client_write_oversized);
 	T("fifo/preloaded-fifo", "preloaded fifo validated",
 	  test_preloaded_fifo);
 
