@@ -2994,7 +2994,8 @@ static int _info_dmeventd(const char *name, struct dm_event_fifos *fifos)
 		goto out;
 
 	line++;
-	for (i = 0; msg.data[i]; ++i)
+	/* Scan only the part behind the message id, where line starts */
+	for (i = line - msg.data; msg.data[i]; ++i)
 		if (msg.data[i] == ';') {
 			msg.data[i] = 0;
 			if (!count)
@@ -3065,9 +3066,10 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos,
 	if (!msg.data || !(message = strchr(msg.data, ' ')))
 		goto bad;
 	message++;
-	for (i = 0; msg.data[i]; ++i)
-		if (msg.data[i] == ';') {
-			msg.data[i] = 0;
+	/* Count only behind the message id, where copying below starts */
+	for (i = 0; message[i]; ++i)
+		if (message[i] == ';') {
+			message[i] = 0;
 			++count;
 		}
 
