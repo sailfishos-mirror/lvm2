@@ -686,11 +686,12 @@ static response poll_init(client_handle h, struct lvmpolld_state *ls, request re
 
 	if (pdlv) {
 		if (!pdlv_is_type(pdlv, type)) {
-			pdst_unlock(pdst);
 			ERROR(ls, "%s: %s '%s': expected: %s, requested: %s",
 			      PD_LOG_PREFIX, "poll operation type mismatch on LV identified by",
 			      id,
 			      polling_op(pdlv_get_type(pdlv)), polling_op(type));
+			/* pdlv must not be dereferenced from now on */
+			pdst_unlock(pdst);
 			free(id);
 			return reply(LVMPD_RESP_EINVAL,
 				     REASON_DIFFERENT_OPERATION_IN_PROGRESS);
