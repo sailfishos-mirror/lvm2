@@ -707,10 +707,14 @@ static int _check_label_header(struct label_header *lh, uint64_t labelsector,
 
 static int _check_pv_header(struct pv_header *ph)
 {
+	char pvid[ID_LEN + 1] = { 0 };
 	struct id id;
 	int bad = 0;
 
-	if (!id_read_format_try(&id, (char *)&ph->pv_uuid)) {
+	/* pv_uuid is a fixed size field on disk, not a string */
+	memcpy(pvid, ph->pv_uuid, ID_LEN);
+
+	if (!id_read_format_try(&id, pvid)) {
 		log_print("CHECK: pv_header.pv_uuid invalid format");
 		bad++;
 	}
@@ -2009,6 +2013,7 @@ static int _get_pv_info_from_metadata(struct cmd_context *cmd, struct settings *
 				     uint64_t *device_size_sectors,
 				     uint64_t *pe_start_sectors)
 {
+	char pvid_hdr[ID_LEN + 1] = { 0 };  /* pv_header.pv_uuid as a string */
 	char pvid_cur[ID_LEN + 1] = { 0 };  /* found in existing pv_header */
 	char pvid_set[ID_LEN + 1] = { 0 };  /* set by user in --settings */
 	char pvid_use[ID_LEN + 1] = { 0 };  /* the pvid chosen to use */
@@ -2020,8 +2025,11 @@ static int _get_pv_info_from_metadata(struct cmd_context *cmd, struct settings *
 
 	/*
 	 * Check if there's a valid existing PV UUID at the expected location.
+	 * pv_uuid is a fixed size field on disk, not a string.
 	 */
-	if (!id_read_format_try((struct id *)&pvid_cur, (char *)&pvh->pv_uuid))
+	memcpy(pvid_hdr, pvh->pv_uuid, ID_LEN);
+
+	if (!id_read_format_try((struct id *)&pvid_cur, pvid_hdr))
 		memset(&pvid_cur, 0, ID_LEN);
 	else {
 		memcpy(&pvid_use, &pvid_cur, ID_LEN);
