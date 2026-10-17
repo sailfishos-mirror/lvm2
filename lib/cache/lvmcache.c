@@ -297,8 +297,10 @@ static struct lvmcache_vginfo *_search_vginfos_list(const char *vgname, const ch
 	struct lvmcache_vginfo *vginfo;
 
 	if (vgid) {
+		/* VGs with different names can have the same VGID */
 		dm_list_iterate_items(vginfo, &_vginfos) {
-			if (!memcmp(vgid, vginfo->vgid, ID_LEN))
+			if (!memcmp(vgid, vginfo->vgid, ID_LEN) &&
+			    (!vgname || !strcmp(vgname, vginfo->vgname)))
 				return vginfo;
 		}
 	} else if (vgname) {
@@ -321,11 +323,8 @@ static struct lvmcache_vginfo *_vginfo_lookup(const char *vgname, const char *vg
 		if ((vginfo = dm_hash_lookup(_vgid_hash, vgid))) {
 			if (vgname && strcmp(vginfo->vgname, vgname)) {
 				log_warn("WARNING: Lookup found duplicate VGID %s for VGs %s and %s.", vgid, vginfo->vgname, vgname);
-				if ((vginfo = dm_hash_lookup(_vgname_hash, vgname))) {
-					if (!memcmp(vginfo->vgid, vgid, ID_LEN))
-						return vginfo;
-				}
-				return NULL;
+				/* vgname_hash may hold another VG with the same name */
+				return _search_vginfos_list(vgname, vgid);
 			}
 			return vginfo;
 		} else {
@@ -1852,11 +1851,11 @@ static int _lvmcache_update_vgname(struct cmd_context *cmd,
 	vginfo = lvmcache_vginfo_from_vgid(vgid);
 	if (vginfo && strcmp(vginfo->vgname, vgname)) {
 		log_warn("WARNING: Fix duplicate VGID %s for VGs %s and %s (see vgchange -u).", vgid_dashed, vgname, vginfo->vgname);
-		vginfo = lvmcache_vginfo_from_vgname(vgname, NULL);
-		if (vginfo && memcmp(vginfo->vgid, vgid, ID_LEN)) {
-			log_error("Ignoring %s with conflicting VG info %s %s.", dev_name(info->dev), vgid_dashed, vgname);
-			return_0;
-		}
+		/*
+		 * Another VG with this name and a different VGID is not
+		 * the VG of this dev, it's a duplicate VG name (below).
+		 */
+		vginfo = _search_vginfos_list(vgname, vgid);
 	}
 
 	if (!vginfo) {
