@@ -969,7 +969,7 @@ int dm_device_list_equal(const struct dm_list *list1, const struct dm_list *list
 			return !dm_list_next(list1, &dev1->list);
 	}
 
-	return 1;
+	return 0; /* list1 is shorter than list2 */
 }
 
 const char *dm_task_get_message_response(struct dm_task *dmt)
