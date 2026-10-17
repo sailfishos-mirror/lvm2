@@ -2073,7 +2073,7 @@ int dm_mountinfo_read(dm_mountinfo_line_callback_fn read_fn, void *cb_data)
 {
 	FILE *minfo;
 	char buffer[2 * PATH_MAX];
-	char target[PATH_MAX];
+	char target[PATH_MAX + 1]; /* unmangled copy of parsed target + '\0' */
 	unsigned maj, min;
 	int r = 1;
 
