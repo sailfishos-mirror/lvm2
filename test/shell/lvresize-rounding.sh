@@ -89,3 +89,23 @@ check vg_field $vg vg_free_count 0
 
 lvreduce -f --fs ignore -l-20%LV $vg/lv
 check vg_field $vg vg_free_count 3
+vgremove -f $vg
+
+# stripes * (stripe_size / extent_size) must not overflow 32bit number of extents
+vgcreate -s 4K $vg "$dev1" "$dev2" "$dev3"
+
+not lvcreate -an -Zn -l50%FREE -i16 -I1T --alloc anywhere $vg
+
+# Stripe size of existing segment is taken from metadata
+lvcreate -an -Zn -l16 -i16 -I4 --alloc anywhere -n $lv1 $vg
+vgcfgbackup -f backup $vg
+sed -i -e 's/stripe_size = 8\b.*/stripe_size = 2147483648/' backup
+vgcfgrestore -f backup $vg
+check lv_field $vg/$lv1 stripesize "1.00t"
+
+not lvextend -l+256 $vg/$lv1 2>err
+grep "exceeds limit" err
+not lvreduce -f --fs ignore -l-1 $vg/$lv1 2>err
+grep "exceeds limit" err
+
+vgremove -f $vg
