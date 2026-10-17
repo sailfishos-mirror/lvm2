@@ -2148,6 +2148,19 @@ static int _alloc_parallel_area(struct alloc_handle *ah, uint32_t max_to_allocat
 		if (area_len > alloc_state->areas[s].used)
 			area_len = alloc_state->areas[s].used;
 
+	/*
+	 * Metadata is split off the front of every parallel area,
+	 * so the smallest of them must be able to hold it.
+	 * Otherwise allocate nothing and let the caller try another policy.
+	 */
+	if (ah->alloc_and_split_meta && !ah->split_metadata_is_allocated &&
+	    area_len < ah->log_len) {
+		log_debug_alloc("Smallest parallel area of %" PRIu32 " extents "
+				"cannot hold metadata area of %" PRIu32 " extents.",
+				area_len, ah->log_len);
+		return 1;
+	}
+
 	len = (ah->alloc_and_split_meta && !ah->split_metadata_is_allocated) ? total_area_count * 2 : total_area_count;
 	len *= sizeof(*aa);
 	if (!(aa = dm_pool_alloc(ah->mem, len))) {
