@@ -402,6 +402,16 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
 		goto_out;
 
 	/*
+	 * When the PV is not a duplicate, the old name is not found on other
+	 * devs.  Add it to vgnames so the search below never picks it as the
+	 * new name: old and new names must differ since both are locked.
+	 */
+	if (!(vgnl = dm_pool_zalloc(cmd->mem, sizeof(*vgnl))))
+		goto_out;
+	vgnl->vg_name = vp.old_vgname;
+	dm_list_add(&vgnames, &vgnl->list);
+
+	/*
 	 * Pick a new VG name, save as new_vgname.  The new name begins with
 	 * the basevgname or old_vgname, plus a $i suffix, if necessary, to
 	 * make it unique.
@@ -413,19 +423,8 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
 			log_error("Base vg name %s is too long.", vgname);
 			goto out;
 		}
-		if (strcmp(vgname, vp.old_vgname)) {
-			dm_strncpy(tmp_vgname, base_vgname, sizeof(tmp_vgname));
-			vgname_count = 0;
-		} else {
-			/* Needed when basename matches old name, and PV is not a duplicate
-			   which means old name is not found on other devs, and is not seen
-			   in the vgnames search below, causing old and new names to match. */
-			if (dm_snprintf(tmp_vgname, sizeof(tmp_vgname), "%s1", vp.old_vgname) < 0) {
-				log_error("Temporary vg name %s1 is too long.", vp.old_vgname);
-				goto out;
-			}
-			vgname_count = 1;
-		}
+		dm_strncpy(tmp_vgname, base_vgname, sizeof(tmp_vgname));
+		vgname_count = 0;
 	} else {
 		if (dm_snprintf(base_vgname, sizeof(base_vgname), "%s", vp.old_vgname) < 0) {
 			log_error(INTERNAL_ERROR "Old vg name %s is too long.", vp.old_vgname);
