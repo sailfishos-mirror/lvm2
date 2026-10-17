@@ -3765,6 +3765,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		memcpy(dil->pvid, du->pvid, ID_LEN);
 		dm_list_add(&prev_devs, &dil->list);
 		du->dev->flags &= ~DEV_MATCHED_USE_ID;
+		du->dev->id = NULL;
 		du->dev = NULL;
 	}
 
@@ -3783,6 +3784,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 				du = dul->du;
 				dev = devl->dev;
 				du->dev = dev;
+				dev->id = _get_dev_id(dev, DEV_ID_TYPE_SYS_SERIAL);
 				dev->flags |= DEV_MATCHED_USE_ID;
 
 				log_debug("Match suspect serial device id %s PVID %s to %s",
@@ -3843,6 +3845,7 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
 		free(du->pvid);
 		du->pvid = tmpdup;
 		du->dev = dev;
+		dev->id = _get_dev_id(dev, DEV_ID_TYPE_SYS_SERIAL);
 		dev->flags |= DEV_MATCHED_USE_ID;
 		update_file = 1;
 	}
