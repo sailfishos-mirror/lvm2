@@ -2479,9 +2479,9 @@ static int _get_current_settings(struct cmd_context *cmd)
 		cmd->current_settings.backup = 0;
 	}
 
-	if (cmd->cname->flags & LOCKD_VG_SH)
-		cmd->lockd_vg_default_sh = 1;
+	cmd->lockd_vg_default_sh = (cmd->cname->flags & LOCKD_VG_SH) ? 1 : 0;
 
+	cmd->can_use_one_scan = 0;
 	if (cmd->cname->flags & CAN_USE_ONE_SCAN)
 		cmd->can_use_one_scan = 1;
 
@@ -2732,7 +2732,30 @@ static void _apply_current_settings(struct cmd_context *cmd)
 	cmd->fmt = get_format_by_name(cmd, arg_str_value(cmd, metadatatype_ARG,
 				      cmd->current_settings.fmt_name));
 
+	/*
+	 * Commands set these to bypass checks in vg_read/vg_write, lvmlockd
+	 * locking, persistent reservations and the device filter chain.
+	 * The cmd struct is reused by the lvm shell, lvm scripts and
+	 * liblvm2cmd, so they must not be inherited from a previous command.
+	 */
 	cmd->handles_missing_pvs = 0;
+	cmd->handles_unknown_segments = 0;
+	cmd->force_access_clustered = 0;
+	cmd->include_active_foreign_vgs = 0;
+	cmd->disable_pr_required = 0;
+	cmd->expect_missing_vg_device = 0;
+	cmd->filter_deviceid_skip = 0;
+	cmd->filter_regex_skip = 0;
+	cmd->filter_regex_with_devices_file = 0;
+	cmd->filter_regex_set_preferred_name_disable = 0;
+	cmd->filter_nodata_only = 0;
+	cmd->lockd_gl_disable = 0;
+	cmd->lockd_vg_disable = 0;
+	cmd->lockd_lv_disable = 0;
+	cmd->lockd_vg_enforce_sh = 0;
+	cmd->lockopt = 0;
+	cmd->lockopt_retries = -1;
+	cmd->lockopt_removeretry = 0;
 }
 
 static const char *_copy_command_line(struct cmd_context *cmd, int argc, char **argv)
