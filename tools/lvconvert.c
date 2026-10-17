@@ -6128,6 +6128,9 @@ static int _set_writecache_block_size(struct cmd_context *cmd,
 		unsigned int pbs = 0;
 		unsigned int lbs = 0;
 
+		if (!pvl->pv->dev)
+			continue;
+
 		if (!dev_get_direct_block_sizes(pvl->pv->dev, &pbs, &lbs))
 			continue;
 
