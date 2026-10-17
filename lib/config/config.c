@@ -328,10 +328,9 @@ struct dm_config_tree *remove_config_tree_by_source(struct cmd_context *cmd,
 	while (cft) {
 		cs = dm_config_get_custom(cft);
 		if (cs && (cs->type == source)) {
-			if (previous_cft) {
+			if (previous_cft)
 				previous_cft->cascade = cft->cascade;
-				cmd->cft = previous_cft;
-			} else
+			else
 				cmd->cft = cft->cascade;
 			cft->cascade = NULL;
 			break;
