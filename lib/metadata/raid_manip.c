@@ -87,11 +87,19 @@ static int _rebuild_with_emptymeta_is_supported(struct cmd_context *cmd,
  */
 uint32_t raid_ensure_min_region_size(const struct logical_volume *lv, uint64_t raid_size, uint32_t region_size)
 {
-	uint32_t min_region_size = raid_size / (1 << 21);
+	uint64_t min_region_size = raid_size / (1 << 21);
 	uint32_t region_size_sav = region_size;
 
-	while (region_size < min_region_size)
+	/* Doubling 0 or anything above UINT32_MAX / 2 never reaches the minimum */
+	while (region_size && (region_size <= UINT32_MAX / 2) &&
+	       (region_size < min_region_size))
 		region_size *= 2;
+
+	if (region_size < min_region_size)
+		log_warn("WARNING: Region size %s is too small for size %s of %s.",
+			 display_size(lv->vg->cmd, region_size),
+			 display_size(lv->vg->cmd, raid_size),
+			 display_lvname(lv));
 
 	if (region_size != region_size_sav)
 		log_very_verbose("Adjusting region_size from %s to %s for %s.",
