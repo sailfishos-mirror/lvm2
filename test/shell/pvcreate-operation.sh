@@ -187,6 +187,11 @@ rm -f "$backupfile"
 dd if=/dev/zero of="$dev1" bs=64k count=1 oflag=direct
 mkswap "$dev1"
 blkid -c /dev/null "$dev1" | grep "swap"
+# in test mode signature is reported just once and is not wiped
+# (use 'head' to stop the command if it would keep on wiping)
+pvcreate --test -f "$dev1" | head -n 20 >out
+test "$(grep -c "Wiping swap signature" out)" -eq 1
+blkid -c /dev/null "$dev1" | grep "swap"
 pvcreate -f "$dev1"
 # blkid cannot make up its mind whether not finding anything it knows is a failure or not
 (blkid -c /dev/null "$dev1" || true) | not grep "swap"
