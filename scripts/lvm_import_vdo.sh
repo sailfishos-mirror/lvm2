@@ -704,9 +704,26 @@ convert_non_lv_() {
 	[ "${usedev#*=}" = "1" ] && dry "$LVM" lvmdevices --adddev "$DEVICE"
 
 	# Restore auto activation for a VG
-	dry "$LVM" vgchange --setautoactivation y ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} "$VGNAME"
+	# Keep using --devices, so the merged VG is found even when its name
+	# is also used by some other VG visible to the system.
+	dry "$LVM" vgchange --setautoactivation y ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$DEVICE" "$VGNAME"
 
-	dry "$LVM" lvchange -ay ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} "$VGNAME/$LVNAME"
+	dry "$LVM" lvchange -ay ${VERB:+"$VERB"} ${FORCE:+"$FORCE"} --devices "$DEVICE" "$VGNAME/$LVNAME"
+}
+
+# Check whether any VG is already using the given name.
+# Search the list of all VG names, since 'vgs NAME' fails not only for
+# an unknown name, but also for a VG it cannot process (name used by
+# several VGs, foreign VG).
+vg_name_exists_() {
+	local name
+
+	while read -r name; do
+		[ "$name" = "$1" ] && return 0
+	done <<-EOF
+		$(LC_ALL=C "$LVM" vgs --foreign --shared -oname --noheadings 2>/dev/null || true)
+	EOF
+	return 1
 }
 
 # Convert existing VDO volume into lvm2 volume
@@ -741,7 +758,10 @@ convert2lvm_() {
 				# Find largest numbered variant of our 'default' vgname.
 				# Match the literal name with awk; a regex would let
 				# metacharacters in VGNAME (e.g. '.') match other names.
-				LASTVGNAME=$(LC_ALL=C "$LVM" vgs -oname --noheadings |
+				# Use --foreign --shared so the name list matches
+				# vg_name_exists_() and numbered names do not collide
+				# with foreign or lockd-shared VGs.
+				LASTVGNAME=$(LC_ALL=C "$LVM" vgs --foreign --shared -oname --noheadings |
 					awk -v base="$VGNAME" '
 						index($1, base) == 1 {
 							suffix = substr($1, length(base) + 1)
@@ -749,7 +769,7 @@ convert2lvm_() {
 						}' | sort -n | tail -1 || true)
 				# If only the bare name exists (no numbered variants),
 				# start numbering from 0 so a "1" suffix is generated.
-				if [ -z "$LASTVGNAME" ] && "$LVM" vgs "$VGNAME" >/dev/null 2>&1; then
+				if [ -z "$LASTVGNAME" ] && vg_name_exists_ "$VGNAME"; then
 					LASTVGNAME=0
 				fi
 				if [ -n "$LASTVGNAME" ]; then
@@ -765,7 +785,7 @@ convert2lvm_() {
 			fi
 			# New VG is created, LV name should be always unused.
 			[ -n "$LVNAME" ] || LVNAME=${DEFAULT_NAME#*/}
-			"$LVM" vgs "$VGNAME" >/dev/null 2>&1 && error "Cannot use already existing volume group name \"$VGNAME\"."
+			vg_name_exists_ "$VGNAME" && error "Cannot use already existing volume group name \"$VGNAME\"."
 			;;
 	esac
 
