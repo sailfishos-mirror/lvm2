@@ -145,7 +145,7 @@ int lv_is_merging_thin_snapshot(const struct logical_volume *lv)
 {
 	struct lv_segment *seg = first_seg(lv);
 
-	return (seg && seg->status & MERGING) ? 1 : 0;
+	return (seg && seg_is_thin_volume(seg) && (seg->status & MERGING)) ? 1 : 0;
 }
 
 /*

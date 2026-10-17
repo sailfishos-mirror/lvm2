@@ -546,6 +546,14 @@ static void _check_lv_segment(struct logical_volume *lv, struct lv_segment *seg,
 			seg_error("sets indirect_origin LV");
 	}
 
+	if (seg_is_snapshot(seg)) {
+		/* Hidden snapshotN LV only binds origin LV with COW LV */
+		if (seg->origin && lv_is_snapshot(seg->origin))
+			seg_error("uses snapshot LV as origin LV");
+		if (seg->cow && lv_is_snapshot(seg->cow))
+			seg_error("uses snapshot LV as COW LV");
+	}
+
 	if (seg_is_vdo_pool(seg)) {
 		if (!lv_is_vdo_pool(lv))
 			seg_error("is not flagged as VDO pool LV");
