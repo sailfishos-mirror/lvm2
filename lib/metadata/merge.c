@@ -218,6 +218,13 @@ static void _check_raid45610_seg(struct lv_segment *seg, int *error_count)
 		 */
 		if (seg->area_count < 4)
 			raid_seg_error_val("minimum 4 areas required", seg->area_count);
+		/*
+		 * FIXME: has to change once more than 2 data copies are supported.
+		 *	  Less than 2 is valid: it is set whilst allocating reshape
+		 *	  space and reset to 2 when the metadata is read.
+		 */
+		if (seg->data_copies > 2)
+			raid_seg_error_val("maximum 2 data copies supported", seg->data_copies);
 		if (seg->writebehind)
 			raid_seg_error_val("non-zero writebehind", seg->writebehind);
 	}
