@@ -539,18 +539,23 @@ static int _handle_connect(daemon_state s)
 		goto bad;
 	}
 
-	ts->next = s.threads->next;
-	s.threads->next = ts;
-
 	ts->active = 1;
 	ts->s = s;
 	ts->client = client;
 
+	/*
+	 * Add to the list only once the thread exists: thread_id is
+	 * undefined after a failed pthread_create() and _reap() would
+	 * otherwise try to join it.
+	 */
 	if ((errno = pthread_create(&ts->client.thread_id, NULL, _client_thread, ts))) {
 		ERROR(&s, "Failed to create client thread: %s.", strerror(errno));
-		ts->active = 0;
+		free(ts);
 		goto bad;
 	}
+
+	ts->next = s.threads->next;
+	s.threads->next = ts;
 
 	return 1;
 bad:

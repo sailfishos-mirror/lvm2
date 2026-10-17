@@ -1160,8 +1160,9 @@ static int _register_for_timeout(struct thread_status *thread)
 	if (_timeout_thread_id)
 		pthread_cond_signal(&_timeout_cond);
 
-	if (!_timeout_thread_id)
-		ret = _pthread_create_smallstack(&_timeout_thread_id, _timeout_thread, NULL);
+	if (!_timeout_thread_id &&
+	    (ret = _pthread_create_smallstack(&_timeout_thread_id, _timeout_thread, NULL)))
+		_timeout_thread_id = 0; /* Undefined after a failure */
 
 	pthread_mutex_unlock(&_timeout_mutex);
 
