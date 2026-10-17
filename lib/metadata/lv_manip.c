@@ -8079,8 +8079,12 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	 * If we removed a pvmove participant (LOCKED LV), check whether
 	 * the pvmove LV is now orphaned (no more participants reference it).
 	 * If so, remove it to free the PV extents it holds.
+	 * Skip it when its removal is already in progress (it is going to be
+	 * removed by the caller, see lv_remove_with_dependencies()) or when
+	 * it has been removed already.
 	 */
-	if (lv_mirr && dm_list_empty(&lv_mirr->segs_using_this_lv)) {
+	if (lv_mirr && !lv_mirr->to_remove && !lv_is_removed(lv_mirr) &&
+	    dm_list_empty(&lv_mirr->segs_using_this_lv)) {
 		log_verbose("Removing orphaned pvmove LV %s.", display_lvname(lv_mirr));
 		if (!lv_remove(lv_mirr))
 			return_0;
