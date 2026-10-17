@@ -1974,14 +1974,16 @@ static int _out_line_tree(const struct dm_config_node *cn, const char *line, str
 	if (cfg_def && out->tree_spec->valuesonly && !(cfg_def->type & CFG_TYPE_SECTION)) {
 		if ((space_prefix_len = strspn(line, "\t "))) {
 			len = strlen(line);
-			p = line + space_prefix_len;
+			if (!(p = strchr(line + space_prefix_len, '=')))
+				return_0;
+			p++;
 
 			/* copy space_prefix, skip key and '=', copy value */
 			if (!dm_pool_begin_object(out->mem, len))
 				return_0;
 
 			if (!dm_pool_grow_object(out->mem, line, space_prefix_len) ||
-			    !dm_pool_grow_object(out->mem, p + strcspn(p, "=") + 1, len + 1)) {
+			    !dm_pool_grow_object(out->mem, p, strlen(p) + 1)) {
 				dm_pool_abandon_object(out->mem);
 				return_0;
 			}
