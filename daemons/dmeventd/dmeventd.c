@@ -2315,15 +2315,28 @@ static int _client_write(struct dm_event_fifos *fifos,
 			struct dm_event_daemon_message *msg)
 {
 	uint32_t temp[2];
+	uint32_t cmd = msg->cmd;
 	unsigned bytes = 0;
 	int ret;
 	time_t deadline = 0;
 	size_t chunk;
+	size_t data_size = msg->data ? msg->size : 0;
+	const char *data = msg->data;
 	struct pollfd pfd = { .fd = fifos->server, .events = POLLOUT };
 
-	size_t size = 2 * sizeof(uint32_t) + ((msg->data) ? msg->size : 0);
-	uint32_t *header = malloc(size);
+	size_t size;
+	uint32_t *header;
 	char *buf;
+
+	if (data_size > DM_EVENT_MAX_MSG_SIZE) {
+		log_error("Reply to event client exceeds maximum size (%u bytes).", msg->size);
+		cmd = (uint32_t) -E2BIG;
+		data = "Reply exceeds maximum message size.";
+		data_size = strlen(data);
+	}
+
+	size = 2 * sizeof(uint32_t) + data_size;
+	header = malloc(size);
 
 	if (!header) {
 		/* Reply with ENOMEM message */
@@ -2332,10 +2345,10 @@ static int _client_write(struct dm_event_fifos *fifos,
 		header[0] = htonl(-ENOMEM);
 		header[1] = 0;
 	} else {
-		header[0] = htonl(msg->cmd);
-		header[1] = htonl((msg->data) ? msg->size : 0);
-		if (msg->data)
-			memcpy(header + 2, msg->data, msg->size);
+		header[0] = htonl(cmd);
+		header[1] = htonl(data_size);
+		if (data_size)
+			memcpy(header + 2, data, data_size);
 	}
 
 	buf = (char *)header;

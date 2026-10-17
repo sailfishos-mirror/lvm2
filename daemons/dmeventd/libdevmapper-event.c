@@ -301,12 +301,18 @@ static int _daemon_write(struct dm_event_fifos *fifos,
 	int retries = 0;
 	struct pollfd pfd;
 	size_t bytes = 0;
-	size_t size = 2 * sizeof(uint32_t) + msg->size;
+	size_t size;
 	uint32_t *header;
 	char *buf;
 	char drainbuf[128];
 
-	/* Message size is not bounded here, keep the copy off the stack. */
+	if (msg->size > DM_EVENT_MAX_MSG_SIZE) {
+		log_error("Message to event daemon exceeds maximum size (%u bytes).", msg->size);
+		return 0;
+	}
+
+	size = 2 * sizeof(uint32_t) + msg->size;
+
 	if (!(header = malloc(size))) {
 		log_error("Unable to allocate message buffer.");
 		return 0;
