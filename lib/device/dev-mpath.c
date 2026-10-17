@@ -613,6 +613,21 @@ lookup:
 	if (!(dev->flags & DEV_ADDED_VPD_WWIDS) && dev_read_vpd_wwids(cmd, dev))
 		goto lookup;
 
+	/*
+	 * For nvme, dev_read_sys_wwid() only returns the sysfs wwid in
+	 * idbuf, it is not added to dev->wwids and dw is not set, so it
+	 * has to be read here each time.  multipath uses the nvme sysfs
+	 * wwid unmodified, without a type prefix.
+	 */
+	if (dev_is_nvme(dev)) {
+		if (dev_read_sys_wwid(cmd, dev, idbuf, sizeof(idbuf), NULL) &&
+		    dm_hash_lookup_binary(_wwid_hash_tab, idbuf, strlen(idbuf))) {
+			full_wwid = idbuf;
+			goto found;
+		}
+		return 0;
+	}
+
 	if (!(dev->flags & DEV_ADDED_SYS_WWID) && dev_read_sys_wwid(cmd, dev, idbuf, sizeof(idbuf), &dw)) {
 		if (dw->scsi_type == 1 || dw->scsi_type == 2 || dw->scsi_type == 3)
 			wwid = &dw->id[4];
