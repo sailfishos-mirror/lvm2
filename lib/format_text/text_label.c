@@ -280,7 +280,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
 	struct mda_context *mdac, *mdac2;
 
 	if (!mem) {
-		if (!(mdal = malloc(sizeof(struct metadata_area)))) {
+		if (!(mdal = zalloc(sizeof(struct metadata_area)))) {
 			log_error("struct mda_list allocation failed");
 			return 0;
 		}
@@ -291,7 +291,7 @@ int add_mda(const struct format_type *fmt, struct dm_pool *mem, struct dm_list *
 			return 0;
 		}
 	} else {
-		if (!(mdal = dm_pool_alloc(mem, sizeof(struct metadata_area)))) {
+		if (!(mdal = dm_pool_zalloc(mem, sizeof(struct metadata_area)))) {
 			log_error("struct mda_list allocation failed");
 			return 0;
 		}
