@@ -1,5 +1,9 @@
 Version 2.03.44 - 
 ==================
+  Preserve committed metadata when pv_write updates an existing PV.
+  Use mdadm-compatible CRC-32 when detecting DDF metadata.
+  Detect NVMe multipath devices and handle uncached primary devices.
+  Use the VDO pool data LV size for VDO memory checks.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
   Accept transient or incomplete dm-raid status during repair and reduction.
@@ -5812,5 +5816,3 @@ Display output.  Some metadata information cannot yet be displayed.
 
 Recovery tools to salvage "lost" metadata directly from the disks:
 but we hope the new format will mean such tools are hardly ever needed!
-
-
