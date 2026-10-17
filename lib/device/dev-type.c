@@ -1307,7 +1307,12 @@ static int _wipe_known_signatures_with_blkid(struct device *dev, const char *nam
 	while (!blkid_do_probe(probe)) {
 		if ((r_wipe = _blkid_wipe(probe, dev, name, types_to_exclude, types_no_prompt, yes, force)) == 1) {
 			(*wiped)++;
-			if (blkid_probe_step_back(probe)) {
+			/*
+			 * Step back to check for further copies of the signature.
+			 * In test mode nothing is actually wiped, so stepping back
+			 * would only find the same signature again and again.
+			 */
+			if (!test_mode() && blkid_probe_step_back(probe)) {
 				log_error("Failed to step back blkid probe to check just wiped signature.");
 				goto out;
 			}
