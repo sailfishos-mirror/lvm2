@@ -68,7 +68,7 @@ static void _read_blacklist_file(const char *path)
 		for (i = 0; i < MAX_WWID_LINE; i++) {
 			if ((line[i] == '\n') || (line[i] == '\0'))
 				break;
-			if (isspace(line[i]))
+			if (isspace((unsigned char) line[i]))
 				continue;
 			word = &line[i];
 			break;
@@ -121,9 +121,9 @@ static void _read_blacklist_file(const char *path)
 		for (; i < MAX_WWID_LINE; i++) {
 			if ((line[i] == '\n') || (line[i] == '\0'))
 				break;
-			if (!j && isspace(line[i]))
+			if (!j && isspace((unsigned char) line[i]))
 				continue;
-			if (isspace(line[i]))
+			if (isspace((unsigned char) line[i]))
 				break;
 			/* quotes around wwid are optional */
 			if ((line[i] == '"') && !found_quote) {

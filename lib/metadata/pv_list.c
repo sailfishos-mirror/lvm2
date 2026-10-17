@@ -97,7 +97,7 @@ static int _parse_pes(struct dm_pool *mem, char *c, struct dm_list *pe_ranges,
 		end = size - 1;
 
 		/* Start extent given? */
-		if (isdigit(*c)) {
+		if (isdigit((unsigned char) *c)) {
 			if (!_xstrtouint32(c, &endptr, 10, &start))
 				goto error;
 			c = endptr;
@@ -108,14 +108,14 @@ static int _parse_pes(struct dm_pool *mem, char *c, struct dm_list *pe_ranges,
 		/* Range? */
 		if (*c == '-') {
 			c++;
-			if (isdigit(*c)) {
+			if (isdigit((unsigned char) *c)) {
 				if (!_xstrtouint32(c, &endptr, 10, &end))
 					goto error;
 				c = endptr;
 			}
 		} else if (*c == '+') {	/* Length? */
 			c++;
-			if (isdigit(*c)) {
+			if (isdigit((unsigned char) *c)) {
 				if (!_xstrtouint32(c, &endptr, 10, &len))
 					goto error;
 				c = endptr;
@@ -314,4 +314,3 @@ int pv_list_to_dev_list(struct dm_pool *mem, struct dm_list *pvs, struct dm_list
 	}
 	return 1;
 }
-

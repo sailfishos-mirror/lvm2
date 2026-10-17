@@ -1162,7 +1162,7 @@ static const char *_upper_command_name(const char *str)
 	int i = 0;
 
 	while (*str && i < (int)(sizeof(str_upper) - 1)) {
-		str_upper[i++] = toupper(*str);
+		str_upper[i++] = toupper((unsigned char) *str);
 		str++;
 	}
 	str_upper[i] = '\0';
@@ -1886,7 +1886,7 @@ static void _print_alphabetical_index(struct index_cname **entries, int count)
 
 	/* Generate alphabetical index */
 	for (i = 0; i < count; i++) {
-		first_letter = tolower(entries[i]->name[0]);
+		first_letter = tolower((unsigned char) entries[i]->name[0]);
 
 		/* Start new letter section if needed */
 		if (first_letter != current_letter) {

@@ -108,7 +108,7 @@ static const char *_read_system_id_from_file(struct cmd_context *cmd, const char
 		start = line;
 
 		/* Ignore leading whitespace */
-		while (*start && isspace(*start))
+		while (*start && isspace((unsigned char) *start))
 			start++;
 
 		/* Ignore rest of line after # */
@@ -539,7 +539,7 @@ static const char *_set_time_format(struct cmd_context *cmd)
 					goto_bad;
 				p_fmt++;
 			}
-			else if (isprint(c))
+			else if (isprint((unsigned char) c))
 				p_fmt++;
 			else {
 				log_error("Configured time format contains non-printable characters.");

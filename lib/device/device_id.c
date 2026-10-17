@@ -829,7 +829,7 @@ static int _dev_read_sys_serial(struct cmd_context *cmd, struct device *dev,
 
 		/* vda1 to vda */
 		for (i = 0; base[i]; ++i) {
-			if (isdigit(base[i]))
+			if (isdigit((unsigned char) base[i]))
 				break;
 			vdx[j] = base[i];
 			j++;
@@ -941,9 +941,9 @@ char *device_id_system_read(struct cmd_context *cmd, struct device *dev, uint16_
 	    (idtype != DEV_ID_TYPE_WWID_T10)) {
 		for (i = 0; sysbuf[i]; ++i) {
 			if ((sysbuf[i] == '"') ||
-			    isblank(sysbuf[i]) ||
-			    isspace(sysbuf[i]) ||
-			    iscntrl(sysbuf[i]))
+			    isblank((unsigned char) sysbuf[i]) ||
+			    isspace((unsigned char) sysbuf[i]) ||
+			    iscntrl((unsigned char) sysbuf[i]))
 				sysbuf[i] = '_';
 		}
 	}
@@ -4564,4 +4564,3 @@ void devices_file_exit(struct cmd_context *cmd)
 		return;
 	unlock_devices_file(cmd);
 }
-

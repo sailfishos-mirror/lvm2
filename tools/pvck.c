@@ -81,7 +81,7 @@ static char *_chars_to_str(const void *in, void *out, int num, int max, const ch
 	}
 
 	for (n = 0; n < num; n++) {
-		if (isprint((int)*i))
+		if (isprint((unsigned char)*i))
 			*o = *i;
 		else
 			*o = '?';
@@ -144,7 +144,7 @@ static int _check_vgname_start(char *buf, int *len)
 	for (i = 0; i <= NAME_LEN + 2; i++) {
 		c = buf[i];
 
-		if (isalnum(c) || c == '.' || c == '_' || c == '-' || c == '+') {
+		if (isalnum((unsigned char) c) || c == '.' || c == '_' || c == '-' || c == '+') {
 			if (space)
 				return 0;
 			chars++;
@@ -2936,7 +2936,8 @@ static int _check_metadata_file(struct cmd_context *cmd, struct metadata_file *m
 	 * Using pvck --dump metadata output redirected to file may be a common
 	 * mistake, so check and warn about that specifically.
 	 */
-	if (isspace(text_buf[0]) && isspace(text_buf[1]) && strstr(text_buf, "---")) {
+	if (isspace((unsigned char) text_buf[0]) &&
+	    isspace((unsigned char) text_buf[1]) && strstr(text_buf, "---")) {
 		log_error("Invalid raw text metadata in file.");
 		log_error("(pvck stdout is not valid input, see pvck -f.)");
 		return 0;

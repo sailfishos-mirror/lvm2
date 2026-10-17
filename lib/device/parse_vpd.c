@@ -261,7 +261,7 @@ int parse_vpd_ids(const unsigned char *vpd_data, int vpd_datalen, struct dm_list
 			if ((type == 2) || (type == 3)) {
 				unsigned i;
 				for (i = 0; i < strlen(id); i++)
-					id[i] = tolower(id[i]);
+					id[i] = tolower((unsigned char) id[i]);
 			}
 			dev_add_scsi_wwid(id, type, ids);
 			break;
@@ -311,4 +311,3 @@ int parse_vpd_serial(const unsigned char *in, char *out, size_t outsize)
 	}
 	return len;
 }
-

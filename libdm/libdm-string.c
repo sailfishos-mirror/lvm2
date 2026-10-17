@@ -24,7 +24,7 @@
  */
 static char *_consume(char *buffer, int (*fn) (int))
 {
-	while (*buffer && fn(*buffer))
+	while (*buffer && fn((unsigned char) *buffer))
 		buffer++;
 
 	return buffer;
@@ -518,7 +518,7 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
 	if (!use_si_units) {
 		/* Case-independent match */
 		for (s = 0; s < NUM_UNIT_PREFIXES; s++)
-			if (toupper((int) unit_type) ==
+			if (toupper((unsigned char) unit_type) ==
 			    *_size_str[BASE_SHARED + s][2]) {
 				base = BASE_SHARED;
 				break;
@@ -543,7 +543,7 @@ const char *dm_size_to_string(struct dm_pool *mem, uint64_t size,
 	if (base == BASE_UNKNOWN)
 		/* Check for special units - s, b or u */
 		for (s = 0; s < NUM_SPECIAL; s++)
-			if (toupper((int) unit_type) ==
+			if (toupper((unsigned char) unit_type) ==
 			    *_size_str[BASE_SPECIAL + s][2]) {
 				base = BASE_SPECIAL;
 				break;
@@ -628,7 +628,7 @@ uint64_t dm_units_to_factor(const char *units, char *unit_type,
 	if (endptr)
 		*endptr = units;
 
-	if (isdigit(*units)) {
+	if (isdigit((unsigned char) *units)) {
 		custom_value = strtod(units, &ptr);
 		if (ptr == units)
 			return 0;

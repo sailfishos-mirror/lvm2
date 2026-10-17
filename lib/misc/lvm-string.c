@@ -59,7 +59,7 @@ int validate_tag(const char *n)
 
 	/* FIXME: Is unlimited tag size support needed ? */
 	while ((/* len++, */ c = *n++))
-		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+' && c != '/'
+		if (!isalnum((unsigned char) c) && c != '.' && c != '_' && c != '-' && c != '+' && c != '/'
 		    && c != '=' && c != '!' && c != ':' && c != '&' && c != '#')
 			return 0;
 
@@ -82,7 +82,7 @@ static name_error_t _validate_name(const char *n)
 		return NAME_INVALID_DOTS;
 
 	while ((len++, c = *n++))
-		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+')
+		if (!isalnum((unsigned char) c) && c != '.' && c != '_' && c != '-' && c != '+')
 			return NAME_INVALID_CHARSET;
 
 	if (len > NAME_LEN)
@@ -121,11 +121,11 @@ void copy_systemid_chars(const char *src, char *dst)
 	}
 
 	/* Skip non-alphanumeric starting characters */
-	while (*s && !isalnum(*s))
+	while (*s && !isalnum((unsigned char) *s))
 		s++;
 
 	while ((c = *s++)) {
-		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+')
+		if (!isalnum((unsigned char) c) && c != '.' && c != '_' && c != '-' && c != '+')
 			continue;
 
 		*d++ = c;

@@ -2212,7 +2212,7 @@ static int _validate_lock_args_chars(const char *lock_args)
 	for (i = 0; lock_args[i]; i++) {
 		c = lock_args[i];
 
-		if (!isalnum(c) && c != '.' && c != '_' && c != '-' && c != '+' && c != ':') {
+		if (!isalnum((unsigned char) c) && c != '.' && c != '_' && c != '-' && c != '+' && c != ':') {
 			log_error(INTERNAL_ERROR "Invalid character at index %u of lock_args \"%s\"",
 				  i, lock_args);
 			r = 0;
