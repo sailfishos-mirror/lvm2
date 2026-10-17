@@ -189,7 +189,7 @@ static int _rx_get_token(struct parse_sp *ps)
 			dm_bit_set(ps->charset, (int) '\t');
 			break;
 		default:
-			dm_bit_set(ps->charset, (int) *ptr);
+			dm_bit_set(ps->charset, (int) (unsigned char) *ptr);
 		}
 		break;
 
