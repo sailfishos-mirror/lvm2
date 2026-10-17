@@ -74,6 +74,7 @@ struct processing_handle {
 	int include_historical_lvs;
 	struct selection_handle *selection_handle;
 	void *custom_handle;
+	log_report_t saved_log_report_state;
 };
 
 typedef int (*process_single_vg_fn_t)(struct cmd_context *cmd,
