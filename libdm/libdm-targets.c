@@ -615,6 +615,10 @@ int dm_get_status_mirror(struct dm_pool *mem, const char *params,
 		goto_out;
 	pos += used;
 
+	/* One health char per image */
+	if (strlen(pos) < num_devs)
+		goto_out;
+
 	for (i = 0; i < num_devs ; ++i)
 		s->devs[i].health = _get_health(pos[i]);
 
@@ -659,6 +663,10 @@ int dm_get_status_mirror(struct dm_pool *mem, const char *params,
 				if (sscanf(pos, "%u:%u %n",
 					   &s->logs[i].major, &s->logs[i].minor, &used) != 2)
 					goto_out;
+
+			/* One health char per log device */
+			if (strlen(pos) < s->log_count)
+				goto_out;
 
 			for (i = 0; i < s->log_count; ++i)
 				s->logs[i].health = _get_health(pos[i]);
