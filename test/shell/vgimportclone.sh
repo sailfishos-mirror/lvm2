@@ -123,6 +123,20 @@ vgremove ${vg1}2
 pvremove "$dev1"
 pvremove "$dev2"
 
+# Test importing a non-duplicate pv when the base name is used by
+# another VG, and the initial generated vgname with the "1" suffix
+# is the existing vg name, so "2" is used.
+vgcreate $vg1 "$dev1"
+vgcreate ${vg1}1 "$dev2"
+vgimportclone -n $vg1 "$dev2"
+vgs $vg1
+vgs ${vg1}2
+not vgs ${vg1}1
+vgremove $vg1
+vgremove ${vg1}2
+pvremove "$dev1"
+pvremove "$dev2"
+
 # Verify that if we provide the -n|--basevgname,
 # the number suffix is not added unnecessarily.
 vgcreate $SHARED --metadatasize 128k A${vg1}B "$dev1"
