@@ -416,4 +416,17 @@ pvck --dump headers "$dev1" || true
 vgs $vg
 lvcreate -l1 -an $vg
 
+# Two PVs, pv_header zeroed on one, uuid of the other PV must be refused
+_clear_devs "$dev1" "$dev2"
+vgcreate $vg "$dev1" "$dev2"
+UUID1=$(pvck --dump headers "$dev1" | grep pv_header.pv_uuid | awk '{print $2}')
+UUID2=$(pvck --dump headers "$dev2" | grep pv_header.pv_uuid | awk '{print $2}')
+dd if=/dev/zero of="$dev2" bs=512 count=2
+pvck --dump metadata_search --settings seqno=1 -f meta "$dev2" || true
+not pvck --repair -y -f meta --settings pv_uuid=$UUID1 "$dev2" 2>&1 | tee out
+grep "Cannot use PV UUID" out
+pvck --repair -y -f meta --settings pv_uuid=$UUID2 "$dev2"
+vgs $vg
+lvcreate -l1 -an $vg
+
 vgremove -f $vg
