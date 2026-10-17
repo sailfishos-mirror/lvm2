@@ -2176,13 +2176,22 @@ struct processing_handle *init_processing_handle(struct cmd_context *cmd, struct
 	handle->internal_report_for_select = arg_is_set(cmd, select_ARG);
 	handle->include_historical_lvs = cmd->include_historical_lvs;
 
+	/*
+	 * Save the log report state in the handle itself, not in cmd:
+	 * handles nest (e.g. the handle created by report_for_selection
+	 * within parent's process_each_* processing) and each one must
+	 * restore the state that was current when it was created, otherwise
+	 * destroying the parent would restore the child's snapshot pointing
+	 * to the already released VG and the log report we're about to free.
+	 */
+	handle->saved_log_report_state = log_get_report_state();
+
 	if (!parent_handle && !cmd->cmd_report.report_group) {
 		if (!report_format_init(cmd)) {
 			dm_pool_free(cmd->mem, handle);
 			return NULL;
 		}
-	} else
-		cmd->cmd_report.saved_log_report_state = log_get_report_state();
+	}
 
 	log_set_report_context(LOG_REPORT_CONTEXT_PROCESSING);
 	return handle;
@@ -2218,7 +2227,7 @@ void destroy_processing_handle(struct cmd_context *cmd, struct processing_handle
 		if (handle->selection_handle && handle->selection_handle->selection_rh)
 			dm_report_free(handle->selection_handle->selection_rh);
 
-		log_restore_report_state(cmd->cmd_report.saved_log_report_state);
+		log_restore_report_state(handle->saved_log_report_state);
 
 		/*
 		 * Do not destroy current cmd->report_group and cmd->log_rh

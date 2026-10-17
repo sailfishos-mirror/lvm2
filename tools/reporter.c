@@ -1586,7 +1586,6 @@ int report_format_init(struct cmd_context *cmd)
 	}
 
 	cmd->cmd_report.report_group = new_report_group;
-	cmd->cmd_report.saved_log_report_state = log_get_report_state();
 	log_set_report(cmd->cmd_report.log_rh);
 
 	return 1;

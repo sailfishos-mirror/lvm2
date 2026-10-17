@@ -78,7 +78,6 @@ struct cmd_report {
 	struct dm_report_group *report_group;
 	struct dm_report *log_rh;
 	const char *log_name;
-	log_report_t saved_log_report_state;
 };
 
 /* FIXME Split into tool & library contexts */
