@@ -2078,7 +2078,7 @@ static int _get_pv_info_from_metadata(struct cmd_context *cmd, struct settings *
 	 */
 	if (!pvid_use_valid) {
 		dm_list_iterate_items(pvl, &vg->pvs) {
-			if (!strcmp(pvl->pv->device_hint, dev_name(dev)))
+			if (pvl->pv->device_hint && !strcmp(pvl->pv->device_hint, dev_name(dev)))
 				goto copy_pv;
 		}
 	} else {

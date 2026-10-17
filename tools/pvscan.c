@@ -599,7 +599,7 @@ static int _get_devs_from_saved_vg(struct cmd_context *cmd, const char *vgname,
 		name2 = pvl->pv->device_hint;
 
 		/* Probably pointless since dev is from online file which was already checked. */
-		if (!strncmp(name2, "/dev/md", 7) && strncmp(name1, "/dev/md", 7)) {
+		if (name2 && !strncmp(name2, "/dev/md", 7) && strncmp(name1, "/dev/md", 7)) {
 			if (!id_write_format((const struct id *)pvid, uuidstr, sizeof(uuidstr)))
 				uuidstr[0] = '\0';
 			log_print_pvscan(cmd, "PVID %s read from %s last written to %s.", uuidstr, name1, name2);
