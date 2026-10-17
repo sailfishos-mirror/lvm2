@@ -572,7 +572,7 @@ void dm_task_destroy(struct dm_task *dmt)
 	dm_free(dmt->dev_name);
 	dm_free(dmt->mangled_dev_name);
 	dm_free(dmt->newname);
-	dm_free(dmt->message);
+	_dm_zfree_string(dmt->message);
 	dm_free(dmt->geometry);
 	dm_free(dmt->uuid);
 	dm_free(dmt->mangled_uuid);
@@ -1069,7 +1069,7 @@ int dm_task_set_newuuid(struct dm_task *dmt, const char *newuuid)
 
 int dm_task_set_message(struct dm_task *dmt, const char *message)
 {
-	dm_free(dmt->message);
+	_dm_zfree_string(dmt->message);
 	if (!(dmt->message = dm_strdup(message))) {
 		log_error("dm_task_set_message: strdup failed");
 		return 0;
