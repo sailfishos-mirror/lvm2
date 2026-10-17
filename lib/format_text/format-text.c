@@ -1666,8 +1666,30 @@ static int _write_single_mda(struct metadata_area *mda, void *baton)
 
 	char buf[MDA_HEADER_SIZE] __attribute__((aligned(8))) = { 0 };
 	struct mda_header *mdah = (struct mda_header *) buf;
+	uint32_t bad_fields = 0;
 
 	mdac = mda->metadata_locn;
+
+	/*
+	 * When the PV is in a VG, an existing mda header holds the location
+	 * of the committed metadata in raw_locns[0].  It must be kept until
+	 * vg_commit replaces it, otherwise a failed or interrupted vg_write
+	 * (e.g. the PV header update for an old PV header extension) leaves
+	 * no reference to the metadata and the VG is not found any more.
+	 * A new or moved metadata area has been zeroed and has no magic,
+	 * so it gets a fresh header as before.
+	 */
+	if (!is_orphan(p->pv) &&
+	    dev_read_bytes(mdac->area.dev, mdac->area.start, MDA_HEADER_SIZE, mdah) &&
+	    !memcmp(mdah->magic, FMTT_MAGIC, sizeof(mdah->magic)) &&
+	    raw_parse_mda_header(mdah, &mdac->area, 0, &bad_fields)) {
+		log_debug_metadata("Keeping existing mda header on %s at %llu.",
+				   dev_name(mdac->area.dev),
+				   (unsigned long long)mdac->area.start);
+		return 1;
+	}
+
+	memset(buf, 0, sizeof(buf));
 	mdah->size = mdac->area.size;
 	rlocn_set_ignored(mdah->raw_locns, mda_is_ignored(mda));
 
