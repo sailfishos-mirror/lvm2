@@ -18,6 +18,7 @@ static const char * const nonprint_patterns[] = {
 	"foo\x80" "bar",
 	"foo\xc2" "b",
 	"\x80",
+	"\\\xc3\\\xa9",
 	NULL
 };
 
@@ -26,6 +27,7 @@ static const struct check_item nonprint[] = {
 	{ "foo\x80" "bar", 3 },
 	{ "foo\xc2" "b", 2 },
 	{ "\x80", 3 },
+	{ "\xc3\xa9", 4 },
 	{ NULL, 0 }
 };
 
