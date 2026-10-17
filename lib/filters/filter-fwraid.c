@@ -28,8 +28,16 @@
 static int _udev_dev_is_fwraid(struct device *dev)
 {
 	const char *value;
+	struct dev_ext *ext;
 
-	value = udev_device_get_property_value((struct udev_device *)dev->ext.handle, DEV_EXT_UDEV_BLKID_TYPE);
+	/*
+	 * external_device_info_source="udev" enables these udev checks.
+	 * external_device_info_source="none" disables them.
+	 */
+	if (!(ext = dev_ext_get(dev)))
+		return_0;
+
+	value = udev_device_get_property_value((struct udev_device *)ext->handle, DEV_EXT_UDEV_BLKID_TYPE);
 	if (value && strcmp(value, DEV_EXT_UDEV_BLKID_TYPE_SW_RAID) && strstr(value, DEV_EXT_UDEV_BLKID_TYPE_RAID_SUFFIX))
 		return 1;
 
