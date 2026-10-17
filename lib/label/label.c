@@ -918,7 +918,7 @@ int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device
 			continue;
 
 		if (!dev_read_bytes(dev, SECTOR_SIZE, LABEL_SIZE, buf)) {
-			_scan_dev_close(dev);
+			label_scan_invalidate(dev);
 			goto out;
 		}
 
@@ -926,11 +926,11 @@ int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device
 
 		if (!memcmp(pvh->pv_uuid, pvid, ID_LEN)) {
 			*dev_out = dev;
-			_scan_dev_close(dev);
+			label_scan_invalidate(dev);
 			break;
 		}
 
-		_scan_dev_close(dev);
+		label_scan_invalidate(dev);
 	}
 
 	ret = 1;
