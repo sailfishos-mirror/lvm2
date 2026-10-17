@@ -365,13 +365,15 @@ static int _vdo_check(struct cmd_context *cmd, const struct lv_segment *seg)
 {
 
 	struct vdo_pool_size_config cfg = { 0 };
+	/* Physical size passed to the vdo table line is the size of VDO data LV */
+	uint64_t physical_size = seg_lv(seg, 0)->size;
 
 	if (!lv_vdo_pool_size_config(seg->lv, &cfg))
 		return_0;
 
 	/* Check if we are just adding more size to the already running vdo pool */
-	if (seg->lv->size >= cfg.physical_size)
-		cfg.physical_size = seg->lv->size - cfg.physical_size;
+	if (physical_size >= cfg.physical_size)
+		cfg.physical_size = physical_size - cfg.physical_size;
 	if (get_vdo_pool_virtual_size(seg) >= cfg.virtual_size)
 		cfg.virtual_size = get_vdo_pool_virtual_size(seg) - cfg.virtual_size;
 	if (seg->vdo_params.block_map_cache_size_mb >= cfg.block_map_cache_size_mb)
