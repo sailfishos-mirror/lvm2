@@ -37,6 +37,7 @@ UNIT_SOURCE=\
 	test/unit/metadata_security_t.c \
 	test/unit/parse_rx_t.c \
 	test/unit/percent_t.c \
+	test/unit/raid_region_t.c \
 	test/unit/radix_tree_t.c \
 	test/unit/run.c \
 	test/unit/string_t.c \
@@ -71,8 +72,10 @@ run-unit-test: $(UNIT_TARGET)
 		TESTDIR=$$(mktemp -d -t -p "$$LVM_TEST_DIR" "LVMTEST.XXXXXXXXXX") ;\
 		cd "$$TESTDIR" ;\
 		LD_LIBRARY_PATH=$(abs_top_builddir)/libdm:$(abs_top_builddir)/daemons/dmeventd $(abs_top_builddir)/$(UNIT_TARGET) run ;\
+		TEST_RESULT=$$? ;\
 		cd $$OLDPWD ;\
-		$(RM) -r "$${TESTDIR:?}"
+		$(RM) -r "$${TESTDIR:?}" ;\
+		exit $$TEST_RESULT
 
 ifeq ("$(USE_TRACKING)","yes")
 -include $(UNIT_DEPENDS)
