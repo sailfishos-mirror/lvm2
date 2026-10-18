@@ -21,6 +21,7 @@ UNIT_SOURCE=\
 	test/unit/bcache_utils_t.c \
 	test/unit/bitset_t.c \
 	test/unit/config_t.c \
+	test/unit/config_cascade_t.c \
 	test/unit/dmhash_t.c \
 	test/unit/dmlist_t.c \
 	test/unit/dmstats_list_t.c \
@@ -55,6 +56,7 @@ libdaemon/client/libdaemonclient.a: libdaemon
 
 # toolcontext.h requires the generated cmds.h.
 test/unit/dev_cache_t.o: | include
+test/unit/config_cascade_t.o: | include
 
 $(UNIT_TARGET): $(UNIT_OBJECTS) $(LVMINTERNAL_LIBS)
 	$(SHOW) "    [LD] $@"
