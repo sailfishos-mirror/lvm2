@@ -27,6 +27,8 @@
 #include "lib/locking/lvmlockd.h"
 #include "lib/misc/lvm-signal.h"
 
+#include <sys/utsname.h>
+
 typedef int (*fn_on_lv_t)(struct logical_volume *lv, void *data);
 static int _eliminate_extracted_lvs_optional_write_vg(struct volume_group *vg,
 						      struct dm_list *removal_lvs,
@@ -2429,6 +2431,30 @@ static int _same_layout(struct lv_segment *seg,
 		seg->region_size == new_region_size &&
 		old_image_count == new_image_count &&
 		seg->stripe_size == new_stripe_size) ? 1 : 0;
+}
+
+/*
+ * The dm-raid target version is not bumped for bug fixes, so the kernel
+ * release is the only way to tell a kernel with the reshape fixes from
+ * an older one.  Distro backports are not detected.
+ */
+static void _warn_if_reshape_kernel_is_old(const struct logical_volume *lv)
+{
+	struct utsname uts;
+	unsigned major = 0, minor = 0, patch = 0;
+
+	if (uname(&uts) ||
+	    sscanf(uts.release, "%u.%u.%u", &major, &minor, &patch) < 2)
+		return;
+
+	if (KERNEL_VERSION(major, minor, patch) >= KERNEL_VERSION(6, 11, 0))
+		return;
+
+	log_warn("WARNING: Kernel %s predates upstream dm-raid fixes for RAID"
+		 " reshape data corruption (Linux 6.11); reshaping %s may lose"
+		 " data if the table is reloaded or the device is suspended."
+		 " Distro backports are not detected.",
+		 uts.release, display_lvname(lv));
 }
 
 /*
@@ -7059,6 +7085,8 @@ int lv_raid_convert(struct logical_volume *lv,
 	case 0:
 		break;
 	case 1:
+		_warn_if_reshape_kernel_is_old(lv);
+
 		if (!_raid_reshape(lv, new_segtype, yes, force,
 				   data_copies, region_size,
 				   stripes, stripe_size, allocate_pvs)) {
