@@ -4516,11 +4516,53 @@ static int _lv_extend_layered_lv(struct alloc_handle *ah,
 	return 1;
 }
 
+/*
+ * Return 1 if the candidate PVs do not all have the same size and free
+ * space.  Only the PVs the allocation may use are compared: measuring the
+ * whole VG would blame an imbalance for a failure caused by restricting
+ * the allocation with an explicit PV list or an --alloc policy.
+ */
+static int _pvs_differ_in_size_or_free(struct dm_list *pvs)
+{
+	const struct pv_list *pvl;
+	const struct physical_volume *first_pv = NULL;
+
+	dm_list_iterate_items(pvl, pvs) {
+		if (!first_pv) {
+			first_pv = pvl->pv;
+			continue;
+		}
+
+		if (pv_pe_count(first_pv) != pv_pe_count(pvl->pv) ||
+		    pv_free(first_pv) != pv_free(pvl->pv))
+			return 1;
+	}
+
+	return 0;
+}
+
+/*
+ * Explain a failed RAID extend in a VG whose candidate PVs are not equally
+ * sized.  A NULL vg means the shape was not checked or was balanced, so
+ * callers can invoke this unconditionally and get the hint only when it
+ * can actually explain the failure.
+ */
+static void _log_unequal_pv_hint(const struct volume_group *vg)
+{
+	if (!vg)
+		return;
+
+	log_error("Unequal physical volume sizes or free space in volume group "
+		  "%s may prevent the logical volume from extending.", vg->name);
+}
+
 /* Check either RAID images and metas are being allocated redundantly. */
 static int _lv_raid_redundant(struct logical_volume *lv,
 			      struct dm_list *allocatable_pvs, int meta)
 {
-	uint32_t nlvs, s;
+	uint32_t s;
+	struct logical_volume *first_slv;
+	const char *image_kind = meta ? "metadata" : "data";
 	struct lv_segment *seg = first_seg(lv);
 	struct pv_list *pvl;
 
@@ -4528,16 +4570,27 @@ static int _lv_raid_redundant(struct logical_volume *lv,
 		return 1;
 
 	dm_list_iterate_items(pvl, allocatable_pvs) {
-		nlvs = 0;
+		first_slv = NULL;
 
 		for (s = 0; s < seg->area_count; s++) {
 			struct logical_volume *slv = meta ? seg_metalv(seg, s) : seg_lv(seg, s);
 
-			if (slv && lv_is_on_pv(slv, pvl->pv) && nlvs++) {
-				log_error("LV %s using PV %s is not redundant.",
-					  display_lvname(slv), dev_name(pvl->pv->dev));
-				return 0;
+			if (!slv || !lv_is_on_pv(slv, pvl->pv))
+				continue;
+
+			if (!first_slv) {
+				first_slv = slv;
+				continue;
 			}
+
+			log_error("RAID %s images %s and %s both use physical volume %s.",
+				  image_kind,
+				  display_lvname(first_slv), display_lvname(slv),
+				  dev_name(pvl->pv->dev));
+			log_error("RAID %s images must use different physical volumes.",
+				  image_kind);
+
+			return 0;
 		}
 	}
 
@@ -4570,9 +4623,10 @@ int lv_extend(struct logical_volume *lv,
 {
 	int r = 1;
 	int log_count = 0;
+	const struct volume_group *pv_imbalance_vg = NULL;
 	struct alloc_handle *ah;
 	uint32_t sub_lv_count;
-	uint32_t old_extents;
+	uint32_t old_extents = lv->le_count;	/* 0 when the LV is created. */
 	uint32_t new_extents;	/* Total logical size after extension. */
 	uint64_t raid_size;
 
@@ -4612,10 +4666,25 @@ int lv_extend(struct logical_volume *lv,
 
 	}
 
+	/*
+	 * Snapshot the candidate PV shape before the new extents are assigned:
+	 * assigning them bumps pe_alloc_count on the PVs used and would hide an
+	 * existing imbalance between PV sizes or free space.
+	 *
+	 * Only an extend is diagnosed: a create that cannot place its images
+	 * gets the allocator's own message and has no previous extent layout
+	 * that could be blamed, so old_extents gates the hint off.
+	 */
+	if (old_extents && segtype_is_raid(segtype) && alloc != ALLOC_ANYWHERE &&
+	    allocatable_pvs && _pvs_differ_in_size_or_free(allocatable_pvs))
+		pv_imbalance_vg = lv->vg;
+
 	if (!(ah = allocate_extents(lv->vg, lv, segtype, stripes, mirrors,
 				    log_count, region_size, extents,
-				    allocatable_pvs, alloc, approx_alloc, NULL)))
+				    allocatable_pvs, alloc, approx_alloc, NULL))) {
+		_log_unequal_pv_hint(pv_imbalance_vg);
 		return_0;
+	}
 
 	new_extents = ah->new_extents;
 	if (segtype_is_raid_with_meta(segtype))
@@ -4640,8 +4709,6 @@ int lv_extend(struct logical_volume *lv,
 		else
 			sub_lv_count = mirrors;
 
-		old_extents = lv->le_count;
-
 		if (!lv->le_count &&
 		    !(r = _lv_insert_empty_sublvs(lv, segtype, stripe_size,
 						  region_size, sub_lv_count))) {
@@ -4657,6 +4724,7 @@ int lv_extend(struct logical_volume *lv,
 		    alloc != ALLOC_ANYWHERE &&
 		    !(r = _lv_raid_redundant_allocation(lv, allocatable_pvs))) {
 			log_error("Insufficient suitable allocatable extents for logical volume %s", display_lvname(lv));
+			_log_unequal_pv_hint(pv_imbalance_vg);
 			if (!old_extents && (!lv_remove(lv) || !vg_write(lv->vg) || !vg_commit(lv->vg)))
 				return_0;
 			goto out;
