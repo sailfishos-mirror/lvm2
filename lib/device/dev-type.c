@@ -20,7 +20,7 @@
 #include "lib/mm/xlate.h"
 #include "lib/config/config.h"
 #include "lib/metadata/metadata.h"
-#include "lib/device/bcache.h"
+#include "lib/device/blkio.h"
 #include "lib/label/label.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/activate/activate.h"

@@ -13,7 +13,7 @@
  */
 
 #include "units.h"
-#include "lib/device/bcache.h"
+#include "lib/device/blkio.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -34,7 +34,7 @@ struct fixture {
 	int fd;
 	int di;
 	char fname[32];
-	struct bcache *cache;
+	struct blkio *bio;
 };
 
 static inline uint8_t _pattern_at(uint8_t pat, uint8_t byte)
@@ -95,10 +95,10 @@ static void *_fix_init(struct io_engine *engine)
 		T_ASSERT(f->fd >= 0);
 	}
 
-	f->cache = bcache_create(bsize / 512, NR_BLOCKS, engine);
-	T_ASSERT(f->cache);
+	f->bio = blkio_create(bsize / 512, NR_BLOCKS, engine);
+	T_ASSERT(f->bio);
 
-	f->di = bcache_set_fd(f->fd);
+	f->di = blkio_set_fd(f->fd);
 
 	return f;
 }
@@ -124,8 +124,8 @@ static void _fix_exit(void *fixture)
 	struct fixture *f = fixture;
 
 	if (f) {
-		bcache_clear_fd(f->di);
-		bcache_destroy(f->cache);
+		blkio_clear_fd(f->di);
+		blkio_destroy(f->bio);
 		(void) close(f->fd);
 		(void) unlink(f->fname);
 		free(f);
@@ -156,7 +156,7 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 	uint64_t offset = byte_b % T_BLOCK_SIZE;
 	uint64_t blen, len = byte_e - byte_b;
 
-	// Verify via bcache_read_bytes
+	// Verify via blkio_read_bytes
 	{
 		unsigned i;
 		size_t len2 = byte_e - byte_b;
@@ -165,15 +165,15 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 		T_ASSERT(buffer);
 		memset(buffer, 0, len2);
 
-		T_ASSERT(bcache_read_bytes(f->cache, f->di, byte_b, len2, buffer));
+		T_ASSERT(blkio_read_bytes(f->bio, f->di, byte_b, len2, buffer));
 		for (i = 0; i < len; i++)
 			T_ASSERT_EQUAL(buffer[i], _pattern_at(pat, byte_b + i));
 		free(buffer);
 	}
 
-	// Verify again, driving bcache directly
+	// Verify again, driving the blkio directly
 	for (; bb != be; bb++) {
-		T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
+		T_ASSERT(blkio_get(f->bio, f->di, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
 		_verify_bytes(b, bb * T_BLOCK_SIZE, offset, blen, pat);
@@ -181,7 +181,7 @@ static void _verify(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t
 		offset = 0;
 		len -= blen;
 
-		bcache_put(b);
+		blkio_put(b);
 	}
 }
 
@@ -195,7 +195,7 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
 	uint64_t blen, len = byte_e - byte_b;
 
 	for (; bb != be; bb++) {
-		T_ASSERT(bcache_get(f->cache, f->di, bb, 0, &b));
+		T_ASSERT(blkio_get(f->bio, f->di, bb, 0, &b));
 
 		blen = _min(T_BLOCK_SIZE - offset, len);
 		for (i = 0; i < blen; i++)
@@ -204,7 +204,7 @@ static void _verify_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uin
 		offset = 0;
 		len -= blen;
 
-		bcache_put(b);
+		blkio_put(b);
 	}
 }
 
@@ -225,31 +225,31 @@ static void _do_write(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8
 	for (i = 0; i < len; i++)
 		buffer[i] = _pattern_at(pat, byte_b + i);
 
-	T_ASSERT(bcache_write_bytes(f->cache, f->di, byte_b, byte_e - byte_b, buffer));
+	T_ASSERT(blkio_write_bytes(f->bio, f->di, byte_b, byte_e - byte_b, buffer));
 	free(buffer);
 }
 
 static void _do_zero(struct fixture *f, uint64_t byte_b, uint64_t byte_e)
 {
-	T_ASSERT(bcache_zero_bytes(f->cache, f->di, byte_b, byte_e - byte_b));
+	T_ASSERT(blkio_zero_bytes(f->bio, f->di, byte_b, byte_e - byte_b));
 }
 
 static void _do_set(struct fixture *f, uint64_t byte_b, uint64_t byte_e, uint8_t val)
 {
-	T_ASSERT(bcache_set_bytes(f->cache, f->di, byte_b, byte_e - byte_b, val));
+	T_ASSERT(blkio_set_bytes(f->bio, f->di, byte_b, byte_e - byte_b, val));
 }
 
 /*
  * Flush dirty blocks to disk and drop all cached blocks so the
  * next read goes back to the file.  This replaces the old _reopen()
- * which destroyed and recreated the entire bcache + io_engine -
+ * which destroyed and recreated the entire blkio + its io engine -
  * io_destroy() alone takes ~40ms, so avoiding it per-test saves
  * significant time.
  */
 static void _flush_and_invalidate(struct fixture *f)
 {
-	T_ASSERT(bcache_flush(f->cache));
-	bcache_invalidate_di(f->cache, f->di);
+	T_ASSERT(blkio_flush(f->bio));
+	blkio_invalidate_di(f->bio, f->di);
 }
 
 //----------------------------------------------------------------
@@ -399,7 +399,7 @@ static void _test_set_many_boundaries(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/async/" path, desc, fn)
 
 static struct test_suite *_async_tests(void)
 {
@@ -409,7 +409,7 @@ static struct test_suite *_async_tests(void)
 		exit(1);
 	}
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/async/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/async/" path, desc, fn)
 	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
 	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
 	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -444,7 +444,7 @@ static struct test_suite *_sync_tests(void)
 		exit(1);
 	}
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/utils/sync/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/sync/" path, desc, fn)
 	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
 	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
 	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -470,7 +470,7 @@ static struct test_suite *_sync_tests(void)
 	return ts;
 }
 
-void bcache_utils_tests(struct dm_list *all_tests)
+void blkio_utils_tests(struct dm_list *all_tests)
 {
 	dm_list_add(all_tests, &_async_tests()->list);
 	dm_list_add(all_tests, &_sync_tests()->list);

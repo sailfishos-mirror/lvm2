@@ -3121,7 +3121,7 @@ static int _pvck_mf(struct metadata_file *mf, struct cmd_context *cmd, int argc,
 			return_ECMD_FAILED;
 	}
 
-	label_scan_setup_bcache();
+	label_scan_setup_blkio();
 
 	if (dev) {
 		char buf[4096];
@@ -3140,7 +3140,7 @@ static int _pvck_mf(struct metadata_file *mf, struct cmd_context *cmd, int argc,
 		cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
 
 		/*
-		 * This buf is not used, but bcache data is used for subsequent
+		 * This buf is not used, but blkio data is used for subsequent
 		 * reads in the filters and by _read_bytes for other disk structs.
 		 */
 		if (!dev_read_bytes(dev, 0, 4096, buf)) {

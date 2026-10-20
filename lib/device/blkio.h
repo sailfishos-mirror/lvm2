@@ -12,8 +12,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef BCACHE_H
-#define BCACHE_H
+#ifndef BLKIO_H
+#define BLKIO_H
 
 #include "libdm/libdevmapper.h"
 #include "base/memory/container_of.h"
@@ -21,6 +21,8 @@
 #include <linux/fs.h>
 #include <stdint.h>
 #include <stdbool.h>
+
+#include "lib/misc/lvm-sector.h"
 
 enum dir {
 	DIR_READ,
@@ -33,11 +35,11 @@ typedef uint64_t sector_t;
 typedef void io_complete_fn(void *context, int io_error);
 
 struct io_engine {
-	void (*destroy)(struct io_engine *e);
-	bool (*issue)(struct io_engine *e, enum dir d, int di,
+	void (*destroy)(struct io_engine *ioe);
+	bool (*issue)(struct io_engine *ioe, enum dir d, int di,
 		      sector_t sb, sector_t se, void *data, void *context);
-	bool (*wait)(struct io_engine *e, io_complete_fn fn);
-	unsigned (*max_io)(struct io_engine *e);
+	bool (*wait)(struct io_engine *ioe, io_complete_fn fn);
+	unsigned (*max_io)(struct io_engine *ioe);
 };
 
 struct io_engine *create_async_io_engine(void);
@@ -45,14 +47,15 @@ struct io_engine *create_sync_io_engine(void);
 
 /*----------------------------------------------------------------*/
 
-struct bcache;
+struct blkio;
 struct block {
-	/* clients may only access these three fields */
+	/* Public: clients may access only these fields. */
 	int di;
 	uint64_t index;
 	void *data;
 
-	struct bcache *cache;
+	/* Private cache state. */
+	struct blkio *bio;
 	struct dm_list list;
 
 	unsigned flags;
@@ -64,11 +67,12 @@ struct block {
 /*
  * Ownership of engine passes.  Engine will be destroyed even if this fails.
  */
-struct bcache *bcache_create(sector_t block_sectors, unsigned nr_cache_blocks,
-			     struct io_engine *engine);
-void bcache_destroy(struct bcache *cache);
+struct blkio *blkio_create(sector_t block_sectors,
+			   unsigned nr_cache_blocks,
+			   struct io_engine *engine);
+void blkio_destroy(struct blkio *bio);
 
-enum bcache_get_flags {
+enum blkio_get_flags {
 	/*
 	 * The block will be zeroed before get_block returns it.  This
 	 * potentially avoids a read if the block is not already in the cache.
@@ -83,20 +87,26 @@ enum bcache_get_flags {
 	GF_DIRTY = (1 << 1)
 };
 
-sector_t bcache_block_sectors(struct bcache *cache);
-unsigned bcache_nr_cache_blocks(struct bcache *cache);
-unsigned bcache_max_prefetches(struct bcache *cache);
+sector_t blkio_block_sectors(struct blkio *bio);
+unsigned blkio_nr_cache_blocks(struct blkio *bio);
+unsigned blkio_max_prefetches(struct blkio *bio);
 
 /*
  * Use the prefetch method to take advantage of asynchronous IO.  For example,
  * if you wanted to read a block from many devices concurrently you'd do
  * something like this:
  *
+ * dm_list_iterate_items (dev, &devices) {
+ *	dev->blkio_di = blkio_set_fd(dev->blkio_fd);
+ *	if (dev->blkio_di == -1)
+ *		fail();
+ * }
+ *
  * dm_list_iterate_items (dev, &devices)
- * 	bcache_prefetch(cache, dev->fd, block);
+ *	blkio_prefetch(bio, dev->blkio_di, block);
  *
  * dm_list_iterate_items (dev, &devices) {
- *	if (!bcache_get(cache, dev->fd, block, &b))
+ *	if (!blkio_get(bio, dev->blkio_di, block, &b))
  *		fail();
  *
  *	process_block(b);
@@ -106,20 +116,20 @@ unsigned bcache_max_prefetches(struct bcache *cache);
  * they complete.  But we're talking a very small difference, and it's worth it
  * to keep callbacks out of this interface.
  */
-void bcache_prefetch(struct bcache *cache, int di, block_address index);
+void blkio_prefetch(struct blkio *bio, int di, block_address index);
 
 /*
  * Returns true on success.
  */
-bool bcache_get(struct bcache *cache, int di, block_address index,
-	        unsigned flags, struct block **result);
-void bcache_put(struct block *b);
+bool blkio_get(struct blkio *bio, int di, block_address index,
+	       unsigned flags, struct block **result);
+void blkio_put(struct block *b);
 
 /*
  * flush() does not attempt to writeback locked blocks.  flush will fail
  * (return false), if any unlocked dirty data cannot be written back.
  */
-bool bcache_flush(struct bcache *cache);
+bool blkio_flush(struct blkio *bio);
 
 /*
  * Removes a block from the cache.
@@ -129,13 +139,13 @@ bool bcache_flush(struct bcache *cache);
  *
  * If the block is currently held false will be returned.
  */
-bool bcache_invalidate(struct bcache *cache, int di, block_address index);
+bool blkio_invalidate(struct blkio *bio, int di, block_address index);
 
 /*
  * Invalidates all blocks on the given descriptor.  Call this before closing
  * the descriptor to make sure everything is written back.
  */
-bool bcache_invalidate_di(struct bcache *cache, int di);
+bool blkio_invalidate_di(struct blkio *bio, int di);
 
 /*
  * Call this function if flush, or invalidate fail and you do not
@@ -143,7 +153,7 @@ bool bcache_invalidate_di(struct bcache *cache, int di);
  * not written.  If any blocks for di are held, then it will call
  * abort().
  */
-void bcache_abort_di(struct bcache *cache, int di);
+void blkio_abort_di(struct blkio *bio, int di);
 
 /*----------------------------------------------------------------*/
 
@@ -152,22 +162,22 @@ void bcache_abort_di(struct bcache *cache, int di);
  *
  * Prefetches the blocks necessary to satisfy a byte range.
  */
-void bcache_prefetch_bytes(struct bcache *cache, int di, uint64_t start, size_t len);
+void blkio_prefetch_bytes(struct blkio *bio, int di, uint64_t start, size_t len);
 
 /* Reads, writes, zeroes, sets and invalidates byte ranges.  Returns false on error. */
-bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len, void *data);
-bool bcache_write_bytes(struct bcache *cache, int di, uint64_t start, size_t len, const void *data);
-bool bcache_zero_bytes(struct bcache *cache, int di, uint64_t start, size_t len);
-bool bcache_set_bytes(struct bcache *cache, int di, uint64_t start, size_t len, uint8_t val);
-bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_t len);
+bool blkio_read_bytes(struct blkio *bio, int di, uint64_t start, size_t len, void *data);
+bool blkio_write_bytes(struct blkio *bio, int di, uint64_t start, size_t len, const void *data);
+bool blkio_zero_bytes(struct blkio *bio, int di, uint64_t start, size_t len);
+bool blkio_set_bytes(struct blkio *bio, int di, uint64_t start, size_t len, uint8_t val);
+bool blkio_invalidate_bytes(struct blkio *bio, int di, uint64_t start, size_t len);
 
-void bcache_set_last_byte(struct bcache *cache, int di, uint64_t offset, size_t sector_size);
-void bcache_unset_last_byte(struct bcache *cache, int di);
+void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset, size_t sector_size);
+void blkio_unset_last_byte(struct blkio *bio, int di);
 
 /*----------------------------------------------------------------*/
 
-int bcache_set_fd(int fd); /* returns di, or -1 on failure */
-void bcache_clear_fd(int di);
-int bcache_change_fd(int di, int fd);
+int blkio_set_fd(int fd); /* returns di, or -1 on failure */
+void blkio_clear_fd(int di);
+int blkio_change_fd(int di, int fd);
 
 #endif

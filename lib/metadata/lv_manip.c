@@ -9193,14 +9193,14 @@ int wipe_lv(struct logical_volume *lv, struct wipe_params wp)
 
 #ifdef HAVE_BLKZEROOUT
 		if (!test_mode() && !wp.zero_value && (zero_sectors > 16)) {
-			/* TODO: maybe integrate with bcache_zero_set() */
+			/* TODO: maybe integrate with blkio_zero_bytes() */
 			const uint64_t end = zero_sectors << SECTOR_SHIFT;
 			uint64_t range[2] = { 0, 1024 * 1024 }; /* zeroing with 1M steps (for better ^C support) */
 			for (/* empty */ ; range[0] < end; range[0] += range[1]) {
 				if ((range[0] + range[1]) > end)
 					range[1] = end - range[0];
 
-				if (ioctl(dev->bcache_fd, BLKZEROOUT, &range)) {
+				if (ioctl(dev->blkio_fd, BLKZEROOUT, &range)) {
 					/*
 					 * If errno == EINVAL, then the kernel is without support for BLKZEROOUT.
 					 * Fall back to dev_set_bytes silently in that case. Otherwise, also log

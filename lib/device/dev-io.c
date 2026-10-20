@@ -86,7 +86,7 @@ static int _dev_get_size_file(struct device *dev, uint64_t *size)
 static int _dev_get_size_dev(struct device *dev, uint64_t *size)
 {
 	const char *name = dev_name(dev);
-	int fd = dev->bcache_fd;
+	int fd = dev->blkio_fd;
 	int do_close = 0;
 
 	if (dm_list_empty(&dev->aliases))
@@ -191,7 +191,7 @@ static int _dev_discard_blocks(struct device *dev, uint64_t offset_bytes, uint64
 int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_size,
 				unsigned int *logical_block_size)
 {
-	int fd = dev->bcache_fd;
+	int fd = dev->blkio_fd;
 	int do_close = 0;
 	unsigned int pbs = 0;
 	unsigned int lbs = 0;

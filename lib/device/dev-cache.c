@@ -81,8 +81,8 @@ static int _insert(const char *path, const struct stat *info,
 void dev_init(struct device *dev)
 {
 	dev->fd = -1;
-	dev->bcache_fd = -1;
-	dev->bcache_di = -1;
+	dev->blkio_fd = -1;
+	dev->blkio_di = -1;
 	dev->read_ahead = -1;
 	dev->part = -1;
 
@@ -1752,8 +1752,8 @@ static struct device *_dev_cache_get(struct cmd_context *cmd, const char *name, 
 	 * . wipe_lv opening lv to zero it
 	 * . _extend_sanlock_lv opening lv to extend it
 	 * . _write_log_header opening lv to write header
-	 * Also, io to LVs should not go through bcache.
-	 * bcache should contain only labels and metadata
+	 * Also, io to LVs should not go through the blkio.
+	 * The blkio should contain only labels and metadata
 	 * scanned from PVs.
 	 */
 	if (!dev) {

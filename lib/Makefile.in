@@ -27,8 +27,8 @@ SOURCES =\
 	config/config.c \
 	datastruct/radix-tree.c \
 	datastruct/str_list.c \
-	device/bcache.c \
-	device/bcache-utils.c \
+	device/blkio.c \
+	device/blkio_utils.c \
 	device/dev-cache.c \
 	device/device_id.c \
 	device/dev-ext.c \

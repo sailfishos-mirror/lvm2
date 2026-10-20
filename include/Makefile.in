@@ -41,7 +41,7 @@ CLEAN_TARGETS += cmds.h cmds.h-t \
  .symlinks_created \
  activate.h \
  archiver.h \
- bcache.h \
+ blkio.h \
  btree.h \
  clvm.h \
  config-util.h \

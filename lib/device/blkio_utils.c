@@ -12,19 +12,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "lib/device/bcache.h"
-
-// FIXME: need to define this in a common place (that doesn't pull in deps)
-#ifndef SECTOR_SHIFT
-#define SECTOR_SHIFT 9
-#endif
+#include "lib/device/blkio.h"
 
 //----------------------------------------------------------------
 
-static bool _byte_range_to_block_range(struct bcache *cache, uint64_t start, size_t len,
+static bool _byte_range_to_block_range(struct blkio *bio, uint64_t start, size_t len,
 				       block_address *bb, block_address *be)
 {
-	block_address block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
+	block_address block_size = blkio_block_sectors(bio) << SECTOR_SHIFT;
 
 	if ((uint64_t)len > UINT64_MAX - start)
 		return false;
@@ -44,40 +39,40 @@ static uint64_t _min(uint64_t lhs, uint64_t rhs)
 
 //----------------------------------------------------------------
 
-void bcache_prefetch_bytes(struct bcache *cache, int di, uint64_t start, size_t len)
+void blkio_prefetch_bytes(struct blkio *bio, int di, uint64_t start, size_t len)
 {
 	block_address bb, be;
 
-	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
 		return;
 	while (bb < be) {
-		bcache_prefetch(cache, di, bb);
+		blkio_prefetch(bio, di, bb);
 		bb++;
 	}
 }
 
 //----------------------------------------------------------------
 
-bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len, void *data)
+bool blkio_read_bytes(struct blkio *bio, int di, uint64_t start, size_t len, void *data)
 {
 	struct block *b;
 	block_address bb, be;
-	uint64_t block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
+	uint64_t block_size = blkio_block_sectors(bio) << SECTOR_SHIFT;
 	uint64_t block_offset = start % block_size;
 	size_t blen;
 
-	bcache_prefetch_bytes(cache, di, start, len);
+	blkio_prefetch_bytes(bio, di, start, len);
 
-	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
 		return false;
 
 	for (; bb != be; bb++) {
-        	if (!bcache_get(cache, di, bb, 0, &b))
+        	if (!blkio_get(bio, di, bb, 0, &b))
 			return false;
 
 		blen = _min(block_size - block_offset, len);
 		memcpy(data, ((unsigned char *) b->data) + block_offset, blen);
-		bcache_put(b);
+		blkio_put(b);
 
 		block_offset = 0;
 		len -= blen;
@@ -87,16 +82,16 @@ bool bcache_read_bytes(struct bcache *cache, int di, uint64_t start, size_t len,
 	return true;
 }
 
-bool bcache_invalidate_bytes(struct bcache *cache, int di, uint64_t start, size_t len)
+bool blkio_invalidate_bytes(struct blkio *bio, int di, uint64_t start, size_t len)
 {
 	block_address bb, be;
 	bool result = true;
 
-	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
 		return false;
 
 	for (; bb != be; bb++) {
-		if (!bcache_invalidate(cache, di, bb))
+		if (!blkio_invalidate(bio, di, bb))
 			result = false;
 	}
 
@@ -114,7 +109,7 @@ typedef bool (*partial_update_fn)(struct updater *u, int di, block_address bb, u
 typedef bool (*whole_update_fn)(struct updater *u, int di, block_address bb, block_address be);
 
 struct updater {
-	struct bcache *cache;
+	struct blkio *bio;
 	partial_update_fn partial_fn;
 	whole_update_fn whole_fn;
 	void *data;
@@ -122,19 +117,19 @@ struct updater {
 
 static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 {
-        struct bcache *cache = u->cache;
+        struct blkio *bio = u->bio;
 	block_address bb, be;
-	uint64_t block_size = bcache_block_sectors(cache) << SECTOR_SHIFT;
+	uint64_t block_size = blkio_block_sectors(bio) << SECTOR_SHIFT;
 	uint64_t block_offset = start % block_size;
 	uint64_t nr_whole;
 
-	if (!_byte_range_to_block_range(cache, start, len, &bb, &be))
+	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
 		return false;
 
 	// If the last block is partial, we will require a read, so let's
 	// prefetch it.
 	if ((start + len) % block_size)
-        	bcache_prefetch(cache, di, (start + len) / block_size);
+        	blkio_prefetch(bio, di, (start + len) / block_size);
 
 	// First block may be partial
 	if (block_offset) {
@@ -171,7 +166,7 @@ static bool _write_partial(struct updater *u, int di, block_address bb,
 {
 	struct block *b;
 
-	if (!bcache_get(u->cache, di, bb, GF_DIRTY, &b))
+	if (!blkio_get(u->bio, di, bb, GF_DIRTY, &b))
 		return false;
 
 	if (u->data) {
@@ -179,33 +174,33 @@ static bool _write_partial(struct updater *u, int di, block_address bb,
 		u->data = ((unsigned char *) u->data) + len;
 	}
 
-	bcache_put(b);
+	blkio_put(b);
 	return true;
 }
 
 static bool _write_whole(struct updater *u, int di, block_address bb, block_address be)
 {
 	struct block *b;
-	uint64_t block_size = bcache_block_sectors(u->cache) << SECTOR_SHIFT;
+	uint64_t block_size = blkio_block_sectors(u->bio) << SECTOR_SHIFT;
 
 	for (; bb != be; bb++) {
         	// We don't need to read the block since we are overwriting
         	// it completely.
-		if (!bcache_get(u->cache, di, bb, GF_ZERO, &b))
+		if (!blkio_get(u->bio, di, bb, GF_ZERO, &b))
         		return false;
 		memcpy(b->data, u->data, block_size);
 		u->data = ((unsigned char *) u->data) + block_size;
-        	bcache_put(b);
+        	blkio_put(b);
 	}
 
 	return true;
 }
 
-bool bcache_write_bytes(struct bcache *cache, int di, uint64_t start, size_t len, const void *data)
+bool blkio_write_bytes(struct blkio *bio, int di, uint64_t start, size_t len, const void *data)
 {
         struct updater u;
 
-        u.cache = cache;
+        u.bio = bio;
         u.partial_fn = _write_partial;
         u.whole_fn = _write_whole;
         u.data = (void *) data;
@@ -219,11 +214,11 @@ static bool _zero_partial(struct updater *u, int di, block_address bb, uint64_t 
 {
 	struct block *b;
 
-	if (!bcache_get(u->cache, di, bb, GF_DIRTY, &b))
+	if (!blkio_get(u->bio, di, bb, GF_DIRTY, &b))
 		return false;
 
 	memset(((unsigned char *) b->data) + offset, 0, len);
-	bcache_put(b);
+	blkio_put(b);
 
 	return true;
 }
@@ -233,19 +228,19 @@ static bool _zero_whole(struct updater *u, int di, block_address bb, block_addre
 	struct block *b;
 
 	for (; bb != be; bb++) {
-		if (!bcache_get(u->cache, di, bb, GF_ZERO, &b))
+		if (!blkio_get(u->bio, di, bb, GF_ZERO, &b))
         		return false;
-        	bcache_put(b);
+        	blkio_put(b);
 	}
 
 	return true;
 }
 
-bool bcache_zero_bytes(struct bcache *cache, int di, uint64_t start, size_t len)
+bool blkio_zero_bytes(struct blkio *bio, int di, uint64_t start, size_t len)
 {
         struct updater u;
 
-        u.cache = cache;
+        u.bio = bio;
         u.partial_fn = _zero_partial;
         u.whole_fn = _zero_whole;
         u.data = NULL;
@@ -260,11 +255,11 @@ static bool _set_partial(struct updater *u, int di, block_address bb, uint64_t o
 	struct block *b;
 	uint8_t val = (u->data) ? *((uint8_t *) u->data) : 0;
 
-	if (!bcache_get(u->cache, di, bb, GF_DIRTY, &b))
+	if (!blkio_get(u->bio, di, bb, GF_DIRTY, &b))
 		return false;
 
 	memset(((unsigned char *) b->data) + offset, val, len);
-	bcache_put(b);
+	blkio_put(b);
 
 	return true;
 }
@@ -273,23 +268,23 @@ static bool _set_whole(struct updater *u, int di, block_address bb, block_addres
 {
 	struct block *b;
 	uint8_t val = (u->data) ? *((uint8_t *) u->data) : 0;
-        uint64_t len = bcache_block_sectors(u->cache) * 512;
+	uint64_t len = blkio_block_sectors(u->bio) << SECTOR_SHIFT;
 
 	for (; bb != be; bb++) {
-		if (!bcache_get(u->cache, di, bb, GF_ZERO, &b))
+		if (!blkio_get(u->bio, di, bb, GF_ZERO, &b))
         		return false;
         	memset((unsigned char *) b->data, val, len);
-        	bcache_put(b);
+        	blkio_put(b);
 	}
 
 	return true;
 }
 
-bool bcache_set_bytes(struct bcache *cache, int di, uint64_t start, size_t len, uint8_t val)
+bool blkio_set_bytes(struct blkio *bio, int di, uint64_t start, size_t len, uint8_t val)
 {
         struct updater u;
 
-        u.cache = cache;
+        u.bio = bio;
         u.partial_fn = _set_partial;
         u.whole_fn = _set_whole;
         u.data = &val;

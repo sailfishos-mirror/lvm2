@@ -664,7 +664,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 
 		unlink_searched_devnames(cmd);
 
-		label_scan_setup_bcache();
+		label_scan_setup_blkio();
 
 		dm_list_iterate_items(du, &cmd->use_devices) {
 			if (!du->dev)
@@ -844,7 +844,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 		 * reads pvid from dev header, sets dev->pvid.
 		 * (it's ok if the device is not a PV and has no PVID)
 		 */
-		label_scan_setup_bcache();
+		label_scan_setup_blkio();
 		if (!label_read_pvid(dev, NULL)) {
 			log_error("Failed to read %s.", devname);
 			goto bad;
@@ -885,7 +885,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 		char pvid[ID_LEN+1] = { 0 };
 		const char *pvid_arg;
 
-		label_scan_setup_bcache();
+		label_scan_setup_blkio();
 
 		/*
 		 * Iterate through all devs on the system, reading the
@@ -952,7 +952,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 			goto bad;
 		}
 
-		label_scan_setup_bcache();
+		label_scan_setup_blkio();
 		if (!label_read_pvid(dev, NULL))
 			log_warn("WARNING: failed to read PVID from %s", dev_name(dev));
 

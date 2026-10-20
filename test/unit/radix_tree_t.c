@@ -610,7 +610,7 @@ static void test_destroy_calls_dtr(void *fixture)
 
 /*----------------------------------------------------------------*/
 
-static void test_bcache_scenario(void *fixture)
+static void test_blkio_scenario(void *fixture)
 {
 	struct radix_tree *rt = fixture;
 
@@ -668,7 +668,7 @@ static void _bcs2_step2(struct radix_tree *rt)
 	T_ASSERT(radix_tree_is_well_formed(rt));
 }
 
-static void test_bcache_scenario2(void *fixture)
+static void test_blkio_scenario2(void *fixture)
 {
 	unsigned i;
 	struct radix_tree *rt = fixture;
@@ -860,7 +860,7 @@ static void _generate_radix_test_pattern(struct radix_tree *rt)
 	}
 }
 
-static void test_bcache_scenario3(void *fixture)
+static void test_blkio_scenario3(void *fixture)
 {
 	struct radix_tree *rt = fixture;
 
@@ -1048,9 +1048,9 @@ void radix_tree_tests(struct dm_list *all_tests)
 	T("iterate-vary-middle", "iterate keys that vary in the middle", test_iterate_vary_middle);
 	T("remove-calls-dtr", "remove should call the dtr for the value", test_remove_calls_dtr);
 	T("destroy-calls-dtr", "destroy should call the dtr for all values", test_destroy_calls_dtr);
-	T("bcache-scenario", "A specific series of keys from a bcache scenario", test_bcache_scenario);
-	T("bcache-scenario-2", "A second series of keys from a bcache scenario", test_bcache_scenario2);
-	T("bcache-scenario-3", "A third series of keys from a bcache scenario", test_bcache_scenario3);
+	T("blkio-scenario", "A specific series of keys from a blkio scenario", test_blkio_scenario);
+	T("blkio-scenario-2", "A second series of keys from a blkio scenario", test_blkio_scenario2);
+	T("blkio-scenario-3", "A third series of keys from a blkio scenario", test_blkio_scenario3);
 	T("uniq-insert", "Test insert with test for uniq key", test_uniq_insert);
 	T("prefix-chain-split-zero", "prefix chain split with zero-length remainder", test_prefix_chain_split_zero);
 	T("overwrite-calls-dtr", "overwrite calls destructor for old value", test_overwrite_calls_dtr);

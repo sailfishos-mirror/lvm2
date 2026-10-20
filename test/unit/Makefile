@@ -14,11 +14,12 @@
 #       which defined all top_* variables
 
 UNIT_SOURCE=\
-	test/unit/bcache_t.c \
+	test/unit/blkio_engine_t.c \
+	test/unit/blkio_t.c \
 	test/unit/daemon_stray_t.c \
 	test/unit/dev_cache_t.c \
 	test/unit/dmeventd_t.c \
-	test/unit/bcache_utils_t.c \
+	test/unit/blkio_utils_t.c \
 	test/unit/bitset_t.c \
 	test/unit/config_t.c \
 	test/unit/dmhash_t.c \
@@ -31,7 +32,6 @@ UNIT_SOURCE=\
 	test/unit/dmeventd_vdo_t.c \
 	test/unit/dmeventd_snapshot_t.c \
 	test/unit/framework.c \
-	test/unit/io_engine_t.c \
 	test/unit/matcher_t.c \
 	test/unit/metadata_security_t.c \
 	test/unit/parse_rx_t.c \
