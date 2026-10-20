@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -19,7 +19,7 @@
 #include "lib/misc/crc.h"
 #include "lib/mm/xlate.h"
 #include "lib/cache/lvmcache.h"
-#include "lib/device/bcache.h"
+#include "lib/blkio/blkio.h"
 #include "lib/commands/toolcontext.h"
 #include "lib/activate/activate.h"
 #include "lib/label/hints.h"
@@ -36,7 +36,7 @@
 
 /* FIXME Allow for larger labels?  Restricted to single sector currently */
 
-static uint64_t _current_bcache_size_bytes;
+static uint64_t _current_blkio_size_bytes;
 
 /*
  * Internal labeller struct.
@@ -256,17 +256,17 @@ struct label *label_create(struct labeller *labeller)
 }
 
 
-/* global variable for accessing the bcache populated by label scan */
+/* global variable for accessing the blkio populated by label scan */
 /* FIXME/TODO convert to cmd_context */
-static struct bcache *scan_bcache;
+static struct blkio *scan_blkio;
 
-#define BCACHE_BLOCK_SIZE_IN_SECTORS 256 /* 256*512 = 128K */
+#define BLKIO_BLOCK_SIZE_IN_SECTORS 256 /* 256*512 = 128K */
 
-static bool _in_bcache(struct device *dev)
+static bool _in_blkio(struct device *dev)
 {
 	if (!dev)
 		return false;
-	return (dev->flags & DEV_IN_BCACHE) ? true : false;
+	return (dev->flags & DEV_IN_BLKIO) ? true : false;
 }
 
 static struct labeller *_find_lvm_header(struct device *dev,
@@ -361,7 +361,7 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 	/*
 	 * The device may have signatures that exclude it from being processed,
 	 * even if it might look like a PV.  Now that the device has been read
-	 * and data is available in bcache for it, recheck filters, including
+	 * and data is available in the blkio for it, recheck filters, including
 	 * those that use data.  The device needs to be excluded before it
 	 * begins to be processed as a PV.
 	 */
@@ -459,7 +459,7 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 
 /*
  * The label scan cache must already be set up by the caller,
- * see label_scan_setup_bcache().
+ * see label_scan_setup_blkio().
  */
 static int _scan_dev_open(struct device *dev)
 {
@@ -474,16 +474,16 @@ static int _scan_dev_open(struct device *dev)
 	if (!dev)
 		return 0;
 
-	if (dev->flags & DEV_IN_BCACHE) {
+	if (dev->flags & DEV_IN_BLKIO) {
 		/* Shouldn't happen */
-		log_error("Device open %s has DEV_IN_BCACHE already set", dev_name(dev));
-		dev->flags &= ~DEV_IN_BCACHE;
+		log_error("Device open %s has DEV_IN_BLKIO already set.", dev_name(dev));
+		dev->flags &= ~DEV_IN_BLKIO;
 	}
 
-	if (dev->bcache_di != -1) {
+	if (dev->blkio_di != -1) {
 		/* Shouldn't happen */
 		log_error("Device open %s already open with di %d fd %d",
-			  dev_name(dev), dev->bcache_di, dev->bcache_fd);
+			  dev_name(dev), dev->blkio_di, dev->blkio_fd);
 		return 0;
 	}
 
@@ -519,11 +519,11 @@ static int _scan_dev_open(struct device *dev)
 	 * just open with RDWR by default.
 	 */
 
-	if (dev->flags & DEV_BCACHE_EXCL) {
+	if (dev->flags & DEV_BLKIO_EXCL) {
 		flags |= O_EXCL;
 		flags |= O_RDWR;
 		modestr = "rwex";
-	} else if (dev->flags & DEV_BCACHE_WRITE) {
+	} else if (dev->flags & DEV_BLKIO_WRITE) {
 		flags |= O_RDWR;
 		modestr = "rw";
 	} else {
@@ -561,60 +561,60 @@ static int _scan_dev_open(struct device *dev)
 		goto next_name;
 	}
 
-	dev->flags |= DEV_IN_BCACHE;
-	dev->bcache_fd = fd;
+	dev->flags |= DEV_IN_BLKIO;
+	dev->blkio_fd = fd;
 
-	di = bcache_set_fd(fd);
+	di = blkio_set_fd(fd);
 
 	if (di == -1) {
-		log_error("Failed to set bcache fd.");
+		log_error("Failed to set blkio fd.");
 		if (close(fd))
 			log_sys_debug("close", name);
-		dev->bcache_fd = -1;
-		dev->flags &= ~DEV_IN_BCACHE;
+		dev->blkio_fd = -1;
+		dev->flags &= ~DEV_IN_BLKIO;
 		return 0;
 	}
 
 	log_debug("open %s %s di %d fd %d", dev_name(dev), modestr, di, fd);
 
-	dev->bcache_di = di;
+	dev->blkio_di = di;
 
 	return 1;
 }
 
 static int _scan_dev_close(struct device *dev)
 {
-	if (!(dev->flags & DEV_IN_BCACHE))
-		log_error("scan_dev_close %s no DEV_IN_BCACHE set", dev_name(dev));
+	if (!(dev->flags & DEV_IN_BLKIO))
+		log_warn("WARNING: scan_dev_close %s no DEV_IN_BLKIO set.", dev_name(dev));
 
-	dev->flags &= ~DEV_IN_BCACHE;
-	dev->flags &= ~DEV_BCACHE_EXCL;
-	dev->flags &= ~DEV_BCACHE_WRITE;
+	dev->flags &= ~DEV_IN_BLKIO;
+	dev->flags &= ~DEV_BLKIO_EXCL;
+	dev->flags &= ~DEV_BLKIO_WRITE;
 
-	if (dev->bcache_di == -1) {
+	if (dev->blkio_di == -1) {
 		log_error("scan_dev_close %s already closed", dev_name(dev));
 		return 0;
 	}
 
-	bcache_clear_fd(dev->bcache_di);
+	blkio_clear_fd(dev->blkio_di);
 
-	if (close(dev->bcache_fd))
+	if (close(dev->blkio_fd))
 		log_warn("close %s errno %d", dev_name(dev), errno);
 
-	dev->bcache_fd = -1;
-	dev->bcache_di = -1;
+	dev->blkio_fd = -1;
+	dev->blkio_di = -1;
 
 	return 1;
 }
 
 /*
- * Like bcache_invalidate, only it throws any dirty data away if the
+ * Like blkio_invalidate, only it throws any dirty data away if the
  * write fails.
  */
-static void _invalidate_di(struct bcache *cache, int di)
+static void _invalidate_di(struct blkio *bio, int di)
 {
-	if (!bcache_invalidate_di(cache, di))
-		bcache_abort_di(cache, di);
+	if (!blkio_invalidate_di(bio, di))
+		blkio_abort_di(bio, di);
 }
 
 /*
@@ -637,7 +637,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 	struct dm_list wait_devs;
 	struct dm_list done_devs;
 	struct device_list *devl, *devl2;
-	struct block *bb;
 	int scan_read_errors = 0;
 	int scan_process_errors = 0;
 	int scan_failed_count = 0;
@@ -652,7 +651,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 	log_debug_devs("Scanning %u devices for VG info.", dm_list_size(devs));
 
  scan_more:
-	rem_prefetches = bcache_max_prefetches(scan_bcache);
+	rem_prefetches = blkio_max_prefetches(scan_blkio);
 	submit_count = 0;
 
 	dm_list_iterate_items_safe(devl, devl2, devs) {
@@ -669,7 +668,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 		if (!rem_prefetches)
 			break;
 
-		if (!_in_bcache(devl->dev)) {
+		if (!_in_blkio(devl->dev)) {
 			if (!_scan_dev_open(devl->dev)) {
 				log_debug_devs("Scan failed to open %u:%u %s.",
 					       MAJOR(devl->dev->dev), MINOR(devl->dev->dev), dev_name(devl->dev));
@@ -679,7 +678,7 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 			}
 		}
 
-		bcache_prefetch(scan_bcache, devl->dev->bcache_di, 0);
+		blkio_prefetch_bytes(scan_blkio, devl->dev->blkio_di, 0, HEADERS_BUF_SIZE);
 
 		rem_prefetches--;
 		submit_count++;
@@ -691,39 +690,30 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 	log_debug_devs("Scanning submitted %d reads", submit_count);
 
 	dm_list_iterate_items_safe(devl, devl2, &wait_devs) {
-		bb = NULL;
 		is_lvm_device = 0;
 
-		if (!bcache_get(scan_bcache, devl->dev->bcache_di, 0, 0, &bb)) {
+		if (!blkio_read_bytes(scan_blkio, devl->dev->blkio_di, 0,
+				      HEADERS_BUF_SIZE, headers_buf)) {
 			log_debug_devs("Scan failed to read %s.", dev_name(devl->dev));
 			scan_read_errors++;
 			scan_failed_count++;
 			devl->dev->flags |= DEV_SCAN_NOT_READ;
 			lvmcache_del_dev(devl->dev);
 		} else {
-			/* copy the first 4k from bb that will contain label_header */
-
-			memcpy(headers_buf, bb->data, HEADERS_BUF_SIZE);
-
 			/*
-			 * "put" the bcache block before process_block because
-			 * processing metadata may need to invalidate and reread
-			 * metadata that's covered by bb. invalidate/reread is
-			 * not allowed while bb is held.  The functions for
-			 * filtering and scanning metadata for this device use
-			 * dev_read_bytes(), which will generally grab the
-			 * bcache block/data that we're putting here.  Since
-			 * we're doing put, it's possible but not likely that
-			 * bcache could drop the block before dev_read_bytes()
-			 * uses it again, in which case bcache will reread it
-			 * from disk for dev_read_bytes().
+			 * The byte read is complete, so no block is still held
+			 * when process_block runs.  Processing metadata may
+			 * invalidate and reread metadata covered by the same
+			 * blocks; invalidate/reread is not allowed while a
+			 * block is held.  The functions for filtering and
+			 * scanning metadata for this device use
+			 * dev_read_bytes(), which will generally find the
+			 * blocks this read left in the cache.
 			 */
-			bcache_put(bb);
-
 			log_debug_devs("Processing data from device %s %u:%u di %d.",
 				       dev_name(devl->dev),
 				       MAJOR(devl->dev->dev), MINOR(devl->dev->dev),
-				       devl->dev->bcache_di);
+				       devl->dev->blkio_di);
 
 			ret = _process_block(cmd, f, devl->dev, headers_buf, sizeof(headers_buf), 0, 0, &is_lvm_device);
 
@@ -735,15 +725,15 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 		}
 
 		/*
-		 * Keep the bcache block of lvm devices we have processed so
-		 * that the vg_read phase can reuse it.  If bcache failed to
+		 * Keep the blkio block of lvm devices we have processed so
+		 * that the vg_read phase can reuse it.  If the blkio failed to
 		 * read the block, or the device does not belong to lvm, then
-		 * drop it from bcache.  When "want_other_devs" is set, it
+		 * drop it from the blkio.  When "want_other_devs" is set, it
 		 * means the caller wants to scan and keep open non-lvm devs,
 		 * e.g. to pvcreate them.
 		 */
 		if (!is_lvm_device && !want_other_devs) {
-			_invalidate_di(scan_bcache, devl->dev->bcache_di);
+			_invalidate_di(scan_blkio, devl->dev->blkio_di);
 			_scan_dev_close(devl->dev);
 		}
 
@@ -767,53 +757,39 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 
 /*
  * We don't know ahead of time if we will find some VG metadata
- * that is larger than the total size of the bcache, which would
+ * that is larger than the total size of the blkio, which would
  * prevent us from reading/writing the VG since we do not dynamically
- * increase the bcache size when we find it's too small.  In these
+ * increase the blkio size when we find it's too small.  In these
  * cases the user would need to set io_memory_size to be larger
  * than the max VG metadata size (lvm does not impose any limit on
  * the metadata size.)
  */
 
-#define MIN_BCACHE_BLOCKS 32    /* 4MB (32 * 128KB) */
-#define MAX_BCACHE_BLOCKS 4096  /* 512MB (4096 * 128KB) */
+#define MIN_BLKIO_BLOCKS 32    /* 4MB (32 * 128KB) */
+#define MAX_BLKIO_BLOCKS 4096  /* 512MB (4096 * 128KB) */
 
-int label_scan_setup_bcache(void)
+int label_scan_setup_blkio(void)
 {
-	struct io_engine *ioe = NULL;
 	int iomem_kb = io_memory_size();
-	int block_size_kb = (BCACHE_BLOCK_SIZE_IN_SECTORS * 512) / 1024;
+	int block_size_kb = (BLKIO_BLOCK_SIZE_IN_SECTORS * SECTOR_SIZE) / 1024;
 	int cache_blocks;
 
-	if (scan_bcache)
+	if (scan_blkio)
 		return 1;
 
 	cache_blocks = iomem_kb / block_size_kb;
 
-	if (cache_blocks < MIN_BCACHE_BLOCKS)
-		cache_blocks = MIN_BCACHE_BLOCKS;
+	if (cache_blocks < MIN_BLKIO_BLOCKS)
+		cache_blocks = MIN_BLKIO_BLOCKS;
 
-	if (cache_blocks > MAX_BCACHE_BLOCKS)
-		cache_blocks = MAX_BCACHE_BLOCKS;
+	if (cache_blocks > MAX_BLKIO_BLOCKS)
+		cache_blocks = MAX_BLKIO_BLOCKS;
 
-	_current_bcache_size_bytes = (uint64_t)cache_blocks * BCACHE_BLOCK_SIZE_IN_SECTORS * 512;
+	_current_blkio_size_bytes = (uint64_t)cache_blocks * BLKIO_BLOCK_SIZE_IN_SECTORS * SECTOR_SIZE;
 
-	if (use_aio()) {
-		if (!(ioe = create_async_io_engine())) {
-			log_warn("Failed to set up async io, using sync io.");
-			init_use_aio(0);
-		}
-	}
-
-	if (!ioe) {
-		if (!(ioe = create_sync_io_engine())) {
-			log_error("Failed to set up sync io.");
-			return 0;
-		}
-	}
-
-	if (!(scan_bcache = bcache_create(BCACHE_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {
-		log_error("Failed to set up io layer with %d blocks.", cache_blocks);
+	if (!(scan_blkio = blkio_create(use_aio() ? "auto" : "sync",
+					BLKIO_BLOCK_SIZE_IN_SECTORS, cache_blocks))) {
+		log_error("Failed to set up blkio with %d blocks.", cache_blocks);
 		return 0;
 	}
 
@@ -896,7 +872,7 @@ int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device
 		return 0;
 	}
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	/*
@@ -922,7 +898,7 @@ int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device
 		if (!dev_read_bytes(dev, SECTOR_SIZE, LABEL_SIZE, buf)) {
 			/*
 			 * dev_read_bytes() invalidates and closes the device
-			 * on a bcache read error, but not on every failure
+			 * on a blkio read error, but not on every failure
 			 * path, so close it here only if it is still open.
 			 */
 			label_scan_invalidate(dev);
@@ -1139,7 +1115,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 
 	log_debug("label_scan_vg_online: read and filter devs");
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		goto_bad;
 
 	dm_list_iterate_items_safe(devl, devl2, &devs) {
@@ -1204,7 +1180,7 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 	/*
 	 * Scan devs to populate lvmcache info, which includes the mda info that's
 	 * needed to read vg metadata.
-	 * bcache data from label_read_pvid above is not invalidated so it can
+	 * blkio data from label_read_pvid above is not invalidated so it can
 	 * be reused (more data may need to be read depending on how much of the
 	 * metadata was covered when reading the pvid.)
 	 */
@@ -1266,7 +1242,7 @@ int label_scan(struct cmd_context *cmd)
 	dm_list_init(&scan_devs);
 	dm_list_init(&hints_list);
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	/*
@@ -1308,7 +1284,7 @@ int label_scan(struct cmd_context *cmd)
 	/*
 	 * Create a list of all devices in dev-cache (all found on the system.)
 	 * Do not apply filters and do not read any (the filter arg is NULL).
-	 * Invalidate bcache data for all devs (there will usually be no bcache
+	 * Invalidate blkio data for all devs (there will usually be no blkio
 	 * data to invalidate.)
 	 */
 	if (!(iter = dev_iter_create(NULL, 0))) {
@@ -1412,29 +1388,29 @@ int label_scan(struct cmd_context *cmd)
 	_scan_list(cmd, cmd->filter, &scan_devs, 0, NULL);
 
 	/*
-	 * Metadata could be larger than total size of bcache, and bcache
+	 * Metadata could be larger than total size of the blkio, and the blkio
 	 * cannot currently be resized during the command.  If this is the
 	 * case (or within reach), warn that io_memory_size needs to be
 	 * set larger.
 	 *
-	 * Even if bcache out of space did not cause a failure during scan, it
+	 * Even if blkio out of space did not cause a failure during scan, it
 	 * may cause a failure during the next vg_read phase or during vg_write.
 	 *
-	 * If there was an error during scan, we could recreate bcache here
+	 * If there was an error during scan, we could recreate the blkio here
 	 * with a larger size and then restart label_scan.  But, this does not
-	 * address the problem of writing new metadata that exceeds the bcache
+	 * address the problem of writing new metadata that exceeds the blkio
 	 * size and failing, which would often be hit first, i.e. we'll fail
 	 * to write new metadata exceeding the max size before we have a chance
 	 * to read any metadata with that size, unless we find an existing vg
 	 * that has been previously created with the larger size.
 	 *
-	 * If the largest metadata is within 1MB of the bcache size, then start
+	 * If the largest metadata is within 1MB of the blkio size, then start
 	 * warning.
 	 */
 	max_metadata_size_bytes = lvmcache_max_metadata_size();
 
-	if (max_metadata_size_bytes + (1024 * 1024) > _current_bcache_size_bytes) {
-		/* we want bcache to be 1MB larger than the max metadata seen */
+	if (max_metadata_size_bytes + (1024 * 1024) > _current_blkio_size_bytes) {
+		/* we want the blkio to be 1MB larger than the max metadata seen */
 		uint64_t want_size_kb = (max_metadata_size_bytes / 1024) + 1024;
 		uint64_t remainder;
 		if ((remainder = (want_size_kb % 1024)))
@@ -1529,7 +1505,7 @@ int label_read_pvid(struct device *dev, int *has_pvid)
 	/*
 	 * We could do:
 	 * dev_read_bytes(dev, 512, LABEL_SIZE, buf);
-	 * which works, but there's a bcache issue that
+	 * which works, but there's a blkio issue that
 	 * prevents proper invalidation after that.
 	 */
 	if (!dev_read_bytes(dev, 0, 4096, buf)) {
@@ -1577,12 +1553,12 @@ int label_read_pvid(struct device *dev, int *has_pvid)
 
 /*
  * label_scan_devs without invalidating data for the devs first,
- * when the caller wants to make use of any bcache data that
+ * when the caller wants to make use of any blkio data that
  * they may have already read.
  */
 int label_scan_devs_cached(struct cmd_context *cmd, struct dev_filter *f, struct dm_list *devs)
 {
-	if (!scan_bcache)
+	if (!scan_blkio)
 		return 0;
 
 	_scan_list(cmd, f, devs, 0, NULL);
@@ -1594,7 +1570,7 @@ int label_scan_devs_cached(struct cmd_context *cmd, struct dev_filter *f, struct
  * Scan and cache lvm data from the listed devices.  If a device is already
  * scanned and cached, this replaces the previously cached lvm data for the
  * device.  This is called when vg_read() wants to guarantee that it is using
- * the latest data from the devices in the VG (since the scan populated bcache
+ * the latest data from the devices in the VG (since the scan populated the blkio
  * without a lock.)
  */
 
@@ -1602,12 +1578,12 @@ int label_scan_devs(struct cmd_context *cmd, struct dev_filter *f, struct dm_lis
 {
 	struct device_list *devl;
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	dm_list_iterate_items(devl, devs) {
-		if (_in_bcache(devl->dev))
-			_invalidate_di(scan_bcache, devl->dev->bcache_di);
+		if (_in_blkio(devl->dev))
+			_invalidate_di(scan_blkio, devl->dev->blkio_di);
 	}
 
 	_scan_list(cmd, f, devs, 0, NULL);
@@ -1619,13 +1595,13 @@ int label_scan_devs_rw(struct cmd_context *cmd, struct dev_filter *f, struct dm_
 {
 	struct device_list *devl;
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	dm_list_iterate_items(devl, devs) {
-		if (_in_bcache(devl->dev))
-			_invalidate_di(scan_bcache, devl->dev->bcache_di);
-		devl->dev->flags |= DEV_BCACHE_WRITE;
+		if (_in_blkio(devl->dev))
+			_invalidate_di(scan_blkio, devl->dev->blkio_di);
+		devl->dev->flags |= DEV_BLKIO_WRITE;
 	}
 
 	_scan_list(cmd, f, devs, 0, NULL);
@@ -1638,7 +1614,7 @@ int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct d
 	struct device_list *devl;
 	int failed = 0;
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	dm_list_iterate_items(devl, devs) {
@@ -1647,8 +1623,8 @@ int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct d
 		 * With this flag set, _scan_dev_open() done by
 		 * _scan_list() will do open EXCL
 		 */
-		devl->dev->flags |= DEV_BCACHE_EXCL;
-		devl->dev->flags |= DEV_BCACHE_WRITE;
+		devl->dev->flags |= DEV_BLKIO_EXCL;
+		devl->dev->flags |= DEV_BLKIO_WRITE;
 	}
 
 	_scan_list(cmd, f, devs, 1, &failed);
@@ -1660,15 +1636,15 @@ int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct d
 
 void label_scan_invalidate(struct device *dev)
 {
-	if (_in_bcache(dev)) {
-		_invalidate_di(scan_bcache, dev->bcache_di);
+	if (_in_blkio(dev)) {
+		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 	}
 }
 
 /*
  * If a PV is stacked on an LV, then the LV is kept open
- * in bcache, and needs to be closed so the open fd doesn't
+ * in the blkio, and needs to be closed so the open fd doesn't
  * interfere with processing the LV.
  */
 
@@ -1711,8 +1687,8 @@ void label_scan_invalidate_lvs(struct cmd_context *cmd, struct dm_list *lvs)
 }
 
 /*
- * Empty the bcache of all blocks and close all open fds,
- * but keep the bcache set up.
+ * Empty the blkio of all blocks and close all open fds,
+ * but keep the blkio set up.
  */
 
 void label_scan_drop(struct cmd_context *cmd)
@@ -1731,24 +1707,24 @@ void label_scan_drop(struct cmd_context *cmd)
 }
 
 /*
- * Close devices that are open because bcache is holding blocks for them.
- * Destroy the bcache.
+ * Close devices that are open because the blkio is holding blocks for them.
+ * Destroy the blkio.
  */
 
 void label_scan_destroy(struct cmd_context *cmd)
 {
-	if (!scan_bcache)
+	if (!scan_blkio)
 		return;
 
 	label_scan_drop(cmd);
 
-	bcache_destroy(scan_bcache);
-	scan_bcache = NULL;
+	blkio_destroy(scan_blkio);
+	scan_blkio = NULL;
 }
 
 /*
  * Read (or re-read) and process (or re-process) the data for a device.  This
- * will reset (clear and repopulate) the bcache and lvmcache info for this
+ * will reset (clear and repopulate) the blkio and lvmcache info for this
  * device.  There are only a couple odd places that want to reread a specific
  * device, this is not a commonly used function.
  */
@@ -1759,7 +1735,7 @@ int label_scan_dev(struct cmd_context *cmd, struct device *dev)
 	struct device_list *devl;
 	int failed = 0;
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	/* scanning is done by list, so make a single item list for this dev */
@@ -1783,8 +1759,8 @@ int label_scan_dev(struct cmd_context *cmd, struct device *dev)
 /*
  * This is needed to write to a new non-lvm device.
  * Scanning that dev would not keep it open or in
- * bcache, but to use bcache_write we need the dev
- * to be open so we can use dev->bcache_di to write.
+ * the blkio, but to use blkio_write_bytes we need the dev
+ * to be open so we can use dev->blkio_di to write.
  */
 
 int label_scan_open(struct device *dev)
@@ -1795,34 +1771,34 @@ int label_scan_open(struct device *dev)
 		return 0;
 	}
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
-	if (!_in_bcache(dev))
+	if (!_in_blkio(dev))
 		return _scan_dev_open(dev);
 	return 1;
 }
 
 int label_scan_open_excl(struct device *dev)
 {
-	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_EXCL)) {
+	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_EXCL)) {
 		log_debug("close and reopen excl %s", dev_name(dev));
-		_invalidate_di(scan_bcache, dev->bcache_di);
+		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 	}
-	dev->flags |= DEV_BCACHE_EXCL;
-	dev->flags |= DEV_BCACHE_WRITE;
+	dev->flags |= DEV_BLKIO_EXCL;
+	dev->flags |= DEV_BLKIO_WRITE;
 	return label_scan_open(dev);
 }
 
 int label_scan_open_rw(struct device *dev)
 {
-	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
 		log_debug("close and reopen rw %s", dev_name(dev));
-		_invalidate_di(scan_bcache, dev->bcache_di);
+		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 	}
-	dev->flags |= DEV_BCACHE_WRITE;
+	dev->flags |= DEV_BLKIO_WRITE;
 	return label_scan_open(dev);
 }
 
@@ -1830,47 +1806,47 @@ int label_scan_reopen_rw(struct device *dev)
 {
 	const char *name;
 	int flags = 0;
-	int prev_fd = dev->bcache_fd;
+	int prev_fd = dev->blkio_fd;
 	int fd;
 
-	if (!label_scan_setup_bcache())
+	if (!label_scan_setup_blkio())
 		return_0;
 
 	if (dm_list_empty(&dev->aliases)) {
 		log_error("Cannot reopen rw device %u:%u with no valid paths di %d fd %d.",
-			  MAJOR(dev->dev), MINOR(dev->dev), dev->bcache_di, dev->bcache_fd);
+			  MAJOR(dev->dev), MINOR(dev->dev), dev->blkio_di, dev->blkio_fd);
 		return 0;
 	}
 
 	name = dev_name(dev);
 	if (!name || name[0] != '/') {
 		log_error("Cannot reopen rw device %u:%u with no valid name di %d fd %d.",
-			  MAJOR(dev->dev), MINOR(dev->dev), dev->bcache_di, dev->bcache_fd);
+			  MAJOR(dev->dev), MINOR(dev->dev), dev->blkio_di, dev->blkio_fd);
 		return 0;
 	}
 
-	if (!(dev->flags & DEV_IN_BCACHE)) {
-		if ((dev->bcache_fd != -1) || (dev->bcache_di != -1)) {
+	if (!(dev->flags & DEV_IN_BLKIO)) {
+		if ((dev->blkio_fd != -1) || (dev->blkio_di != -1)) {
 			/* shouldn't happen */
 			log_debug("Reopen writeable %s uncached fd %d di %d",
-				  dev_name(dev), dev->bcache_fd, dev->bcache_di);
+				  dev_name(dev), dev->blkio_fd, dev->blkio_di);
 			return 0;
 		}
-		dev->flags |= DEV_BCACHE_WRITE;
+		dev->flags |= DEV_BLKIO_WRITE;
 		return _scan_dev_open(dev);
 	}
 
-	if ((dev->flags & DEV_BCACHE_WRITE))
+	if ((dev->flags & DEV_BLKIO_WRITE))
 		return 1;
 
-	if (dev->bcache_fd == -1) {
+	if (dev->blkio_fd == -1) {
 		log_error("Failed to open writable %s index %d fd none",
-			  dev_name(dev), dev->bcache_di);
+			  dev_name(dev), dev->blkio_di);
 		return 0;
 	}
-	if (dev->bcache_di == -1) {
+	if (dev->blkio_di == -1) {
 		log_error("Failed to open writeable %s index none fd %d",
-			  dev_name(dev), dev->bcache_fd);
+			  dev_name(dev), dev->blkio_fd);
 		return 0;
 	}
 
@@ -1881,28 +1857,28 @@ int label_scan_reopen_rw(struct device *dev)
 	fd = open(name, flags, 0777);
 	if (fd < 0) {
 		log_error("Failed to open rw %s errno %d di %d fd %d.",
-			  dev_name(dev), errno, dev->bcache_di, dev->bcache_fd);
+			  dev_name(dev), errno, dev->blkio_di, dev->blkio_fd);
 		return 0;
 	}
 
-	if (!bcache_change_fd(dev->bcache_di, fd)) {
+	if (!blkio_change_fd(dev->blkio_di, fd)) {
 		log_error("Failed to change to rw fd %s di %d fd %d.",
-			  dev_name(dev), dev->bcache_di, fd);
+			  dev_name(dev), dev->blkio_di, fd);
 		if (close(fd))
 			log_sys_debug("close", dev_name(dev));
 		return 0;
 	}
 
-	if (close(dev->bcache_fd))
+	if (close(dev->blkio_fd))
 		log_debug("reopen writeable %s close prev errno %d di %d fd %d.",
-			  dev_name(dev), errno, dev->bcache_di, dev->bcache_fd);
+			  dev_name(dev), errno, dev->blkio_di, dev->blkio_fd);
 
-	dev->flags |= DEV_IN_BCACHE;
-	dev->flags |= DEV_BCACHE_WRITE;
-	dev->bcache_fd = fd;
+	dev->flags |= DEV_IN_BLKIO;
+	dev->flags |= DEV_BLKIO_WRITE;
+	dev->blkio_fd = fd;
 
 	log_debug("reopen writable %s di %d prev %d fd %d",
-		  dev_name(dev), dev->bcache_di, prev_fd, fd);
+		  dev_name(dev), dev->blkio_di, prev_fd, fd);
 
 	return 1;
 }
@@ -1920,13 +1896,13 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		return false;
 	}
 
-	if (!scan_bcache) {
+	if (!scan_blkio) {
 		/* Should not happen */
-		log_error("dev_read bcache not set up %s", dev_name(dev));
+		log_error("dev_read blkio not set up %s.", dev_name(dev));
 		return false;
 	}
 
-	if (dev->bcache_di < 0) {
+	if (dev->blkio_di < 0) {
 		/* This is not often needed. */
 		if (!label_scan_open(dev)) {
 			log_error("Error opening device %s for reading at %llu length %zu.",
@@ -1936,7 +1912,7 @@ bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		}
 	}
 
-	if (!bcache_read_bytes(scan_bcache, dev->bcache_di, start, len, data)) {
+	if (!blkio_read_bytes(scan_blkio, dev->blkio_di, start, len, data)) {
 		log_error("Error reading device %s at %llu length %zu.",
 			  dev_name(dev), (unsigned long long)start, len);
 		dev->flags |= DEV_SCAN_NOT_READ;
@@ -1952,25 +1928,25 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 	if (test_mode())
 		return true;
 
-	if (!scan_bcache) {
+	if (!scan_blkio) {
 		/* Should not happen */
-		log_error("dev_write bcache not set up %s", dev_name(dev));
+		log_error("dev_write blkio not set up %s.", dev_name(dev));
 		return false;
 	}
 
-	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
-		/* FIXME: avoid tossing out bcache blocks just to replace fd. */
+	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
+		/* FIXME: avoid tossing out blkio blocks just to replace fd. */
 		log_debug("close and reopen to write %s", dev_name(dev));
-		_invalidate_di(scan_bcache, dev->bcache_di);
+		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 
-		dev->flags |= DEV_BCACHE_WRITE;
+		dev->flags |= DEV_BLKIO_WRITE;
 		(void) label_scan_open(dev); /* checked later */
 	}
 
-	if (dev->bcache_di < 0) {
+	if (dev->blkio_di < 0) {
 		/* This is not often needed. */
-		dev->flags |= DEV_BCACHE_WRITE;
+		dev->flags |= DEV_BLKIO_WRITE;
 		if (!label_scan_open(dev)) {
 			if (dev_scan_io_failed(dev))
 				log_debug_devs("Skipping write to %s: excluded after earlier I/O error.",
@@ -1982,7 +1958,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		}
 	}
 
-	if (!bcache_write_bytes(scan_bcache, dev->bcache_di, start, len, data)) {
+	if (!blkio_write_bytes(scan_blkio, dev->blkio_di, start, len, data)) {
 		log_error("Error writing device %s at %llu length %zu.",
 			  dev_name(dev), (unsigned long long)start, len);
 		dev_unset_last_byte(dev);
@@ -1990,7 +1966,7 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 		return false;
 	}
 
-	if (!bcache_flush(scan_bcache)) {
+	if (!blkio_flush(scan_blkio)) {
 		log_error("Error writing device %s at %llu length %zu.",
 			  dev_name(dev), (unsigned long long)start, len);
 		dev_unset_last_byte(dev);
@@ -2002,16 +1978,16 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 
 bool dev_invalidate_bytes(struct device *dev, uint64_t start, size_t len)
 {
-	if (!scan_bcache)
+	if (!scan_blkio)
 		return true;
-	return bcache_invalidate_bytes(scan_bcache, dev->bcache_di, start, len);
+	return blkio_invalidate_bytes(scan_blkio, dev->blkio_di, start, len);
 }
 
 void dev_invalidate(struct device *dev)
 {
-	if (!scan_bcache)
+	if (!scan_blkio)
 		return;
-	bcache_invalidate_di(scan_bcache, dev->bcache_di);
+	blkio_invalidate_di(scan_blkio, dev->blkio_di);
 }
 
 bool dev_write_zeros(struct device *dev, uint64_t start, size_t len)
@@ -2026,21 +2002,21 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 	if (test_mode())
 		return true;
 
-	if (!scan_bcache) {
-		log_error("dev_set_bytes bcache not set up %s", dev_name(dev));
+	if (!scan_blkio) {
+		log_error("dev_set_bytes blkio not set up %s.", dev_name(dev));
 		return false;
 	}
 
-	if (_in_bcache(dev) && !(dev->flags & DEV_BCACHE_WRITE)) {
+	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
 		log_debug("close and reopen to write %s", dev_name(dev));
-		_invalidate_di(scan_bcache, dev->bcache_di);
+		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
-		/* goes to label_scan_open() since bcache_di < 0 */
+		/* goes to label_scan_open() since blkio_di < 0 */
 	}
 
-	if (dev->bcache_di == -1) {
+	if (dev->blkio_di == -1) {
 		/* This is not often needed. */
-		dev->flags |= DEV_BCACHE_WRITE;
+		dev->flags |= DEV_BLKIO_WRITE;
 		if (!label_scan_open(dev)) {
 			if (dev_scan_io_failed(dev))
 				log_debug_devs("Skipping write to %s: excluded after earlier I/O error.",
@@ -2055,9 +2031,9 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 	dev_set_last_byte(dev, start + len);
 
 	if (!val)
-		rv = bcache_zero_bytes(scan_bcache, dev->bcache_di, start, len);
+		rv = blkio_zero_bytes(scan_blkio, dev->blkio_di, start, len);
 	else
-		rv = bcache_set_bytes(scan_bcache, dev->bcache_di, start, len, val);
+		rv = blkio_set_bytes(scan_blkio, dev->blkio_di, start, len, val);
 
 	if (!rv) {
 		log_error("Error writing device value %s at %llu length %zu.",
@@ -2065,7 +2041,7 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 		goto fail;
 	}
 
-	if (!bcache_flush(scan_bcache)) {
+	if (!blkio_flush(scan_blkio)) {
 		log_error("Error writing device %s at %llu length %zu.",
 			  dev_name(dev), (unsigned long long)start, len);
 		goto fail;
@@ -2109,10 +2085,10 @@ void dev_set_last_byte(struct device *dev, uint64_t offset)
 		bs = 512;
 	}
 
-	bcache_set_last_byte(scan_bcache, dev->bcache_di, offset, bs);
+	blkio_set_last_byte(scan_blkio, dev->blkio_di, offset, bs);
 }
 
 void dev_unset_last_byte(struct device *dev)
 {
-	bcache_unset_last_byte(scan_bcache, dev->bcache_di);
+	blkio_unset_last_byte(scan_blkio, dev->blkio_di);
 }

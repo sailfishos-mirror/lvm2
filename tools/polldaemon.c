@@ -686,7 +686,7 @@ static int _poll_daemon(struct cmd_context *cmd, const struct poll_operation_id 
 			 * done its job: report a failure to get the scan back
 			 * as a warning rather than as a failed command.
 			 */
-			if (!label_scan_setup_bcache())
+			if (!label_scan_setup_blkio())
 				log_warn("WARNING: Failed to recreate the label scan "
 					 "after forking the polling daemon.");
 			return ECMD_PROCESSED;	    /* Parent */

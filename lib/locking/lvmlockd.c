@@ -21,6 +21,7 @@
 
 #include <mntent.h>
 #include <sys/ioctl.h>
+#include <linux/fs.h>
 
 static daemon_handle _lvmlockd;
 static const char *_lvmlockd_socket = NULL;

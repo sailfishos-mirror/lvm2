@@ -97,7 +97,7 @@ int lvmdiskscan(struct cmd_context *cmd, int argc __attribute__((unused)),
 	if (arg_is_set(cmd, lvmpartition_ARG))
 		log_warn("WARNING: Only considering LVM devices.");
 
-	/* Call before using dev_iter which uses filters which want bcache data. */
+	/* Call before using dev_iter which uses filters which want blkio data. */
 	label_scan(cmd);
 
 	_max_len = _get_max_dev_name_len(cmd, cmd->filter);

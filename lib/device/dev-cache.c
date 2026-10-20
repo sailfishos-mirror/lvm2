@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -14,6 +14,7 @@
  */
 
 #include "base/memory/zalloc.h"
+#include "base/memory/container_of.h"
 #include "lib/datastruct/radix-tree.h"
 #include "lib/misc/lib.h"
 #include "lib/device/dev-type.h"
@@ -81,8 +82,8 @@ static int _insert(const char *path, const struct stat *info,
 void dev_init(struct device *dev)
 {
 	dev->fd = -1;
-	dev->bcache_fd = -1;
-	dev->bcache_di = -1;
+	dev->blkio_fd = -1;
+	dev->blkio_di = -1;
 	dev->read_ahead = -1;
 	dev->part = -1;
 
@@ -1752,8 +1753,8 @@ static struct device *_dev_cache_get(struct cmd_context *cmd, const char *name, 
 	 * . wipe_lv opening lv to zero it
 	 * . _extend_sanlock_lv opening lv to extend it
 	 * . _write_log_header opening lv to write header
-	 * Also, io to LVs should not go through bcache.
-	 * bcache should contain only labels and metadata
+	 * Also, io to LVs should not go through the blkio.
+	 * The blkio should contain only labels and metadata
 	 * scanned from PVs.
 	 */
 	if (!dev) {

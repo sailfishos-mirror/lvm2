@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -391,13 +391,13 @@ static int _read_mda_header_and_metadata(const struct format_type *fmt,
 		 * This code is used by label_scan to get a summary of the
 		 * VG metadata that will be properly read later by vg_read.
 		 * The initial read of this device during label_scan
-		 * populates bcache with the first 128K of data from the
+		 * populates the blkio with the first 128K of data from the
 		 * device.  That block of data contains the mda_header
 		 * (at 4k) but will often not include the metadata text,
 		 * which is often located further into the metadata area
-		 * (beyond the 128K block saved in bcache.)
+		 * (beyond the 128K block saved in the blkio.)
 		 * So read_metadata_location_summary will usually get the
-		 * mda_header from bcache which was read initially, and
+		 * mda_header from the blkio which was read initially, and
 		 * then it will often need to do a new disk read to get
 		 * the actual metadata text that the mda_header points to.
 		 * Since there is no locking around label_scan, it's
@@ -406,7 +406,7 @@ static int _read_mda_header_and_metadata(const struct format_type *fmt,
 		 * this command read the mda_header and the time that it
 		 * reads the metadata text.  This means the expected metadata
 		 * text isn't found, and an error is returned here.
-		 * To handle this, invalidate all data in bcache for this
+		 * To handle this, invalidate all data in the blkio for this
 		 * device and reread the mda_header and metadata text back to
 		 * back, so inconsistency is less likely (without locking
 		 * there's no guarantee, e.g. if the command is blocked

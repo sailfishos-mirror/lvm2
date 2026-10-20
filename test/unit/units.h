@@ -24,8 +24,9 @@
 extern bool extended_tests;
 
 // Declare the function that adds tests suites here ...
-void bcache_tests(struct dm_list *all_tests);
-void bcache_utils_tests(struct dm_list *all_tests);
+void blkio_engine_tests(struct dm_list *all_tests);
+void blkio_tests(struct dm_list *all_tests);
+void blkio_byterange_tests(struct dm_list *all_tests);
 void bitset_tests(struct dm_list *all_tests);
 void config_tests(struct dm_list *all_tests);
 void config_cascade_tests(struct dm_list *all_tests);
@@ -41,7 +42,6 @@ void dmeventd_raid_tests(struct dm_list *all_tests);
 void dmeventd_thin_tests(struct dm_list *all_tests);
 void dmeventd_vdo_tests(struct dm_list *all_tests);
 void dmeventd_snapshot_tests(struct dm_list *all_tests);
-void io_engine_tests(struct dm_list *all_tests);
 void metadata_security_tests(struct dm_list *all_tests);
 void parse_rx_tests(struct dm_list *all_tests);
 void percent_tests(struct dm_list *all_tests);
@@ -55,8 +55,9 @@ void vdo_stats_tests(struct dm_list *all_tests);
 // ... and call it in here.
 static inline void register_all_tests(struct dm_list *all_tests)
 {
-	bcache_tests(all_tests);
-	bcache_utils_tests(all_tests);
+	blkio_engine_tests(all_tests);
+	blkio_tests(all_tests);
+	blkio_byterange_tests(all_tests);
 	bitset_tests(all_tests);
 	config_tests(all_tests);
 	config_cascade_tests(all_tests);
@@ -72,7 +73,6 @@ static inline void register_all_tests(struct dm_list *all_tests)
 	dmeventd_thin_tests(all_tests);
 	dmeventd_vdo_tests(all_tests);
 	dmeventd_snapshot_tests(all_tests);
-	io_engine_tests(all_tests);
 	metadata_security_tests(all_tests);
 	parse_rx_tests(all_tests);
 	percent_tests(all_tests);

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2018-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -13,7 +13,7 @@
  */
 
 #include "units.h"
-#include "lib/device/bcache.h"
+#include "lib/blkio/internal.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -30,7 +30,7 @@ struct mock_engine {
 	struct dm_list expected_calls;
 	struct dm_list issued_io;
 	unsigned max_io;
-	sector_t block_size;
+	sector_t block_sectors;
 };
 
 enum method {
@@ -45,9 +45,9 @@ struct mock_call {
 	enum method m;
 
 	bool match_args;
-	enum dir d;
+	enum blkio_dir d;
 	int di;
-	block_address b;
+	block_address_t b;
 	bool issue_r;
 	bool wait_r;
 };
@@ -88,14 +88,14 @@ static void _expect(struct mock_engine *e, enum method m)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read(struct mock_engine *e, int di, block_address b)
+static void _expect_read(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_READ;
+	mc->d = BLKIO_DIR_READ;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = true;
@@ -115,14 +115,14 @@ static void _expect_read_any(struct mock_engine *e)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write(struct mock_engine *e, int di, block_address b)
+static void _expect_write(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_WRITE;
+	mc->d = BLKIO_DIR_WRITE;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = true;
@@ -130,14 +130,14 @@ static void _expect_write(struct mock_engine *e, int di, block_address b)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read_bad_issue(struct mock_engine *e, int di, block_address b)
+static void _expect_read_bad_issue(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_READ;
+	mc->d = BLKIO_DIR_READ;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = false;
@@ -145,14 +145,14 @@ static void _expect_read_bad_issue(struct mock_engine *e, int di, block_address 
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write_bad_issue(struct mock_engine *e, int di, block_address b)
+static void _expect_write_bad_issue(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_WRITE;
+	mc->d = BLKIO_DIR_WRITE;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = false;
@@ -160,14 +160,14 @@ static void _expect_write_bad_issue(struct mock_engine *e, int di, block_address
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read_bad_wait(struct mock_engine *e, int di, block_address b)
+static void _expect_read_bad_wait(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_READ;
+	mc->d = BLKIO_DIR_READ;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = true;
@@ -175,14 +175,14 @@ static void _expect_read_bad_wait(struct mock_engine *e, int di, block_address b
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_write_bad_wait(struct mock_engine *e, int di, block_address b)
+static void _expect_write_bad_wait(struct mock_engine *e, int di, block_address_t b)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
 	mc->match_args = true;
-	mc->d = DIR_WRITE;
+	mc->d = BLKIO_DIR_WRITE;
 	mc->di = di;
 	mc->b = b;
 	mc->issue_r = true;
@@ -243,7 +243,7 @@ static void _mock_destroy(struct io_engine *e)
 	free(_to_mock(e));
 }
 
-static bool _mock_issue(struct io_engine *e, enum dir d, int di,
+static bool _mock_issue(struct io_engine *e, enum blkio_dir d, int di,
 	      		sector_t sb, sector_t se, void *data, void *context)
 {
 	bool r, wait_r;
@@ -255,8 +255,8 @@ static bool _mock_issue(struct io_engine *e, enum dir d, int di,
 	if (mc->match_args) {
 		T_ASSERT(d == mc->d);
 		T_ASSERT(di == mc->di);
-		T_ASSERT(sb == mc->b * me->block_size);
-		T_ASSERT(se == (mc->b + 1) * me->block_size);
+		T_ASSERT(sb == mc->b * me->block_sectors);
+		T_ASSERT(se == (mc->b + 1) * me->block_sectors);
 	}
 	r = mc->issue_r;
 	wait_r = mc->wait_r;
@@ -304,7 +304,7 @@ static unsigned _mock_max_io(struct io_engine *e)
 	return me->max_io;
 }
 
-static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
+static struct mock_engine *_mock_create(unsigned max_io, sector_t block_sectors)
 {
 	struct mock_engine *m = malloc(sizeof(*m));
 
@@ -316,7 +316,7 @@ static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
 	m->e.max_io = _mock_max_io;
 
 	m->max_io = max_io;
-	m->block_size = block_size;
+	m->block_sectors = block_sectors;
 	dm_list_init(&m->expected_calls);
 	dm_list_init(&m->issued_io);
 
@@ -328,21 +328,21 @@ static struct mock_engine *_mock_create(unsigned max_io, sector_t block_size)
  *--------------------------------------------------------------*/
 struct fixture {
 	struct mock_engine *me;
-	struct bcache *cache;
+	struct blkio *bio;
 };
 
-static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_blocks)
+static struct fixture *_fixture_init(sector_t block_sectors, unsigned nr_cache_blocks)
 {
 	struct fixture *f = malloc(sizeof(*f));
 
 	T_ASSERT(f);
 
-	f->me = _mock_create(16, block_size);
+	f->me = _mock_create(16, block_sectors);
 	T_ASSERT(f->me);
 
 	_expect(f->me, E_MAX_IO);
-	f->cache = bcache_create(block_size, nr_cache_blocks, &f->me->e);
-	T_ASSERT(f->cache);
+	f->bio = blkio_create_engine(block_sectors, nr_cache_blocks, &f->me->e);
+	T_ASSERT(f->bio);
 
 	return f;
 }
@@ -351,7 +351,7 @@ static void _fixture_exit(struct fixture *f)
 {
 	if (f) {
 		_expect(f->me, E_DESTROY);
-		bcache_destroy(f->cache);
+		blkio_destroy(f->bio);
 
 		free(f);
 	}
@@ -381,30 +381,29 @@ static void _large_fixture_exit(void *context)
  * Tests
  *--------------------------------------------------------------*/
 #define MEG 2048
-#define SECTOR_SHIFT 9
 #define PAGE_SIZE_SECTORS ((TEST_PAGE_SIZE) >> SECTOR_SHIFT)
 
-static void good_create(sector_t block_size, unsigned nr_cache_blocks)
+static void good_create(sector_t block_sectors, unsigned nr_cache_blocks)
 {
-	struct bcache *cache;
+	struct blkio *bio;
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
-	cache = bcache_create(block_size, nr_cache_blocks, &me->e);
-	T_ASSERT(cache);
+	bio = blkio_create_engine(block_sectors, nr_cache_blocks, &me->e);
+	T_ASSERT(bio);
 
 	_expect(me, E_DESTROY);
-	bcache_destroy(cache);
+	blkio_destroy(bio);
 }
 
-static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
+static void bad_create(sector_t block_sectors, unsigned nr_cache_blocks)
 {
-	struct bcache *cache;
+	struct blkio *bio;
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
-	cache = bcache_create(block_size, nr_cache_blocks, &me->e);
-	T_ASSERT(!cache);
+	bio = blkio_create_engine(block_sectors, nr_cache_blocks, &me->e);
+	T_ASSERT(!bio);
 
 	_expect(me, E_DESTROY);
 	me->e.destroy(&me->e);
@@ -420,12 +419,12 @@ static void test_nr_cache_blocks_must_be_positive(void *fixture)
 	bad_create(PAGE_SIZE_SECTORS, 0);
 }
 
-static void test_block_size_must_be_positive(void *fixture)
+static void test_block_sectors_must_be_positive(void *fixture)
 {
 	bad_create(0, 16);
 }
 
-static void test_block_size_must_be_multiple_of_page_size(void *fixture)
+static void test_block_sectors_must_be_multiple_of_page_size(void *fixture)
 {
 	static const unsigned _bad_examples[] = {3, 9, 13, 1025};
 	unsigned i;
@@ -442,19 +441,19 @@ static void test_get_triggers_read(void *context)
 	struct fixture *f = context;
 
 	int di = 17;   // arbitrary key
-	struct block *b;
+	struct blkio_block *b;
 
 	_expect_read(f->me, di, 0);
 	_expect(f->me, E_WAIT);
-	T_ASSERT(bcache_get(f->cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(f->bio, di, 0, 0, &b));
+	blkio_put(b);
 
 	_expect_read(f->me, di, 1);
 	_expect(f->me, E_WAIT);
-	T_ASSERT(bcache_get(f->cache, di, 1, GF_DIRTY, &b));
+	T_ASSERT(blkio_get(f->bio, di, 1, GF_DIRTY, &b));
 	_expect_write(f->me, di, 1);
 	_expect(f->me, E_WAIT);
-	bcache_put(b);
+	blkio_put(b);
 }
 
 static void test_repeated_reads_are_cached(void *context)
@@ -463,13 +462,13 @@ static void test_repeated_reads_are_cached(void *context)
 
 	int di = 17;   // arbitrary key
 	unsigned i;
-	struct block *b;
+	struct blkio_block *b;
 
 	_expect_read(f->me, di, 0);
 	_expect(f->me, E_WAIT);
 	for (i = 0; i < 100; i++) {
-		T_ASSERT(bcache_get(f->cache, di, 0, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(f->bio, di, 0, 0, &b));
+		blkio_put(b);
 	}
 }
 
@@ -478,25 +477,25 @@ static void test_block_gets_evicted_with_many_reads(void *context)
 	struct fixture *f = context;
 
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 	const unsigned nr_cache_blocks = 16;
 
 	int di = 17;   // arbitrary key
 	unsigned i;
-	struct block *b;
+	struct blkio_block *b;
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		_expect_read(me, di, i);
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, di, i, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(bio, di, i, 0, &b));
+		blkio_put(b);
 	}
 
 	// Not enough cache blocks to hold this one
 	_expect_read(me, di, nr_cache_blocks);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, nr_cache_blocks, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, nr_cache_blocks, 0, &b));
+	blkio_put(b);
 
 	// Now if we run through we should find one block has been
 	// evicted.  We go backwards because the oldest is normally
@@ -504,8 +503,8 @@ static void test_block_gets_evicted_with_many_reads(void *context)
 	_expect_read_any(me);
 	_expect(me, E_WAIT);
 	for (i = nr_cache_blocks; i; i--) {
-		T_ASSERT(bcache_get(cache, di, i - 1, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(bio, di, i - 1, 0, &b));
+		blkio_put(b);
 	}
 }
 
@@ -513,24 +512,24 @@ static void test_prefetch_issues_a_read(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 	const unsigned nr_cache_blocks = 16;
 
 	int di = 17;   // arbitrary key
 	unsigned i;
-	struct block *b;
+	struct blkio_block *b;
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		// prefetch should not wait
 		_expect_read(me, di, i);
-		bcache_prefetch(cache, di, i);
+		blkio_prefetch(bio, di, i);
 	}
 	_no_outstanding_expectations(me);
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, di, i, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(bio, di, i, 0, &b));
+		blkio_put(b);
 	}
 }
 
@@ -538,7 +537,7 @@ static void test_too_many_prefetches_does_not_trigger_a_wait(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 
 	const unsigned nr_cache_blocks = 16;
 	int di = 17;   // arbitrary key
@@ -548,7 +547,7 @@ static void test_too_many_prefetches_does_not_trigger_a_wait(void *context)
 		// prefetch should not wait
 		if (i < nr_cache_blocks)
 			_expect_read(me, di, i);
-		bcache_prefetch(cache, di, i);
+		blkio_prefetch(bio, di, i);
 	}
 
 	// Destroy will wait for any in flight IO triggered by prefetches.
@@ -560,16 +559,16 @@ static void test_dirty_data_gets_written_back(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 
 	int di = 17;   // arbitrary key
-	struct block *b;
+	struct blkio_block *b;
 
 	// Expect the read
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, GF_DIRTY, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, GF_DIRTY, &b));
+	blkio_put(b);
 
 	// Expect the write
 	_expect_write(me, di, 0);
@@ -580,14 +579,14 @@ static void test_zeroed_data_counts_as_dirty(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 
 	int di = 17;   // arbitrary key
-	struct block *b;
+	struct blkio_block *b;
 
 	// No read
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	blkio_put(b);
 
 	// Expect the write
 	_expect_write(me, di, 0);
@@ -598,22 +597,22 @@ static void test_flush_waits_for_all_dirty(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 
 	const unsigned count = 16;
 	int di = 17;   // arbitrary key
 	unsigned i;
-	struct block *b;
+	struct blkio_block *b;
 
 	for (i = 0; i < count; i++) {
 		if (i % 2) {
-			T_ASSERT(bcache_get(cache, di, i, GF_ZERO, &b));
+			T_ASSERT(blkio_get(bio, di, i, GF_ZERO, &b));
 		} else {
 			_expect_read(me, di, i);
 			_expect(me, E_WAIT);
-			T_ASSERT(bcache_get(cache, di, i, 0, &b));
+			T_ASSERT(blkio_get(bio, di, i, 0, &b));
 		}
-		bcache_put(b);
+		blkio_put(b);
 	}
 
 	for (i = 0; i < count; i++) {
@@ -626,7 +625,7 @@ static void test_flush_waits_for_all_dirty(void *context)
 			_expect(me, E_WAIT);
 	}
 
-	T_ASSERT(bcache_flush(cache));
+	T_ASSERT(blkio_flush(bio));
 	_no_outstanding_expectations(me);
 }
 
@@ -636,16 +635,16 @@ static void test_multiple_files(void *context)
 
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	unsigned i;
 
 	for (i = 0; i < DM_ARRAY_SIZE(_dis); i++) {
 		_expect_read(me, _dis[i], 0);
 		_expect(me, E_WAIT);
 
-		T_ASSERT(bcache_get(cache, _dis[i], 0, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(bio, _dis[i], 0, 0, &b));
+		blkio_put(b);
 	}
 }
 
@@ -653,181 +652,181 @@ static void test_read_bad_issue(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 
 	_expect_read_bad_issue(me, 17, 0);
-	T_ASSERT(!bcache_get(cache, 17, 0, 0, &b));
+	T_ASSERT(!blkio_get(bio, 17, 0, 0, &b));
 }
 
 static void test_read_bad_issue_intermittent(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read_bad_issue(me, di, 0);
-	T_ASSERT(!bcache_get(cache, di, 0, 0, &b));
+	T_ASSERT(!blkio_get(bio, di, 0, 0, &b));
 
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
 }
 
 static void test_read_bad_wait(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read_bad_wait(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_get(cache, di, 0, 0, &b));
+	T_ASSERT(!blkio_get(bio, di, 0, 0, &b));
 }
 
 static void test_read_bad_wait_intermittent(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read_bad_wait(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_get(cache, di, 0, 0, &b));
+	T_ASSERT(!blkio_get(bio, di, 0, 0, &b));
 
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
 }
 
 static void test_write_bad_issue_stops_flush(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
 	_expect_write_bad_issue(me, di, 0);
-	bcache_put(b);
-	T_ASSERT(!bcache_flush(cache));
+	blkio_put(b);
+	T_ASSERT(!blkio_flush(bio));
 
 	// we'll let it succeed the second time
 	_expect_write(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_flush(cache));
+	T_ASSERT(blkio_flush(bio));
 }
 
 static void test_write_bad_io_stops_flush(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
 	_expect_write_bad_wait(me, di, 0);
 	_expect(me, E_WAIT);
-	bcache_put(b);
-	T_ASSERT(!bcache_flush(cache));
+	blkio_put(b);
+	T_ASSERT(!blkio_flush(bio));
 
 	// we'll let it succeed the second time
 	_expect_write(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_flush(cache));
+	T_ASSERT(blkio_flush(bio));
 }
 
 static void test_invalidate_not_present(void *context)
 {
 	struct fixture *f = context;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 	int di = 17;
 
-	T_ASSERT(bcache_invalidate(cache, di, 0));
+	T_ASSERT(blkio_invalidate(bio, di, 0));
 }
 
 static void test_invalidate_present(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
 
-	T_ASSERT(bcache_invalidate(cache, di, 0));
+	T_ASSERT(blkio_invalidate(bio, di, 0));
 }
 
 static void test_invalidate_after_read_error(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read_bad_issue(me, di, 0);
-	T_ASSERT(!bcache_get(cache, di, 0, 0, &b));
-	T_ASSERT(bcache_invalidate(cache, di, 0));
+	T_ASSERT(!blkio_get(bio, di, 0, 0, &b));
+	T_ASSERT(blkio_invalidate(bio, di, 0));
 }
 
 static void test_invalidate_after_write_error(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	blkio_put(b);
 
 	// invalidate should fail if the write fails
 	_expect_write_bad_wait(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(!bcache_invalidate(cache, di, 0));
+	T_ASSERT(!blkio_invalidate(bio, di, 0));
 
 	// and should succeed if the write does
 	_expect_write(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_invalidate(cache, di, 0));
+	T_ASSERT(blkio_invalidate(bio, di, 0));
 
 	// a read is not required to get the block
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
 }
 
 static void test_invalidate_held_block(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
 
-	T_ASSERT(!bcache_invalidate(cache, di, 0));
+	T_ASSERT(!blkio_invalidate(bio, di, 0));
 
 	_expect_write(me, di, 0);
 	_expect(me, E_WAIT);
-	bcache_put(b);
+	blkio_put(b);
 }
 
 //----------------------------------------------------------------
@@ -836,73 +835,73 @@ static void test_invalidate_held_block(void *context)
 static void test_abort_no_blocks(void *context)
 {
 	struct fixture *f = context;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 	int di = 17;
 
 	// We have no expectations
-	bcache_abort_di(cache, di);
+	blkio_abort_di(bio, di);
 }
 
 static void test_abort_single_block(void *context)
 {
 	struct fixture *f = context;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
-	T_ASSERT(bcache_get(cache, di, 0, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	blkio_put(b);
 
-	bcache_abort_di(cache, di);
+	blkio_abort_di(bio, di);
 
 	// no write should be issued
-	T_ASSERT(bcache_flush(cache));
+	T_ASSERT(blkio_flush(bio));
 }
 
 static void test_abort_forces_reread(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di = 17;
 
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, GF_DIRTY, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, GF_DIRTY, &b));
+	blkio_put(b);
 
-	bcache_abort_di(cache, di);
-	T_ASSERT(bcache_flush(cache));
+	blkio_abort_di(bio, di);
+	T_ASSERT(blkio_flush(bio));
 
 	// Check the block is re-read
 	_expect_read(me, di, 0);
 	_expect(me, E_WAIT);
-	T_ASSERT(bcache_get(cache, di, 0, 0, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
 }
 
 static void test_abort_only_specific_di(void *context)
 {
 	struct fixture *f = context;
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
-	struct block *b;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
 	int di1 = 17, di2 = 18;
 
-	T_ASSERT(bcache_get(cache, di1, 0, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di1, 0, GF_ZERO, &b));
+	blkio_put(b);
 
-	T_ASSERT(bcache_get(cache, di1, 1, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di1, 1, GF_ZERO, &b));
+	blkio_put(b);
 
-	T_ASSERT(bcache_get(cache, di2, 0, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di2, 0, GF_ZERO, &b));
+	blkio_put(b);
 
-	T_ASSERT(bcache_get(cache, di2, 1, GF_ZERO, &b));
-	bcache_put(b);
+	T_ASSERT(blkio_get(bio, di2, 1, GF_ZERO, &b));
+	blkio_put(b);
 
-	bcache_abort_di(cache, di2);
+	blkio_abort_di(bio, di2);
 
 	// writes for di1 should still be issued
 	_expect_write(me, di1, 0);
@@ -911,7 +910,7 @@ static void test_abort_only_specific_di(void *context)
 	_expect(me, E_WAIT);
 	_expect(me, E_WAIT);
 
-	T_ASSERT(bcache_flush(cache));
+	T_ASSERT(blkio_flush(bio));
 }
 
 //----------------------------------------------------------------
@@ -920,15 +919,15 @@ static void test_abort_only_specific_di(void *context)
 static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
 {
 	struct mock_engine *me = f->me;
-	struct bcache *cache = f->cache;
+	struct blkio *bio = f->bio;
 
 	unsigned i;
-	struct block *b;
+	struct blkio_block *b;
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		// prefetch should not wait
 		_expect_read(me, i, 0);
-		bcache_prefetch(cache, i, 0);
+		blkio_prefetch(bio, i, 0);
 	}
 
 	// This double checks the reads occur in response to the prefetch
@@ -936,8 +935,8 @@ static void _cycle(struct fixture *f, unsigned nr_cache_blocks)
 
 	for (i = 0; i < nr_cache_blocks; i++) {
 		_expect(me, E_WAIT);
-		T_ASSERT(bcache_get(cache, i, 0, 0, &b));
-		bcache_put(b);
+		T_ASSERT(blkio_get(bio, i, 0, 0, &b));
+		blkio_put(b);
 	}
 
 	_no_outstanding_expectations(me);
@@ -950,14 +949,14 @@ static void test_concurrent_reads_after_invalidate(void *context)
 
 	_cycle(f, nr_cache_blocks);
 	for (i = 0; i < nr_cache_blocks; i++)
-		bcache_invalidate_di(f->cache, i);
+		blkio_invalidate_di(f->bio, i);
 	_cycle(f, nr_cache_blocks);
 }
 
 /*----------------------------------------------------------------
  * Top level
  *--------------------------------------------------------------*/
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/blkio/" path, desc, fn)
 
 static struct test_suite *_tiny_tests(void)
 {
@@ -969,8 +968,8 @@ static struct test_suite *_tiny_tests(void)
 
 	T("create-destroy", "simple create/destroy", test_create);
 	T("cache-blocks-positive", "nr cache blocks must be positive", test_nr_cache_blocks_must_be_positive);
-	T("block-size-positive", "block size must be positive", test_block_size_must_be_positive);
-	T("block-size-multiple-page", "block size must be a multiple of page size", test_block_size_must_be_multiple_of_page_size);
+	T("block-size-positive", "block size must be positive", test_block_sectors_must_be_positive);
+	T("block-size-multiple-page", "block size must be a multiple of page size", test_block_sectors_must_be_multiple_of_page_size);
 
 	return ts;
 }
@@ -983,7 +982,7 @@ static struct test_suite *_small_tests(void)
 		exit(1);
 	}
 
-	T("get-reads", "bcache_get() triggers read", test_get_triggers_read);
+	T("get-reads", "blkio_get() triggers read", test_get_triggers_read);
 	T("reads-cached", "repeated reads are cached", test_repeated_reads_are_cached);
 	T("blocks-get-evicted", "block get evicted with many reads", test_block_gets_evicted_with_many_reads);
 	T("prefetch-reads", "prefetch issues a read", test_prefetch_issues_a_read);
@@ -998,7 +997,7 @@ static struct test_suite *_small_tests(void)
 	T("write-bad-issue-stops-flush", "flush fails temporarily if any block fails to write", test_write_bad_issue_stops_flush);
 	T("write-bad-io-stops-flush", "flush fails temporarily if any block fails to write", test_write_bad_io_stops_flush);
 	T("invalidate-not-present", "invalidate a block that isn't in the cache", test_invalidate_not_present);
-	T("invalidate-present", "invalidate a block that is in the cache", test_invalidate_present);
+	T("invalidate-present", "invalidate a block that is in the blkio", test_invalidate_present);
 	T("invalidate-read-error", "invalidate a block that errored", test_invalidate_after_read_error);
 	T("invalidate-write-error", "invalidate a block that errored", test_invalidate_after_write_error);
 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
@@ -1027,7 +1026,7 @@ static struct test_suite *_large_tests(void)
 	return ts;
 }
 
-void bcache_tests(struct dm_list *all_tests)
+void blkio_tests(struct dm_list *all_tests)
 {
 	dm_list_add(all_tests, &_tiny_tests()->list);
 	dm_list_add(all_tests, &_small_tests()->list);

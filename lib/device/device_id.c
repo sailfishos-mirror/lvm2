@@ -4149,7 +4149,7 @@ void device_ids_search(struct cmd_context *cmd, struct dm_list *new_devs,
 			continue;
 
 		/*
-		 * These filters will use the block of data from bcache that
+		 * These filters will use the block of data from the blkio that
 		 * was read label_read_pvid(), and may read other
 		 * data blocks beyond that.
 		 */

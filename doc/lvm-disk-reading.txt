@@ -70,9 +70,9 @@ label_scan()
 . dev_cache_scan()
   choose which devices on the system to look at
 
-. for each dev in dev_cache: bcache prefetch/read
+. for each dev in dev_cache: blkio prefetch/read
 
-. _process_block() to process data from bcache
+. _process_block() to process data from the blkio cache
   _find_lvm_header() checks if this is an lvm dev by looking at label_header
   _text_read() via ops->read() looks at mda/pv/vg data to populate lvmcache
 
@@ -211,16 +211,17 @@ label.
    know whether to exclude the device from further processing.
 
 We apply filters from 1 before reading devices, and we apply filters from
-2 after populating bcache, but before processing the device (i.e. before
-checking for an lvm label, which is the first step in processing.)
+2 after populating the blkio cache, but before processing the device (i.e.
+before checking for an lvm label, which is the first step in processing.)
 
 The current implementation of this makes filters return -EAGAIN if they
-want to read the device, but bcache data is not yet available.  This will
-happen when filtering runs prior to populating bcache.  In this case the
-device is flagged.  After bcache is populated, the filters are reapplied
-to the flagged devices.  The filters which need to look at device content
-are now able to get it from bcache.  Devices that do not pass filters at
-this point are excluded just like devices which were excluded earlier.
+want to read the device, but blkio data is not yet available.  This will
+happen when filtering runs prior to populating the blkio cache.  In this
+case the device is flagged.  After the blkio cache is populated, the
+filters are reapplied to the flagged devices.  The filters which need to
+look at device content are now able to get it from the blkio cache.
+Devices that do not pass filters at this point are excluded just like
+devices which were excluded earlier.
 
 (Some filters from 2 can be skipped by consulting udev for the information
 instead of reading the device.  This is not entirely reliable, so it is

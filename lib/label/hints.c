@@ -140,7 +140,6 @@
 #include "lib/label/label.h"
 #include "lib/misc/crc.h"
 #include "lib/cache/lvmcache.h"
-#include "lib/device/bcache.h"
 #include "lib/activate/activate.h"
 #include "lib/label/hints.h"
 #include "lib/device/dev-type.h"

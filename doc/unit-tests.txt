@@ -33,14 +33,14 @@ base
       asprint  .............................................  tests asprint
       strncpy  .............................................  tests string copying
   device
-    bcache
+    blkio
       block-size-multiple-page  ............................  block size must be a multiple of page size
       block-size-positive  .................................  block size must be positive
       blocks-get-evicted  ..................................  block get evicted with many reads
       cache-blocks-positive  ...............................  nr cache blocks must be positive
       create-destroy  ......................................  simple create/destroy
       flush-waits  .........................................  flush waits for all dirty
-      get-reads  ...........................................  bcache_get() triggers read
+      get-reads  ...........................................  blkio_get() triggers read
       prefetch-never-waits  ................................  too many prefetches does not trigger a wait
       prefetch-reads  ......................................  prefetch issues a read
       read-multiple-files  .................................  read from multiple files
@@ -86,9 +86,9 @@ base
 ejt@devel-vm1:~/lvm2/unit-test/$ ./unit-test list s$
 base
   device
-    bcache
+    blkio
       flush-waits  .........................................  flush waits for all dirty
-      get-reads  ...........................................  bcache_get() triggers read
+      get-reads  ...........................................  blkio_get() triggers read
       prefetch-never-waits  ................................  too many prefetches does not trigger a wait
       prefetch-reads  ......................................  prefetch issues a read
       read-multiple-files  .................................  read from multiple files
@@ -112,17 +112,17 @@ Use the 'run' command to run the tests.  Currently all logging goes to stderr,
 so the test runner prints a line at the start of the test and a line
 indicating success or failure at the end.
 
-ejt@devel-vm1:~/lvm2/unit-test/$ ./unit-test run bcache/block-size
-[RUN    ] /base/device/bcache/block-size-multiple-page
-bcache block size must be a multiple of page size
-bcache block size must be a multiple of page size
-bcache block size must be a multiple of page size
-bcache block size must be a multiple of page size
-[     OK] /base/device/bcache/block-size-multiple-page
+ejt@devel-vm1:~/lvm2/unit-test/$ ./unit-test run blkio/block-size
+[RUN    ] /base/blkio/block-size-multiple-page
+blkio block size must be a multiple of page size.
+blkio block size must be a multiple of page size.
+blkio block size must be a multiple of page size.
+blkio block size must be a multiple of page size.
+[     OK] /base/blkio/block-size-multiple-page
 
-[RUN    ] /base/device/bcache/block-size-positive
-bcache must have a non zero block size
-[     OK] /base/device/bcache/block-size-positive
+[RUN    ] /base/blkio/block-size-positive
+blkio must have a non zero block size.
+[     OK] /base/blkio/block-size-positive
 
 
 2/2 tests passed

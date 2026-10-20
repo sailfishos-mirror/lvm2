@@ -26,6 +26,7 @@
 #include <mntent.h>
 #include <sys/ioctl.h>
 #include <linux/types.h>
+#include <linux/fs.h>
 
 static const char *_get_lvresize_fs_helper_path(struct cmd_context *cmd)
 {

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2017 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -3573,7 +3573,7 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
 
 	/*
 	 * If a PV is stacked on an LV, then the LV is kept open
-	 * in bcache, and needs to be closed so the open fd doesn't
+	 * in the blkio, and needs to be closed so the open fd doesn't
 	 * interfere with processing the LV.
 	 */
 	label_scan_invalidate_lvs(cmd, &final_lvs);
@@ -6309,7 +6309,7 @@ do_command:
 		stack;
 
 	/*
-	 * Don't keep devs open excl in bcache because the excl will prevent
+	 * Don't keep devs open excl in the blkio because the excl will prevent
 	 * using that dev elsewhere.
 	 */
 	dm_list_iterate_items(devl, &rescan_devs)

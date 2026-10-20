@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -32,11 +32,11 @@
 #define DEV_USED_FOR_LV		0x00000100	/* Is device used for an LV */
 #define DEV_ASSUMED_FOR_LV	0x00000200	/* Is device assumed for an LV */
 #define DEV_NOT_O_NOATIME	0x00000400	/* Don't use O_NOATIME */
-#define DEV_IN_BCACHE		0x00000800	/* dev fd is open and used in bcache */
-#define DEV_BCACHE_EXCL		0x00001000	/* bcache_fd should be open EXCL */
+#define DEV_IN_BLKIO		0x00000800	/* dev fd is open and used in the blkio */
+#define DEV_BLKIO_EXCL		0x00001000	/* blkio_fd should be open EXCL */
 #define DEV_ADDED_SYS_WWID	0x00002000	/* wwid has been added from sysfs wwid file */
 #define DEV_ADDED_VPD_WWIDS	0x00004000	/* wwids have been added from vpd_pg83 */
-#define DEV_BCACHE_WRITE	0x00008000	/* bcache_fd is open with RDWR */
+#define DEV_BLKIO_WRITE		0x00008000	/* blkio_fd is open with RDWR */
 #define DEV_SCAN_FOUND_LABEL	0x00010000	/* label scan read dev and found label */
 #define DEV_IS_MD_COMPONENT	0x00020000	/* device is an md component */
 #define DEV_IS_NVME		0x00040000	/* set if dev is nvme */
@@ -153,8 +153,8 @@ struct device {
 	unsigned int physical_block_size; /* From BLKPBSZGET: lowest possible sector size that the hardware can operate on without reverting to read-modify-write operations */
 	unsigned int logical_block_size;  /* From BLKSSZGET: lowest possible block size that the storage device can address */
 	int read_ahead;
-	int bcache_fd;
-	int bcache_di;
+	int blkio_fd;
+	int blkio_di;
 	int part;		/* partition number */
 	uint32_t flags;
 	uint32_t filtered_flags;

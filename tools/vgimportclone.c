@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2016-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -293,7 +293,8 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
 	 */
 	log_debug("scan new devs");
 
-	label_scan_setup_bcache();
+	if (!label_scan_setup_blkio())
+		goto_out;
 
 	cmd->filter_nodata_only = 0;
 

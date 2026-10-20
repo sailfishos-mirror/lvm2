@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2020-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -664,7 +664,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 
 		unlink_searched_devnames(cmd);
 
-		label_scan_setup_bcache();
+		if (!label_scan_setup_blkio())
+			goto_bad;
 
 		dm_list_iterate_items(du, &cmd->use_devices) {
 			if (!du->dev)
@@ -844,7 +845,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 		 * reads pvid from dev header, sets dev->pvid.
 		 * (it's ok if the device is not a PV and has no PVID)
 		 */
-		label_scan_setup_bcache();
+		if (!label_scan_setup_blkio())
+			goto_bad;
 		if (!label_read_pvid(dev, NULL)) {
 			log_error("Failed to read %s.", devname);
 			goto bad;
@@ -885,7 +887,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 		char pvid[ID_LEN+1] = { 0 };
 		const char *pvid_arg;
 
-		label_scan_setup_bcache();
+		if (!label_scan_setup_blkio())
+			goto_bad;
 
 		/*
 		 * Iterate through all devs on the system, reading the
@@ -952,7 +955,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
 			goto bad;
 		}
 
-		label_scan_setup_bcache();
+		if (!label_scan_setup_blkio())
+			goto_bad;
 		if (!label_read_pvid(dev, NULL))
 			log_warn("WARNING: failed to read PVID from %s", dev_name(dev));
 

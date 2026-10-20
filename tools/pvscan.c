@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -1595,7 +1595,8 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 
 	log_debug("pvscan_cache_args: read and filter devs");
 
-	label_scan_setup_bcache();
+	if (!label_scan_setup_blkio())
+		return_0;
 
 	dm_list_iterate_items_safe(devl, devl2, &pvscan_devs) {
 		int has_pvid;
@@ -1645,7 +1646,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
 	/*
 	 * Scan devs to populate lvmcache info, which includes the mda info that's
 	 * needed to read vg metadata in the next step.  The _cached variant of
-	 * label_scan is used so the existing bcache data from label_read_pvid above
+	 * label_scan is used so the existing blkio data from label_read_pvid above
 	 * can be reused (although more data may need to be read depending on how
 	 * much of the metadata was covered by reading the pvid.)
 	 */

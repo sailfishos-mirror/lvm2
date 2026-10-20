@@ -1,6 +1,6 @@
 #
 # Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
-# Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
 #
 # This file is part of LVM2.
 #
@@ -19,6 +19,8 @@ abs_srcdir = @abs_srcdir@
 
 SOURCES =\
 	activate/activate.c \
+	blkio/blkio.c \
+	blkio/byterange.c \
 	cache/lvmcache.c \
 	writecache/writecache.c \
 	integrity/integrity.c \
@@ -27,8 +29,6 @@ SOURCES =\
 	config/config.c \
 	datastruct/radix-tree.c \
 	datastruct/str_list.c \
-	device/bcache.c \
-	device/bcache-utils.c \
 	device/dev-cache.c \
 	device/device_id.c \
 	device/dev-ext.c \

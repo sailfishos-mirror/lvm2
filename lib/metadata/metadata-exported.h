@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -26,13 +26,12 @@
 #include "lib/metadata/vg.h"
 #include "lib/metadata/lv.h"
 #include "lib/misc/lvm-percent.h"
+#include "lib/misc/lvm-sector.h"
 #include "lib/locking/lvmlockd.h"
 #include <stdbool.h>
 
 #define MAX_LV_RECURSION 1024
 #define MAX_STRIPES 128U
-#define SECTOR_SHIFT 9L
-#define SECTOR_SIZE ( 1L << SECTOR_SHIFT )
 /*
  * The dm-stripe target does not require the stripe size to be a multiple of
  * the page size, so allow 4 KiB stripes to make striped LVs portable across

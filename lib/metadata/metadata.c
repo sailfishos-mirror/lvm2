@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -4562,7 +4562,7 @@ bool scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char 
 		 * Reopen device if it was closed, e.g. by label_scan_invalidate_lvs
 		 * closing a PV stacked on an LV after processing the LV's VG.
 		 */
-		if (dev->bcache_di < 0) {
+		if (dev->blkio_di < 0) {
 			if (!label_scan_open(dev)) {
 				if (dev_scan_io_failed(dev))
 					log_debug("Rescan for text mismatch - %s excluded after I/O error.",
@@ -4575,7 +4575,7 @@ bool scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char 
 		}
 
 		/*
-		 * Invalidate mda_header in bcache so it will be reread from disk.
+		 * Invalidate mda_header in the blkio so it will be reread from disk.
 		 */
 		if (!dev_invalidate_bytes(dev, 4096, 512)) {
 			log_debug("Rescan for text mismatch - cannot invalidate.");
@@ -4658,7 +4658,7 @@ static struct volume_group *_vg_read(struct cmd_context *cmd,
 	 * Devices are generally open readonly from scanning, and we need to
 	 * reopen them rw to update metadata.  We want to reopen them rw before
 	 * before rescanning and/or writing.  Reopening rw preserves the existing
-	 * bcache blocks for the devs.
+	 * blkio blocks for the devs.
 	 */
 	if (writing)
 		lvmcache_label_reopen_vg_rw(cmd, vgname, vgid);

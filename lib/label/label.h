@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -18,7 +18,10 @@
 
 #include "lib/id/id.h"
 #include "lib/device/device.h"
-#include "lib/device/bcache.h"
+#include "lib/misc/lvm-sector.h"
+
+#include <stdbool.h>
+#include <stdint.h>
 
 #define LABEL_ID "LABELONE"
 #define LABEL_SIZE SECTOR_SIZE	/* Think very carefully before changing this */
@@ -109,7 +112,7 @@ void label_scan_invalidate_lv(struct cmd_context *cmd, struct logical_volume *lv
 void label_scan_invalidate_lvs(struct cmd_context *cmd, struct dm_list *lvs);
 void label_scan_drop(struct cmd_context *cmd);
 void label_scan_destroy(struct cmd_context *cmd);
-int label_scan_setup_bcache(void);
+int label_scan_setup_blkio(void);
 int label_scan_open(struct device *dev);
 int label_scan_open_excl(struct device *dev);
 int label_scan_open_rw(struct device *dev);
@@ -122,8 +125,8 @@ int label_scan_vg_online(struct cmd_context *cmd, const char *vgname,
 int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device **dev_out);
 
 /*
- * Wrappers around bcache equivalents.
- * (these make it easier to disable bcache and revert to direct rw if needed)
+ * Wrappers around blkio equivalents.
+ * (these make it easier to disable the blkio and revert to direct rw if needed)
  */
 bool dev_read_bytes(struct device *dev, uint64_t start, size_t len, void *data);
 bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data);

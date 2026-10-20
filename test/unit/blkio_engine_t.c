@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2018-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -13,7 +13,7 @@
  */
 
 #include "units.h"
-#include "lib/device/bcache.h"
+#include "lib/blkio/internal.h"
 #include "lib/misc/lvm-signal.h"
 
 #include <signal.h>
@@ -27,8 +27,6 @@
 
 //----------------------------------------------------------------
 
-#define SECTOR_SHIFT 9
-#define SECTOR_SIZE 512
 #define BLOCK_SIZE_SECTORS 8
 #define PAGE_SIZE_SECTORS ((TEST_PAGE_SIZE) >> SECTOR_SHIFT)
 #define NR_BLOCKS 64
@@ -143,22 +141,22 @@ static void _test_read(void *fixture)
 {
 	struct fixture *f = fixture;
 	struct io io;
-	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
-	T_ASSERT(cache);
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	T_ASSERT(bio);
 
-	f->di = bcache_set_fd(f->fd);
+	f->di = blkio_set_fd(f->fd);
 
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, DIR_READ, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+	T_ASSERT(f->e->issue(f->e, BLKIO_DIR_READ, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
 
 	_check_buffer(f->data, 123, SECTOR_SIZE * BLOCK_SIZE_SECTORS);
 
-	bcache_destroy(cache);
+	blkio_destroy(bio);
 	f->e = NULL;   // already destroyed
 }
 
@@ -166,20 +164,20 @@ static void _test_write(void *fixture)
 {
 	struct fixture *f = fixture;
 	struct io io;
-	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
-	T_ASSERT(cache);
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	T_ASSERT(bio);
 
-	f->di = bcache_set_fd(f->fd);
+	f->di = blkio_set_fd(f->fd);
 
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, DIR_WRITE, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+	T_ASSERT(f->e->issue(f->e, BLKIO_DIR_WRITE, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
 
-	bcache_destroy(cache);
+	blkio_destroy(bio);
 	f->e = NULL;   // already destroyed
 }
 
@@ -190,15 +188,15 @@ static void _test_write_bytes(void *fixture)
 	unsigned offset = 345;
 	char buf_out[32];
 	char buf_in[32];
-	struct bcache *cache = bcache_create(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
-	T_ASSERT(cache);
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	T_ASSERT(bio);
 
-	f->di = bcache_set_fd(f->fd);
+	f->di = blkio_set_fd(f->fd);
 
-	// T_ASSERT(bcache_read_bytes(cache, f->di, offset, sizeof(buf_in), buf_in));
+	// T_ASSERT(blkio_read_bytes(bio, f->di, offset, sizeof(buf_in), buf_in));
 	_fill_buffer((uint8_t *) buf_out, 234, sizeof(buf_out));
-	T_ASSERT(bcache_write_bytes(cache, f->di, offset, sizeof(buf_out), buf_out));
-	T_ASSERT(bcache_read_bytes(cache, f->di, offset, sizeof(buf_in), buf_in));
+	T_ASSERT(blkio_write_bytes(bio, f->di, offset, sizeof(buf_out), buf_out));
+	T_ASSERT(blkio_read_bytes(bio, f->di, offset, sizeof(buf_in), buf_in));
 
 	if (memcmp(buf_out, buf_in, sizeof(buf_out))) {
 		_print_buffer("buf_out", (uint8_t *) buf_out, sizeof(buf_out));
@@ -206,7 +204,7 @@ static void _test_write_bytes(void *fixture)
 	}
 	T_ASSERT(!memcmp(buf_out, buf_in, sizeof(buf_out)));
 
-	bcache_destroy(cache);
+	blkio_destroy(bio);
 	f->e = NULL;   // already destroyed
 }
 
@@ -337,7 +335,7 @@ static void _test_wait_eintr(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/device/bcache/io-engine/" path, desc, fn)
+#define T(path, desc, fn) register_test(ts, "/base/blkio/engine/" path, desc, fn)
 
 static struct test_suite *_tests(void)
 {
@@ -350,14 +348,14 @@ static struct test_suite *_tests(void)
 	T("create-destroy", "simple create/destroy", _test_create);
 	T("read", "read sanity check", _test_read);
 	T("write", "write sanity check", _test_write);
-	T("bcache-write-bytes", "test the utility fns", _test_write_bytes);
+	T("blkio-write-bytes", "test the utility fns", _test_write_bytes);
 	T("destroy-after-fork", "io_destroy skipped in child after fork", _test_destroy_after_fork);
 	T("wait-eintr", "io_getevents interrupted by signal", _test_wait_eintr);
 
 	return ts;
 }
 
-void io_engine_tests(struct dm_list *all_tests)
+void blkio_engine_tests(struct dm_list *all_tests)
 {
 	dm_list_add(all_tests, &_tests()->list);
 }
