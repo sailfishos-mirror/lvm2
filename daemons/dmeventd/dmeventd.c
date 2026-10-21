@@ -131,6 +131,11 @@ static const char *_exit_on = DEFAULT_DMEVENTD_EXIT_ON_PATH;
  * Override to abort on first race so test teardown detects the failure.
  */
 #ifdef ENABLE_TSAN
+/*
+ * Must not be instrumented: TSAN calls this during runtime
+ * initialization, before it is ready to handle instrumented code.
+ */
+__attribute__((no_sanitize("thread")))
 const char *__tsan_default_options(void);
 const char *__tsan_default_options(void)
 {
