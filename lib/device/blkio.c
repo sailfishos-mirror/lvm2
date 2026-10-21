@@ -981,6 +981,11 @@ struct invalidate_iterator {
 	struct radix_tree_iterator it;
 };
 
+struct abort_iterator {
+	bool held;
+	struct radix_tree_iterator it;
+};
+
 static bool _writeback_v(struct radix_tree_iterator *it,
                          const void *kb, size_t keylen, union radix_value v)
 {
@@ -1045,16 +1050,25 @@ bool blkio_invalidate_di(struct blkio *bio, int di)
 
 //----------------------------------------------------------------
 
-static bool _abort_v(struct radix_tree_iterator *it,
-                     const void *kb, size_t keylen, union radix_value v)
+static bool _check_abort_v(struct radix_tree_iterator *it,
+			   const void *kb, size_t keylen, union radix_value v)
 {
 	struct block *b = v.ptr;
+	struct abort_iterator *ait = container_of(it, struct abort_iterator, it);
 
 	if (b->ref_count) {
-		log_fatal("blkio destroy: block (%d, %llu) still held.",
+		log_warn("WARNING: blkio abort: block (%d, %llu) still held.",
 			 b->di, (unsigned long long) b->index);
-		return true;
+		ait->held = true;
 	}
+
+	return true;
+}
+
+static bool _abort_v(struct radix_tree_iterator *it,
+		     const void *kb, size_t keylen, union radix_value v)
+{
+	struct block *b = v.ptr;
 
 	_unlink_block(b);
 	_free_block(b);
@@ -1067,12 +1081,36 @@ static bool _abort_v(struct radix_tree_iterator *it,
 void blkio_abort_di(struct blkio *bio, int di)
 {
 	union key k;
-	struct radix_tree_iterator it;
+	struct abort_iterator it;
+
+	/*
+	 * An in-flight request still references its block.  Leave the cache
+	 * intact if the I/O cannot be drained; blkio_destroy() will retain
+	 * the buffers when the engine reports an interrupted teardown.
+	 */
+	if (!_wait_all(bio)) {
+		log_warn("WARNING: blkio abort: I/O still in flight for di %d.", di);
+		return;
+	}
 
 	k.parts.di = di;
 
-	it.visit = _abort_v;
-	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it);
+	/*
+	 * Check for held blocks before freeing anything.  Once _abort_v()
+	 * unlinks a block the radix tree still points at it, so the prefix
+	 * cannot be removed unless every block is discarded.
+	 */
+	it.held = false;
+	it.it.visit = _check_abort_v;
+	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
+
+	if (it.held) {
+		log_warn("WARNING: blkio abort: cache for di %d left intact.", di);
+		return;
+	}
+
+	it.it.visit = _abort_v;
+	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
 	(void) radix_tree_remove_prefix(bio->rtree, k.bytes, sizeof(k.parts.di));
 }
 

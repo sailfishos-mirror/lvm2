@@ -205,8 +205,8 @@ bool blkio_invalidate_di(struct blkio *bio, int di);
 /*
  * Call this function if flush, or invalidate fail and you do not
  * wish to retry the writes.  This will throw away any dirty data
- * not written.  If any blocks for di are held, then it will call
- * abort().
+ * not written.  If any blocks for di are held, the cache is left
+ * intact and a warning is logged.
  */
 void blkio_abort_di(struct blkio *bio, int di);
 
