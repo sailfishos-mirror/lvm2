@@ -38,7 +38,11 @@ const char *command_name(struct cmd_context *cmd)
 
 static void _sigchld_handler(int sig __attribute__((unused)))
 {
+	int saved_errno = errno;
+
 	while (wait4(-1, NULL, WNOHANG | WUNTRACED, NULL) > 0) ;
+
+	errno = saved_errno;
 }
 
 /*
