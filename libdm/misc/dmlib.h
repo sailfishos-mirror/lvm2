@@ -64,6 +64,17 @@
  * versions of library symbols prior to the introduction of symbol
  * versioning: it must never be used for new symbols.
  */
+
+/*
+ * Coverity does not follow GNU symbol version aliases: it sees a
+ * versioned definition under its internal name, not the name callers
+ * use, and reports bogus uninitialized-output findings.  Build libdm
+ * without symbol versioning for the analysis.
+ */
+#if defined(__COVERITY__) && defined(GNU_SYMVER)
+# undef GNU_SYMVER
+#endif
+
 #if defined(GNU_SYMVER)
 # ifdef __has_attribute
 #  if __has_attribute(symver)
