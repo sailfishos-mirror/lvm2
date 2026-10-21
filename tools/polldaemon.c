@@ -666,6 +666,16 @@ static int _poll_daemon(struct cmd_context *cmd, const struct poll_operation_id 
 	int daemon_mode = 0;
 	int ret = ECMD_PROCESSED;
 
+	/*
+	 * Destroy the label scan and its I/O engine before forking the
+	 * background polldaemon.  The child must not inherit the I/O
+	 * engine or I/O still in flight; the engine is drained and
+	 * released here, while this process is still its creator.
+	 * The lvmcache itself is kept in the parent: the caller may
+	 * still use its VG metadata after background polling is spawned.
+	 */
+	label_scan_destroy(cmd);
+
 	if (parms->background) {
 		daemon_mode = become_daemon(cmd, 0);
 		if (daemon_mode == 0)
@@ -678,12 +688,15 @@ static int _poll_daemon(struct cmd_context *cmd, const struct poll_operation_id 
 	}
 
 	/*
+	 * Destroy the lvmcache in the child, and in this process when
+	 * background mode was not used or become_daemon() failed.  The
+	 * parent returns above and keeps its cache.
+	 */
+	lvmcache_destroy(cmd, 1, 0);
+
+	/*
 	 * Process one specific task or all incomplete tasks?
 	 */
-
-	/* clear lvmcache/bcache/fds from the parent */
-	lvmcache_destroy(cmd, 1, 0);
-	label_scan_destroy(cmd);
 
 	if (id) {
 		if (!wait_for_single_lv(cmd, id, parms)) {
