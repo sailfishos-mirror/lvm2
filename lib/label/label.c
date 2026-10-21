@@ -457,6 +457,10 @@ static int _process_block(struct cmd_context *cmd, struct dev_filter *f,
 	return ret;
 }
 
+/*
+ * The label scan cache must already be set up by the caller,
+ * see label_scan_setup_bcache().
+ */
 static int _scan_dev_open(struct device *dev)
 {
 	struct dm_list *name_list;
@@ -1752,6 +1756,9 @@ int label_scan_dev(struct cmd_context *cmd, struct device *dev)
 	struct device_list *devl;
 	int failed = 0;
 
+	if (!label_scan_setup_bcache())
+		return_0;
+
 	/* scanning is done by list, so make a single item list for this dev */
 	if (!(devl = zalloc(sizeof(*devl))))
 		return 0;
@@ -1784,6 +1791,9 @@ int label_scan_open(struct device *dev)
 			       dev_name(dev));
 		return 0;
 	}
+
+	if (!label_scan_setup_bcache())
+		return_0;
 
 	if (!_in_bcache(dev))
 		return _scan_dev_open(dev);
@@ -1819,6 +1829,9 @@ int label_scan_reopen_rw(struct device *dev)
 	int flags = 0;
 	int prev_fd = dev->bcache_fd;
 	int fd;
+
+	if (!label_scan_setup_bcache())
+		return_0;
 
 	if (dm_list_empty(&dev->aliases)) {
 		log_error("Cannot reopen rw device %u:%u with no valid paths di %d fd %d.",

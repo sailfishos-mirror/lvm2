@@ -666,10 +666,31 @@ static int _poll_daemon(struct cmd_context *cmd, const struct poll_operation_id 
 	int daemon_mode = 0;
 	int ret = ECMD_PROCESSED;
 
+	/*
+	 * Destroy the label scan and its I/O engine before forking the
+	 * background polldaemon.  The child must not inherit the I/O
+	 * engine or I/O still in flight; the engine is drained and
+	 * released here, while this process is still its creator.
+	 * The lvmcache itself is kept in the parent: the caller may
+	 * still use its VG metadata after background polling is spawned.
+	 * The parent recreates the label scan before returning because
+	 * the caller may also continue to use its devices.
+	 */
+	label_scan_destroy(cmd);
+
 	if (parms->background) {
 		daemon_mode = become_daemon(cmd, 0);
-		if (daemon_mode == 0)
+		if (daemon_mode == 0) {
+			/*
+			 * The daemon is already running, so this command has
+			 * done its job: report a failure to get the scan back
+			 * as a warning rather than as a failed command.
+			 */
+			if (!label_scan_setup_bcache())
+				log_warn("WARNING: Failed to recreate the label scan "
+					 "after forking the polling daemon.");
 			return ECMD_PROCESSED;	    /* Parent */
+		}
 
 		if (daemon_mode == 1)
 			parms->progress_display = 0; /* Child */
@@ -678,12 +699,15 @@ static int _poll_daemon(struct cmd_context *cmd, const struct poll_operation_id 
 	}
 
 	/*
+	 * Destroy the lvmcache in the child, and in this process when
+	 * background mode was not used or become_daemon() failed.  The
+	 * parent returns above and keeps its cache.
+	 */
+	lvmcache_destroy(cmd, 1, 0);
+
+	/*
 	 * Process one specific task or all incomplete tasks?
 	 */
-
-	/* clear lvmcache/bcache/fds from the parent */
-	lvmcache_destroy(cmd, 1, 0);
-	label_scan_destroy(cmd);
 
 	if (id) {
 		if (!wait_for_single_lv(cmd, id, parms)) {
