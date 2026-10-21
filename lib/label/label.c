@@ -582,6 +582,18 @@ static int _scan_dev_open(struct device *dev)
 	return 1;
 }
 
+/*
+ * Like blkio_invalidate, only it throws any dirty data away if the
+ * write fails.
+ */
+static bool _invalidate_di(struct blkio *bio, int di)
+{
+	if (blkio_invalidate_di(bio, di))
+		return true;
+
+	return blkio_abort_di(bio, di);
+}
+
 static int _scan_dev_close(struct device *dev)
 {
 	if (!(dev->flags & DEV_IN_BLKIO))
@@ -596,7 +608,14 @@ static int _scan_dev_close(struct device *dev)
 		return 0;
 	}
 
-	blkio_clear_fd(scan_blkio, dev->blkio_di);
+	/*
+	 * Keep the di reserved when invalidating the cached blocks failed,
+	 * so the fd slot is not reused while the blocks are still cached.
+	 */
+	if (_invalidate_di(scan_blkio, dev->blkio_di))
+		blkio_clear_fd(scan_blkio, dev->blkio_di);
+	else
+		blkio_reserve_fd(scan_blkio, dev->blkio_di);
 
 	if (close(dev->blkio_fd))
 		log_warn("close %s errno %d", dev_name(dev), errno);
@@ -605,16 +624,6 @@ static int _scan_dev_close(struct device *dev)
 	dev->blkio_di = -1;
 
 	return 1;
-}
-
-/*
- * Like blkio_invalidate, only it throws any dirty data away if the
- * write fails.
- */
-static void _invalidate_di(struct blkio *bio, int di)
-{
-	if (!blkio_invalidate_di(bio, di))
-		blkio_abort_di(bio, di);
 }
 
 /*
@@ -732,10 +741,8 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 		 * means the caller wants to scan and keep open non-lvm devs,
 		 * e.g. to pvcreate them.
 		 */
-		if (!is_lvm_device && !want_other_devs) {
-			_invalidate_di(scan_blkio, devl->dev->blkio_di);
+		if (!is_lvm_device && !want_other_devs)
 			_scan_dev_close(devl->dev);
-		}
 
 		dm_list_del(&devl->list);
 		dm_list_add(&done_devs, &devl->list);
@@ -1636,10 +1643,8 @@ int label_scan_devs_excl(struct cmd_context *cmd, struct dev_filter *f, struct d
 
 void label_scan_invalidate(struct device *dev)
 {
-	if (_in_blkio(dev)) {
-		_invalidate_di(scan_blkio, dev->blkio_di);
+	if (_in_blkio(dev))
 		_scan_dev_close(dev);
-	}
 }
 
 /*
@@ -1783,7 +1788,6 @@ int label_scan_open_excl(struct device *dev)
 {
 	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_EXCL)) {
 		log_debug("close and reopen excl %s", dev_name(dev));
-		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 	}
 	dev->flags |= DEV_BLKIO_EXCL;
@@ -1795,7 +1799,6 @@ int label_scan_open_rw(struct device *dev)
 {
 	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
 		log_debug("close and reopen rw %s", dev_name(dev));
-		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 	}
 	dev->flags |= DEV_BLKIO_WRITE;
@@ -1937,7 +1940,6 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
 		/* FIXME: avoid tossing out blkio blocks just to replace fd. */
 		log_debug("close and reopen to write %s", dev_name(dev));
-		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 
 		dev->flags |= DEV_BLKIO_WRITE;
@@ -2010,7 +2012,6 @@ bool dev_set_bytes(struct device *dev, uint64_t start, size_t len, uint8_t val)
 
 	if (_in_blkio(dev) && !(dev->flags & DEV_BLKIO_WRITE)) {
 		log_debug("close and reopen to write %s", dev_name(dev));
-		_invalidate_di(scan_blkio, dev->blkio_di);
 		_scan_dev_close(dev);
 		/* goes to label_scan_open() since blkio_di < 0 */
 	}

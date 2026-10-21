@@ -56,8 +56,8 @@ bool blkio_invalidate_di(struct blkio *bio, int di);
 /*
  * Call this function if flush, or invalidate fail and you do not
  * wish to retry the writes.  This will throw away any dirty data
- * not written.  If any blocks for di are held, then it will call
- * abort().
+ * not written.  If any blocks for di are held, or I/O for di is still
+ * in flight, the cache is left intact and a warning is logged.
  *
  * Returns true if all blocks for di were dropped, false if the cache
  * was left intact.
@@ -85,6 +85,7 @@ void blkio_unset_last_byte(struct blkio *bio, int di);
 
 int blkio_set_fd(struct blkio *bio, int fd); /* returns di, or -1 on failure */
 void blkio_clear_fd(struct blkio *bio, int di);
+void blkio_reserve_fd(struct blkio *bio, int di);
 bool blkio_change_fd(struct blkio *bio, int di, int fd);
 
 #endif

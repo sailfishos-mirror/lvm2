@@ -24,6 +24,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define FD_FREE (-1)
+#define FD_RESERVED (-2)
 
 /*----------------------------------------------------------------*/
 
@@ -135,6 +137,15 @@ static inline bool _di_valid(struct blkio *bio, int di)
 	return true;
 }
 
+/*
+ * A reserved di was closed while its cached blocks could not be dropped.
+ * The slot must not be handed to another device until those blocks are gone.
+ */
+static inline bool _di_reserved(struct blkio *bio, int di)
+{
+	return bio->fd_table[di] == FD_RESERVED;
+}
+
 /*----------------------------------------------------------------*/
 
 struct key_parts {
@@ -147,13 +158,23 @@ union key {
 	uint8_t bytes[sizeof(struct key_parts)];
 };
 
+/*
+ * The radix tree key of one block: the device index followed by the block
+ * index.  Setting the block index to zero gives the prefix that selects
+ * every block of a device.
+ */
+static void _block_key(int di, block_address_t i, union key *k)
+{
+	k->parts.di = di;
+	k->parts.b = i;
+}
+
 static struct blkio_block *_block_lookup(struct blkio *bio, int di, uint64_t i)
 {
 	union key k;
 	union radix_value v;
 
-	k.parts.di = di;
-	k.parts.b = i;
+	_block_key(di, i, &k);
 
 	if (radix_tree_lookup(bio->rtree, k.bytes, sizeof(k.bytes), &v))
 		return v.ptr;
@@ -166,8 +187,7 @@ static bool _block_insert(struct blkio_block *b)
 	union key k;
 	union radix_value v;
 
-	k.parts.di = b->di;
-	k.parts.b = b->index;
+	_block_key(b->di, b->index, &k);
 	v.ptr = b;
 
 	return radix_tree_insert(b->bio->rtree, k.bytes, sizeof(k.bytes), v);
@@ -177,8 +197,7 @@ static void _block_remove(struct blkio_block *b)
 {
 	union key k;
 
-	k.parts.di = b->di;
-	k.parts.b = b->index;
+	_block_key(b->di, b->index, &k);
 
 	(void) radix_tree_remove(b->bio->rtree, k.bytes, sizeof(k.bytes));
 }
@@ -869,7 +888,7 @@ struct blkio *blkio_create_engine(unsigned block_sectors,
 		goto_bad;
 
 	for (i = 0; i < bio->fd_table_size; i++)
-		bio->fd_table[i] = -1;
+		bio->fd_table[i] = FD_FREE;
 
 	return bio;
 
@@ -1106,9 +1125,14 @@ bool blkio_invalidate(struct blkio *bio, int di, block_address_t index)
 
 /*----------------------------------------------------------------*/
 
-struct invalidate_iterator {
-	bool success;
+#define DROP_HELD	(1 << 0)
+#define DROP_DIRTY	(1 << 1)
+
+struct block_iterator {
 	struct radix_tree_iterator it;
+	unsigned reasons;	/* DROP_* flags accepted as a reason to fail */
+	const char *what;	/* operation name used in messages */
+	bool failed;
 };
 
 static bool _writeback_v(struct radix_tree_iterator *it,
@@ -1122,27 +1146,33 @@ static bool _writeback_v(struct radix_tree_iterator *it,
 	return true;
 }
 
-static bool _check_invalidate_v(struct radix_tree_iterator *it,
-				const void *kb, size_t keylen, union radix_value v)
+static bool _check_droppable_v(struct radix_tree_iterator *it,
+			       const void *kb, size_t keylen, union radix_value v)
 {
 	struct blkio_block *b = v.ptr;
-	struct invalidate_iterator *iit = container_of(it, struct invalidate_iterator, it);
+	struct block_iterator *bit = container_of(it, struct block_iterator, it);
 
 	if (b->ref_count) {
-		log_warn("WARNING: blkio invalidate: block (%d, %llu) still held.",
-			 b->di, (unsigned long long) b->index);
-		iit->success = false;
-	} else if (_test_flags(b, BF_DIRTY)) {
-		log_warn("WARNING: blkio invalidate: block (%d, %llu) still dirty.",
-			 b->di, (unsigned long long) b->index);
-		iit->success = false;
+		if (bit->reasons & DROP_HELD) {
+			log_warn("WARNING: blkio %s: block (%d, %llu) still held.",
+				 bit->what, b->di, (unsigned long long) b->index);
+			bit->failed = true;
+		}
+
+		return true;
+	}
+
+	if ((bit->reasons & DROP_DIRTY) && _test_flags(b, BF_DIRTY)) {
+		log_warn("WARNING: blkio %s: block (%d, %llu) still dirty.",
+			 bit->what, b->di, (unsigned long long) b->index);
+		bit->failed = true;
 	}
 
 	return true;
 }
 
-static bool _invalidate_v(struct radix_tree_iterator *it,
-                          const void *kb, size_t keylen, union radix_value v)
+static bool _drop_block_v(struct radix_tree_iterator *it,
+			  const void *kb, size_t keylen, union radix_value v)
 {
 	struct blkio_block *b = v.ptr;
 
@@ -1153,75 +1183,118 @@ static bool _invalidate_v(struct radix_tree_iterator *it,
 	 * We can't remove the block from the radix tree yet because
 	 * we're in the middle of an iteration.
 	 */
+	return true;
+}
+
+static void _drop_di(struct blkio *bio, const union key *k)
+{
+	struct radix_tree_iterator it;
+
+	it.visit = _drop_block_v;
+	radix_tree_iterate(bio->rtree, k->bytes, sizeof(k->parts.di), &it);
+	(void) radix_tree_remove_prefix(bio->rtree, k->bytes, sizeof(k->parts.di));
+
+	/*
+	 * A reserved di was closed while its blocks could not be dropped.
+	 * Now that they are gone the slot no longer aliases a closed
+	 * device and can be handed to the next blkio_set_fd().
+	 */
+	if (_di_reserved(bio, k->parts.di))
+		bio->fd_table[k->parts.di] = FD_FREE;
+}
+
+/*
+ * Validate di and build the radix tree key that selects all of its blocks.
+ */
+static bool _di_key(struct blkio *bio, int di, union key *k)
+{
+	if (!_di_valid(bio, di))
+		return_false;
+
+	_block_key(di, 0, k);
+
+	return true;
+}
+
+/*
+ * The two operations that drop a whole di, which differ only in the block
+ * state that makes the drop fail and in the name used in the messages.
+ */
+enum drop_op {
+	DROP_INVALIDATE,
+	DROP_ABORT,
+};
+
+/*
+ * Drop every block cached for the di selected by k.  Reports the reason
+ * itself, so a caller that needs to say more about the device does so
+ * after the false return.
+ */
+static bool _drop_di_blocks(struct blkio *bio, const union key *k,
+			    enum drop_op op)
+{
+	struct block_iterator it = {
+		.reasons = (op == DROP_INVALIDATE) ?
+			   DROP_HELD | DROP_DIRTY : DROP_HELD,
+		.what = (op == DROP_INVALIDATE) ? "invalidate" : "abort",
+	};
+
+	/*
+	 * Check for held blocks before freeing anything.  Once _drop_block_v()
+	 * unlinks a block the radix tree still points at it, so the prefix
+	 * cannot be removed unless every block is dropped.
+	 */
+	it.it.visit = _check_droppable_v;
+	radix_tree_iterate(bio->rtree, k->bytes, sizeof(k->parts.di), &it.it);
+
+	if (it.failed)
+		return_false;
+
+	_drop_di(bio, k);
+
 	return true;
 }
 
 bool blkio_invalidate_di(struct blkio *bio, int di)
 {
 	union key k;
-	struct invalidate_iterator it;
+	struct radix_tree_iterator it;
 
-	if (!_di_valid(bio, di))
-		return false;
+	if (!_di_key(bio, di, &k))
+		return_false;
 
-	k.parts.di = di;
-
-	it.it.visit = _writeback_v;
-	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
+	it.visit = _writeback_v;
+	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it);
 
 	if (!_wait_all(bio))
-		return false;
+		return_false;
 
-	it.success = true;
-	it.it.visit = _check_invalidate_v;
-	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
-
-	if (!it.success)
-		return false;
-
-	it.it.visit = _invalidate_v;
-	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
-	(void) radix_tree_remove_prefix(bio->rtree, k.bytes, sizeof(k.parts.di));
-
-	return true;
+	return _drop_di_blocks(bio, &k, DROP_INVALIDATE);
 }
 
 /*----------------------------------------------------------------*/
 
-static bool _abort_v(struct radix_tree_iterator *it,
-                     const void *kb, size_t keylen, union radix_value v)
-{
-	struct blkio_block *b = v.ptr;
-
-	if (b->ref_count) {
-		log_fatal("blkio destroy: block (%d, %llu) still held.",
-			 b->di, (unsigned long long) b->index);
-		return true;
-	}
-
-	_unlink_block(b);
-	_free_block(b);
-
-	/*
-	 * We can't remove the block from the radix tree yet because
-	 * we're in the middle of an iteration.
-	 */
-	return true;
-}
-
 bool blkio_abort_di(struct blkio *bio, int di)
 {
 	union key k;
-	struct radix_tree_iterator it;
 
-	if (!_di_valid(bio, di))
+	if (!_di_key(bio, di, &k))
+		return_false;
+
+	/*
+	 * An in-flight request still references its block.  Leave the cache
+	 * intact if the I/O cannot be drained; blkio_destroy() will retain
+	 * the buffers when the engine reports an interrupted teardown.
+	 */
+	if (!_wait_all(bio)) {
+		log_warn("WARNING: blkio abort: I/O still in flight for di %d.", di);
 		return false;
+	}
 
-	k.parts.di = di;
-
-	it.visit = _abort_v;
-	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it);
-	(void) radix_tree_remove_prefix(bio->rtree, k.bytes, sizeof(k.parts.di));
+	if (!_drop_di_blocks(bio, &k, DROP_ABORT)) {
+		log_warn("WARNING: blkio abort: cache for di %d left intact.", di);
+		return false;
+	}
 
 	return true;
 }
@@ -1254,7 +1327,7 @@ int blkio_set_fd(struct blkio *bio, int fd)
 	new_size = old_size + BLKIO_FD_TABLE_INC;
 
 	for (i = 0; i < old_size; i++) {
-		if (bio->fd_table[i] == -1) {
+		if (bio->fd_table[i] == FD_FREE) {
 			bio->fd_table[i] = fd;
 			return i;
 		}
@@ -1269,30 +1342,43 @@ int blkio_set_fd(struct blkio *bio, int fd)
 	new_table[old_size] = fd;
 
 	for (i = old_size + 1; i < new_size; i++)
-		new_table[i] = -1;
+		new_table[i] = FD_FREE;
 	bio->fd_table = new_table;
 	bio->fd_table_size = new_size;
 
 	return old_size;
 }
 
-/*
- * Should we check for unflushed or in-progress io on an fd
- * prior to doing clear_fd or change_fd?  (To catch mistakes;
- * the caller should be smart enough to not do that.)
- */
-
 void blkio_clear_fd(struct blkio *bio, int di)
 {
 	if (!_di_valid(bio, di))
 		return;
-	bio->fd_table[di] = -1;
+
+	/* A reserved di still owns cached blocks and must not be reused. */
+	if (_di_reserved(bio, di))
+		return;
+
+	bio->fd_table[di] = FD_FREE;
+}
+
+void blkio_reserve_fd(struct blkio *bio, int di)
+{
+	if (!_di_valid(bio, di))
+		return;
+	bio->fd_table[di] = FD_RESERVED;
 }
 
 bool blkio_change_fd(struct blkio *bio, int di, int fd)
 {
 	if (!_di_valid(bio, di))
 		return_false;
+
+	/* A reserved di has no fd to change and must not be reused. */
+	if (_di_reserved(bio, di)) {
+		log_error("Can't change fd for reserved blkio di %d.", di);
+		return false;
+	}
+
 	bio->fd_table[di] = fd;
 	return true;
 }
