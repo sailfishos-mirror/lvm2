@@ -103,6 +103,7 @@ static void *_fix_init(struct io_engine *engine)
 	return f;
 }
 
+#ifdef HAVE_LIBAIO_H
 static void *_async_init(void)
 {
 	struct io_engine *e = create_async_io_engine(0);
@@ -110,6 +111,7 @@ static void *_async_init(void)
 	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
 }
+#endif
 
 static void *_sync_init(void)
 {
@@ -399,8 +401,55 @@ static void _test_set_many_boundaries(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/async/" path, desc, fn)
+static void _test_completion_short_read(void *fixture)
+{
+	(void) fixture;
 
+	T_ASSERT_EQUAL(blkio_completion_status("test", DIR_READ, 0, 4096, 512), 0);
+	T_ASSERT_EQUAL(blkio_completion_status("test", DIR_READ, 0, 4096, 0), -ENODATA);
+}
+
+static void _test_completion_short_write(void *fixture)
+{
+	(void) fixture;
+
+	T_ASSERT_EQUAL(blkio_completion_status("test", DIR_WRITE, 0, 4096, 4096), 0);
+	T_ASSERT(blkio_completion_status("test", DIR_WRITE, 0, 4096, 512) < 0);
+}
+
+static void _test_range_overflow(void *fixture)
+{
+	struct fixture *f = fixture;
+	uint64_t start = UINT64_MAX - (T_BLOCK_SIZE - 1);
+	size_t len = T_BLOCK_SIZE - 1;
+	uint8_t *buffer = alloca(T_BLOCK_SIZE);
+
+	T_ASSERT(!blkio_read_bytes(f->bio, f->di, start, len, buffer));
+	T_ASSERT(!blkio_write_bytes(f->bio, f->di, start, len, buffer));
+	T_ASSERT(!blkio_zero_bytes(f->bio, f->di, start, len));
+	T_ASSERT(!blkio_set_bytes(f->bio, f->di, start, len, 0));
+	T_ASSERT(!blkio_invalidate_bytes(f->bio, f->di, start, len));
+}
+
+static struct test_suite *_completion_tests(void)
+{
+	struct test_suite *ts = test_suite_create(NULL, NULL);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+#define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/completion/" path, desc, fn)
+	T("short-read", "short read of at least one sector succeeds", _test_completion_short_read);
+	T("short-write", "short write is an error", _test_completion_short_write);
+#undef T
+
+	return ts;
+}
+
+//----------------------------------------------------------------
+
+#ifdef HAVE_LIBAIO_H
 static struct test_suite *_async_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
@@ -434,7 +483,7 @@ static struct test_suite *_async_tests(void)
 
 	return ts;
 }
-
+#endif
 
 static struct test_suite *_sync_tests(void)
 {
@@ -445,6 +494,7 @@ static struct test_suite *_sync_tests(void)
 	}
 
 #define T(path, desc, fn) register_test(ts, "/base/device/blkio/utils/sync/" path, desc, fn)
+	T("range-overflow", "overflowing byte range is rejected", _test_range_overflow);
 	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
 	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
 	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -472,6 +522,9 @@ static struct test_suite *_sync_tests(void)
 
 void blkio_utils_tests(struct dm_list *all_tests)
 {
+	dm_list_add(all_tests, &_completion_tests()->list);
+#ifdef HAVE_LIBAIO_H
 	dm_list_add(all_tests, &_async_tests()->list);
+#endif
 	dm_list_add(all_tests, &_sync_tests()->list);
 }

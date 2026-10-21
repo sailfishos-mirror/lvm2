@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #define SHOW_MOCK_CALLS 0
@@ -245,7 +246,7 @@ static bool _mock_destroy(struct io_engine *e)
 	return true;
 }
 
-static bool _mock_issue(struct io_engine *e, enum dir d, int di,
+static int _mock_issue(struct io_engine *e, enum dir d, int di,
 	      		sector_t sb, sector_t se, void *data, void *context)
 {
 	bool r, wait_r;
@@ -279,7 +280,7 @@ static bool _mock_issue(struct io_engine *e, enum dir d, int di,
 		dm_list_add(&me->issued_io, &io->list);
 	}
 
-	return r;
+	return r ? 0 : -EIO;
 }
 
 static bool _mock_wait(struct io_engine *e, io_complete_fn fn)
@@ -414,11 +415,9 @@ static void bad_create(sector_t block_size, unsigned nr_cache_blocks)
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
+	_expect(me, E_DESTROY);
 	bio = blkio_create(block_size, nr_cache_blocks, &me->e);
 	T_ASSERT(!bio);
-
-	_expect(me, E_DESTROY);
-	me->e.destroy(&me->e);
 }
 
 static void test_create(void *fixture)
@@ -893,6 +892,26 @@ static void test_abort_forces_reread(void *context)
 	blkio_put(b);
 }
 
+static void test_abort_held_block(void *context)
+{
+	struct fixture *f = context;
+	struct blkio *bio = f->bio;
+	struct block *b, *b2 = (void *) 1;
+	int di = 17;
+
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	blkio_abort_di(bio, di);
+
+	/* The held block keeps the cache intact, so the write lock remains. */
+	T_ASSERT(!blkio_get(bio, di, 0, 0, &b2));
+	T_ASSERT(!b2);
+
+	blkio_put(b);
+	blkio_abort_di(bio, di);
+	T_ASSERT(blkio_flush(bio));
+	_no_outstanding_expectations(f->me);
+}
+
 static void test_abort_only_specific_di(void *context)
 {
 	struct fixture *f = context;
@@ -986,6 +1005,75 @@ static struct test_suite *_tiny_tests(void)
 	return ts;
 }
 
+static void test_rejected_read_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct block *b = (void *) 1;
+
+	/* Exercise rejection with an unregistered fd. */
+	blkio_clear_fd(f->bio, 0);
+	T_ASSERT(!blkio_get(f->bio, 0, 0, 0, &b));
+	T_ASSERT(!b);
+	T_ASSERT(blkio_set_fd(f->bio, 0) == 0);
+
+	/* Rejected requests must not consume the prefetch queue capacity. */
+	_expect_read(f->me, 0, 0);
+	blkio_prefetch(f->bio, 0, 0);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(blkio_get(f->bio, 0, 0, 0, &b));
+	blkio_put(b);
+	_no_outstanding_expectations(f->me);
+}
+
+static void test_rejected_write_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct block *b;
+
+	T_ASSERT(blkio_get(f->bio, 0, 1, GF_ZERO, &b));
+	blkio_put(b);
+	blkio_set_last_byte(f->bio, 0, 512, 512);
+	T_ASSERT(!blkio_flush(f->bio));
+
+	/* Removing the limit must let the same dirty block be retried. */
+	blkio_unset_last_byte(f->bio, 0);
+	_expect_write(f->me, 0, 1);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(blkio_flush(f->bio));
+	_no_outstanding_expectations(f->me);
+}
+
+static bool _abort_on_internal_errors(void)
+{
+	const char *env = getenv("DM_ABORT_ON_INTERNAL_ERRORS");
+
+	return env && strcmp(env, "0");
+}
+
+static void test_read_lock_conflict(void *context)
+{
+	struct fixture *f = context;
+	struct block *b, *b2 = (void *) 1;
+
+	T_ASSERT(blkio_get(f->bio, 0, 0, GF_ZERO, &b));
+	T_ASSERT(!blkio_get(f->bio, 0, 0, 0, &b2));
+	T_ASSERT(!b2);
+	blkio_put(b);
+	blkio_abort_di(f->bio, 0);
+}
+
+static void test_write_lock_conflict(void *context)
+{
+	struct fixture *f = context;
+	struct block *b, *b2 = (void *) 1;
+
+	T_ASSERT(blkio_get(f->bio, 0, 0, GF_ZERO, &b));
+	T_ASSERT(!blkio_get(f->bio, 0, 0, GF_DIRTY, &b2));
+	T_ASSERT(!b2);
+	blkio_put(b);
+	blkio_abort_di(f->bio, 0);
+}
+
 static struct test_suite *_small_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_small_fixture_init, _small_fixture_exit);
@@ -995,6 +1083,12 @@ static struct test_suite *_small_tests(void)
 	}
 
 	T("get-reads", "blkio_get() triggers read", test_get_triggers_read);
+	T("rejected-read-pending", "rejected reads preserve queue capacity", test_rejected_read_preserves_pending);
+	T("rejected-write-pending", "rejected writes can be retried", test_rejected_write_preserves_pending);
+	if (!_abort_on_internal_errors()) {
+		T("lock-conflict-read", "read lock fails on a write locked block", test_read_lock_conflict);
+		T("lock-conflict-write", "write lock fails on a held block", test_write_lock_conflict);
+	}
 	T("reads-cached", "repeated reads are cached", test_repeated_reads_are_cached);
 	T("blocks-get-evicted", "block get evicted with many reads", test_block_gets_evicted_with_many_reads);
 	T("prefetch-reads", "prefetch issues a read", test_prefetch_issues_a_read);
@@ -1018,6 +1112,7 @@ static struct test_suite *_small_tests(void)
 	T("abort-single-block", "single block get silently discarded", test_abort_single_block);
 	T("abort-forces-read", "if a block has been discarded then another read is necc.", test_abort_forces_reread);
 	T("abort-specific-di", "abort doesn't effect other dis", test_abort_only_specific_di);
+	T("abort-held-block", "abort leaves held blocks in the cache", test_abort_held_block);
 
 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
 	  test_concurrent_reads_after_invalidate);
