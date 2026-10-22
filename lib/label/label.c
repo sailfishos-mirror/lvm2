@@ -796,7 +796,7 @@ int label_scan_setup_blkio(void)
 
 	_current_blkio_size_bytes = (uint64_t)cache_blocks * BLKIO_BLOCK_SIZE_IN_SECTORS * SECTOR_SIZE;
 
-	if (!(ioe = blkio_create_io_engine("auto")))
+	if (!(ioe = blkio_create_io_engine(io_engine())))
 		return_0;
 
 	if (!(scan_blkio = blkio_create(BLKIO_BLOCK_SIZE_IN_SECTORS, cache_blocks, ioe))) {

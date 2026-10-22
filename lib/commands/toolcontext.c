@@ -667,6 +667,7 @@ static int _process_config(struct cmd_context *cmd)
 	mode_t old_umask;
 	const char *dev_ext_info_src = NULL;
 	const char *read_ahead, *validate_metadata;
+	const char *io_engine_name;
 	struct stat st;
 	const struct dm_config_node *cn;
 	const struct dm_config_value *cv;
@@ -847,6 +848,11 @@ static int _process_config(struct cmd_context *cmd)
 		return_0;
 
 	init_io_memory_size(find_config_tree_int(cmd, global_io_memory_size_CFG, NULL));
+	io_engine_name = find_config_tree_str(cmd, global_io_engine_CFG, NULL);
+	if (!find_config_tree_node(cmd, global_io_engine_CFG, NULL) &&
+	    !find_config_tree_bool(cmd, global_use_aio_CFG, NULL))
+		io_engine_name = "sync";
+	init_io_engine(io_engine_name);
 
 	return 1;
 }
@@ -1793,8 +1799,6 @@ struct cmd_context *create_toolcontext(const char *system_dir,
 	if (!(cmd->dev_types = create_dev_types(cmd->proc_dir,
 						find_config_tree_array(cmd, devices_types_CFG, NULL))))
 		goto_out;
-
-	init_use_aio(find_config_tree_bool(cmd, global_use_aio_CFG, NULL));
 
 	if (!_init_dev_cache(cmd))
 		goto_out;

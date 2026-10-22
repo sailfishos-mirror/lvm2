@@ -14,7 +14,6 @@
 
 #include "lib/device/blkio.h"
 #include "lib/log/lvm-logging.h"
-#include "lib/misc/lvm-globals.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -125,7 +124,7 @@ int blkio_completion_status(const char *engine, enum dir d,
 /*
  * Create an I/O engine selected by hint.
  *
- * Auto-selection: libaio (if use_aio=1) -> sync (default)
+ * Auto-selection: use the best available async engine.
  * Explicit hints: "libaio" ("async", "aio"), "sync", "auto", or NULL
  * Fallback: sync always succeeds
  */
@@ -149,15 +148,13 @@ struct io_engine *blkio_create_io_engine(const char *hint)
 
 	/* Determine engine: explicit hint or auto-selection */
 	if (!hint || !*hint || !strcmp(hint, "auto")) {
-		/* Auto: use libaio if use_aio=1 */
-		if (use_aio())
-			for (i = 0; i < DM_ARRAY_SIZE(_engine_hints); i++) {
-				if (!_engine_hints[i].auto_select)
-					continue;
+		for (i = 0; i < DM_ARRAY_SIZE(_engine_hints); i++) {
+			if (!_engine_hints[i].auto_select)
+				continue;
 
-				if ((engine = _engine_hints[i].create(0)))
-					break;
-			}
+			if ((engine = _engine_hints[i].create(0)))
+				break;
+		}
 	} else {
 		for (i = 0; i < DM_ARRAY_SIZE(_engine_hints); i++) {
 			if (!strcmp(hint, _engine_hints[i].name)) {
