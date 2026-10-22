@@ -1014,6 +1014,7 @@ static struct block *_new_block(struct blkio *bio, int di, block_address i, bool
 	b->di = di;
 	b->index = i;
 	b->ref_count = 0;
+	b->write_locked = false;
 	b->error = 0;
 
 	if (!_block_insert(b)) {
@@ -1060,10 +1061,13 @@ static struct block *_lookup_or_read_block(struct blkio *bio,
 	struct block *b = _block_lookup(bio, di, i);
 
 	if (b) {
-		// FIXME: this is insufficient.  We need to also catch a read
-		// lock of a write locked block.  Ref count needs to distinguish.
+		if (b->write_locked && !(flags & (GF_DIRTY | GF_ZERO))) {
+			log_error(INTERNAL_ERROR "blkio concurrent read lock attempted on write locked block.");
+			return NULL;
+		}
+
 		if (b->ref_count && (flags & (GF_DIRTY | GF_ZERO))) {
-			log_warn("concurrent write lock attempted.");
+			log_error(INTERNAL_ERROR "blkio concurrent write lock attempted on held block.");
 			return NULL;
 		}
 
@@ -1299,6 +1303,9 @@ bool blkio_get(struct blkio *bio, int di, block_address index,
 			bio->nr_locked++;
 		b->ref_count++;
 
+		if (flags & (GF_DIRTY | GF_ZERO))
+			b->write_locked = true;
+
 		*result = b;
 		return true;
 	}
@@ -1318,8 +1325,10 @@ static void _put_ref(struct block *b)
 	}
 
 	b->ref_count--;
-	if (!b->ref_count)
+	if (!b->ref_count) {
+		b->write_locked = false;
 		b->bio->nr_locked--;
+	}
 }
 
 void blkio_put(struct block *b)

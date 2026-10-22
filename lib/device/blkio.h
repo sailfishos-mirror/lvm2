@@ -60,6 +60,7 @@ struct block {
 
 	unsigned flags;
 	unsigned ref_count;
+	bool write_locked;
 	int error;
 	enum dir io_dir;
 };
@@ -120,6 +121,10 @@ void blkio_prefetch(struct blkio *bio, int di, block_address index);
 
 /*
  * Returns true on success.
+ *
+ * GF_DIRTY and GF_ZERO take an exclusive lock on the block.  A second
+ * dirty/zero get of a held block fails, as does a read of a block that is
+ * currently write locked.
  */
 bool blkio_get(struct blkio *bio, int di, block_address index,
 	       unsigned flags, struct block **result);
