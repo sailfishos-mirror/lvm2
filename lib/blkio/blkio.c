@@ -25,16 +25,6 @@
 #include <unistd.h>
 
 
-// Assumes the list is not empty.
-static inline struct dm_list *_list_pop(struct dm_list *head)
-{
-	struct dm_list *l;
-
-	l = head->n;
-	dm_list_del(l);
-	return l;
-}
-
 /*----------------------------------------------------------------*/
 
 #define MIN_BLOCKS 16
@@ -235,12 +225,16 @@ static void _exit_free_list(struct blkio *bio)
 static struct blkio_block *_alloc_block(struct blkio *bio)
 {
 	struct blkio_block *b;
+	struct dm_list *l;
 
-	if (dm_list_empty(&bio->free))
+	/* Remove the first element from the free list and return it. */
+	if (!(l = dm_list_first(&bio->free)))
 		return NULL;
 
-	b = dm_list_struct_base(_list_pop(&bio->free), struct blkio_block, list);
+	b = dm_list_item(l, struct blkio_block);
+	dm_list_del(&b->list);
 	bio->nr_free--;
+
 	return b;
 }
 
