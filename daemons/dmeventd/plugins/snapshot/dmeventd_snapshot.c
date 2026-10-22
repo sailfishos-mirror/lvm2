@@ -184,7 +184,7 @@ static void _snapshot_terminal(struct dso_state *state, struct dm_task *dmt,
 	_remove(dm_task_get_uuid(dmt));
 #endif
 	if ((ret = pthread_kill(pthread_self(), SIGALRM)) && (ret != ESRCH))
-		log_sys_error("pthread_kill", "self");
+		log_error("pthread_kill self failed: %s.", strerror(ret));
 }
 
 /*
@@ -266,7 +266,7 @@ void process_event(struct dm_task *dmt,
 		log_info("Dropping monitoring of fully provisioned snapshot %s.",
 			 device);
 		if ((ret = pthread_kill(pthread_self(), SIGALRM)) && (ret != ESRCH))
-			log_sys_error("pthread_kill", "self");
+			log_error("pthread_kill self failed: %s.", strerror(ret));
 		goto out;
 	}
 

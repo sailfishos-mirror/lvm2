@@ -596,7 +596,7 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
 	 * applications should nevertheless handle a possible error return).
 	 */
 	if ((r = pthread_attr_init(&attr)) != 0) {
-		log_sys_error("pthread_attr_init", "");
+		log_error("pthread_attr_init failed: %s.", strerror(r));
 		return -r;
 	}
 
@@ -614,7 +614,7 @@ static int _pthread_create_smallstack(pthread_t *t, void *(*fun)(void *), void *
 	}
 
 	if ((r = pthread_create(t, &attr, fun, arg)))
-		log_sys_error("pthread_create", "");
+		log_error("pthread_create failed: %s.", strerror(r));
 
 	pthread_attr_destroy(&attr);
 
@@ -1219,13 +1219,15 @@ static int _reset_pending_signal(int signal)
 	sigset_t prev_mask, mask, pending;
 	struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
 	int r = 1;
+	int ret;
 
 	sigemptyset(&mask);
 	sigaddset(&mask, signal);
 
 	/* The signal must be blocked before it can be consumed */
-	if (pthread_sigmask(SIG_BLOCK, &mask, &prev_mask) != 0) {
-		log_sys_error("pthread_sigmask", "block signal");
+	if ((ret = pthread_sigmask(SIG_BLOCK, &mask, &prev_mask))) {
+		log_error("pthread_sigmask failed to block signal: %s.",
+			  strerror(ret));
 		return 0; /* What better */
 	}
 
@@ -1240,8 +1242,9 @@ static int _reset_pending_signal(int signal)
 	}
 
 	/* Restore the process's original sigmask */
-	if (pthread_sigmask(SIG_SETMASK, &prev_mask, NULL) < 0) {
-		log_sys_error("pthread_sigmask", "restore signal");
+	if ((ret = pthread_sigmask(SIG_SETMASK, &prev_mask, NULL))) {
+		log_error("pthread_sigmask failed to restore signal mask: %s.",
+			  strerror(ret));
 		return 0;
 	}
 
@@ -1256,6 +1259,7 @@ static int _event_wait(struct thread_status *thread)
 	int ret = DM_WAIT_RETRY;
 	struct dm_info info;
 	int task_result;
+	int r;
 
 	_unlock_thread(thread);
 	/* TODO: audit libdm thread usage */
@@ -1267,16 +1271,18 @@ static int _event_wait(struct thread_status *thread)
 	sigemptyset(&old);
 	sigemptyset(&set);
 	sigaddset(&set, SIGALRM);
-	if (pthread_sigmask(SIG_UNBLOCK, &set, &old) != 0) {
-		log_sys_error("pthread_sigmask", "unblock alarm");
+	if ((r = pthread_sigmask(SIG_UNBLOCK, &set, &old))) {
+		log_warn("WARNING: pthread_sigmask failed to unblock alarm: %s.",
+			 strerror(r));
 		_lock_thread(thread);
 		return ret; /* What better */
 	}
 
 	task_result = dm_task_run(thread->wait_task);
 
-	if (pthread_sigmask(SIG_SETMASK, &old, NULL) != 0)
-		log_sys_error("pthread_sigmask", "block alarm");
+	if ((r = pthread_sigmask(SIG_SETMASK, &old, NULL)))
+		log_warn("WARNING: pthread_sigmask failed to restore signal mask: %s.",
+			 strerror(r));
 
 	_lock_thread(thread);
 
@@ -2589,8 +2595,9 @@ static void _cleanup_unused_threads(void)
 
 		DEBUGLOG("Destroying Thr %lx.", (unsigned long) thread->thread);
 
-		if (pthread_join(thread->thread, NULL))
-			log_sys_debug("pthread_join", "");
+		if ((ret = pthread_join(thread->thread, NULL)))
+			log_warn("WARNING: pthread_join failed: %s.",
+				 strerror(ret));
 
 		_free_thread_status(thread);
 		_lock_mutex();
@@ -2609,6 +2616,7 @@ static void _init_thread_signals(void)
 {
 	sigset_t my_sigset;
 	struct sigaction act = { .sa_handler = _sig_alarm };
+	int r;
 
 	if (sigaction(SIGALRM, &act, NULL))
 		log_sys_debug("sigaction", "SIGALRM");
@@ -2620,8 +2628,8 @@ static void _init_thread_signals(void)
 	sigdelset(&my_sigset, SIGHUP);
 	sigdelset(&my_sigset, SIGQUIT);
 
-	if (pthread_sigmask(SIG_BLOCK, &my_sigset, NULL))
-		log_sys_debug("pthread_sigmask", "SIG_BLOCK");
+	if ((r = pthread_sigmask(SIG_BLOCK, &my_sigset, NULL)))
+		log_warn("WARNING: pthread_sigmask failed: %s.", strerror(r));
 }
 
 /*
@@ -3393,11 +3401,14 @@ int main(int argc, char *argv[])
 		pthread_mutex_unlock(&_timeout_mutex);
 	else {
 		pthread_t thread_id = _timeout_thread_id;
+		int r;
+
 		_exit_now = DM_EXITING;
 		pthread_cond_signal(&_timeout_cond);  /* Wake it up to check exit */
 		pthread_mutex_unlock(&_timeout_mutex);
-		if (pthread_join(thread_id, NULL))
-			log_sys_debug("pthread_join", "timeout thread");
+		if ((r = pthread_join(thread_id, NULL)))
+			log_warn("WARNING: pthread_join timeout thread failed: %s.",
+				 strerror(r));
 	}
 
 	pthread_cond_destroy(&_timeout_cond);
