@@ -34,16 +34,6 @@
 
 #define FD_TABLE_INC 1024
 
-// Assumes the list is not empty.
-static inline struct dm_list *_list_pop(struct dm_list *head)
-{
-	struct dm_list *l;
-
-	l = head->n;
-	dm_list_del(l);
-	return l;
-}
-
 //----------------------------------------------------------------
 
 #define MIN_BLOCKS 16
@@ -238,12 +228,14 @@ static struct block *_alloc_block(struct blkio *bio)
 {
 	struct block *b;
 
-	if (dm_list_empty(&bio->free))
-		return NULL;
+	/* Remove the first element from the free list and return it. */
+	dm_list_iterate_items(b, &bio->free) {
+		dm_list_del(&b->list);
+		bio->nr_free--;
+		return b;
+	}
 
-	b = dm_list_struct_base(_list_pop(&bio->free), struct block, list);
-	bio->nr_free--;
-	return b;
+	return NULL;
 }
 
 static void _free_block(struct block *b)

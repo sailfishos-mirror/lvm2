@@ -37,16 +37,6 @@ static const char *_async_dir(int opcode)
 	return (opcode == IO_CMD_PREAD) ? "read" : "write";
 }
 
-// Assumes the list is not empty.
-static inline struct dm_list *_list_pop(struct dm_list *head)
-{
-	struct dm_list *l;
-
-	l = head->n;
-	dm_list_del(l);
-	return l;
-}
-
 //----------------------------------------------------------------
 
 struct control_block {
@@ -94,14 +84,15 @@ static struct control_block *_cb_alloc(struct cb_set *cbs, void *context)
 {
 	struct control_block *cb;
 
-	if (dm_list_empty(&cbs->free))
-		return NULL;
+	/* Remove the first element from the free list and return it. */
+	dm_list_iterate_items(cb, &cbs->free) {
+		dm_list_del(&cb->list);
+		cb->context = context;
+		dm_list_add(&cbs->allocated, &cb->list);
+		return cb;
+	}
 
-	cb = dm_list_item(_list_pop(&cbs->free), struct control_block);
-	cb->context = context;
-	dm_list_add(&cbs->allocated, &cb->list);
-
-	return cb;
+	return NULL;
 }
 
 static void _cb_free(struct cb_set *cbs, struct control_block *cb)
