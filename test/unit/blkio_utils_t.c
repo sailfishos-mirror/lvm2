@@ -98,7 +98,7 @@ static void *_fix_init(struct io_engine *engine)
 	f->bio = blkio_create(bsize / 512, NR_BLOCKS, engine);
 	T_ASSERT(f->bio);
 
-	f->di = blkio_set_fd(f->fd);
+	f->di = blkio_set_fd(f->bio, f->fd);
 
 	return f;
 }
@@ -124,7 +124,7 @@ static void _fix_exit(void *fixture)
 	struct fixture *f = fixture;
 
 	if (f) {
-		blkio_clear_fd(f->di);
+		blkio_clear_fd(f->bio, f->di);
 		blkio_destroy(f->bio);
 		(void) close(f->fd);
 		(void) unlink(f->fname);

@@ -354,7 +354,7 @@ static struct fixture *_fixture_init(sector_t block_size, unsigned nr_cache_bloc
 	 * fd table entry before calling engine->issue().
 	 */
 	for (i = 0; i < 1024; i++)
-		T_ASSERT(blkio_set_fd(i) == (int) i);
+		T_ASSERT(blkio_set_fd(f->bio, i) == (int) i);
 
 	return f;
 }

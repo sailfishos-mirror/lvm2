@@ -148,7 +148,7 @@ unsigned blkio_max_prefetches(struct blkio *bio);
  * something like this:
  *
  * dm_list_iterate_items (dev, &devices) {
- *	dev->blkio_di = blkio_set_fd(dev->blkio_fd);
+ *	dev->blkio_di = blkio_set_fd(bio, dev->blkio_fd);
  *	if (dev->blkio_di == -1)
  *		fail();
  * }
@@ -157,7 +157,7 @@ unsigned blkio_max_prefetches(struct blkio *bio);
  *	blkio_prefetch(bio, dev->blkio_di, block);
  *
  * dm_list_iterate_items (dev, &devices) {
- *	if (!blkio_get(bio, dev->blkio_di, block, &b))
+ *	if (!blkio_get(bio, dev->blkio_di, block, 0, &b))
  *		fail();
  *
  *	process_block(b);
@@ -231,8 +231,8 @@ void blkio_unset_last_byte(struct blkio *bio, int di);
 
 /*----------------------------------------------------------------*/
 
-int blkio_set_fd(int fd); /* returns di, or -1 on failure */
-void blkio_clear_fd(int di);
-int blkio_change_fd(int di, int fd);
+int blkio_set_fd(struct blkio *bio, int fd); /* returns di, or -1 on failure */
+void blkio_clear_fd(struct blkio *bio, int di);
+int blkio_change_fd(struct blkio *bio, int di, int fd);
 
 #endif

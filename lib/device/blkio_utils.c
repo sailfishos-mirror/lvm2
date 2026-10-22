@@ -20,12 +20,17 @@ static bool _byte_range_to_block_range(struct blkio *bio, uint64_t start, size_t
 				       block_address *bb, block_address *be)
 {
 	block_address block_size = blkio_block_sectors(bio) << SECTOR_SHIFT;
+	uint64_t end;
 
 	if ((uint64_t)len > UINT64_MAX - start)
 		return false;
 
+	end = start + (uint64_t) len;
+	if (end > UINT64_MAX - (block_size - 1))
+		return false;
+
 	*bb = start / block_size;
-	*be = (start + len + block_size - 1) / block_size;
+	*be = (end + block_size - 1) / block_size;
 	return true;
 }
 

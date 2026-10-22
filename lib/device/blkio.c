@@ -33,18 +33,6 @@
 #include <sys/user.h>
 
 #define FD_TABLE_INC 1024
-static int _fd_table_size = 0;
-static int *_fd_table = NULL;
-
-static inline int _di_valid(int di)
-{
-	if (di < 0 || di >= _fd_table_size) {
-		log_error(INTERNAL_ERROR "blkio invalid di %d (fd table size %d).", di, _fd_table_size);
-		return 0;
-	}
-
-	return 1;
-}
 
 // Assumes the list is not empty.
 static inline struct dm_list *_list_pop(struct dm_list *head)
@@ -135,6 +123,9 @@ struct blkio {
 
 	struct radix_tree *rtree;
 
+	int *fd_table;
+	int fd_table_size;
+
 	/*
 	 * Statistics
 	 */
@@ -145,6 +136,16 @@ struct blkio {
 	unsigned write_misses;
 	unsigned prefetches;
 };
+
+static inline int _di_valid(struct blkio *bio, int di)
+{
+	if (di < 0 || di >= bio->fd_table_size) {
+		log_error(INTERNAL_ERROR "blkio invalid di %d (fd table size %d).", di, bio->fd_table_size);
+		return 0;
+	}
+
+	return 1;
+}
 
 //----------------------------------------------------------------
 
@@ -465,13 +466,12 @@ static void _issue_low_level(struct block *b, enum dir d)
 	bio->nr_io_pending++;
 	dm_list_move(&bio->io_pending, &b->list);
 
-	if (b->di >= _fd_table_size) {
-		log_error("blkio device index %d out of range.", b->di);
+	if (!_di_valid(bio, b->di)) {
 		_complete_io(b, -EIO);
 		return;
 	}
 
-	fd = _fd_table[b->di];
+	fd = bio->fd_table[b->di];
 	if (fd < 0) {
 		log_error("blkio no fd for device index %d.", b->di);
 		_complete_io(b, -EIO);
@@ -763,18 +763,13 @@ struct blkio *blkio_create(sector_t block_sectors, unsigned nr_cache_blocks,
 	if (!_init_free_list(bio, nr_cache_blocks, _pagesize))
 		goto bad;
 
-	_fd_table_size = FD_TABLE_INC;
+	bio->fd_table_size = FD_TABLE_INC;
 
-	if (!(_fd_table = malloc(sizeof(int) * _fd_table_size))) {
-		if (bio->engine->destroy(bio->engine))
-			_exit_free_list(bio);
-		radix_tree_destroy(bio->rtree);
-		free(bio);
-		return NULL;
-	}
+	if (!(bio->fd_table = malloc(sizeof(int) * bio->fd_table_size)))
+		goto bad;
 
-	for (i = 0; i < _fd_table_size; i++)
-		_fd_table[i] = -1;
+	for (i = 0; i < bio->fd_table_size; i++)
+		bio->fd_table[i] = -1;
 
 	return bio;
 
@@ -782,6 +777,7 @@ bad:
 	_exit_free_list(bio);
 	if (bio->rtree)
 		radix_tree_destroy(bio->rtree);
+	free(bio->fd_table);
 	free(bio);
 
 bad_engine:
@@ -811,10 +807,8 @@ void blkio_destroy(struct blkio *bio)
 			 (unsigned long long) bio->nr_cache_blocks);
 
 	radix_tree_destroy(bio->rtree);
+	free(bio->fd_table);
 	free(bio);
-	free(_fd_table);
-	_fd_table = NULL;
-	_fd_table_size = 0;
 }
 
 sector_t blkio_block_sectors(struct blkio *bio)
@@ -836,7 +830,7 @@ void blkio_prefetch(struct blkio *bio, int di, block_address index)
 {
 	struct block *b;
 
-	if (!_di_valid(di))
+	if (!_di_valid(bio, di))
 		return;
 
 	b = _block_lookup(bio, di, index);
@@ -868,8 +862,8 @@ bool blkio_get(struct blkio *bio, int di, block_address index,
 
 	*result = NULL;
 
-	if (!_di_valid(di))
-		goto bad;
+	if (!_di_valid(bio, di))
+		return false;
 
 	b = _lookup_or_read_block(bio, di, index, flags);
 	if (b) {
@@ -893,7 +887,6 @@ bool blkio_get(struct blkio *bio, int di, block_address index,
 		*result = b;
 		return true;
 	}
-bad:
 
 	log_error("blkio failed to get block %llu di %d.", (unsigned long long) index, di);
 	return false;
@@ -983,7 +976,7 @@ static bool _invalidate_block(struct blkio *bio, struct block *b)
 
 bool blkio_invalidate(struct blkio *bio, int di, block_address index)
 {
-	if (!_di_valid(di))
+	if (!_di_valid(bio, di))
 		return false;
 
 	return _invalidate_block(bio, _block_lookup(bio, di, index));
@@ -1109,16 +1102,16 @@ void blkio_unset_last_byte(struct blkio *bio, int di)
 	}
 }
 
-int blkio_set_fd(int fd)
+int blkio_set_fd(struct blkio *bio, int fd)
 {
 	int *new_table = NULL;
 	int new_size = 0;
 	int i;
 
  retry:
-	for (i = 0; i < _fd_table_size; i++) {
-		if (_fd_table[i] == -1) {
-			_fd_table[i] = fd;
+	for (i = 0; i < bio->fd_table_size; i++) {
+		if (bio->fd_table[i] == -1) {
+			bio->fd_table[i] = fd;
 			return i;
 		}
 	}
@@ -1127,19 +1120,19 @@ int blkio_set_fd(int fd)
 	if (new_size)
 		return -1;
 
-	new_size = _fd_table_size + FD_TABLE_INC;
+	new_size = bio->fd_table_size + FD_TABLE_INC;
 
-	new_table = realloc(_fd_table, sizeof(int) * new_size);
+	new_table = realloc(bio->fd_table, sizeof(int) * new_size);
 	if (!new_table) {
 		log_error("Cannot extend blkio fd table.");
 		return -1;
 	}
 
-	for (i = _fd_table_size; i < new_size; i++)
+	for (i = bio->fd_table_size; i < new_size; i++)
 		new_table[i] = -1;
 
-	_fd_table = new_table;
-	_fd_table_size = new_size;
+	bio->fd_table = new_table;
+	bio->fd_table_size = new_size;
 
 	goto retry;
 }
@@ -1150,17 +1143,17 @@ int blkio_set_fd(int fd)
  * the caller should be smart enough to not do that.)
  */
 
-void blkio_clear_fd(int di)
+void blkio_clear_fd(struct blkio *bio, int di)
 {
-	if (!_di_valid(di))
+	if (!_di_valid(bio, di))
 		return;
-	_fd_table[di] = -1;
+	bio->fd_table[di] = -1;
 }
 
-int blkio_change_fd(int di, int fd)
+int blkio_change_fd(struct blkio *bio, int di, int fd)
 {
-	if (!_di_valid(di))
+	if (!_di_valid(bio, di))
 		return 0;
-	_fd_table[di] = fd;
+	bio->fd_table[di] = fd;
 	return 1;
 }
