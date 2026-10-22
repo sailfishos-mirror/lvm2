@@ -88,6 +88,7 @@ static void _clear_flags(struct blkio_block *b, unsigned bits)
 enum block_flags {
 	BF_IO_PENDING = (1 << 0),
 	BF_DIRTY = (1 << 1),
+	BF_CLEAN = (1 << 2),
 };
 
 struct blkio {
@@ -119,6 +120,8 @@ struct blkio {
 	 * Lists that categorize the blocks.
 	 */
 	unsigned nr_locked;
+	unsigned nr_free;
+	unsigned nr_clean;
 	unsigned nr_dirty;
 	unsigned nr_io_pending;
 
@@ -217,6 +220,8 @@ static bool _init_free_list(struct blkio *bio, unsigned count, unsigned pgsize)
 		dm_list_add(&bio->free, &b->list);
 	}
 
+	bio->nr_free = count;
+
 	return true;
 }
 
@@ -228,26 +233,36 @@ static void _exit_free_list(struct blkio *bio)
 
 static struct blkio_block *_alloc_block(struct blkio *bio)
 {
+	struct blkio_block *b;
+
 	if (dm_list_empty(&bio->free))
 		return NULL;
 
-	return dm_list_struct_base(_list_pop(&bio->free), struct blkio_block, list);
+	b = dm_list_struct_base(_list_pop(&bio->free), struct blkio_block, list);
+	bio->nr_free--;
+	return b;
 }
 
 static void _free_block(struct blkio_block *b)
 {
 	dm_list_add(&b->bio->free, &b->list);
+	b->bio->nr_free++;
 }
 
 /*----------------------------------------------------------------
  * Clean/dirty list management.
- * Always use these methods to ensure nr_dirty_ is correct.
+ * Always use these methods to ensure nr_dirty and nr_clean are correct.
  *--------------------------------------------------------------*/
 
 static void _unlink_block(struct blkio_block *b)
 {
 	if (_test_flags(b, BF_DIRTY))
 		b->bio->nr_dirty--;
+
+	if (_test_flags(b, BF_CLEAN)) {
+		b->bio->nr_clean--;
+		_clear_flags(b, BF_CLEAN);
+	}
 
 	dm_list_del(&b->list);
 }
@@ -259,8 +274,11 @@ static void _link_block(struct blkio_block *b)
 	if (_test_flags(b, BF_DIRTY)) {
 		dm_list_add(&bio->dirty, &b->list);
 		bio->nr_dirty++;
-	} else
+	} else {
 		dm_list_add(&bio->clean, &b->list);
+		bio->nr_clean++;
+		_set_flags(b, BF_CLEAN);
+	}
 }
 
 /*----------------------------------------------------------------
@@ -632,11 +650,15 @@ static struct blkio_block *_new_block(struct blkio *bio, int di, block_address_t
 		if ((b = _claim_free_block(bio)))
 			return _init_block(b, di, i);
 
-		if (dm_list_empty(&bio->io_pending))
-			_writeback(bio, WRITEBACK_BATCH_BLOCKS);
+		if (dm_list_empty(&bio->io_pending) &&
+		    !_writeback(bio, WRITEBACK_BATCH_BLOCKS)) {
+			log_debug("blkio no new blocks for di %d index %llu.",
+				  di, (unsigned long long) i);
+			return NULL;
+		}
 
 		if (!_wait_all(bio))
-			return NULL;
+			return_NULL;
 
 		if (dm_list_size(&bio->errored) >= bio->max_io) {
 			log_debug("blkio no new blocks for di %d index %llu with >%u errors.",
@@ -737,19 +759,17 @@ static struct blkio_block *_lookup_or_read_block(struct blkio *bio,
 	return b;
 }
 
+static unsigned _nr_available_blocks(struct blkio *bio)
+{
+	return bio->nr_free + bio->nr_clean;
+}
+
 static void _preemptive_writeback(struct blkio *bio)
 {
-	// FIXME: this ignores those blocks that are in the error state.  Track
-	// nr_clean instead?
-	unsigned nr_available;
+	unsigned nr_available = _nr_available_blocks(bio);
 
-	if (bio->nr_dirty <= bio->nr_io_pending)
-		return;
-
-	nr_available = bio->nr_cache_blocks - (bio->nr_dirty - bio->nr_io_pending);
 	if (nr_available < (WRITEBACK_LOW_THRESHOLD_PERCENT * bio->nr_cache_blocks / 100))
 		_writeback(bio, (WRITEBACK_HIGH_THRESHOLD_PERCENT * bio->nr_cache_blocks / 100) - nr_available);
-
 }
 
 /*----------------------------------------------------------------
