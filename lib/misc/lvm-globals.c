@@ -22,7 +22,6 @@
 static int _verbose_level = VERBOSE_BASE_LEVEL;
 static int _silent = 0;
 static int _test = 0;
-static int _use_aio = 0;
 static int _md_filtering = 0;
 static int _internal_filtering = 0;
 static int _fwraid_filtering = 0;
@@ -66,11 +65,6 @@ void init_test(int level)
 	if (!_test && level)
 		log_warn("TEST MODE: Metadata will NOT be updated and volumes will not be (de)activated.");
 	_test = level;
-}
-
-void init_use_aio(int useaio)
-{
-	_use_aio = useaio;
 }
 
 void init_md_filtering(int level)
@@ -231,11 +225,6 @@ int error_message_produced(void)
 int test_mode(void)
 {
 	return _test;
-}
-
-int use_aio(void)
-{
-	return _use_aio;
 }
 
 int md_filtering(void)
