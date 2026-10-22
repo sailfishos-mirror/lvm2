@@ -1364,8 +1364,8 @@ static bool _invalidate_block(struct blkio *bio, struct block *b)
 	if (!b)
 		return true;
 
-	if (_test_flags(b, BF_IO_PENDING))
-		_wait_specific(b);
+	if (_test_flags(b, BF_IO_PENDING) && !_wait_specific(b))
+		return false;
 
 	if (b->ref_count) {
 		log_warn("blkio invalidate: block (%d, %llu) still held.",
@@ -1375,10 +1375,12 @@ static bool _invalidate_block(struct blkio *bio, struct block *b)
 
 	if (_test_flags(b, BF_DIRTY)) {
 		_issue_write(b);
-		_wait_specific(b);
+
+		if (!_wait_specific(b))
+			return false;
 
 		if (b->error)
-        		return false;
+			return false;
 	}
 
 	_recycle_block(bio, b);
