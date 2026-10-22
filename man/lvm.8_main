@@ -54,6 +54,15 @@ path of \fBlvm\fP.
 .P
 Additional hyphens within option names are ignored.  For example,
 \fB--readonly\fP and \fB--read-only\fP are both accepted.
+.P
+LVM reads and writes devices through an I/O engine selected by the
+\fBglobal/io_engine\fP configuration setting: \fBauto\fP (the default),
+\fBsync\fP, \fBlibaio\fP, \fBthreads\fP, or \fBiouring\fP.
+\fBlibaio\fP and \fBiouring\fP are available only when LVM is built
+with the required libraries.  The deprecated \fBglobal/use_aio\fP
+setting is used only when \fBio_engine\fP is not set;
+\fBuse_aio=0\fP selects synchronous I/O.  See \fBlvmconfig\fP(8) for
+descriptions of these settings.
 .
 .SH BUILT-IN COMMANDS
 .
