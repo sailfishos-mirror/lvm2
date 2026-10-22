@@ -93,6 +93,7 @@ struct blkio_block {
 
 	unsigned flags;
 	unsigned ref_count;
+	bool write_locked;
 	int error;
 	enum blkio_dir io_dir;
 };
@@ -129,7 +130,9 @@ void blkio_prefetch(struct blkio *bio, int di, block_address_t index);
  * Returns true on success.
  *
  * flags is 0 for a read-only reference, or a set of enum blkio_get_flags
- * asking for a zero filled or dirty block.
+ * asking for a zero filled or dirty block.  Those take an exclusive lock on
+ * the block: a second dirty/zero get of a held block fails, as does a read
+ * of a block that is currently write locked.
  */
 bool blkio_get(struct blkio *bio, int di, block_address_t index,
 	       unsigned flags, struct blkio_block **result);

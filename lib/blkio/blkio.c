@@ -1011,6 +1011,7 @@ static struct blkio_block *_init_block(struct blkio_block *b, int di,
 	b->di = di;
 	b->index = i;
 	b->ref_count = 0;
+	b->write_locked = false;
 	b->error = 0;
 
 	if (!_block_insert(b)) {
@@ -1076,9 +1077,17 @@ static void _zero_block(struct blkio_block *b)
 	_set_flags(b, BF_DIRTY);
 }
 
+/*
+ * A get that carries either of these flags takes the block for writing.
+ */
+static inline bool _is_write(unsigned flags)
+{
+	return (flags & (GF_DIRTY | GF_ZERO)) != 0;
+}
+
 static void _hit(struct blkio_block *b, unsigned flags)
 {
-	if (flags & (GF_ZERO | GF_DIRTY))
+	if (_is_write(flags))
 		b->bio->write_hits++;
 	else
 		b->bio->read_hits++;
@@ -1086,7 +1095,7 @@ static void _hit(struct blkio_block *b, unsigned flags)
 
 static void _miss(struct blkio *bio, unsigned flags)
 {
-	if (flags & (GF_ZERO | GF_DIRTY))
+	if (_is_write(flags))
 		bio->write_misses++;
 	else
 		bio->read_misses++;
@@ -1096,63 +1105,57 @@ static struct blkio_block *_lookup_or_read_block(struct blkio *bio,
 				       int di, block_address_t i,
 				       unsigned flags)
 {
+	bool is_write = _is_write(flags);
 	struct blkio_block *b = _block_lookup(bio, di, i);
 
 	if (b) {
-		// FIXME: this is insufficient.  We need to also catch a read
-		// lock of a write locked block.  Ref count needs to distinguish.
-		if (b->ref_count && (flags & (GF_DIRTY | GF_ZERO))) {
-			log_warn("concurrent write lock attempted.");
+		if (b->write_locked && !is_write) {
+			log_error(INTERNAL_ERROR "blkio concurrent read lock attempted on write locked block.");
 			return NULL;
 		}
 
-		if (_test_flags(b, BF_IO_PENDING)) {
+		if (b->ref_count && is_write) {
+			log_error(INTERNAL_ERROR "blkio concurrent write lock attempted on held block.");
+			return NULL;
+		}
+
+		if (_test_flags(b, BF_IO_PENDING))
 			_miss(bio, flags);
-			if (!_wait_specific(b))
-				return NULL;
-
-		} else
+		else
 			_hit(b, flags);
-
-		_unlink_block(b);
-
-		if (flags & GF_ZERO)
-			_zero_block(b);
 
 	} else {
 		_miss(bio, flags);
 
-		b = _new_block(bio, di, i);
-		if (b) {
-			if (flags & GF_ZERO)
-				_zero_block(b);
+		if (!(b = _new_block(bio, di, i)))
+			return_NULL;
 
-			else {
-				_issue_read(b);
-
-				/*
-				 * On failure the read is still on io_pending;
-				 * its completion owns the block and will unlink it.
-				 */
-				if (!_wait_specific(b))
-					return NULL;
-
-				// The block is no longer pending; blkio_get()
-				// deals with any read error.
-				_unlink_block(b);
-			}
-		}
+		/* A block that is going to be zeroed needs no read. */
+		if (!(flags & GF_ZERO))
+			_issue_read(b);
 	}
 
-	if (b) {
-		if (flags & (GF_DIRTY | GF_ZERO))
-			_set_flags(b, BF_DIRTY);
+	/*
+	 * An I/O may still be in flight, either from a prefetch or from the
+	 * read just issued.  While it is pending its completion owns the
+	 * block and will unlink it, so wait before touching the data.  A
+	 * failed read is not reported here: once the block is no longer
+	 * pending blkio_get() inspects b->error.
+	 */
+	if (!_wait_specific(b))
+		return_NULL;
 
-		_link_block(b);
-		return b;
-	}
+	_unlink_block(b);
 
-	return NULL;
+	/* _zero_block() marks the block dirty itself. */
+	if (flags & GF_ZERO)
+		_zero_block(b);
+	else if (flags & GF_DIRTY)
+		_set_flags(b, BF_DIRTY);
+
+	_link_block(b);
+
+	return b;
 }
 
 static void _preemptive_writeback(struct blkio *bio)
@@ -1378,6 +1381,9 @@ bool blkio_get(struct blkio *bio, int di, block_address_t index,
 			bio->nr_locked++;
 		b->ref_count++;
 
+		if (flags & (GF_DIRTY | GF_ZERO))
+			b->write_locked = true;
+
 		*result = b;
 		return true;
 	}
@@ -1397,8 +1403,10 @@ static void _put_ref(struct blkio_block *b)
 	}
 
 	b->ref_count--;
-	if (!b->ref_count)
+	if (!b->ref_count) {
+		b->write_locked = false;
 		b->bio->nr_locked--;
+	}
 }
 
 void blkio_put(struct blkio_block *b)
