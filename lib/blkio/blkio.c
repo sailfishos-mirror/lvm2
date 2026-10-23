@@ -935,12 +935,17 @@ static bool _wait_all(struct blkio *bio)
 	return true;
 }
 
+/*
+ * A failed wait may be just an interrupted wait, so report success if
+ * the completion still arrived.  If b is still pending, the caller must
+ * leave it on io_pending; its completion will unlink it.
+ */
 static bool _wait_specific(struct blkio_block *b)
 {
 	while (_test_flags(b, BF_IO_PENDING))
 		if (!_wait_io(b->bio))
-			return false;
-	return true;
+			break;
+	return !_test_flags(b, BF_IO_PENDING);
 }
 
 static unsigned _writeback(struct blkio *bio, unsigned count)
@@ -1124,12 +1129,16 @@ static struct blkio_block *_lookup_or_read_block(struct blkio *bio,
 
 			else {
 				_issue_read(b);
-				if (!_wait_specific(b)) {
-					_unlink_block(b);
-					return NULL;
-				}
 
-				// we know the block is clean and unerrored.
+				/*
+				 * On failure the read is still on io_pending;
+				 * its completion owns the block and will unlink it.
+				 */
+				if (!_wait_specific(b))
+					return NULL;
+
+				// The block is no longer pending; blkio_get()
+				// deals with any read error.
 				_unlink_block(b);
 			}
 		}
