@@ -952,8 +952,11 @@ static unsigned _writeback(struct blkio *bio, unsigned count)
 		if (actual == count)
 			break;
 
-		// We can't writeback anything that's still in use.
-		if (!b->ref_count) {
+		/*
+		 * We can't writeback anything that's not dirty or still in
+		 * use.
+		 */
+		if (_test_flags(b, BF_DIRTY) && !b->ref_count) {
 			_issue_write(b);
 			actual++;
 		}
@@ -1401,9 +1404,18 @@ void blkio_put(struct blkio_block *b)
 
 bool blkio_flush(struct blkio *bio)
 {
-	// Only dirty data is on the errored list, since bad read blocks get
-	// recycled straight away.  So we put these back on the dirty list, and
-	// try and rewrite everything.
+	struct blkio_block *b, *tmp;
+
+	/*
+	 * Failed reads have no dirty data to write back, so recycle them.
+	 * Failed writes are still dirty; put them back on the dirty list
+	 * and retry.
+	 */
+	dm_list_iterate_items_safe (b, tmp, &bio->errored) {
+		if (!_test_flags(b, BF_DIRTY))
+			_recycle_block(b);
+	}
+
 	dm_list_splice(&bio->dirty, &bio->errored);
 
 	/*
@@ -1417,7 +1429,7 @@ bool blkio_flush(struct blkio *bio)
 	_writeback(bio, bio->nr_cache_blocks);
 
 	if (!_wait_all(bio))
-		return false;
+		return_false;
 
 	return dm_list_empty(&bio->errored);
 }
@@ -1473,7 +1485,7 @@ static bool _writeback_v(struct radix_tree_iterator *it,
 {
 	struct blkio_block *b = v.ptr;
 
-	if (_test_flags(b, BF_DIRTY))
+	if (_test_flags(b, BF_DIRTY) && !b->ref_count)
 		_issue_write(b);
 
 	return true;
