@@ -82,6 +82,7 @@ struct alloc_state {
 	uint32_t log_area_count_still_needed;	/* Number of areas still needing to be allocated for the log */
 	uint32_t allocated;	/* Total number of extents allocated so far */
 	uint32_t num_positional_areas;	/* Number of parallel allocations that must be contiguous/cling */
+	uint32_t pvs_excluded_as_parallel; /* Set if a PV was skipped because it already holds a parallel image of the LV */
 };
 
 struct lv_names {
@@ -3104,8 +3105,10 @@ static int _find_some_parallel_space(struct alloc_handle *ah,
 				/* FIXME Split into log and non-log parallel_pvs and only check the log ones if log_iteration? */
 				/* (I've temporarily disabled the check.) */
 				/* Avoid PVs used by existing parallel areas */
-				if (!log_iteration_count && parallel_pvs && _pv_is_parallel(pvm->pv, parallel_pvs, ah->cling_tag_list_cn))
+				if (!log_iteration_count && parallel_pvs && _pv_is_parallel(pvm->pv, parallel_pvs, ah->cling_tag_list_cn)) {
+					alloc_state->pvs_excluded_as_parallel++;
 					goto next_pv;
+				}
 
 				/*
 				 * Avoid PVs already set aside for log.
@@ -3398,6 +3401,7 @@ static int _allocate(struct alloc_handle *ah,
 	struct alloc_state alloc_state;
 
 	alloc_state.allocated = lv ? lv->le_count : 0;
+	alloc_state.pvs_excluded_as_parallel = 0;
 
 	if (alloc_state.allocated >= ah->new_extents && !ah->log_area_count) {
 		log_warn("_allocate called with no work to do!");
@@ -3507,6 +3511,20 @@ static int _allocate(struct alloc_handle *ah,
 
 	if (alloc_state.allocated != ah->new_extents) {
 		if (!ah->approx_alloc) {
+			/*
+			 * If nothing was allocated and the only candidate PV(s) were
+			 * skipped because they already hold a parallel image of this
+			 * LV (e.g. a pvmove destination that is also a sibling
+			 * RAID/mirror leg), say so instead of reporting a generic
+			 * extent shortfall.
+			 */
+			if (!alloc_state.allocated && alloc_state.pvs_excluded_as_parallel) {
+				log_error("No free space available on usable device%s for the allocation: "
+					  "already used by another image of logical volume %s.",
+					  dm_list_size(allocatable_pvs) == 1 ? "" : "s",
+					  lv ? lv->name : "");
+				goto out;
+			}
 			log_error("Insufficient suitable %sallocatable extents "
 				  "for logical volume %s: %u more required",
 				  can_split ? "" : "contiguous ",
