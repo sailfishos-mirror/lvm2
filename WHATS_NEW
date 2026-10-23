@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Remove orphaned pvmove LV when force-removing a RAID LV locked for pvmove.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
   Accept transient or incomplete dm-raid status during repair and reduction.
