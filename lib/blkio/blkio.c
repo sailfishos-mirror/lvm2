@@ -1491,25 +1491,29 @@ static bool _writeback_v(struct radix_tree_iterator *it,
 	return true;
 }
 
-static bool _invalidate_v(struct radix_tree_iterator *it,
-                          const void *kb, size_t keylen, union radix_value v)
+static bool _check_invalidate_v(struct radix_tree_iterator *it,
+				const void *kb, size_t keylen, union radix_value v)
 {
 	struct blkio_block *b = v.ptr;
 	struct invalidate_iterator *iit = container_of(it, struct invalidate_iterator, it);
-
-	if (b->error || _test_flags(b, BF_DIRTY)) {
-		log_warn("WARNING: blkio invalidate: block (%d, %llu) still dirty.",
-			 b->di, (unsigned long long) b->index);
-		iit->success = false;
-		return true;
-	}
 
 	if (b->ref_count) {
 		log_warn("WARNING: blkio invalidate: block (%d, %llu) still held.",
 			 b->di, (unsigned long long) b->index);
 		iit->success = false;
-		return true;
+	} else if (_test_flags(b, BF_DIRTY)) {
+		log_warn("WARNING: blkio invalidate: block (%d, %llu) still dirty.",
+			 b->di, (unsigned long long) b->index);
+		iit->success = false;
 	}
+
+	return true;
+}
+
+static bool _invalidate_v(struct radix_tree_iterator *it,
+                          const void *kb, size_t keylen, union radix_value v)
+{
+	struct blkio_block *b = v.ptr;
 
 	_unlink_block(b);
 	_free_block(b);
@@ -1535,13 +1539,17 @@ bool blkio_invalidate_di(struct blkio *bio, int di)
 		return false;
 
 	it.success = true;
-	it.it.visit = _invalidate_v;
+	it.it.visit = _check_invalidate_v;
 	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
 
-	if (it.success)
-		(void) radix_tree_remove_prefix(bio->rtree, k.bytes, sizeof(k.parts.di));
+	if (!it.success)
+		return false;
 
-	return it.success;
+	it.it.visit = _invalidate_v;
+	radix_tree_iterate(bio->rtree, k.bytes, sizeof(k.parts.di), &it.it);
+	(void) radix_tree_remove_prefix(bio->rtree, k.bytes, sizeof(k.parts.di));
+
+	return true;
 }
 
 /*----------------------------------------------------------------*/
