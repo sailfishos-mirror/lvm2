@@ -16,16 +16,40 @@
 
 /*----------------------------------------------------------------*/
 
+/*
+ * The number of bytes one cache block holds.  Every byte range walk needs it
+ * to turn a byte offset into a block index and an offset within that block.
+ */
+static size_t _block_bytes(struct blkio *bio)
+{
+	return (size_t) blkio_block_sectors(bio) << SECTOR_SHIFT;
+}
+
+/*
+ * Map a byte range to the block range it touches.  be is the exclusive end
+ * and may be NULL when the caller only needs the first block.
+ */
 static bool _byte_range_to_block_range(struct blkio *bio, uint64_t start, size_t len,
 				       block_address_t *bb, block_address_t *be)
 {
-	size_t block_bytes = (size_t) blkio_block_sectors(bio) << SECTOR_SHIFT;
+	const size_t block_bytes = _block_bytes(bio);
+	uint64_t end;
 
-	if ((uint64_t)len > UINT64_MAX - start)
+	if ((uint64_t) len > UINT64_MAX - start) {
+		log_error("blkio byte range at %llu len %llu wraps around.",
+			  (unsigned long long) start, (unsigned long long) len);
 		return false;
+	}
 
+	end = start + (uint64_t) len;
 	*bb = start / block_bytes;
-	*be = (start + len + block_bytes - 1) / block_bytes;
+	/*
+	 * Round the exclusive end up using the remainder, avoiding overflow
+	 * from adding block_bytes - 1.  Only round nonempty requests so that
+	 * zero-length ranges have bb == be even when start is unaligned.
+	 */
+	if (be)
+		*be = end / block_bytes + (len && (end % block_bytes));
 	return true;
 }
 
@@ -42,35 +66,6 @@ void blkio_prefetch_bytes(struct blkio *bio, int di, uint64_t start, size_t len)
 }
 
 /*----------------------------------------------------------------*/
-
-bool blkio_read_bytes(struct blkio *bio, int di, uint64_t start, size_t len, void *data)
-{
-	struct blkio_block *b;
-	block_address_t bb, be;
-	size_t block_bytes = blkio_block_sectors(bio) << SECTOR_SHIFT;
-	size_t block_offset = start % block_bytes;
-	size_t blen;
-
-	blkio_prefetch_bytes(bio, di, start, len);
-
-	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
-		return false;
-
-	for (; bb < be; bb++) {
-		if (!blkio_get(bio, di, bb, 0, &b))
-			return false;
-
-		blen = min(block_bytes - block_offset, len);
-		memcpy(data, ((unsigned char *) b->data) + block_offset, blen);
-		blkio_put(b);
-
-		block_offset = 0;
-		len -= blen;
-		data = ((unsigned char *) data) + blen;
-	}
-
-	return true;
-}
 
 bool blkio_invalidate_bytes(struct blkio *bio, int di, uint64_t start, size_t len)
 {
@@ -90,8 +85,10 @@ bool blkio_invalidate_bytes(struct blkio *bio, int di, uint64_t start, size_t le
 
 /*----------------------------------------------------------------*/
 
-// Writing bytes and zeroing bytes are very similar, so we factor out
-// this common code.
+/*
+ * Reads, writes and sets walk a byte range the same way, so the common
+ * walk takes the per-block work as callbacks.
+ */
 
 struct updater;
 
@@ -103,22 +100,31 @@ struct updater {
 	partial_update_fn partial_fn;
 	whole_update_fn whole_fn;
 	void *data;
+	bool prefetch_whole;	/* Zero for writes and sets; see _update_bytes() */
 };
 
 static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 {
 	struct blkio *bio = u->bio;
-	block_address_t bb, be;
-	size_t block_bytes = blkio_block_sectors(bio) << SECTOR_SHIFT;
+	block_address_t bb;
+	size_t block_bytes = _block_bytes(bio);
 	size_t block_offset = start % block_bytes;
 	uint64_t nr_whole;
 
-	if (!_byte_range_to_block_range(bio, start, len, &bb, &be))
+	if (!len)
+		return true;
+
+	if (!_byte_range_to_block_range(bio, start, len, &bb, NULL))
 		return_false;
 
-	// If the last block is partial, we will require a read, so let's
-	// prefetch it.
-	if ((start + len) % block_bytes)
+	/*
+	 * Reading needs the whole range now, so issue it all before waiting
+	 * on the first block.  Otherwise only a partial last block needs a
+	 * read, so prefetch just that block.
+	 */
+	if (u->prefetch_whole)
+		blkio_prefetch_bytes(bio, di, start, len);
+	else if ((start + len) % block_bytes)
 		blkio_prefetch(bio, di, (start + len) / block_bytes);
 
 	/* First block may be partial */
@@ -134,7 +140,7 @@ static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 		bb++;
 	}
 
-	// Now we write out a set of whole blocks
+	/* Now process a set of whole blocks */
 	nr_whole = len / block_bytes;
 	if (!u->whole_fn(u, di, bb, bb + nr_whole))
 		return_false;
@@ -145,8 +151,59 @@ static bool _update_bytes(struct updater *u, int di, uint64_t start, size_t len)
 	if (!len)
 		return true;
 
-	// Finally we write a partial end block
-	return u->partial_fn(u, di, bb, 0, len);
+	/* Finally process a partial end block */
+	if (!u->partial_fn(u, di, bb, 0, len))
+		return_false;
+
+	return true;
+}
+
+/*----------------------------------------------------------------*/
+
+static bool _read_partial(struct updater *u, int di, block_address_t bb,
+                          uint64_t offset, size_t len)
+{
+	struct blkio_block *b;
+
+	if (!blkio_get(u->bio, di, bb, 0, &b))
+		return_false;
+
+	memcpy(u->data, ((unsigned char *) b->data) + offset, len);
+	u->data = ((unsigned char *) u->data) + len;
+
+	blkio_put(b);
+	return true;
+}
+
+static bool _read_whole(struct updater *u, int di, block_address_t bb, block_address_t be)
+{
+	struct blkio_block *b;
+	size_t block_bytes = _block_bytes(u->bio);
+
+	for (; bb < be; bb++) {
+		if (!blkio_get(u->bio, di, bb, 0, &b))
+			return_false;
+
+		memcpy(u->data, b->data, block_bytes);
+		u->data = ((unsigned char *) u->data) + block_bytes;
+
+		blkio_put(b);
+	}
+
+	return true;
+}
+
+bool blkio_read_bytes(struct blkio *bio, int di, uint64_t start, size_t len, void *data)
+{
+	struct updater u = {
+		.bio = bio,
+		.partial_fn = _read_partial,
+		.whole_fn = _read_whole,
+		.data = data,
+		.prefetch_whole = true,
+	};
+
+	return _update_bytes(&u, di, start, len);
 }
 
 /*----------------------------------------------------------------*/
@@ -159,10 +216,8 @@ static bool _write_partial(struct updater *u, int di, block_address_t bb,
 	if (!blkio_get(u->bio, di, bb, GF_DIRTY, &b))
 		return_false;
 
-	if (u->data) {
-		memcpy(((unsigned char *) b->data) + offset, u->data, len);
-		u->data = ((unsigned char *) u->data) + len;
-	}
+	memcpy(((unsigned char *) b->data) + offset, u->data, len);
+	u->data = ((unsigned char *) u->data) + len;
 
 	blkio_put(b);
 	return true;
@@ -171,7 +226,7 @@ static bool _write_partial(struct updater *u, int di, block_address_t bb,
 static bool _write_whole(struct updater *u, int di, block_address_t bb, block_address_t be)
 {
 	struct blkio_block *b;
-	size_t block_bytes = blkio_block_sectors(u->bio) << SECTOR_SHIFT;
+	size_t block_bytes = _block_bytes(u->bio);
 
 	for (; bb < be; bb++) {
 		/*
@@ -227,7 +282,7 @@ static bool _set_whole(struct updater *u, int di, block_address_t bb, block_addr
 {
 	struct blkio_block *b;
 	uint8_t val = *((uint8_t *) u->data);
-	uint64_t len = blkio_block_sectors(u->bio) << SECTOR_SHIFT;
+	size_t len = _block_bytes(u->bio);
 
 	for (; bb < be; bb++) {
 		if (!blkio_get(u->bio, di, bb, GF_ZERO, &b))
