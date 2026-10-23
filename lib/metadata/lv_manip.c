@@ -7907,27 +7907,14 @@ int lv_remove_single(struct cmd_context *cmd, struct logical_volume *lv,
 	}
 
 	if (lv_is_locked(lv)) {
-		struct lv_segment *lvseg;
-		uint32_t s;
-
 		if (force < DONT_PROMPT) {
 			log_error("Can't remove locked logical volume %s.", display_lvname(lv));
 			return 0;
 		}
 		log_warn("WARNING: Removing locked logical volume %s.", display_lvname(lv));
 
-		/* Find pvmove LV this locked participant uses so we can clean it up */
-		dm_list_iterate_items(lvseg, &lv->segments) {
-			for (s = 0; s < lvseg->area_count; s++) {
-				if (seg_type(lvseg, s) == AREA_LV &&
-				    lv_is_pvmove(seg_lv(lvseg, s))) {
-					lv_mirr = seg_lv(lvseg, s);
-					break;
-				}
-			}
-			if (lv_mirr)
-				break;
-		}
+		/* Find pvmove LV (e.g. via RAID rimage segments) to clean up if orphaned */
+		lv_mirr = (struct logical_volume *) find_pvmove_lv_in_lv(lv);
 	}
 
 	if (!lockd_lvremove_lock(cmd, lv, &lockd_other, &other_unlock))
