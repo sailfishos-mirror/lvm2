@@ -221,10 +221,16 @@ struct engine_hint {
 #define ENGINE_URING NULL
 #endif
 
+#ifdef HAVE_LIBAIO_H
+#define ENGINE_LIBAIO create_async_io_engine
+#else
+#define ENGINE_LIBAIO NULL
+#endif
+
 static const struct engine_hint _engine_hints[] = {
 	{ "iouring", { "uring" },        ENGINE_URING,             true },
 	{ "threads", { "" },             create_threads_io_engine, true },
-	{ "libaio",  { "async", "aio" }, create_async_io_engine,   true },
+	{ "libaio",  { "async", "aio" }, ENGINE_LIBAIO,            true },
 	{ "sync",    { "" },             create_sync_io_engine,    false },
 };
 

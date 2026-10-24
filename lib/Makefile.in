@@ -19,7 +19,6 @@ abs_srcdir = @abs_srcdir@
 
 SOURCES =\
 	activate/activate.c \
-	blkio/async.c \
 	blkio/blkio.c \
 	blkio/byterange.c \
 	blkio/engine.c \
@@ -144,6 +143,10 @@ ifeq ("@VDO@", "internal")
   SOURCES += vdo/vdo.c
 endif
 
+ifeq ("@BUILD_LIBAIO@", "yes")
+  SOURCES += blkio/async.c
+endif
+
 ifeq ("@BUILD_LIBURING@", "yes")
   SOURCES += blkio/uring.c
 endif
@@ -154,7 +157,7 @@ LIB_STATIC = $(LIB_NAME).a
 CFLOW_LIST = $(SOURCES)
 CFLOW_LIST_TARGET = $(LIB_NAME).cflow
 
-PROGS_CFLAGS = $(BLKID_CFLAGS) $(LIBNVME_CFLAGS) $(UDEV_CFLAGS) $(URING_CFLAGS)
+PROGS_CFLAGS = $(BLKID_CFLAGS) $(LIBNVME_CFLAGS) $(UDEV_CFLAGS) $(AIO_CFLAGS) $(URING_CFLAGS)
 
 include $(top_builddir)/make.tmpl
 

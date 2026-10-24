@@ -104,7 +104,6 @@ AC_CHECK_HEADERS([assert.h ctype.h dirent.h errno.h fcntl.h float.h \
 
 AC_CHECK_HEADERS(termios.h sys/statvfs.h sys/timerfd.h sys/vfs.h linux/magic.h linux/fiemap.h)
 AC_CHECK_HEADERS(xfs/xfs.h, LVM_NO_XFS_WARN=, LVM_NO_XFS_WARN=y, [#define _GNU_SOURCE 1])
-AC_CHECK_HEADERS(libaio.h,LVM_NEEDS_LIBAIO_WARN=,LVM_NEEDS_LIBAIO_WARN=y)
 AS_CASE(["$host_os"],
 	[linux*], [AC_CHECK_HEADERS([asm/byteorder.h linux/fs.h malloc.h], [], [AC_MSG_ERROR(bailing out)])],
 	[darwin*], [AC_CHECK_HEADERS([machine/endian.h sys/disk.h], [], [AC_MSG_ERROR(bailing out)])])
@@ -220,6 +219,8 @@ test "$exec_prefix" = "NONE" && exec_prefix='${prefix}'
 
 AC_ARG_WITH(blkid, [AS_HELP_STRING([--without-blkid], [do not build with blkid library])],
 	    [], with_blkid="yes")
+AC_ARG_WITH(libaio, [AS_HELP_STRING([--without-libaio], [do not build with libaio library])],
+	    [], with_libaio="yes")
 AC_ARG_WITH(libnvme, [AS_HELP_STRING([--without-libnvme], [do not build with libnvme library])],
 	    [], with_libnvme="yes")
 AC_ARG_WITH(liburing, [AS_HELP_STRING([--without-liburing], [do not build with liburing library])],
@@ -1946,12 +1947,23 @@ LVM_LIBAPI=$(echo "$VER" | $AWK -F '[[()]]' '{print $2}')
 AC_DEFINE_UNQUOTED(LVM_CONFIGURE_LINE, "$CONFIGURE_LINE", [configure command line used])
 
 ################################################################################
-# Allow users to override default location for libaio
-# there seems to be no pkg-config support available
-AIO_CFLAGS=${AIO_CFLAGS:-}
-AIO_LIBS=${AIO_LIBS:--laio}
+# libaio support (optional, for async io engine)
+BUILD_LIBAIO=no
+AS_IF([test "$with_libaio" != "no"],
+      [AIO_CFLAGS=${AIO_CFLAGS:-}
+       save_CPPFLAGS=$CPPFLAGS
+       CPPFLAGS="$CPPFLAGS $AIO_CFLAGS"
+       AC_CHECK_HEADERS(libaio.h,
+                        [AIO_LIBS=${AIO_LIBS:--laio}
+                         BUILD_LIBAIO=yes],
+                        [AIO_CFLAGS=
+                         AIO_LIBS=])
+       CPPFLAGS=$save_CPPFLAGS],
+      [AIO_CFLAGS=
+       AIO_LIBS=])
 AC_ARG_VAR([AIO_CFLAGS], [C compiler flags for AIO])
 AC_ARG_VAR([AIO_LIBS], [linker flags for AIO])
+AC_SUBST(BUILD_LIBAIO)
 
 ################################################################################
 # liburing support (optional, for io_uring engine)
@@ -2199,9 +2211,6 @@ AS_IF([test -n "$CACHE_CHECK_VERSION_WARN"],
 
 AS_IF([test -n "$VDO_CONFIGURE_WARN"],
       [AC_MSG_WARN([Unrecognized 'vdoformat' tool is REQUIRED for VDO logical volume creation!])])
-
-AS_IF([test -n "$LVM_NEEDS_LIBAIO_WARN"],
-      [AC_MSG_WARN([Only libdm part can be build without libaio:  make [[install_]]device-mapper])])
 
 AS_IF([test -n "$LVM_NO_XFS_WARN"],
       [AC_MSG_WARN(['lvextend --resizefs' is less capable without xfs/xfs.h (see package: xfsprogs devel)])])
