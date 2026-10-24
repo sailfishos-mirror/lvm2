@@ -139,14 +139,15 @@ _count_pread64() {
 	grep -c 'pread64(' "$1"
 }
 
-for engine in libaio iouring threads; do
-	engine_cfg="global/io_engine=\"$engine\""
+ENGINES=( $(get_io_engines "$dev1") )
 
-	# A successful command may have fallen back to sync.
-	pvs -vvv --config "$engine_cfg" >tmptest 2>&1
-	if ! grep -q "Created.*$engine" tmptest; then
+for engine in "${ENGINES[@]}"; do
+	# sync has no submission of its own to trace.
+	if [ "$engine" = sync ]; then
 		continue
 	fi
+
+	engine_cfg="global/io_engine=\"$engine\""
 
 	case "$engine" in
 	libaio)
