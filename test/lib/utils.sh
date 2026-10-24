@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (C) 2011-2012 Red Hat, Inc. All rights reserved.
+# Copyright (C) 2011-2026 Red Hat, Inc. All rights reserved.
 #
 # This copyrighted material is made available to anyone wishing to use,
 # modify, copy, or redistribute it subject to the terms and conditions
@@ -281,6 +281,34 @@ get_devs() {
 	export DEVICES
 #	local DEVS=( $(<DEVICES) )
 #	eval "$1"'=("${DEVS[@]}")'
+}
+
+# Print the io engines this build can create, probing each candidate with a
+# verbose pvs run on device $1, in the order given.  Sync needs no engine
+# setup, so it is always printed first; a requested engine that is missing
+# makes pvs fall back to it, hence the "Created ..." check.  With no
+# candidates given, every known engine is probed, so a new engine needs no
+# edit at the callers.
+get_io_engines() {
+	local dev=$1
+	local engine
+
+	shift
+	if [ $# -eq 0 ]; then
+		set -- libaio threads iouring
+	fi
+	echo sync
+	for engine in "$@"; do
+		rm -f debug.log* io_engine.log
+		pvs -vvv --config "global/io_engine=\"$engine\"" "$dev" \
+			>io_engine.log 2>&1 || true
+		if grep -q "Created.*$engine" io_engine.log debug.log* 2>/dev/null; then
+			echo "$engine"
+		fi
+	done
+
+	rm -f io_engine.log
+	return 0
 }
 
 prepare_test_vars() {
