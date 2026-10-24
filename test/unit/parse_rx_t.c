@@ -127,7 +127,9 @@ static void _parse_dump(struct dm_pool *mem, const char *pattern,
 	FILE *f;
 	size_t n;
 
-	T_ASSERT(f = tmpfile());
+	/* coverity[secure_temp] don't care */
+	f = tmpfile();
+	T_ASSERT(f);
 
 	r = rx_parse_str(mem, pattern);
 	T_ASSERT(r != NULL);

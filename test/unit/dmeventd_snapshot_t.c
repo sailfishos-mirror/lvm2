@@ -72,7 +72,9 @@ static FILE *_mounts_open(const char *path, const char *mode)
 	_mount_reads++;
 	if (!_mount_result)
 		return NULL;
-	T_ASSERT(f = tmpfile());
+	/* coverity[secure_temp] don't care */
+	f = tmpfile();
+	T_ASSERT(f);
 	fputs("malformed\n/missing /skip ext4 rw 0 0\n"
 	      "/regular /skip ext4 rw 0 0\n/other /skip ext4 rw 0 0\n"
 	      "/snapshot /test-mount ext4 rw 0 0\n", f);

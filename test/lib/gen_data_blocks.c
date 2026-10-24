@@ -125,7 +125,7 @@ static void dumpBlock(void *buf, const char *label)
       tag[i] = '.';
     }
   }
-  fprintf(stderr, "%s '%s' %u %lu + data\n", label, tag,
+  fprintf(stderr, "%s '%s' %d %lu + data\n", label, tag,
           dbh->head.streamNumber, dbh->head.blockNumber);
 }
 
@@ -234,7 +234,7 @@ static void generateBS(DataStream *pds, int n, void *buf, size_t bufSize)
 static void reportBS(DataStream *pds)
 {
   const BlockStream *pbs = container_of(pds, BlockStream, common);
-  printf("%.*s:%ld\n", TAG_SIZE, pbs->tag, pds->counter);
+  printf("%.*s:%lu\n", TAG_SIZE, pbs->tag, pds->counter);
 }
 
 /**********************************************************************/
@@ -307,7 +307,7 @@ static void generateZS(DataStream *pds  __attribute__((unused)),
 /**********************************************************************/
 static void reportZS(DataStream *pds)
 {
-  printf("ZERO:%ld\n", pds->counter);
+  printf("ZERO:%lu\n", pds->counter);
 }
 
 /**********************************************************************/

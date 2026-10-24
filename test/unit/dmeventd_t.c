@@ -114,13 +114,14 @@ static void test_fetch_unsigned_invalid(void *fixture)
 static int _parse(const char *message, struct message_data *md,
 		  struct dm_event_daemon_message *msg)
 {
-	msg->cmd = DM_EVENT_CMD_REGISTER_FOR_EVENT;
-	msg->size = strlen(message);
-	if (!(msg->data = strdup(message)))
-		return 0;
-
 	memset(md, 0, sizeof(*md));
 	md->msg = msg;
+
+	msg->cmd = DM_EVENT_CMD_REGISTER_FOR_EVENT;
+	msg->size = strlen(message);
+	free(msg->data);
+	if (!(msg->data = strdup(message)))
+		return 0;
 
 	return _parse_message(md);
 }
@@ -128,7 +129,7 @@ static int _parse(const char *message, struct message_data *md,
 static void test_parse_message_valid(void *fixture)
 {
 	struct dm_event_daemon_message msg = { 0 };
-	struct message_data md;
+	struct message_data md = { 0 };
 
 	T_ASSERT(_parse("1:1 thin /dev/vg/lv 5 20", &md, &msg));
 	T_ASSERT(md.id && !strcmp(md.id, "1:1"));
@@ -154,7 +155,7 @@ static void test_parse_message_valid(void *fixture)
 static void test_parse_message_defaults(void *fixture)
 {
 	struct dm_event_daemon_message msg = { 0 };
-	struct message_data md;
+	struct message_data md = { 0 };
 
 	/* REGISTER: mask 131073 = DM_EVENT_TIMEOUT | 1, timeout 0 */
 	T_ASSERT(_parse("1:1 thin uuid 131073 0", &md, &msg));
@@ -163,23 +164,22 @@ static void test_parse_message_defaults(void *fixture)
 	_free_message(&md);
 
 	/* REGISTER: events only (no timeout bit), timeout 0 */
-	memset(&msg, 0, sizeof(msg));
 	T_ASSERT(_parse("1:1 mirror uuid 5 0", &md, &msg));
 	T_ASSERT_EQUAL(md.events_field, 5);
 	T_ASSERT_EQUAL(md.timeout_secs, 0);
 	_free_message(&md);
 
 	/* REGISTER: nonzero timeout is kept */
-	memset(&msg, 0, sizeof(msg));
 	T_ASSERT(_parse("1:1 thin uuid 131073 30", &md, &msg));
 	T_ASSERT_EQUAL(md.timeout_secs, 30);
 	_free_message(&md);
 
 	/* SET_TIMEOUT: zero gets the default, as on main */
-	memset(&msg, 0, sizeof(msg));
 	msg.cmd = DM_EVENT_CMD_SET_TIMEOUT;
 	msg.size = strlen("1:1 thin uuid 0 0");
-	T_ASSERT((msg.data = strdup("1:1 thin uuid 0 0")));
+	free(msg.data);
+	msg.data = strdup("1:1 thin uuid 0 0");
+	T_ASSERT(msg.data);
 	memset(&md, 0, sizeof(md));
 	md.msg = &msg;
 	T_ASSERT(_parse_message(&md));
@@ -187,7 +187,6 @@ static void test_parse_message_defaults(void *fixture)
 	_free_message(&md);
 
 	/* Missing fields */
-	memset(&msg, 0, sizeof(msg));
 	T_ASSERT(_parse("1:1 thin uuid", &md, &msg));
 	T_ASSERT(!md.events_str);
 	T_ASSERT(!md.timeout_str);
@@ -199,18 +198,16 @@ static void test_parse_message_defaults(void *fixture)
 static void test_parse_message_malformed(void *fixture)
 {
 	struct dm_event_daemon_message msg = { 0 };
-	struct message_data md;
+	struct message_data md = { 0 };
 
 	T_ASSERT(!_parse("1:1 thin uuid abc 10", &md, &msg));
 	T_ASSERT(!msg.data);
 	_free_message(&md);
 
-	memset(&msg, 0, sizeof(msg));
 	T_ASSERT(!_parse("1:1 thin uuid 1 xyz", &md, &msg));
 	T_ASSERT(!msg.data);
 	_free_message(&md);
 
-	memset(&msg, 0, sizeof(msg));
 	T_ASSERT(!_parse("1:1 thin uuid 4294967296 10", &md, &msg));
 	T_ASSERT(!msg.data);
 	_free_message(&md);
@@ -223,7 +220,8 @@ static void _write_message(int fd, uint32_t cmd, const char *data)
 	uint32_t *buf;
 	ssize_t written;
 
-	T_ASSERT((buf = malloc(total)));
+	buf = malloc(total);
+	T_ASSERT(buf);
 	buf[0] = htonl(cmd);
 	buf[1] = htonl(size);
 	memcpy((char *) buf + 2 * sizeof(uint32_t), data, size);
@@ -257,8 +255,8 @@ static void test_client_read(void *fixture)
 	T_ASSERT(msg.data && !strcmp(msg.data, payload));
 
 	free(msg.data);
-	close(fds[0]);
-	close(fds[1]);
+	(void) close(fds[0]);
+	(void) close(fds[1]);
 }
 
 /*
@@ -290,8 +288,8 @@ static void test_client_read_oversized(void *fixture)
 	n = read(fds[0], buf, sizeof(buf));
 	T_ASSERT((n < 0) && ((errno == EAGAIN) || (errno == EWOULDBLOCK)));
 
-	close(fds[0]);
-	close(fds[1]);
+	(void) close(fds[0]);
+	(void) close(fds[1]);
 }
 
 struct delayed_write {
@@ -326,8 +324,8 @@ static void test_client_read_delayed_body(void *fixture)
 	T_ASSERT(!pthread_create(&writer, NULL, _write_delayed_body, &delayed));
 	ret = _client_read(&fifos, &msg);
 	T_ASSERT(!pthread_join(writer, NULL));
-	close(fds[0]);
-	close(fds[1]);
+	(void) close(fds[0]);
+	(void) close(fds[1]);
 	T_ASSERT_EQUAL(delayed.result, (ssize_t) 5);
 	T_ASSERT(ret);
 	T_ASSERT(msg.data && !strcmp(msg.data, "hello"));
@@ -348,8 +346,8 @@ static void test_client_read_header_only(void *fixture)
 	T_ASSERT_EQUAL(write(fds[1], header, sizeof(header)), (ssize_t) sizeof(header));
 	start = _get_curr_time();
 	T_ASSERT(!_client_read(&fifos, &msg));
-	close(fds[0]);
-	close(fds[1]);
+	(void) close(fds[0]);
+	(void) close(fds[1]);
 	T_ASSERT(!msg.data);
 	T_ASSERT(_get_curr_time() - start >= DM_EVENT_MSG_READ_TIMEOUT);
 }
@@ -377,8 +375,8 @@ static void test_client_write(void *fixture)
 	T_ASSERT_EQUAL(read(fds[0], payload, 2), (ssize_t) 2);
 	T_ASSERT(!strcmp(payload, "ok"));
 
-	close(fds[0]);
-	close(fds[1]);
+	(void) close(fds[0]);
+	(void) close(fds[1]);
 }
 
 static void test_client_write_oversized(void *fixture)
@@ -428,7 +426,7 @@ static void test_preloaded_fifo(void *fixture)
 	T_ASSERT(fd >= 0);
 	T_ASSERT(!fcntl(fd, F_SETFD, 0));
 	T_ASSERT(!_handle_preloaded_fifo(fd, "/dev/null"));
-	close(fd);
+	(void) close(fd);
 
 	T_ASSERT(!mkfifo(path, 0600));
 	T_ASSERT(!chmod(path, 0600));
@@ -445,7 +443,7 @@ static void test_preloaded_fifo(void *fixture)
 		T_ASSERT(!_handle_preloaded_fifo(fd, path));
 	}
 
-	close(fd);
+	(void) close(fd);
 	T_ASSERT(!unlink(path));
 	T_ASSERT(!rmdir(dir));
 }

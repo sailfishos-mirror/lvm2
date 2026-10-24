@@ -93,8 +93,8 @@ static void test_list_accepts_long_rows(void *fixture)
 	memset(resp + off, 'x', aux_len);
 	off += aux_len;
 	off += (size_t) snprintf(resp + off, sizeof(resp) - off, "\n");
-	off += (size_t) snprintf(resp + off, sizeof(resp) - off,
-				 "1: 512+512 1 test -\n");
+	(void) snprintf(resp + off, sizeof(resp) - off,
+			"1: 512+512 1 test -\n");
 
 	T_ASSERT(dm_stats_read_list(dms, resp));
 	T_ASSERT(dm_stats_get_nr_regions(dms) == 2);

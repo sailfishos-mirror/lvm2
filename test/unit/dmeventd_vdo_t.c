@@ -247,7 +247,9 @@ static void _device_error(void *fixture)
 	struct dso_state *state = fixture;
 
 	_usage(fixture, 81, 100, 1);
-	_event(fixture, DM_EVENT_DEVICE_ERROR | DM_EVENT_TIMEOUT, 2);
+	_event(fixture,
+	       (enum dm_event_mask) (DM_EVENT_DEVICE_ERROR | DM_EVENT_TIMEOUT),
+	       2);
 	T_ASSERT_EQUAL(_reads, 1);
 	T_ASSERT_EQUAL(_creates, 0);
 	T_ASSERT_EQUAL(state->percent, 0);
