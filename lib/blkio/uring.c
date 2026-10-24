@@ -18,6 +18,10 @@
 #include <errno.h>
 #include <liburing.h>
 
+#ifdef HAVE_VALGRIND
+#include <valgrind/memcheck.h>
+#endif
+
 #define URING_SUBMIT_BATCH 64
 #define URING_DRAIN_SUBMIT_RETRIES 64
 
@@ -191,10 +195,21 @@ static bool _uring_reap(struct uring_engine *e, struct io_uring_cqe *cqe,
 			return false;
 		}
 
-		if (fn)
+		if (fn) {
+#ifdef HAVE_VALGRIND
+			/*
+			 * Tell valgrind the buffer is now initialized after io_uring read.
+			 * Valgrind doesn't track io_uring's async buffer writes, so without
+			 * this annotation it reports uninitialized data even though the
+			 * kernel wrote it.
+			 */
+			if ((cqe->res >= 0) && (req->io.d == BLKIO_DIR_READ))
+				VALGRIND_MAKE_MEM_DEFINED(req->iov.iov_base, cqe->res);
+#endif
 			fn(req->context,
 			   blkio_completion_status(&e->base, &req->io,
 						   (int64_t) cqe->res));
+		}
 
 		_request_free(e, req);
 
