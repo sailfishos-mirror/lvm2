@@ -920,6 +920,11 @@ int label_scan_for_pvid(struct cmd_context *cmd, const char *pvid, struct device
 			continue;
 
 		if (!dev_read_bytes(dev, SECTOR_SIZE, LABEL_SIZE, buf)) {
+			/*
+			 * dev_read_bytes() invalidates and closes the device
+			 * on a bcache read error, but not on every failure
+			 * path, so close it here only if it is still open.
+			 */
 			label_scan_invalidate(dev);
 			goto out;
 		}
