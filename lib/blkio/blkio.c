@@ -313,7 +313,7 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
 						     const struct blkio_io *io)
 {
 	struct blkio_byte_range bytes = io->range;
-	sector_t limit_nbytes, extra_nbytes, orig_nbytes;
+	sector_t limit_nbytes, extra_nbytes;
 	struct clamped_write_range range = {
 		.valid = true,
 		.end = (io->range.offset + io->range.len) >> SECTOR_SHIFT,
@@ -374,8 +374,6 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
 		}
 	}
 
-	orig_nbytes = bytes.len;
-
 	if (extra_nbytes) {
 		log_debug_devs("Limit write at %llu len %llu to len %llu rounded to %llu.",
 			       (unsigned long long)bytes.offset,
@@ -389,23 +387,6 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
 			       (unsigned long long)bytes.len,
 			       (unsigned long long)limit_nbytes);
 		bytes.len = limit_nbytes;
-	}
-
-	/*
-	 * This shouldn't happen, the reduced+extended
-	 * bytes.len value should never be larger than the
-	 * blkio block size.
-	 */
-	if (bytes.len > orig_nbytes) {
-		log_error("Invalid adjusted write at %llu len %llu adjusted %llu limit %llu extra %llu sector_size %llu.",
-			  (unsigned long long)bytes.offset,
-			  (unsigned long long)orig_nbytes,
-			  (unsigned long long)bytes.len,
-			  (unsigned long long)limit_nbytes,
-			  (unsigned long long)extra_nbytes,
-			  (unsigned long long)bio->last_byte_sector_size);
-		range.valid = false;
-		return range;
 	}
 
 	range.end = (bytes.offset + bytes.len) >> SECTOR_SHIFT;
