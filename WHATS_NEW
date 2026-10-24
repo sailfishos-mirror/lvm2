@@ -1,5 +1,18 @@
 Version 2.03.44 - 
 ==================
+  Fix blkio invalidation of held or dirty blocks and interrupted waits.
+  Report synchronous I/O failures through the blkio completion path.
+  Release the label scan before forking the polldaemon.
+  Add configure --with/out-libaio to control async engine support.
+  Add configure --with/out-liburing to control io_uring support.
+  Add optional io_uring io engine (requires liburing, kernel 5.1+).
+  Default the I/O engine to iouring, then threads, then libaio, then sync.
+  Add pthread-based I/O engine to eliminate libaio io_destroy penalty.
+  Deprecate use_aio; use_aio=0 still selects sync I/O.
+  Add io_engine config to select the I/O engine.
+  Warn and use sync I/O when the requested I/O engine is unavailable.
+  Zero fill the tail of a short io engine read at the end of a device.
+  Drain in-flight libaio on io engine destroy.
   Preserve committed metadata when pv_write updates an existing PV.
   Use mdadm-compatible CRC-32 when detecting DDF metadata.
   Detect NVMe multipath devices and handle uncached primary devices.
