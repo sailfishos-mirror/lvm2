@@ -303,6 +303,18 @@ static void _complete_io(void *context, int err)
 	}
 }
 
+/*
+ * Round a byte count up to a whole sector so a clamped write does not end
+ * in the middle of a sector.  A count that is already sector aligned is
+ * returned unchanged.
+ */
+static uint64_t _round_up_to_sector(uint64_t nr_bytes, sector_t sector_size)
+{
+	uint64_t remainder = nr_bytes % sector_size;
+
+	return remainder ? nr_bytes + (sector_size - remainder) : nr_bytes;
+}
+
 struct clamped_write_range {
 	bool valid;
 	sector_t end;
@@ -313,7 +325,7 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
 						     const struct blkio_io *io)
 {
 	struct blkio_byte_range bytes = io->range;
-	sector_t limit_nbytes, extra_nbytes;
+	size_t limit_nbytes, rounded_nbytes, block_nbytes;
 	struct clamped_write_range range = {
 		.valid = true,
 		.end = (io->range.offset + io->range.len) >> SECTOR_SHIFT,
@@ -342,53 +354,32 @@ static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
 	 * If the blkio block offset+len goes beyond where lvm is
 	 * intending to write, then reduce the len being written
 	 * (which is the blkio block size) so we don't write past
-	 * the limit set by lvm.  If after applying the limit, the
-	 * resulting size is not a multiple of the sector size (512
-	 * or 4096) then extend the reduced size to be a multiple of
-	 * the sector size (we don't want to write partial sectors.)
+	 * the limit set by lvm.  A partial sector is never written,
+	 * so the reduced len is rounded up to a whole sector when
+	 * that does not take it past the end of the block, which is
+	 * possible because the block size is a multiple of it.
 	 */
-
-	/* Need to clamp */
 	limit_nbytes = bio->last_byte_offset - bytes.offset;
+	block_nbytes = bytes.len;
 
-	extra_nbytes = 0;
-	if (limit_nbytes % bio->last_byte_sector_size) {
-		extra_nbytes = bio->last_byte_sector_size -
-			       (limit_nbytes % bio->last_byte_sector_size);
-
-		/*
-		 * adding extra_nbytes to the reduced nbytes (limit_nbytes)
-		 * should make the final write size a multiple of the
-		 * sector size.  This should never result in a final size
-		 * larger than the blkio block size (as long as the blkio
-		 * block size is a multiple of the sector size).
-		 */
-		if (limit_nbytes + extra_nbytes > bytes.len) {
-			log_warn("WARNING: Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu.",
-				 (unsigned long long)bytes.offset,
-				 (unsigned long long)bytes.len,
-				 (unsigned long long)limit_nbytes,
-				 (unsigned long long)extra_nbytes,
-				 (unsigned long long)bio->last_byte_sector_size);
-			extra_nbytes = 0;
-		}
+	rounded_nbytes = _round_up_to_sector(limit_nbytes,
+					     bio->last_byte_sector_size);
+	if (rounded_nbytes > block_nbytes) {
+		log_warn("WARNING: Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu.",
+			 (unsigned long long)bytes.offset,
+			 (unsigned long long)block_nbytes,
+			 (unsigned long long)limit_nbytes,
+			 (unsigned long long)(rounded_nbytes - limit_nbytes),
+			 (unsigned long long)bio->last_byte_sector_size);
+		rounded_nbytes = limit_nbytes;
 	}
 
-	if (extra_nbytes) {
-		log_debug_devs("Limit write at %llu len %llu to len %llu rounded to %llu.",
-			       (unsigned long long)bytes.offset,
-			       (unsigned long long)bytes.len,
-			       (unsigned long long)limit_nbytes,
-			       (unsigned long long)(limit_nbytes + extra_nbytes));
-		bytes.len = limit_nbytes + extra_nbytes;
-	} else {
-		log_debug_devs("Limit write at %llu len %llu to len %llu.",
-			       (unsigned long long)bytes.offset,
-			       (unsigned long long)bytes.len,
-			       (unsigned long long)limit_nbytes);
-		bytes.len = limit_nbytes;
-	}
+	log_debug_devs("Limit write at %llu len %llu to len %llu.",
+		       (unsigned long long)bytes.offset,
+		       (unsigned long long)block_nbytes,
+		       (unsigned long long)rounded_nbytes);
 
+	bytes.len = rounded_nbytes;
 	range.end = (bytes.offset + bytes.len) >> SECTOR_SHIFT;
 	return range;
 }
