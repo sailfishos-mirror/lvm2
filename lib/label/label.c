@@ -700,8 +700,6 @@ static int _scan_list(struct cmd_context *cmd, struct dev_filter *f,
 			scan_failed_count++;
 			devl->dev->flags |= DEV_SCAN_NOT_READ;
 			lvmcache_del_dev(devl->dev);
-			if (bb)
-				bcache_put(bb);
 		} else {
 			/* copy the first 4k from bb that will contain label_header */
 
