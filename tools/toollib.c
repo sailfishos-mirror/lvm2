@@ -1321,6 +1321,7 @@ int get_vdo_settings(struct cmd_context *cmd,
 	int use_compression = vtp->use_compression;
 	int use_deduplication = vtp->use_deduplication;
 	int checked_lvchange;
+	uint32_t slab_size_mb;
 
 	if (updated)
 		*updated = 0;
@@ -1419,6 +1420,21 @@ int get_vdo_settings(struct cmd_context *cmd,
 	// validation of updated VDO option
 	if (!dm_vdo_validate_target_params(vtp, 0 /* vdo_size */))
 		goto_out;
+
+	/*
+	 * dm-vdo requires the slab size in 4KiB blocks to be a power of two.
+	 * Range was already validated, so the result stays within the maximum.
+	 * Only lvcreate and lvconvert set the slab size of a new VDO pool.
+	 */
+	if (!strcmp(cmd->name, "lvcreate") || !strcmp(cmd->name, "lvconvert")) {
+		slab_size_mb = round_up_pow2(vtp->slab_size_mb);
+		if (slab_size_mb != vtp->slab_size_mb) {
+			log_print_unless_silent("Rounding VDO slab size up from %s to %s (must be a power of two).",
+						display_mb_size(cmd, vtp->slab_size_mb),
+						display_mb_size(cmd, slab_size_mb));
+			vtp->slab_size_mb = slab_size_mb;
+		}
+	}
 
 	if (updated)
 		*updated = u;

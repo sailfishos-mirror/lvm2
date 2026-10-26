@@ -21,4 +21,10 @@ unsigned long gcd(unsigned long n1, unsigned long n2);
 /* Least common multiple */
 unsigned long lcm(unsigned long n1, unsigned long n2);
 
+/* Round up to the next power of two; n must not exceed 2^31 */
+static inline unsigned round_up_pow2(unsigned n)
+{
+	return (n <= 1) ? 1 : 1u << (32 - clz(n - 1));
+}
+
 #endif
