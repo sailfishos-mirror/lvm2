@@ -131,11 +131,12 @@ static inline bool blkio_engine_usable(struct io_engine *ioe)
 
 struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(unsigned queue_depth);
+struct io_engine *create_threads_io_engine(unsigned n_threads);
 
 /*
  * Create an I/O engine selected by hint.
- * hint: "auto", "libaio" (or "async"/"aio"), "sync", or NULL (defaults to
- * auto)
+ * hint: "auto", "threads", "libaio" (or "async"/"aio"), "sync", or NULL
+ * (defaults to auto)
  */
 struct io_engine *blkio_create_io_engine(const char *hint);
 
@@ -320,7 +321,8 @@ struct io_engine_layout {
 };
 
 /*
- * Passing this as the queue depth asks the engine for its own default.
+ * Passing this as the queue depth or thread count asks the engine for its
+ * own default.
  */
 #define BLKIO_ENGINE_DEFAULT 0
 

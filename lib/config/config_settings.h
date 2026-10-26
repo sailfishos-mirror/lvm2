@@ -1214,7 +1214,8 @@ cfg(global_io_engine_CFG, "io_engine", global_CFG_SECTION, CFG_DEFAULT_COMMENTED
 	"Select I/O engine for device reads and writes.\n"
 	"auto - LVM will automatically choose, may change over time.\n"
 	"sync - Use synchronous I/O. Same as deprecated use_aio=0.\n"
-	"libaio - Use async I/O via libaio.\n")
+	"libaio - Use async I/O via libaio.\n"
+	"threads - Use async I/O via pthreads.\n")
 
 cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 124), NULL, 0, NULL,
 	"Use lvmlockd for locking among hosts using LVM on shared storage.\n"

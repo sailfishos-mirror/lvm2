@@ -216,6 +216,7 @@ struct engine_hint {
 };
 
 static const struct engine_hint _engine_hints[] = {
+	{ "threads", { "" },             create_threads_io_engine, true },
 	{ "libaio",  { "async", "aio" }, create_async_io_engine,   true },
 	{ "sync",    { "" },             create_sync_io_engine,    false },
 };

@@ -24,6 +24,7 @@ SOURCES =\
 	blkio/byterange.c \
 	blkio/engine.c \
 	blkio/sync.c \
+	blkio/threads.c \
 	cache/lvmcache.c \
 	writecache/writecache.c \
 	integrity/integrity.c \
