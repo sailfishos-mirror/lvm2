@@ -15,117 +15,72 @@
 #include "lib/blkio/internal.h"
 #include "lib/misc/lvm-signal.h"
 
-#include <errno.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <unistd.h>
 
 /*----------------------------------------------------------------*/
 
-struct sync_io {
-	struct dm_list list;
+struct sync_request {
 	void *context;
 	int io_error;
 };
 
 struct sync_engine {
 	struct io_engine base;
-	struct dm_list complete;
+	struct sync_request req;
+	bool pending;
 };
 
-static struct sync_engine *_to_sync(struct io_engine *e)
+static struct sync_engine *_to_sync(struct io_engine *ioe)
 {
-	return container_of(e, struct sync_engine, base);
+	return container_of(ioe, struct sync_engine, base);
 }
 
 static bool _sync_destroy(struct io_engine *ioe)
 {
-	/* struct io_engine is the first member; free the caller's pointer. */
+	/* struct io_engine is the first member, and the one pending
+	 * completion is embedded, so both go away with the engine.  I/O is
+	 * done synchronously in issue(), so nothing can be in flight. */
 	free(ioe);
 
-	/* I/O is done synchronously in issue(); nothing can be in flight. */
 	return true;
+}
+
+static bool _sync_stop(void *arg)
+{
+	return sigint_caught();
 }
 
 static int _sync_issue(struct io_engine *ioe, const struct blkio_io *io,
 		       void *context)
 {
-	ssize_t rv;
-	off_t offset;
-	uint64_t pos = 0;
-	uint64_t len;
+	struct blkio_rw_result rw;
 	struct sync_engine *e = _to_sync(ioe);
-	struct sync_io *sio = malloc(sizeof(*sio));
-	int io_error = 0;
 
-	if (!sio) {
-		log_warn("WARNING: sync io engine unable to allocate io buffer.");
-		return -ENOMEM;
-	}
+	/* max_io() is 1, so at most one completion may be outstanding. */
+	if (e->pending)
+		return -EIO;
 
-	offset = io->range.offset;
-	len = io->range.len;
-
-	while (pos < len) {
-		if (io->d == BLKIO_DIR_READ)
-			rv = pread(io->fd, (char *)io->data + pos, len - pos, offset + pos);
-		else
-			rv = pwrite(io->fd, (char *)io->data + pos, len - pos, offset + pos);
-
-		if (rv < 0) {
-			if (errno == EAGAIN)
-				continue;
-			if (errno == EINTR && !sigint_caught())
-				continue;
-
-			log_warn("WARNING: blkio sync %s device offset %llu len %llu: %s.",
-				 blkio_dir_name(io->d), (unsigned long long)offset,
-				 (unsigned long long)(len - pos),
-				 strerror(errno));
-			io_error = -errno;
-			break;
-		}
-
-		if (rv == 0)
-			break;
-
-		pos += rv;
-	}
-
-	if (!io_error && pos < len) {
-		if (pos >= (1 << SECTOR_SHIFT)) {
-			/* minimum acceptable read is 1 sector */
-			log_debug_devs("blkio sync %s offset %llu requested %llu got %llu.",
-				       blkio_dir_name(io->d), (unsigned long long)offset,
-				       (unsigned long long)len, (unsigned long long)pos);
-		} else {
-			log_warn("WARNING: blkio sync %s offset %llu requested %llu got %llu.",
-				 blkio_dir_name(io->d), (unsigned long long)offset,
-				 (unsigned long long)len, (unsigned long long)pos);
-			io_error = -ENODATA;
-		}
-	}
+	rw = blkio_rw_loop(io, _sync_stop, NULL);
 
 	/* Always queue completion - errors reported via callback in wait() */
-	sio->context = context;
-	sio->io_error = io_error;
-	dm_list_add(&e->complete, &sio->list);
+	e->req.context = context;
+	e->req.io_error = blkio_completion_result(ioe, io, &rw);
+	e->pending = true;
 
 	return 0;
 }
 
 static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
 {
-	struct sync_io *io, *tmp;
 	struct sync_engine *e = _to_sync(ioe);
 
-	dm_list_iterate_items_safe(io, tmp, &e->complete) {
-		fn(io->context, io->io_error);
-		dm_list_del(&io->list);
-		free(io);
+	if (e->pending) {
+		e->pending = false;
+		fn(e->req.context, e->req.io_error);
 	}
 
 	return true;
@@ -145,15 +100,13 @@ struct io_engine *create_sync_io_engine(unsigned queue_depth)
 		return NULL;
 	}
 
+	e->base.name = "sync";
 	e->base.destroy = _sync_destroy;
 	e->base.issue = _sync_issue;
 	e->base.wait = _sync_wait;
 	e->base.max_io = _sync_max_io;
 
-	dm_list_init(&e->complete);
-
 	log_debug("Created sync io engine.");
 
-	/* coverity[leaked_storage] 'e' is not leaking */
 	return &e->base;
 }

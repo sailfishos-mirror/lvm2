@@ -29,6 +29,173 @@ bool blkio_engine_is_forked(pid_t creator_pid)
 
 /*----------------------------------------------------------------*/
 
+struct blkio_rw_result blkio_rw_loop(const struct blkio_io *io,
+				     bool (*stop)(void *), void *stop_arg)
+{
+	struct blkio_rw_result result = { 0 };
+	ssize_t rv;
+
+	while (result.done < io->range.len) {
+		if (stop && stop(stop_arg)) {
+			result.errnum = EINTR;
+			break;
+		}
+
+		if (io->d == BLKIO_DIR_READ)
+			rv = pread(io->fd, (char *) io->data + result.done,
+				   io->range.len - result.done,
+				   (off_t) (io->range.offset + result.done));
+		else
+			rv = pwrite(io->fd, (char *) io->data + result.done,
+				    io->range.len - result.done,
+				    (off_t) (io->range.offset + result.done));
+
+		if (rv < 0) {
+			if (errno == EAGAIN)
+				continue;
+
+			if (errno == EINTR) {
+				if (stop && stop(stop_arg)) {
+					result.errnum = EINTR;
+					break;
+				}
+				continue;
+			}
+
+			result.errnum = errno;
+			break;
+		}
+
+		if (rv == 0)
+			break;
+
+		result.done += rv;
+	}
+
+	return result;
+}
+
+static int _completion_errno(const struct io_engine *ioe,
+			     const struct blkio_io *io, int errnum)
+{
+	const char *op = blkio_dir_name(io->d);
+
+	/*
+	 * An interrupted scan is the normal way a SIGINT cancels
+	 * outstanding I/O, so it is not worth a warning for every request.
+	 */
+	if (errnum == EINTR) {
+		log_debug_devs("%s io engine %s interrupted at offset %llu.",
+			       ioe->name, op,
+			       (unsigned long long) io->range.offset);
+		return -EINTR;
+	}
+
+	log_warn("WARNING: %s io engine %s device offset %llu len %llu: %s.",
+		 ioe->name, op,
+		 (unsigned long long) io->range.offset,
+		 (unsigned long long) io->range.len,
+		 strerror(errnum));
+	return -errnum;
+}
+
+/*
+ * A short direct read is a normal end of device condition only when it
+ * still transferred a whole sector.
+ */
+static bool _at_least_one_sector(int64_t nr_bytes)
+{
+	return nr_bytes >= SECTOR_SIZE;
+}
+
+void *blkio_alloc_request_pool(const struct io_engine *proto,
+			       const struct io_engine_layout *layout,
+			       unsigned nr_requests)
+{
+	struct io_engine_pool *pool;
+	struct io_pool_link *next;
+	char *engine, *request;
+	unsigned i;
+
+	if (!(engine = zalloc(layout->engine_size +
+			      nr_requests * layout->request_size))) {
+		log_error("Failed to allocate %s io engine.", proto->name);
+		return NULL;
+	}
+
+	*(struct io_engine *) engine = *proto;
+
+	/* Thread the requests onto the free list, in allocation order. */
+	next = NULL;
+	for (i = nr_requests; i-- > 0;) {
+		request = engine + layout->requests_offset +
+			  i * layout->request_size;
+		((struct io_pool_link *) request)->next = next;
+		next = (struct io_pool_link *) request;
+	}
+
+	pool = (struct io_engine_pool *) (engine + layout->pool_offset);
+	pool->creator_pid = getpid();
+	pool->free_list = next;
+
+	return engine;
+}
+
+int blkio_completion_status(const struct io_engine *ioe,
+			    const struct blkio_io *io, int64_t result)
+{
+	const char *op = blkio_dir_name(io->d);
+
+	if (result < 0)
+		return _completion_errno(ioe, io, (int) -result);
+
+	if ((uint64_t) result >= io->range.len)
+		return 0;
+
+	/*
+	 * A direct read is truncated at the end of the device, so a short
+	 * read is a normal end of device condition.  The caller has no way
+	 * to learn about a shorter transfer, so zero fill the unread tail
+	 * of the block to keep it free of stale data when the block is
+	 * written back.  A transfer shorter than a whole sector means the
+	 * device is not behaving as expected.  A short write means part of
+	 * the dirty block was not persisted, so it is always an error.
+	 */
+	if ((io->d == BLKIO_DIR_READ) && _at_least_one_sector(result)) {
+		memset((char *) io->data + result, 0, io->range.len - result);
+		log_debug_devs("%s io engine short read zero filled %llu bytes.",
+			       ioe->name,
+			       (unsigned long long) (io->range.len - result));
+		return 0;
+	}
+
+	log_warn("WARNING: %s io engine %s offset %llu requested %llu got %llu.",
+		 ioe->name, op,
+		 (unsigned long long) io->range.offset,
+		 (unsigned long long) io->range.len,
+		 (unsigned long long) result);
+	return (io->d == BLKIO_DIR_READ) ? -ENODATA : -EIO;
+}
+
+int blkio_completion_result(const struct io_engine *ioe,
+			    const struct blkio_io *io,
+			    const struct blkio_rw_result *rw)
+{
+	if (rw->errnum) {
+		/* Report the part of the transfer that failed. */
+		struct blkio_io failed = *io;
+
+		failed.range.offset += rw->done;
+		failed.range.len -= rw->done;
+		return _completion_errno(ioe, &failed, rw->errnum);
+	}
+
+	if (rw->done < io->range.len)
+		return blkio_completion_status(ioe, io, (int64_t) rw->done);
+
+	return 0;
+}
+
 /*
  * An engine name or alias is stored inline rather than pointed to, so the
  * row stays one object.  The array is sized for the longest name in the

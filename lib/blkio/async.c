@@ -27,7 +27,7 @@
  * completed.
  */
 struct async_request {
-	struct async_request *next_free;	/* When free: link to next */
+	struct io_pool_link link;		/* When free: pool link, first */
 	void *context;				/* Caller context for the completion */
 	struct blkio_io io;			/* The transfer it carries */
 	struct iocb iocb;
@@ -39,8 +39,7 @@ struct async_engine {
 	unsigned max_io;
 	unsigned page_mask;
 	unsigned in_flight;		/* Requests handed out, not completed */
-	pid_t creator_pid;		/* PID that created the AIO context */
-	struct async_request *free_list;	/* Head of intrusive free list */
+	struct io_engine_pool pool;	/* Creator pid and free list */
 	struct io_event event[MAX_EVENT];
 	struct async_request requests[];	/* Pre-allocated requests */
 };
@@ -52,12 +51,14 @@ static struct async_engine *_to_async(struct io_engine *ioe)
 
 static struct async_request *_request_alloc(struct async_engine *e, void *context)
 {
-	struct async_request *req = e->free_list;
+	struct io_pool_link *link = blkio_pool_pop(&e->pool);
+	struct async_request *req;
 
-	if (!req)
+	if (!link)
 		return NULL;
 
-	e->free_list = req->next_free;
+	/* The link is the first member, so the two pointers are the same. */
+	req = (struct async_request *) link;
 	e->in_flight++;
 	req->context = context;
 
@@ -66,8 +67,7 @@ static struct async_request *_request_alloc(struct async_engine *e, void *contex
 
 static void _request_free(struct async_engine *e, struct async_request *req)
 {
-	req->next_free = e->free_list;
-	e->free_list = req;
+	blkio_pool_push(&e->pool, &req->link);
 	e->in_flight--;
 }
 
@@ -124,33 +124,10 @@ static bool _async_reap(struct async_engine *e, int nr, io_complete_fn fn)
 
 		req = container_of(ev->obj, struct async_request, iocb);
 
-		if (fn) {
-			if ((int) ev->res < 0) {
-				log_warn("WARNING: blkio async %s device offset %llu len %llu: %s.",
-					 blkio_dir_name(req->io.d),
-					 (unsigned long long)req->io.range.offset,
-					 (unsigned long long)req->io.range.len,
-					 strerror(-(int)ev->res));
-				fn(req->context, (int) ev->res);
-			} else if (ev->res >= req->io.range.len) {
-				fn(req->context, 0);
-			} else if (ev->res >= (1 << SECTOR_SHIFT)) {
-				/* minimum acceptable read is 1 sector */
-				log_debug_devs("blkio async %s offset %llu requested %llu got %llu.",
-					       blkio_dir_name(req->io.d),
-					       (unsigned long long)req->io.range.offset,
-					       (unsigned long long)req->io.range.len,
-					       (unsigned long long)ev->res);
-				fn(req->context, 0);
-			} else {
-				log_warn("WARNING: blkio async %s offset %llu requested %llu got %llu.",
-					 blkio_dir_name(req->io.d),
-					 (unsigned long long)req->io.range.offset,
-					 (unsigned long long)req->io.range.len,
-					 (unsigned long long)ev->res);
-				fn(req->context, -ENODATA);
-			}
-		}
+		if (fn)
+			fn(req->context,
+			   blkio_completion_status(&e->base, &req->io,
+						   (int64_t) (long) ev->res));
 
 		_request_free(e, req);
 	}
@@ -217,7 +194,7 @@ static bool _async_destroy(struct io_engine *ioe)
 	bool drained = true;
 	int r;
 
-	if (!blkio_engine_is_forked(e->creator_pid)) {
+	if (!blkio_engine_is_forked(e->pool.creator_pid)) {
 		drained = _async_drain(e);
 
 		log_debug_devs("Destroy AIO context.");
@@ -299,8 +276,20 @@ static unsigned _async_max_io(struct io_engine *ioe)
 
 struct io_engine *create_async_io_engine(unsigned queue_depth)
 {
+	static const struct io_engine proto = {
+		.name = "libaio",
+		.destroy = _async_destroy,
+		.issue = _async_issue,
+		.wait = _async_wait,
+		.max_io = _async_max_io,
+	};
+	static const struct io_engine_layout layout = {
+		.engine_size = sizeof(struct async_engine),
+		.requests_offset = offsetof(struct async_engine, requests),
+		.pool_offset = offsetof(struct async_engine, pool),
+		.request_size = sizeof(struct async_request),
+	};
 	struct async_engine *e;
-	unsigned i;
 	int pagesize;
 	int r;
 
@@ -311,25 +300,11 @@ struct io_engine *create_async_io_engine(unsigned queue_depth)
 		return NULL;
 	}
 
-	/* Allocate engine with pre-allocated request pool */
-	if (!(e = zalloc(sizeof(*e) + queue_depth * sizeof(*e->requests)))) {
-		log_warn("WARNING: libaio io engine failed to allocate engine.");
-		return NULL;
-	}
+	if (!(e = blkio_alloc_request_pool(&proto, &layout, queue_depth)))
+		return_NULL;
 
-	e->base.name = "libaio";
-	e->base.destroy = _async_destroy;
-	e->base.issue = _async_issue;
-	e->base.wait = _async_wait;
-	e->base.max_io = _async_max_io;
 	e->max_io = queue_depth;
 	e->page_mask = (unsigned) pagesize - 1;
-	e->creator_pid = getpid();
-
-	/* Build intrusive free list; the last next_free stays NULL from zalloc */
-	e->free_list = &e->requests[0];
-	for (i = 0; i < queue_depth - 1; i++)
-		e->requests[i].next_free = &e->requests[i + 1];
 
 	r = io_setup(queue_depth, &e->aio_context);
 	if (r < 0) {
