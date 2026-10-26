@@ -15,24 +15,15 @@
 #include "lib/blkio/internal.h"
 
 #include "lib/datastruct/radix-tree.h"
-#include "lib/misc/lvm-signal.h"
 
 #include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <libaio.h>
 #include <unistd.h>
-#include <sys/user.h>
 
-#define SECTOR_SHIFT 9L
-
-#define FD_TABLE_INC 1024
 static int _fd_table_size = 0;
 static int *_fd_table = NULL;
 
@@ -44,14 +35,6 @@ static inline int _di_valid(int di)
 	}
 
 	return 1;
-}
-
-
-/*----------------------------------------------------------------*/
-
-static void _log_sys_warn(const char *call, int err)
-{
-	log_warn("WARNING: %s failed: %s.", call, strerror(err));
 }
 
 // Assumes the list is not empty.
@@ -66,586 +49,10 @@ static inline struct dm_list *_list_pop(struct dm_list *head)
 
 /*----------------------------------------------------------------*/
 
-struct control_block {
-	struct dm_list list;
-	void *context;
-	struct iocb cb;
-};
-
-struct cb_set {
-	struct dm_list free;
-	struct dm_list allocated;
-	struct control_block vec[];
-};
-
-static struct cb_set *_cb_set_create(unsigned nr)
-{
-	unsigned i;
-	struct cb_set *cbs = malloc(sizeof(*cbs) + nr * sizeof(*cbs->vec));
-
-	if (!cbs)
-		return NULL;
-
-	dm_list_init(&cbs->free);
-	dm_list_init(&cbs->allocated);
-
-	for (i = 0; i < nr; i++)
-		dm_list_add(&cbs->free, &cbs->vec[i].list);
-
-	return cbs;
-}
-
-static void _cb_set_destroy(struct cb_set *cbs)
-{
-	// We know this is always called after a wait_all.  So there should
-	// never be in flight IO.
-	if (!dm_list_empty(&cbs->allocated)) {
-		// bail out
-		log_warn("WARNING: Async io still in flight.");
-		return;
-	}
-
-	free(cbs);
-}
-
-static struct control_block *_cb_alloc(struct cb_set *cbs, void *context)
-{
-	struct control_block *cb;
-
-	if (dm_list_empty(&cbs->free))
-		return NULL;
-
-	cb = dm_list_item(_list_pop(&cbs->free), struct control_block);
-	cb->context = context;
-	dm_list_add(&cbs->allocated, &cb->list);
-
-	return cb;
-}
-
-static void _cb_free(struct cb_set *cbs, struct control_block *cb)
-{
-	dm_list_del(&cb->list);
-	dm_list_add_h(&cbs->free, &cb->list);
-}
-
-static struct control_block *_iocb_to_cb(struct iocb *icb)
-{
-	return dm_list_struct_base(icb, struct control_block, cb);
-}
-
-/*----------------------------------------------------------------*/
-
-struct async_engine {
-	struct io_engine base;
-	io_context_t aio_context;
-	struct cb_set *cbs;
-	unsigned page_mask;
-	pid_t aio_context_pid; /* PID that created this AIO context */
-};
-
-static struct async_engine *_to_async(struct io_engine *e)
-{
-	return container_of(e, struct async_engine, base);
-}
-
-static void _async_destroy(struct io_engine *ioe)
-{
-	int r;
-	struct async_engine *e = _to_async(ioe);
-
-	_cb_set_destroy(e->cbs);
-
-	/*
-	 * Only call io_destroy() if we're in the same process that created
-	 * the AIO context. After fork(), the child inherits the parent's
-	 * aio_context value but must not call io_destroy() on it.
-	 */
-	if (e->aio_context) {
-		if (e->aio_context_pid != getpid())
-			log_debug_devs("Skipping AIO context destroy for different pid.");
-		else {
-			log_debug_devs("Destroy AIO context.");
-			r = io_destroy(e->aio_context); // really slow (~40ms)
-			if (r < 0)
-				_log_sys_warn("io_destroy", -r);
-		}
-	}
-
-	free(e);
-}
-
-static int _last_byte_di;
-static uint64_t _last_byte_offset;
-static size_t _last_byte_sector_size;
-
-static bool _async_issue(struct io_engine *ioe, enum blkio_dir d, int di,
-			 sector_t sb, sector_t se, void *data, void *context)
-{
-	int r;
-	struct iocb *cb_array[1];
-	struct control_block *cb;
-	struct async_engine *e = _to_async(ioe);
-	sector_t offset;
-	sector_t nbytes;
-	sector_t limit_nbytes;
-	sector_t orig_nbytes;
-	sector_t extra_nbytes = 0;
-
-	if (((uintptr_t) data) & e->page_mask) {
-		log_warn("misaligned data buffer");
-		return false;
-	}
-
-	offset = sb << SECTOR_SHIFT;
-	nbytes = (se - sb) << SECTOR_SHIFT;
-
-	/*
-	 * If blkio block goes past where lvm wants to write, then clamp it.
-	 */
-	if ((d == BLKIO_DIR_WRITE) && _last_byte_offset && (di == _last_byte_di)) {
-		if (offset > _last_byte_offset) {
-			log_error("Limit write at %llu len %llu beyond last byte %llu",
-				  (unsigned long long)offset,
-				  (unsigned long long)nbytes,
-				  (unsigned long long)_last_byte_offset);
-			return false;
-		}
-
-		/*
-		 * If the blkio block offset+len goes beyond where lvm is
-		 * intending to write, then reduce the len being written
-		 * (which is the blkio block size) so we don't write past
-		 * the limit set by lvm.  If after applying the limit, the
-		 * resulting size is not a multiple of the sector size (512
-		 * or 4096) then extend the reduced size to be a multiple of
-		 * the sector size (we don't want to write partial sectors.)
-		 */
-		if (offset + nbytes > _last_byte_offset) {
-			limit_nbytes = _last_byte_offset - offset;
-
-			if (limit_nbytes % _last_byte_sector_size) {
-				extra_nbytes = _last_byte_sector_size - (limit_nbytes % _last_byte_sector_size);
-
-				/*
-				 * adding extra_nbytes to the reduced nbytes (limit_nbytes)
-				 * should make the final write size a multiple of the
-				 * sector size.  This should never result in a final size
-				 * larger than the blkio block size (as long as the blkio
-				 * block size is a multiple of the sector size).
-				 */
-				if (limit_nbytes + extra_nbytes > nbytes) {
-					log_warn("Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu",
-						 (unsigned long long)offset,
-						 (unsigned long long)nbytes,
-						 (unsigned long long)limit_nbytes,
-						 (unsigned long long)extra_nbytes,
-						 (unsigned long long)_last_byte_sector_size);
-					extra_nbytes = 0;
-				}
-			}
-
-			orig_nbytes = nbytes;
-
-			if (extra_nbytes) {
-				log_debug("Limit write at %llu len %llu to len %llu rounded to %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes,
-					  (unsigned long long)(limit_nbytes + extra_nbytes));
-				nbytes = limit_nbytes + extra_nbytes;
-			} else {
-				log_debug("Limit write at %llu len %llu to len %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes);
-				nbytes = limit_nbytes;
-			}
-
-			/*
-			 * This shouldn't happen, the reduced+extended
-			 * nbytes value should never be larger than the
-			 * blkio block size.
-			 */
-			if (nbytes > orig_nbytes) {
-				log_error("Invalid adjusted write at %llu len %llu adjusted %llu limit %llu extra %llu sector_size %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)orig_nbytes,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes,
-					  (unsigned long long)extra_nbytes,
-					  (unsigned long long)_last_byte_sector_size);
-				return false;
-			}
-		}
-	}
-
-	cb = _cb_alloc(e->cbs, context);
-	if (!cb) {
-		log_warn("couldn't allocate control block");
-		return false;
-	}
-
-	memset(&cb->cb, 0, sizeof(cb->cb));
-
-	cb->cb.aio_fildes = (int) _fd_table[di];
-	cb->cb.u.c.buf = data;
-	cb->cb.u.c.offset = offset;
-	cb->cb.u.c.nbytes = nbytes;
-	cb->cb.aio_lio_opcode = (d == BLKIO_DIR_READ) ? IO_CMD_PREAD : IO_CMD_PWRITE;
-
-#if 0
-	if (d == BLKIO_DIR_READ) {
-		log_debug("io R off %llu bytes %llu di %d fd %d",
-			  (unsigned long long)cb->cb.u.c.offset,
-			  (unsigned long long)cb->cb.u.c.nbytes,
-			  di, _fd_table[di]);
-	} else {
-		log_debug("io W off %llu bytes %llu di %d fd %d",
-			  (unsigned long long)cb->cb.u.c.offset,
-			  (unsigned long long)cb->cb.u.c.nbytes,
-			  di, _fd_table[di]);
-	}
-#endif
-
-	cb_array[0] = &cb->cb;
-	do {
-		r = io_submit(e->aio_context, 1, cb_array);
-	} while (r == -EAGAIN);
-
-	if (r < 0) {
-		_cb_free(e->cbs, cb);
-		return false;
-	}
-
-	return true;
-}
-
-/*
- * MAX_IO is returned to the layer above via blkio_max_prefetches() which
- * tells the caller how many devices to submit io for concurrently.  There will
- * be an open file descriptor for each of these, so keep it low enough to avoid
- * reaching the default max open file limit (1024) when there are over 1024
- * devices being scanned.
- */
-
-#define MAX_IO 256
-#define MAX_EVENT 64
-
-static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
-{
-	int i, r;
-	struct io_event event[MAX_EVENT] = { };
-	struct control_block *cb;
-	struct async_engine *e = _to_async(ioe);
-
-	/*
-	 * Retry on EINTR from stray signals, but stop if an LVM interrupt
-	 * signal (SIGINT/SIGTERM via sigint_allow()) has been caught.
-	 */
-	do {
-		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
-	} while (r == -EINTR && !sigint_caught());
-
-	if (r < 0) {
-		if (r == -EINTR)
-			stack;
-		else
-			_log_sys_warn("io_getevents", -r);
-		return false;
-	}
-
-	for (i = 0; i < r; i++) {
-		struct io_event *ev = event + i;
-
-		cb = _iocb_to_cb((struct iocb *) ev->obj);
-
-		if (ev->res == cb->cb.u.c.nbytes)
-			fn((void *) cb->context, 0);
-
-		else if ((int) ev->res < 0)
-			fn(cb->context, (int) ev->res);
-
-		// FIXME: dct added this. a short read is ok?!
-		else if (ev->res >= (1 << SECTOR_SHIFT)) {
-			/* minimum acceptable read is 1 sector */
-			fn((void *) cb->context, 0);
-
-		} else {
-			fn(cb->context, -ENODATA);
-		}
-
-		_cb_free(e->cbs, cb);
-	}
-
-	return true;
-}
-
-static unsigned _async_max_io(struct io_engine *ioe)
-{
-	return MAX_IO;
-}
-
-struct io_engine *create_async_io_engine(void)
-{
-	static int _pagesize = 0;
-	int r;
-	struct async_engine *e;
-
-	if ((_pagesize <= 0) && (_pagesize = sysconf(_SC_PAGESIZE)) < 0) {
-		log_warn("_SC_PAGESIZE returns negative value.");
-		return NULL;
-	}
-
-	if (!(e = malloc(sizeof(*e))))
-		return NULL;
-
-	e->base.destroy = _async_destroy;
-	e->base.issue = _async_issue;
-	e->base.wait = _async_wait;
-	e->base.max_io = _async_max_io;
-
-	e->aio_context = 0;
-	e->aio_context_pid = getpid();
-	r = io_setup(MAX_IO, &e->aio_context);
-	if (r < 0) {
-		log_debug("io_setup failed %d", r);
-		free(e);
-		return NULL;
-	}
-
-	e->cbs = _cb_set_create(MAX_IO);
-	if (!e->cbs) {
-		log_warn("couldn't create control block set");
-		free(e);
-		return NULL;
-	}
-
-	e->page_mask = (unsigned) _pagesize - 1;
-
-	/* coverity[leaked_storage] 'e' is not leaking */
-	return &e->base;
-}
-
-/*----------------------------------------------------------------*/
-
-struct sync_io {
-        struct dm_list list;
-	void *context;
-};
-
-struct sync_engine {
-	struct io_engine base;
-	struct dm_list complete;
-};
-
-static struct sync_engine *_to_sync(struct io_engine *e)
-{
-        return container_of(e, struct sync_engine, base);
-}
-
-static void _sync_destroy(struct io_engine *ioe)
-{
-        struct sync_engine *e = _to_sync(ioe);
-        free(e);
-}
-
-static bool _sync_issue(struct io_engine *ioe, enum blkio_dir d, int di,
-                        sector_t sb, sector_t se, void *data, void *context)
-{
-	ssize_t rv;
-	off_t off;
-	uint64_t where;
-	uint64_t pos = 0;
-	uint64_t len = (se - sb) * 512;
-	struct sync_engine *e = _to_sync(ioe);
-	struct sync_io *io = malloc(sizeof(*io));
-	if (!io) {
-		log_warn("unable to allocate sync_io");
-        	return false;
-	}
-
-	where = sb * 512;
-	off = lseek(_fd_table[di], where, SEEK_SET);
-	if (off == (off_t) -1) {
-		log_warn("Device seek error %d for offset %llu", errno, (unsigned long long)where);
-		free(io);
-		return false;
-	}
-	if (off != (off_t) where) {
-		log_warn("Device seek failed for offset %llu", (unsigned long long)where);
-		free(io);
-		return false;
-	}
-
-	/*
-	 * If blkio block goes past where lvm wants to write, then clamp it.
-	 */
-	if ((d == BLKIO_DIR_WRITE) && _last_byte_offset && (di == _last_byte_di)) {
-		uint64_t offset = where;
-		uint64_t nbytes = len;
-		sector_t limit_nbytes = 0;
-		sector_t extra_nbytes = 0;
-		sector_t orig_nbytes = 0;
-
-		if (offset > _last_byte_offset) {
-			log_error("Limit write at %llu len %llu beyond last byte %llu",
-				  (unsigned long long)offset,
-				  (unsigned long long)nbytes,
-				  (unsigned long long)_last_byte_offset);
-			free(io);
-			return false;
-		}
-
-		if (offset + nbytes > _last_byte_offset) {
-			limit_nbytes = _last_byte_offset - offset;
-
-			if (limit_nbytes % _last_byte_sector_size) {
-				extra_nbytes = _last_byte_sector_size - (limit_nbytes % _last_byte_sector_size);
-
-				/*
-				 * adding extra_nbytes to the reduced nbytes (limit_nbytes)
-				 * should make the final write size a multiple of the
-				 * sector size.  This should never result in a final size
-				 * larger than the blkio block size (as long as the blkio
-				 * block size is a multiple of the sector size).
-				 */
-				if (limit_nbytes + extra_nbytes > nbytes) {
-					log_warn("Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu",
-						 (unsigned long long)offset,
-						 (unsigned long long)nbytes,
-						 (unsigned long long)limit_nbytes,
-						 (unsigned long long)extra_nbytes,
-						 (unsigned long long)_last_byte_sector_size);
-					extra_nbytes = 0;
-				}
-			}
-
-			orig_nbytes = nbytes;
-
-			if (extra_nbytes) {
-				log_debug("Limit write at %llu len %llu to len %llu rounded to %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes,
-					  (unsigned long long)(limit_nbytes + extra_nbytes));
-				nbytes = limit_nbytes + extra_nbytes;
-			} else {
-				log_debug("Limit write at %llu len %llu to len %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes);
-				nbytes = limit_nbytes;
-			}
-
-			/*
-			 * This shouldn't happen, the reduced+extended
-			 * nbytes value should never be larger than the
-			 * blkio block size.
-			 */
-			if (nbytes > orig_nbytes) {
-				log_error("Invalid adjusted write at %llu len %llu adjusted %llu limit %llu extra %llu sector_size %llu",
-					  (unsigned long long)offset,
-					  (unsigned long long)orig_nbytes,
-					  (unsigned long long)nbytes,
-					  (unsigned long long)limit_nbytes,
-					  (unsigned long long)extra_nbytes,
-					  (unsigned long long)_last_byte_sector_size);
-				free(io);
-				return false;
-			}
-		}
-
-		len = nbytes;
-	}
-
-	while (pos < len) {
-		if (d == BLKIO_DIR_READ)
-			rv = read(_fd_table[di], (char *)data + pos, len - pos);
-		else
-			rv = write(_fd_table[di], (char *)data + pos, len - pos);
-
-		if (rv == -1 && errno == EINTR)
-			continue;
-		if (rv == -1 && errno == EAGAIN)
-			continue;
-
-		if (!rv)
-			break;
-
-		if (rv < 0) {
-			if (d == BLKIO_DIR_READ)
-				log_debug("Device read error %d offset %llu len %llu", errno,
-					  (unsigned long long)(where + pos),
-					  (unsigned long long)(len - pos));
-			else
-				log_debug("Device write error %d offset %llu len %llu", errno,
-					  (unsigned long long)(where + pos),
-					  (unsigned long long)(len - pos));
-			free(io);
-			return false;
-		}
-		pos += rv;
-	}
-
-	if (pos < len) {
-		if (d == BLKIO_DIR_READ)
-			log_warn("Device read short %u bytes remaining", (unsigned)(len - pos));
-		else
-			log_warn("Device write short %u bytes remaining", (unsigned)(len - pos));
-		/*
-        	free(io);
-        	return false;
-		*/
-	}
-
-
-	dm_list_add(&e->complete, &io->list);
-	io->context = context;
-
-	return true;
-}
-
-static bool _sync_wait(struct io_engine *ioe, io_complete_fn fn)
-{
-        struct sync_io *io, *tmp;
-	struct sync_engine *e = _to_sync(ioe);
-
-	dm_list_iterate_items_safe(io, tmp, &e->complete) {
-		fn(io->context, 0);
-		dm_list_del(&io->list);
-		free(io);
-	}
-
-	return true;
-}
-
-static unsigned _sync_max_io(struct io_engine *ioe)
-{
-        return 1;
-}
-
-struct io_engine *create_sync_io_engine(void)
-{
-	struct sync_engine *e = malloc(sizeof(*e));
-
-	if (!e)
-        	return NULL;
-
-        e->base.destroy = _sync_destroy;
-        e->base.issue = _sync_issue;
-        e->base.wait = _sync_wait;
-        e->base.max_io = _sync_max_io;
-
-	dm_list_init(&e->complete);
-	/* coverity[leaked_storage] 'e' is not leaking */
-        return &e->base;
-}
-
-/*----------------------------------------------------------------*/
-
 #define MIN_BLOCKS 16
 #define WRITEBACK_LOW_THRESHOLD_PERCENT 33
 #define WRITEBACK_HIGH_THRESHOLD_PERCENT 66
+#define WRITEBACK_BATCH_BLOCKS 16
 
 /*----------------------------------------------------------------*/
 
@@ -691,8 +98,22 @@ struct blkio {
 
 	struct io_engine *engine;
 
+	/*
+	 * PID of the process that created this cache.  After fork() the
+	 * child must not use the engine or kernel state owned by the
+	 * parent, and must not flush I/O inherited from the parent.
+	 */
+	pid_t creator_pid;
+
 	void *raw_data;
 	struct blkio_block *raw_blocks;
+
+	/*
+	 * Write clamping - limit writes to not exceed a certain byte offset
+	 */
+	int last_byte_di;
+	uint64_t last_byte_offset;
+	size_t last_byte_sector_size;
 
 	/*
 	 * Lists that categorize the blocks.
@@ -882,6 +303,161 @@ static void _complete_io(void *context, int err)
 	}
 }
 
+struct clamped_write_range {
+	bool valid;
+	sector_t end;
+};
+
+/* Clamp write range if last_byte limit is set for this device. */
+static struct clamped_write_range _clamp_write_range(struct blkio *bio, int di,
+						     const struct blkio_io *io)
+{
+	struct blkio_byte_range bytes = io->range;
+	sector_t limit_nbytes, extra_nbytes, orig_nbytes;
+	struct clamped_write_range range = {
+		.valid = true,
+		.end = (io->range.offset + io->range.len) >> SECTOR_SHIFT,
+	};
+
+	if (io->d != BLKIO_DIR_WRITE)
+		return range;
+
+	if (!bio->last_byte_offset || di != bio->last_byte_di)
+		return range;
+
+	/* If blkio block goes past where lvm wants to write, then clamp it. */
+	if (bytes.offset > bio->last_byte_offset) {
+		log_error("Limit write at %llu len %llu beyond last byte %llu.",
+			  (unsigned long long)bytes.offset,
+			  (unsigned long long)bytes.len,
+			  (unsigned long long)bio->last_byte_offset);
+		range.valid = false;
+		return range;
+	}
+
+	if (bytes.offset + bytes.len <= bio->last_byte_offset)
+		return range;
+
+	/*
+	 * If the blkio block offset+len goes beyond where lvm is
+	 * intending to write, then reduce the len being written
+	 * (which is the blkio block size) so we don't write past
+	 * the limit set by lvm.  If after applying the limit, the
+	 * resulting size is not a multiple of the sector size (512
+	 * or 4096) then extend the reduced size to be a multiple of
+	 * the sector size (we don't want to write partial sectors.)
+	 */
+
+	/* Need to clamp */
+	limit_nbytes = bio->last_byte_offset - bytes.offset;
+
+	extra_nbytes = 0;
+	if (limit_nbytes % bio->last_byte_sector_size) {
+		extra_nbytes = bio->last_byte_sector_size -
+			       (limit_nbytes % bio->last_byte_sector_size);
+
+		/*
+		 * adding extra_nbytes to the reduced nbytes (limit_nbytes)
+		 * should make the final write size a multiple of the
+		 * sector size.  This should never result in a final size
+		 * larger than the blkio block size (as long as the blkio
+		 * block size is a multiple of the sector size).
+		 */
+		if (limit_nbytes + extra_nbytes > bytes.len) {
+			log_warn("WARNING: Skip extending write at %llu len %llu limit %llu extra %llu sector_size %llu.",
+				 (unsigned long long)bytes.offset,
+				 (unsigned long long)bytes.len,
+				 (unsigned long long)limit_nbytes,
+				 (unsigned long long)extra_nbytes,
+				 (unsigned long long)bio->last_byte_sector_size);
+			extra_nbytes = 0;
+		}
+	}
+
+	orig_nbytes = bytes.len;
+
+	if (extra_nbytes) {
+		log_debug_devs("Limit write at %llu len %llu to len %llu rounded to %llu.",
+			       (unsigned long long)bytes.offset,
+			       (unsigned long long)bytes.len,
+			       (unsigned long long)limit_nbytes,
+			       (unsigned long long)(limit_nbytes + extra_nbytes));
+		bytes.len = limit_nbytes + extra_nbytes;
+	} else {
+		log_debug_devs("Limit write at %llu len %llu to len %llu.",
+			       (unsigned long long)bytes.offset,
+			       (unsigned long long)bytes.len,
+			       (unsigned long long)limit_nbytes);
+		bytes.len = limit_nbytes;
+	}
+
+	/*
+	 * This shouldn't happen, the reduced+extended
+	 * bytes.len value should never be larger than the
+	 * blkio block size.
+	 */
+	if (bytes.len > orig_nbytes) {
+		log_error("Invalid adjusted write at %llu len %llu adjusted %llu limit %llu extra %llu sector_size %llu.",
+			  (unsigned long long)bytes.offset,
+			  (unsigned long long)orig_nbytes,
+			  (unsigned long long)bytes.len,
+			  (unsigned long long)limit_nbytes,
+			  (unsigned long long)extra_nbytes,
+			  (unsigned long long)bio->last_byte_sector_size);
+		range.valid = false;
+		return range;
+	}
+
+	range.end = (bytes.offset + bytes.len) >> SECTOR_SHIFT;
+	return range;
+}
+
+static bool _wait_io(struct blkio *bio)
+{
+	return bio->engine->wait(bio->engine, _complete_io);
+}
+
+/*
+ * Drain completions before counting a new request as pending.  A break
+ * here means the wait was interrupted; the caller notices when the
+ * pending count then exceeds max_io.
+ */
+static void _drain_before_issue(struct blkio *bio)
+{
+	while (bio->nr_io_pending >= bio->max_io)
+		if (!_wait_io(bio))
+			break;
+}
+
+/*
+ * The engine queue is full.  Withdraw this request from the pending
+ * count (but keep it linked so _complete_io can retire it), reap a
+ * completion to make room, and ask the caller to retry.  Without the
+ * withdrawal the wait could block forever on a request the kernel never
+ * received.
+ *
+ * Returns false when there is nothing to wait for or the wait was
+ * interrupted.  The request is then back in the pending count and has
+ * been completed with the engine's error.
+ */
+static bool _make_room_for_retry(struct blkio_block *b, int err)
+{
+	struct blkio *bio = b->bio;
+
+	_clear_flags(b, BF_IO_PENDING);
+	bio->nr_io_pending--;
+
+	if (!bio->nr_io_pending || !_wait_io(bio)) {
+		/* Put it back before retiring it as an error. */
+		bio->nr_io_pending++;
+		_set_flags(b, BF_IO_PENDING);
+		_complete_io(b, err);
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * |b->list| should be valid (either pointing to itself, on one of the other
  * lists.
@@ -889,21 +465,57 @@ static void _complete_io(void *context, int err)
 static void _issue_low_level(struct blkio_block *b, enum blkio_dir d)
 {
 	struct blkio *bio = b->bio;
-	sector_t sb = b->index * bio->block_sectors;
-	sector_t se = sb + bio->block_sectors;
+	struct clamped_write_range range;
+	struct blkio_io io;
+	int r;
 
 	if (_test_flags(b, BF_IO_PENDING))
 		return;
 
+	_drain_before_issue(bio);
+
+retry:
+	/* Validation failures complete this request just like issue failures. */
 	b->io_dir = d;
 	_set_flags(b, BF_IO_PENDING);
 	bio->nr_io_pending++;
-
 	dm_list_move(&bio->io_pending, &b->list);
 
-	if (!bio->engine->issue(bio->engine, d, b->di, sb, se, b->data, b)) {
-		/* FIXME: if io_submit() set an errno, return that instead of EIO? */
+	if (b->di >= _fd_table_size) {
+		log_error("blkio device index %d out of range.", b->di);
 		_complete_io(b, -EIO);
+		return;
+	}
+
+	io.d = d;
+	io.fd = _fd_table[b->di];
+	io.data = b->data;
+	io.range = blkio_sector_range_bytes(b->index * bio->block_sectors,
+					    (b->index + 1) * bio->block_sectors);
+
+	if (io.fd < 0) {
+		log_error("blkio no fd for device index %d.", b->di);
+		_complete_io(b, -EIO);
+		return;
+	}
+
+	range = _clamp_write_range(bio, b->di, &io);
+	if (!range.valid) {
+		_complete_io(b, -EIO);
+		return;
+	}
+	io.range.len = (range.end << SECTOR_SHIFT) - io.range.offset;
+
+	r = bio->engine->issue(bio->engine, &io, b);
+	if (r == -EAGAIN) {
+		if (!_make_room_for_retry(b, r))
+			return;
+
+		goto retry;
+	}
+
+	if (r < 0) {
+		_complete_io(b, r);
 		return;
 	}
 }
@@ -916,11 +528,6 @@ static inline void _issue_read(struct blkio_block *b)
 static inline void _issue_write(struct blkio_block *b)
 {
 	_issue_low_level(b, BLKIO_DIR_WRITE);
-}
-
-static bool _wait_io(struct blkio *bio)
-{
-	return bio->engine->wait(bio->engine, _complete_io);
 }
 
 /*----------------------------------------------------------------
@@ -1054,7 +661,7 @@ static struct blkio_block *_new_block(struct blkio *bio, int di, block_address_t
 			return _init_block(b, di, i);
 
 		if (dm_list_empty(&bio->io_pending))
-			_writeback(bio, 16);  // FIXME: magic number
+			_writeback(bio, WRITEBACK_BATCH_BLOCKS);
 
 		if (!_wait_all(bio))
 			return NULL;
@@ -1176,46 +783,86 @@ static void _preemptive_writeback(struct blkio *bio)
 /*----------------------------------------------------------------
  * Public interface
  *--------------------------------------------------------------*/
+/*
+ * Return the system page size, or 0 after reporting the problem.
+ */
+static int _get_pagesize(void)
+{
+	static int _pagesize = 0;
+
+	if (_pagesize <= 0) {
+		_pagesize = lvm_getpagesize();
+		if (_pagesize <= 0)
+			log_error("Invalid system page size.");
+	}
+
+	return _pagesize;
+}
+
+/*
+ * Check the cache geometry arguments against the page size the blocks have
+ * to align to.  Returns 1 when they are usable, or 0 after reporting the
+ * rejected argument; the caller still owns the engine.
+ */
+static int _check_geometry(sector_t block_sectors, unsigned nr_cache_blocks,
+			   int pagesize)
+{
+	if (!nr_cache_blocks) {
+		log_error("blkio must have at least one cache block.");
+		return 0;
+	}
+
+	if (!block_sectors) {
+		log_error("blkio must have a non zero block size.");
+		return 0;
+	}
+
+	if (block_sectors & ((pagesize >> SECTOR_SHIFT) - 1)) {
+		log_error("blkio block size must be a multiple of page size.");
+		return 0;
+	}
+
+	return 1;
+}
+
 struct blkio *blkio_create_engine(unsigned block_sectors,
 				  unsigned nr_cache_blocks,
 				  struct io_engine *engine)
 {
-	static long _pagesize = 0;
 	struct blkio *bio;
-	unsigned max_io = engine->max_io(engine);
+	unsigned max_io;
+	int pagesize;
 	int i;
 
-	if ((_pagesize <= 0) && ((_pagesize = sysconf(_SC_PAGESIZE)) < 0)) {
-		log_warn("WARNING: _SC_PAGESIZE returns negative value.");
+	if (!blkio_engine_usable(engine)) {
+		log_error("Cannot use an unavailable io engine.");
 		return NULL;
 	}
 
-	if (!nr_cache_blocks) {
-		log_warn("blkio must have at least one cache block.");
-		return NULL;
+	max_io = engine->max_io(engine);
+	if (!max_io) {
+		log_error("The %s io engine accepts no outstanding I/O.",
+			  engine->name);
+		goto bad_engine;
 	}
 
-	if (!block_sectors) {
-		log_warn("blkio must have a non zero block size.");
-		return NULL;
+	if (!(pagesize = _get_pagesize()) ||
+	    !_check_geometry(block_sectors, nr_cache_blocks, pagesize)) {
+		stack;
+		goto bad_engine;
 	}
 
-	if (block_sectors & ((_pagesize >> SECTOR_SHIFT) - 1)) {
-		log_warn("blkio block size must be a multiple of page size.");
-		return NULL;
+	bio = zalloc(sizeof(*bio));
+	if (!bio) {
+		stack;
+		goto bad_engine;
 	}
 
-	bio = malloc(sizeof(*bio));
-	if (!bio)
-		return NULL;
-
+	bio->creator_pid = getpid();
 	bio->block_sectors = block_sectors;
 	bio->nr_cache_blocks = nr_cache_blocks;
 	bio->max_io = nr_cache_blocks < max_io ? nr_cache_blocks : max_io;
 	bio->engine = engine;
-	bio->nr_locked = 0;
-	bio->nr_dirty = 0;
-	bio->nr_io_pending = 0;
 
 	dm_list_init(&bio->free);
 	dm_list_init(&bio->errored);
@@ -1224,31 +871,17 @@ struct blkio *blkio_create_engine(unsigned block_sectors,
 	dm_list_init(&bio->io_pending);
 
 	bio->rtree = radix_tree_create(NULL, NULL);
-	if (!bio->rtree) {
-		bio->engine->destroy(bio->engine);
-		free(bio);
-		return NULL;
-	}
+	if (!bio->rtree)
+		goto_bad;
 
-	bio->read_hits = 0;
-	bio->read_misses = 0;
-	bio->write_zeroes = 0;
-	bio->write_hits = 0;
-	bio->write_misses = 0;
-	bio->prefetches = 0;
+	if (!_init_free_list(bio, nr_cache_blocks, pagesize))
+		goto_bad;
 
-	if (!_init_free_list(bio, nr_cache_blocks, _pagesize)) {
-		bio->engine->destroy(bio->engine);
-		radix_tree_destroy(bio->rtree);
-		free(bio);
-		return NULL;
-	}
-
-	_fd_table_size = FD_TABLE_INC;
+	_fd_table_size = BLKIO_FD_TABLE_INC;
 
 	if (!(_fd_table = malloc(sizeof(int) * _fd_table_size))) {
-		_exit_free_list(bio);
-		bio->engine->destroy(bio->engine);
+		if (bio->engine->destroy(bio->engine))
+			_exit_free_list(bio);
 		radix_tree_destroy(bio->rtree);
 		free(bio);
 		return NULL;
@@ -1258,35 +891,16 @@ struct blkio *blkio_create_engine(unsigned block_sectors,
 		_fd_table[i] = -1;
 
 	return bio;
-}
 
-/*
- * Pick the engine named by hint.  Auto tries the asynchronous engine first and
- * falls back to the synchronous one, which is also the final fallback for an
- * engine that is unavailable or not known at all.
- */
-struct io_engine *blkio_create_io_engine(const char *hint)
-{
-	bool automatic = !hint || !*hint || !strcmp(hint, "auto");
-	bool asynchronous = automatic || !strcmp(hint, "libaio") ||
-			    !strcmp(hint, "async") || !strcmp(hint, "aio");
-	struct io_engine *engine;
+bad:
+	_exit_free_list(bio);
+	if (bio->rtree)
+		radix_tree_destroy(bio->rtree);
+	free(bio);
 
-	if (asynchronous) {
-		if ((engine = create_async_io_engine()))
-			return engine;
-
-		if (automatic)
-			log_warn("WARNING: Failed to set up async io, using sync io.");
-		else
-			log_warn("WARNING: Requested libaio I/O engine is not available.");
-	} else if (strcmp(hint, "sync"))
-		log_warn("WARNING: Unknown I/O engine \"%s\".", hint);
-
-	if (!(engine = create_sync_io_engine()))
-		return_NULL;
-
-	return engine;
+bad_engine:
+	engine->destroy(engine);
+	return NULL;
 }
 
 struct blkio *blkio_create(const char *hint, unsigned block_sectors,
@@ -1302,14 +916,34 @@ struct blkio *blkio_create(const char *hint, unsigned block_sectors,
 
 void blkio_destroy(struct blkio *bio)
 {
-	if (bio->nr_locked)
-		log_warn("some blocks are still locked.");
+	bool forked = blkio_engine_is_forked(bio->creator_pid);
 
-	if (!blkio_flush(bio))
+	if (bio->nr_locked)
+		log_warn("WARNING: some blocks are still locked.");
+
+	/*
+	 * After fork() the cache and its engine belong to the parent.
+	 * The child must not submit a flush or otherwise touch the
+	 * inherited kernel state; it only releases its private copies.
+	 * The fork check must happen before the flush.
+	 */
+	if (!forked && !blkio_flush(bio))
 		stack;
-	_exit_free_list(bio);
+
+	/*
+	 * A failed flush can leave I/O in flight.  Destroy the engine
+	 * first so each engine drains outstanding I/O while the block
+	 * data is still mapped, then free the buffers.  An engine that
+	 * could not finish draining (e.g. teardown was interrupted) asks
+	 * us to keep the block data, since the kernel may still use it.
+	 */
+	if (bio->engine->destroy(bio->engine))
+		_exit_free_list(bio);
+	else
+		log_warn("WARNING: blkio leaked %llu blocks with I/O still in flight after interrupted destroy.",
+			 (unsigned long long) bio->nr_cache_blocks);
+
 	radix_tree_destroy(bio->rtree);
-	bio->engine->destroy(bio->engine);
 	free(bio);
 	free(_fd_table);
 	_fd_table = NULL;
@@ -1398,7 +1032,7 @@ bad:
 static void _put_ref(struct blkio_block *b)
 {
 	if (!b->ref_count) {
-		log_warn("ref count on blkio block already zero.");
+		log_warn("WARNING: ref count on blkio block already zero.");
 		return;
 	}
 
@@ -1464,7 +1098,7 @@ static bool _invalidate_block(struct blkio_block *b)
 		return_false;
 
 	if (b->ref_count) {
-		log_warn("blkio invalidate: block (%d, %llu) still held.",
+		log_warn("WARNING: blkio invalidate: block (%d, %llu) still held.",
 			 b->di, (unsigned long long) b->index);
 		return false;
 	}
@@ -1612,20 +1246,17 @@ bool blkio_abort_di(struct blkio *bio, int di)
 
 void blkio_set_last_byte(struct blkio *bio, int di, uint64_t offset, size_t sector_size)
 {
-	_last_byte_di = di;
-	_last_byte_offset = offset;
-	if (!sector_size)
-		_last_byte_sector_size = 512;
-	else
-		_last_byte_sector_size = sector_size;
+	bio->last_byte_di = di;
+	bio->last_byte_offset = offset;
+	bio->last_byte_sector_size = sector_size ? sector_size : SECTOR_SIZE;
 }
 
 void blkio_unset_last_byte(struct blkio *bio, int di)
 {
-	if (_last_byte_di == di) {
-		_last_byte_di = 0;
-		_last_byte_offset = 0;
-		_last_byte_sector_size = 0;
+	if (bio->last_byte_di == di) {
+		bio->last_byte_di = 0;
+		bio->last_byte_offset = 0;
+		bio->last_byte_sector_size = 0;
 	}
 }
 
@@ -1647,7 +1278,7 @@ int blkio_set_fd(int fd)
 	if (new_size)
 		return -1;
 
-	new_size = _fd_table_size + FD_TABLE_INC;
+	new_size = _fd_table_size + BLKIO_FD_TABLE_INC;
 
 	new_table = realloc(_fd_table, sizeof(int) * new_size);
 	if (!new_table) {

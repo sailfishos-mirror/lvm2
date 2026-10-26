@@ -105,7 +105,7 @@ static void *_fix_init(struct io_engine *engine)
 
 static void *_async_init(void)
 {
-	struct io_engine *e = create_async_io_engine();
+	struct io_engine *e = create_async_io_engine(BLKIO_ENGINE_DEFAULT);
 	T_ASSERT(e);
 	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
@@ -113,7 +113,7 @@ static void *_async_init(void)
 
 static void *_sync_init(void)
 {
-	struct io_engine *e = create_sync_io_engine();
+	struct io_engine *e = create_sync_io_engine(BLKIO_ENGINE_DEFAULT);
 	T_ASSERT(e);
 	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);

@@ -55,9 +55,7 @@ struct mock_call {
 struct mock_io {
 	struct dm_list list;
 	int di;
-	sector_t sb;
-	sector_t se;
-	void *data;
+	struct blkio_io io;
 	void *context;
 	bool r;
 };
@@ -233,7 +231,7 @@ static struct mock_engine *_to_mock(struct io_engine *e)
 	return container_of(e, struct mock_engine, e);
 }
 
-static void _mock_destroy(struct io_engine *e)
+static bool _mock_destroy(struct io_engine *e)
 {
 	struct mock_engine *me = _to_mock(e);
 
@@ -241,11 +239,15 @@ static void _mock_destroy(struct io_engine *e)
 	T_ASSERT(dm_list_empty(&me->issued_io));
 	T_ASSERT(dm_list_empty(&me->expected_calls));
 	free(_to_mock(e));
+
+	return true;
 }
 
-static bool _mock_issue(struct io_engine *e, enum blkio_dir d, int di,
-	      		sector_t sb, sector_t se, void *data, void *context)
+static int _mock_issue(struct io_engine *e, const struct blkio_io *bio_io,
+		       void *context)
 {
+	sector_t sb = bio_io->range.offset >> SECTOR_SHIFT;
+	sector_t se = (bio_io->range.offset + bio_io->range.len) >> SECTOR_SHIFT;
 	bool r, wait_r;
 	struct mock_io *io;
 	struct mock_call *mc;
@@ -253,8 +255,8 @@ static bool _mock_issue(struct io_engine *e, enum blkio_dir d, int di,
 
 	mc = _match_pop(me, E_ISSUE);
 	if (mc->match_args) {
-		T_ASSERT(d == mc->d);
-		T_ASSERT(di == mc->di);
+		T_ASSERT(bio_io->d == mc->d);
+		T_ASSERT(bio_io->fd == mc->di);
 		T_ASSERT(sb == mc->b * me->block_sectors);
 		T_ASSERT(se == (mc->b + 1) * me->block_sectors);
 	}
@@ -267,17 +269,15 @@ static bool _mock_issue(struct io_engine *e, enum blkio_dir d, int di,
 		if (!io)
 			abort();
 
-		io->di = di;
-		io->sb = sb;
-		io->se = se;
-		io->data = data;
+		io->di = bio_io->fd;
+		io->io = *bio_io;
 		io->context = context;
 		io->r = wait_r;
 
 		dm_list_add(&me->issued_io, &io->list);
 	}
 
-	return r;
+	return r ? 0 : -EIO;
 }
 
 static bool _mock_wait(struct io_engine *e, io_complete_fn fn)
@@ -334,6 +334,7 @@ struct fixture {
 static struct fixture *_fixture_init(sector_t block_sectors, unsigned nr_cache_blocks)
 {
 	struct fixture *f = malloc(sizeof(*f));
+	unsigned i;
 
 	T_ASSERT(f);
 
@@ -343,6 +344,15 @@ static struct fixture *_fixture_init(sector_t block_sectors, unsigned nr_cache_b
 	_expect(f->me, E_MAX_IO);
 	f->bio = blkio_create_engine(block_sectors, nr_cache_blocks, &f->me->e);
 	T_ASSERT(f->bio);
+
+	/*
+	 * Register mock fds with identity mapping (_fd_table[i] = i)
+	 * so tests can use di values directly.  The mock engine does
+	 * not perform real I/O, but _issue_low_level() needs a valid
+	 * fd table entry before calling engine->issue().
+	 */
+	for (i = 0; i < BLKIO_FD_TABLE_INC; i++)
+		T_ASSERT(blkio_set_fd(i) == (int) i);
 
 	return f;
 }

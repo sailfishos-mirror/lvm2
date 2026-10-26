@@ -19,8 +19,11 @@ abs_srcdir = @abs_srcdir@
 
 SOURCES =\
 	activate/activate.c \
+	blkio/async.c \
 	blkio/blkio.c \
 	blkio/byterange.c \
+	blkio/engine.c \
+	blkio/sync.c \
 	cache/lvmcache.c \
 	writecache/writecache.c \
 	integrity/integrity.c \

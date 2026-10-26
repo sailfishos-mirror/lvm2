@@ -82,7 +82,7 @@ static void *_fix_init(void)
 	struct fixture *f = malloc(sizeof(*f));
 
 	T_ASSERT(f);
-	f->e = create_async_io_engine();
+	f->e = create_async_io_engine(BLKIO_ENGINE_DEFAULT);
 	T_ASSERT(f->e);
 	if (posix_memalign((void **) &f->data, TEST_PAGE_SIZE, SECTOR_SIZE * BLOCK_SIZE_SECTORS))
 		test_fail("posix_memalign failed");
@@ -141,7 +141,14 @@ static void _test_read(void *fixture)
 {
 	struct fixture *f = fixture;
 	struct io io;
-	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	struct blkio_io bio_io = {
+		.d = BLKIO_DIR_READ,
+		.fd = f->fd,
+		.data = f->data,
+		.range = blkio_sector_range_bytes(0, BLOCK_SIZE_SECTORS),
+	};
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS,
+						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
 	f->di = blkio_set_fd(f->fd);
@@ -149,7 +156,8 @@ static void _test_read(void *fixture)
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, BLKIO_DIR_READ, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+
+	T_ASSERT(!f->e->issue(f->e, &bio_io, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
@@ -164,7 +172,14 @@ static void _test_write(void *fixture)
 {
 	struct fixture *f = fixture;
 	struct io io;
-	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	struct blkio_io bio_io = {
+		.d = BLKIO_DIR_WRITE,
+		.fd = f->fd,
+		.data = f->data,
+		.range = blkio_sector_range_bytes(0, BLOCK_SIZE_SECTORS),
+	};
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS,
+						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
 	f->di = blkio_set_fd(f->fd);
@@ -172,7 +187,8 @@ static void _test_write(void *fixture)
 	T_ASSERT(f->di >= 0);
 
 	_io_init(&io);
-	T_ASSERT(f->e->issue(f->e, BLKIO_DIR_WRITE, f->di, 0, BLOCK_SIZE_SECTORS, f->data, &io));
+
+	T_ASSERT(!f->e->issue(f->e, &bio_io, &io));
 	T_ASSERT(f->e->wait(f->e, _complete_io));
 	T_ASSERT(io.completed);
 	T_ASSERT(!io.error);
@@ -188,7 +204,8 @@ static void _test_write_bytes(void *fixture)
 	unsigned offset = 345;
 	char buf_out[32];
 	char buf_in[32];
-	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS, BLOCK_SIZE_SECTORS, f->e);
+	struct blkio *bio = blkio_create_engine(PAGE_SIZE_SECTORS,
+						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
 	f->di = blkio_set_fd(f->fd);
@@ -226,7 +243,7 @@ static void _test_destroy_after_fork(void *fixture)
 	pid_t pid;
 	int status;
 
-	e = create_async_io_engine();
+	e = create_async_io_engine(BLKIO_ENGINE_DEFAULT);
 	T_ASSERT(e);
 
 	pid = fork();
@@ -294,7 +311,7 @@ static void _test_wait_eintr(void *fixture)
 	pid_t child;
 	int status;
 
-	e = create_async_io_engine();
+	e = create_async_io_engine(BLKIO_ENGINE_DEFAULT);
 	T_ASSERT(e);
 
 	/*
