@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,6 +30,10 @@
 #define T_BLOCK_BYTES ((uint64_t) TEST_PAGE_SIZE)
 #define NR_BLOCKS 64
 #define INIT_PATTERN 123
+
+static const struct io_engine _test_engine = {
+	.name = "test",
+};
 
 struct fixture {
 	int fd;
@@ -47,35 +52,49 @@ static uint64_t byte(block_address_t b, uint64_t offset)
 	return b * T_BLOCK_BYTES + offset;
 }
 
+/*
+ * Find out once per process whether this file system accepts O_DIRECT.
+ * Returns true when it does, false (probably a tmpfs) when it does not.
+ */
+static bool _detect_direct_io(void)
+{
+	static int _direct_io = -1;
+	char fname[32];
+	int fd;
+
+	if (_direct_io != -1)
+		return _direct_io;
+
+	snprintf(fname, sizeof(fname), "unit-test-XXXXXX");
+	/* coverity[secure_temp] don't care */
+	fd = mkstemp(fname);
+	T_ASSERT(fd >= 0);
+	(void) close(fd);
+
+	// test if we can reopen with O_DIRECT
+	if ((fd = open(fname, O_RDWR | O_DIRECT)) >= 0) {
+		_direct_io = 1;
+		(void) close(fd);
+	} else {
+		_direct_io = 0; // likely running on tmpfs
+		printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
+	}
+	(void) unlink(fname);
+
+	return _direct_io;
+}
+
 static void *_fix_init(struct io_engine *engine)
 {
 	const size_t bsize = T_BLOCK_BYTES;
 	uint8_t *buffer;
 	struct fixture *f = malloc(sizeof(*f));
 	unsigned b, i;
-	static int _runs_is_tmpfs = -1;
 
 	buffer = alloca(bsize);
 
 	memset(buffer, 0, bsize);
 	T_ASSERT(f);
-
-	if (_runs_is_tmpfs == -1) {
-		snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
-		/* coverity[secure_temp] don't care */
-		f->fd = mkstemp(f->fname);
-		T_ASSERT(f->fd >= 0);
-		(void) close(f->fd);
-		// test if we can reopen with O_DIRECT
-		if ((f->fd = open(f->fname, O_RDWR | O_DIRECT)) >= 0) {
-			_runs_is_tmpfs = 0;
-			(void) close(f->fd);
-		} else {
-			_runs_is_tmpfs = 1; // likely running on tmpfs
-			printf("  Running test in tmpfs, *NOT* using O_DIRECT\n");
-		}
-		(void) unlink(f->fname);
-	}
 
 	snprintf(f->fname, sizeof(f->fname), "unit-test-XXXXXX");
 	/* coverity[secure_temp] don't care */
@@ -88,7 +107,7 @@ static void *_fix_init(struct io_engine *engine)
 		T_ASSERT(write(f->fd, buffer, bsize) > 0);
 	}
 
-	if (!_runs_is_tmpfs) {
+	if (_detect_direct_io()) {
 		(void) close(f->fd);
 		// reopen with O_DIRECT
 		f->fd = open(f->fname, O_RDWR | O_DIRECT);
@@ -103,6 +122,7 @@ static void *_fix_init(struct io_engine *engine)
 	return f;
 }
 
+#ifdef HAVE_LIBAIO_H
 static void *_async_init(void)
 {
 	struct io_engine *e = create_async_io_engine(BLKIO_ENGINE_DEFAULT);
@@ -110,6 +130,7 @@ static void *_async_init(void)
 	/* coverity[leaked_storage] stored in fixture by _fix_init */
 	return _fix_init(e);
 }
+#endif
 
 static void *_sync_init(void)
 {
@@ -394,8 +415,114 @@ static void _test_set_many_boundaries(void *fixture)
 
 //----------------------------------------------------------------
 
-#define T(path, desc, fn) register_test(ts, "/base/blkio/byterange/async/" path, desc, fn)
+static void _test_completion_short_read(void *fixture)
+{
+	uint8_t buffer[T_BLOCK_BYTES];
+	struct blkio_io io = {
+		.d = BLKIO_DIR_READ,
+		.data = buffer,
+		.range = {
+			.offset = 0,
+			.len = sizeof(buffer),
+		},
+	};
+	unsigned i;
+	(void) fixture;
 
+	memset(buffer, 0xAA, sizeof(buffer));
+
+	/*
+	 * A short read is a normal end of device condition: the unread
+	 * tail of the block is zero filled and the read succeeds.
+	 */
+	T_ASSERT_EQUAL(blkio_completion_status(&_test_engine, &io, 512), 0);
+	for (i = 0; i < 512; i++)
+		T_ASSERT_EQUAL(buffer[i], 0xAA);
+	for (; i < sizeof(buffer); i++)
+		T_ASSERT_EQUAL(buffer[i], 0);
+
+	/* A transfer shorter than a whole sector is an error. */
+	T_ASSERT_EQUAL(blkio_completion_status(&_test_engine, &io, 0),
+		       -ENODATA);
+}
+
+static void _test_completion_short_write(void *fixture)
+{
+	uint8_t buffer[T_BLOCK_BYTES];
+	struct blkio_io io = {
+		.d = BLKIO_DIR_WRITE,
+		.data = buffer,
+		.range = {
+			.offset = 0,
+			.len = sizeof(buffer),
+		},
+	};
+	(void) fixture;
+
+	T_ASSERT_EQUAL(blkio_completion_status(&_test_engine, &io,
+					       sizeof(buffer)), 0);
+	T_ASSERT(blkio_completion_status(&_test_engine, &io, 512) < 0);
+}
+
+static void _test_range_overflow(void *fixture)
+{
+	struct fixture *f = fixture;
+	uint64_t start = UINT64_MAX - (T_BLOCK_BYTES - 1);
+	size_t len = T_BLOCK_BYTES;
+	uint8_t *buffer = alloca(T_BLOCK_BYTES);
+
+	T_ASSERT(!blkio_read_bytes(f->bio, f->di, start, len, buffer));
+	T_ASSERT(!blkio_write_bytes(f->bio, f->di, start, len, buffer));
+	T_ASSERT(!blkio_zero_bytes(f->bio, f->di, start, len));
+	T_ASSERT(!blkio_set_bytes(f->bio, f->di, start, len, 0));
+	T_ASSERT(!blkio_invalidate_bytes(f->bio, f->di, start, len));
+
+	/* Rounding a representable end must not overflow. */
+	T_ASSERT(blkio_invalidate_bytes(f->bio, f->di, start, len - 1));
+}
+
+static void _test_zero_length(void *fixture)
+{
+	struct fixture *f = fixture;
+	struct blkio_block *b;
+	uint8_t data = 0;
+	uint64_t start[2] = { byte(7, 0), byte(7, 3) };
+	unsigned i;
+
+	T_ASSERT(blkio_get(f->bio, f->di, 7, GF_DIRTY, &b));
+
+	for (i = 0; i < DM_ARRAY_SIZE(start); i++) {
+		T_ASSERT(blkio_read_bytes(f->bio, f->di, start[i], 0, &data));
+		T_ASSERT(blkio_write_bytes(f->bio, f->di, start[i], 0, &data));
+		T_ASSERT(blkio_zero_bytes(f->bio, f->di, start[i], 0));
+		T_ASSERT(blkio_set_bytes(f->bio, f->di, start[i], 0, 0));
+		T_ASSERT(blkio_invalidate_bytes(f->bio, f->di, start[i], 0));
+	}
+
+	blkio_put(b);
+	T_ASSERT(blkio_flush(f->bio));
+	_verify(f, byte(7, 0), byte(7, T_BLOCK_BYTES), INIT_PATTERN);
+}
+
+static struct test_suite *_completion_tests(void)
+{
+	struct test_suite *ts = test_suite_create(NULL, NULL);
+	if (!ts) {
+		fprintf(stderr, "out of memory\n");
+		exit(1);
+	}
+
+#define T(path, desc, fn) register_test(ts, "/base/blkio/byterange/completion/" path, desc, fn)
+	T("short-read", "short read zero fills the tail of the block", _test_completion_short_read);
+	T("short-write", "short write is an error", _test_completion_short_write);
+#undef T
+
+	return ts;
+}
+
+//----------------------------------------------------------------
+
+#ifdef HAVE_LIBAIO_H
 static struct test_suite *_async_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_async_init, _fix_exit);
@@ -429,7 +556,7 @@ static struct test_suite *_async_tests(void)
 
 	return ts;
 }
-
+#endif
 
 static struct test_suite *_sync_tests(void)
 {
@@ -440,6 +567,8 @@ static struct test_suite *_sync_tests(void)
 	}
 
 #define T(path, desc, fn) register_test(ts, "/base/blkio/byterange/sync/" path, desc, fn)
+	T("range-overflow", "overflowing byte range is rejected", _test_range_overflow);
+	T("zero-length", "zero-length byte operations do not touch a block", _test_zero_length);
 	T("rw-first-block", "read/write/verify the first block", _test_rw_first_block);
 	T("rw-last-block", "read/write/verify the last block", _test_rw_last_block);
 	T("rw-several-blocks", "read/write/verify several whole blocks", _test_rw_several_whole_blocks);
@@ -467,6 +596,9 @@ static struct test_suite *_sync_tests(void)
 
 void blkio_byterange_tests(struct dm_list *all_tests)
 {
+	dm_list_add(all_tests, &_completion_tests()->list);
+#ifdef HAVE_LIBAIO_H
 	dm_list_add(all_tests, &_async_tests()->list);
+#endif
 	dm_list_add(all_tests, &_sync_tests()->list);
 }

@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #define SHOW_MOCK_CALLS 0
@@ -38,6 +39,13 @@ enum method {
 	E_ISSUE,
 	E_WAIT,
 	E_MAX_IO
+};
+
+/* How an expected issue() call should behave. */
+enum mock_outcome {
+	MOCK_OK,
+	MOCK_BAD_ISSUE,
+	MOCK_BAD_WAIT
 };
 
 struct mock_call {
@@ -86,106 +94,56 @@ static void _expect(struct mock_engine *e, enum method m)
 	dm_list_add(&e->expected_calls, &mc->list);
 }
 
-static void _expect_read(struct mock_engine *e, int di, block_address_t b)
+static void _expect_issue(struct mock_engine *e, enum blkio_dir d, int di,
+			  block_address_t b, bool match_args,
+			  enum mock_outcome outcome)
 {
 	struct mock_call *mc = malloc(sizeof(*mc));
 
 	T_ASSERT(mc);
 	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_READ;
+	mc->match_args = match_args;
+	mc->d = d;
 	mc->di = di;
 	mc->b = b;
-	mc->issue_r = true;
-	mc->wait_r = true;
+	mc->issue_r = (outcome != MOCK_BAD_ISSUE);
+	mc->wait_r = (outcome != MOCK_BAD_WAIT);
 	dm_list_add(&e->expected_calls, &mc->list);
+}
+
+static void _expect_read(struct mock_engine *e, int di, block_address_t b)
+{
+	_expect_issue(e, BLKIO_DIR_READ, di, b, true, MOCK_OK);
 }
 
 static void _expect_read_any(struct mock_engine *e)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = false;
-	mc->issue_r = true;
-	mc->wait_r = true;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_READ, 0, 0, false, MOCK_OK);
 }
 
 static void _expect_write(struct mock_engine *e, int di, block_address_t b)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_WRITE;
-	mc->di = di;
-	mc->b = b;
-	mc->issue_r = true;
-	mc->wait_r = true;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_WRITE, di, b, true, MOCK_OK);
 }
 
 static void _expect_read_bad_issue(struct mock_engine *e, int di, block_address_t b)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_READ;
-	mc->di = di;
-	mc->b = b;
-	mc->issue_r = false;
-	mc->wait_r = true;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_READ, di, b, true, MOCK_BAD_ISSUE);
 }
 
 static void _expect_write_bad_issue(struct mock_engine *e, int di, block_address_t b)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_WRITE;
-	mc->di = di;
-	mc->b = b;
-	mc->issue_r = false;
-	mc->wait_r = true;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_WRITE, di, b, true, MOCK_BAD_ISSUE);
 }
 
 static void _expect_read_bad_wait(struct mock_engine *e, int di, block_address_t b)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_READ;
-	mc->di = di;
-	mc->b = b;
-	mc->issue_r = true;
-	mc->wait_r = false;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_READ, di, b, true, MOCK_BAD_WAIT);
 }
 
 static void _expect_write_bad_wait(struct mock_engine *e, int di, block_address_t b)
 {
-	struct mock_call *mc = malloc(sizeof(*mc));
-
-	T_ASSERT(mc);
-	mc->m = E_ISSUE;
-	mc->match_args = true;
-	mc->d = BLKIO_DIR_WRITE;
-	mc->di = di;
-	mc->b = b;
-	mc->issue_r = true;
-	mc->wait_r = false;
-	dm_list_add(&e->expected_calls, &mc->list);
+	_expect_issue(e, BLKIO_DIR_WRITE, di, b, true, MOCK_BAD_WAIT);
 }
 
 static struct mock_call *_match_pop(struct mock_engine *e, enum method m)
@@ -238,7 +196,8 @@ static bool _mock_destroy(struct io_engine *e)
 	_match(me, E_DESTROY);
 	T_ASSERT(dm_list_empty(&me->issued_io));
 	T_ASSERT(dm_list_empty(&me->expected_calls));
-	free(_to_mock(e));
+	/* struct io_engine is the first member; free the caller's pointer. */
+	free(e);
 
 	return true;
 }
@@ -310,6 +269,7 @@ static struct mock_engine *_mock_create(unsigned max_io, sector_t block_sectors)
 
 	T_ASSERT(m);
 
+	m->e.name = "mock";
 	m->e.destroy = _mock_destroy;
 	m->e.issue = _mock_issue;
 	m->e.wait = _mock_wait;
@@ -412,11 +372,9 @@ static void bad_create(sector_t block_sectors, unsigned nr_cache_blocks)
 	struct mock_engine *me = _mock_create(16, 128);
 
 	_expect(me, E_MAX_IO);
+	_expect(me, E_DESTROY);
 	bio = blkio_create_engine(block_sectors, nr_cache_blocks, &me->e);
 	T_ASSERT(!bio);
-
-	_expect(me, E_DESTROY);
-	me->e.destroy(&me->e);
 }
 
 static void test_create(void *fixture)
@@ -839,6 +797,40 @@ static void test_invalidate_held_block(void *context)
 	blkio_put(b);
 }
 
+static void test_invalidate_held_leaves_earlier_block(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b, *held;
+	int di = 17;
+	unsigned i;
+
+	_expect_read(me, di, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
+	blkio_put(b);
+
+	_expect_read(me, di, 1);
+	_expect(me, E_WAIT);
+	T_ASSERT(blkio_get(bio, di, 1, 0, &held));
+
+	T_ASSERT(!blkio_invalidate_di(bio, di));
+
+	for (i = 2; i < 17; i++) {
+		_expect_read(me, di, i);
+		_expect(me, E_WAIT);
+		T_ASSERT(blkio_get(bio, di, i, 0, &b));
+		blkio_put(b);
+	}
+
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	T_ASSERT_EQUAL(b->index, 0);
+	blkio_put(b);
+	blkio_put(held);
+	blkio_abort_di(bio, di);
+}
+
 //----------------------------------------------------------------
 // abort tests
 
@@ -889,6 +881,55 @@ static void test_abort_forces_reread(void *context)
 	_expect(me, E_WAIT);
 	T_ASSERT(blkio_get(bio, di, 0, 0, &b));
 	blkio_put(b);
+}
+
+static void test_abort_held_block(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct blkio *bio = f->bio;
+	struct blkio_block *b;
+	int di = 17;
+
+	T_ASSERT(blkio_get(bio, di, 0, GF_ZERO, &b));
+	blkio_abort_di(bio, di);
+
+	/* The held block keeps the cache intact, so its dirty data survives. */
+	blkio_put(b);
+	_expect_write(me, di, 0);
+	_expect(me, E_WAIT);
+	T_ASSERT(blkio_flush(bio));
+	_no_outstanding_expectations(me);
+}
+
+static void test_all_blocks_held(void *context)
+{
+	struct fixture *f = context;
+	struct mock_engine *me = f->me;
+	struct blkio *bio = f->bio;
+	struct blkio_block *blocks[16], *b = (void *) 1;
+	unsigned i;
+	int di = 17;
+	bool got;
+
+	for (i = 0; i < DM_ARRAY_SIZE(blocks); i++) {
+		_expect_read(me, di, i);
+		_expect(me, E_WAIT);
+		T_ASSERT(blkio_get(bio, di, i, 0, &blocks[i]));
+	}
+
+	/* No block can be reclaimed while all of them are held. */
+	alarm(5);
+	got = blkio_get(bio, di, DM_ARRAY_SIZE(blocks), 0, &b);
+	alarm(0);
+	T_ASSERT(!got);
+	T_ASSERT(!b);
+
+	for (i = 0; i < DM_ARRAY_SIZE(blocks); i++)
+		blkio_put(blocks[i]);
+
+	blkio_abort_di(bio, di);
+	_no_outstanding_expectations(me);
 }
 
 static void test_abort_only_specific_di(void *context)
@@ -984,6 +1025,102 @@ static struct test_suite *_tiny_tests(void)
 	return ts;
 }
 
+static void test_rejected_read_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct blkio_block *b = (void *) 1;
+
+	/* Exercise rejection with an unregistered fd. */
+	blkio_clear_fd(f->bio, 0);
+	T_ASSERT(!blkio_get(f->bio, 0, 0, 0, &b));
+	T_ASSERT(!b);
+	T_ASSERT(blkio_set_fd(f->bio, 0) == 0);
+
+	/* Rejected requests must not consume the prefetch queue capacity. */
+	_expect_read(f->me, 0, 0);
+	blkio_prefetch(f->bio, 0, 0);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(blkio_get(f->bio, 0, 0, 0, &b));
+	blkio_put(b);
+	_no_outstanding_expectations(f->me);
+}
+
+static void test_reserved_fd_reuse(void *context)
+{
+	struct fixture *f = context;
+	struct blkio_block *b;
+
+	/* Cache a block on di 0 and keep it held by the caller. */
+	_expect_read(f->me, 0, 0);
+	blkio_prefetch(f->bio, 0, 0);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(blkio_get(f->bio, 0, 0, 0, &b));
+
+	/*
+	 * Closing a di while its blocks cannot be dropped reserves the
+	 * slot, and blkio_clear_fd() must not release that reservation.
+	 */
+	blkio_reserve_fd(f->bio, 0);
+	blkio_clear_fd(f->bio, 0);
+
+	/* A held block keeps di 0 out of the free pool. */
+	T_ASSERT_EQUAL(blkio_set_fd(f->bio, 0), BLKIO_FD_TABLE_INC);
+
+	/* Dropping the blocks releases the reservation with them. */
+	blkio_put(b);
+	T_ASSERT(blkio_abort_di(f->bio, 0));
+	T_ASSERT_EQUAL(blkio_set_fd(f->bio, 0), 0);
+}
+
+static void test_rejected_write_preserves_pending(void *context)
+{
+	struct fixture *f = context;
+	struct blkio_block *b;
+
+	T_ASSERT(blkio_get(f->bio, 0, 1, GF_ZERO, &b));
+	blkio_put(b);
+	blkio_set_last_byte(f->bio, 0, 512, 512);
+	T_ASSERT(!blkio_flush(f->bio));
+
+	/* Removing the limit must let the same dirty block be retried. */
+	blkio_unset_last_byte(f->bio, 0);
+	_expect_write(f->me, 0, 1);
+	_expect(f->me, E_WAIT);
+	T_ASSERT(blkio_flush(f->bio));
+	_no_outstanding_expectations(f->me);
+}
+
+static bool _abort_on_internal_errors(void)
+{
+	const char *env = getenv("DM_ABORT_ON_INTERNAL_ERRORS");
+
+	return env && strcmp(env, "0");
+}
+
+static void test_read_lock_conflict(void *context)
+{
+	struct fixture *f = context;
+	struct blkio_block *b, *b2 = (void *) 1;
+
+	T_ASSERT(blkio_get(f->bio, 0, 0, GF_ZERO, &b));
+	T_ASSERT(!blkio_get(f->bio, 0, 0, 0, &b2));
+	T_ASSERT(!b2);
+	blkio_put(b);
+	blkio_abort_di(f->bio, 0);
+}
+
+static void test_write_lock_conflict(void *context)
+{
+	struct fixture *f = context;
+	struct blkio_block *b, *b2 = (void *) 1;
+
+	T_ASSERT(blkio_get(f->bio, 0, 0, GF_ZERO, &b));
+	T_ASSERT(!blkio_get(f->bio, 0, 0, GF_DIRTY, &b2));
+	T_ASSERT(!b2);
+	blkio_put(b);
+	blkio_abort_di(f->bio, 0);
+}
+
 static struct test_suite *_small_tests(void)
 {
 	struct test_suite *ts = test_suite_create(_small_fixture_init, _small_fixture_exit);
@@ -993,6 +1130,13 @@ static struct test_suite *_small_tests(void)
 	}
 
 	T("get-reads", "blkio_get() triggers read", test_get_triggers_read);
+	T("rejected-read-pending", "rejected reads preserve queue capacity", test_rejected_read_preserves_pending);
+	T("rejected-write-pending", "rejected writes can be retried", test_rejected_write_preserves_pending);
+	T("reserved-fd-reuse", "reserved fd is only reused once its blocks are dropped", test_reserved_fd_reuse);
+	if (!_abort_on_internal_errors()) {
+		T("lock-conflict-read", "read lock fails on a write locked block", test_read_lock_conflict);
+		T("lock-conflict-write", "write lock fails on a held block", test_write_lock_conflict);
+	}
 	T("reads-cached", "repeated reads are cached", test_repeated_reads_are_cached);
 	T("blocks-get-evicted", "block get evicted with many reads", test_block_gets_evicted_with_many_reads);
 	T("prefetch-reads", "prefetch issues a read", test_prefetch_issues_a_read);
@@ -1011,11 +1155,14 @@ static struct test_suite *_small_tests(void)
 	T("invalidate-read-error", "invalidate a block that errored", test_invalidate_after_read_error);
 	T("invalidate-write-error", "invalidate a block that errored", test_invalidate_after_write_error);
 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
+	T("invalidate-held-keeps-earlier", "failed invalidate does not free earlier blocks", test_invalidate_held_leaves_earlier_block);
 
 	T("abort-with-no-blocks", "you can call abort, even if there are no blocks in the cache", test_abort_no_blocks);
-	T("abort-single-block", "single block get silently discarded", test_abort_single_block);
-	T("abort-forces-read", "if a block has been discarded then another read is necc.", test_abort_forces_reread);
+	T("abort-single-block", "single block get silently dropped", test_abort_single_block);
+	T("abort-forces-read", "if a block has been dropped then another read is necc.", test_abort_forces_reread);
 	T("abort-specific-di", "abort doesn't effect other dis", test_abort_only_specific_di);
+	T("abort-held-block", "abort leaves held blocks in the cache", test_abort_held_block);
+	T("all-blocks-held", "get fails when all cache blocks are held", test_all_blocks_held);
 
 	T("concurrent-reads-after-invalidate", "prefetch should still issue concurrent reads after invalidate",
 	  test_concurrent_reads_after_invalidate);
