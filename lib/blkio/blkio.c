@@ -29,7 +29,6 @@
 
 /*----------------------------------------------------------------*/
 
-#define MIN_BLOCKS 16
 #define WRITEBACK_LOW_THRESHOLD_PERCENT 33
 #define WRITEBACK_HIGH_THRESHOLD_PERCENT 66
 #define WRITEBACK_BATCH_BLOCKS 16
@@ -73,7 +72,6 @@ enum block_flags {
 
 struct blkio {
 	unsigned block_sectors;
-	uint64_t nr_data_blocks;
 	uint64_t nr_cache_blocks;
 	unsigned max_io;
 
@@ -117,7 +115,7 @@ struct blkio {
 	int fd_table_size;
 
 	/*
-	 * Statistics
+	 * Statistics, reported by blkio_destroy().
 	 */
 	unsigned read_hits;
 	unsigned read_misses;
@@ -484,6 +482,12 @@ retry:
 	_set_flags(b, BF_IO_PENDING);
 	bio->nr_io_pending++;
 	dm_list_move(&bio->io_pending, &b->list);
+
+	/* Draining was interrupted; fail instead of issuing past max_io. */
+	if (bio->nr_io_pending > bio->max_io) {
+		_complete_io(b, -EIO);
+		return;
+	}
 
 	if (!_di_valid(bio, b->di)) {
 		_complete_io(b, -EIO);
@@ -931,6 +935,14 @@ void blkio_destroy(struct blkio *bio)
 	if (!forked && !blkio_flush(bio))
 		stack;
 
+	log_debug("blkio cache %llu blocks, %u read hits, %u read misses, "
+		  "%u write hits, %u write misses, %u write zeroes, "
+		  "%u prefetches.",
+		  (unsigned long long) bio->nr_cache_blocks,
+		  bio->read_hits, bio->read_misses,
+		  bio->write_hits, bio->write_misses, bio->write_zeroes,
+		  bio->prefetches);
+
 	/*
 	 * A failed flush can leave I/O in flight.  Destroy the engine
 	 * first so each engine drains outstanding I/O while the block
@@ -941,8 +953,10 @@ void blkio_destroy(struct blkio *bio)
 	if (bio->engine->destroy(bio->engine))
 		_exit_free_list(bio);
 	else
-		log_warn("WARNING: blkio leaked %llu blocks with I/O still in flight after interrupted destroy.",
-			 (unsigned long long) bio->nr_cache_blocks);
+		log_warn("WARNING: blkio retained all %llu cache blocks with %u "
+			 "I/Os still in flight after interrupted destroy.",
+			 (unsigned long long) bio->nr_cache_blocks,
+			 bio->nr_io_pending);
 
 	radix_tree_destroy(bio->rtree);
 	free(bio->fd_table);
