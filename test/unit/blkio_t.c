@@ -352,7 +352,7 @@ static struct fixture *_fixture_init(sector_t block_sectors, unsigned nr_cache_b
 	 * fd table entry before calling engine->issue().
 	 */
 	for (i = 0; i < BLKIO_FD_TABLE_INC; i++)
-		T_ASSERT(blkio_set_fd(i) == (int) i);
+		T_ASSERT(blkio_set_fd(f->bio, i) == (int) i);
 
 	return f;
 }

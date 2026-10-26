@@ -83,8 +83,8 @@ void blkio_unset_last_byte(struct blkio *bio, int di);
 
 /*----------------------------------------------------------------*/
 
-int blkio_set_fd(int fd); /* returns di, or -1 on failure */
-void blkio_clear_fd(int di);
-int blkio_change_fd(int di, int fd);
+int blkio_set_fd(struct blkio *bio, int fd); /* returns di, or -1 on failure */
+void blkio_clear_fd(struct blkio *bio, int di);
+bool blkio_change_fd(struct blkio *bio, int di, int fd);
 
 #endif

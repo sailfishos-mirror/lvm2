@@ -564,7 +564,7 @@ static int _scan_dev_open(struct device *dev)
 	dev->flags |= DEV_IN_BLKIO;
 	dev->blkio_fd = fd;
 
-	di = blkio_set_fd(fd);
+	di = blkio_set_fd(scan_blkio, fd);
 
 	if (di == -1) {
 		log_error("Failed to set blkio fd.");
@@ -596,7 +596,7 @@ static int _scan_dev_close(struct device *dev)
 		return 0;
 	}
 
-	blkio_clear_fd(dev->blkio_di);
+	blkio_clear_fd(scan_blkio, dev->blkio_di);
 
 	if (close(dev->blkio_fd))
 		log_warn("close %s errno %d", dev_name(dev), errno);
@@ -1861,7 +1861,7 @@ int label_scan_reopen_rw(struct device *dev)
 		return 0;
 	}
 
-	if (!blkio_change_fd(dev->blkio_di, fd)) {
+	if (!blkio_change_fd(scan_blkio, dev->blkio_di, fd)) {
 		log_error("Failed to change to rw fd %s di %d fd %d.",
 			  dev_name(dev), dev->blkio_di, fd);
 		if (close(fd))
@@ -1978,14 +1978,15 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
 
 bool dev_invalidate_bytes(struct device *dev, uint64_t start, size_t len)
 {
-	if (!scan_blkio)
+	/* Without an index no block of this device is cached. */
+	if (!scan_blkio || dev->blkio_di < 0)
 		return true;
 	return blkio_invalidate_bytes(scan_blkio, dev->blkio_di, start, len);
 }
 
 void dev_invalidate(struct device *dev)
 {
-	if (!scan_blkio)
+	if (!scan_blkio || dev->blkio_di < 0)
 		return;
 	blkio_invalidate_di(scan_blkio, dev->blkio_di);
 }

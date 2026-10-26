@@ -151,7 +151,7 @@ static void _test_read(void *fixture)
 						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
-	f->di = blkio_set_fd(f->fd);
+	f->di = blkio_set_fd(bio, f->fd);
 
 	T_ASSERT(f->di >= 0);
 
@@ -182,7 +182,7 @@ static void _test_write(void *fixture)
 						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
-	f->di = blkio_set_fd(f->fd);
+	f->di = blkio_set_fd(bio, f->fd);
 
 	T_ASSERT(f->di >= 0);
 
@@ -208,7 +208,7 @@ static void _test_write_bytes(void *fixture)
 						 BLOCK_SIZE_SECTORS, f->e);
 	T_ASSERT(bio);
 
-	f->di = blkio_set_fd(f->fd);
+	f->di = blkio_set_fd(bio, f->fd);
 
 	// T_ASSERT(blkio_read_bytes(bio, f->di, offset, sizeof(buf_in), buf_in));
 	_fill_buffer((uint8_t *) buf_out, 234, sizeof(buf_out));
