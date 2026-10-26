@@ -25,11 +25,12 @@ struct blkio;
 
 /*
  * Create a cache of block_sectors sized blocks, backed by an I/O engine
- * selected by hint: "auto", "threads", "libaio" (or "async"/"aio"),
- * "sync", or NULL for auto.  Auto-selection tries the threads engine,
- * then libaio, then sync.  An engine that is not available falls through
- * to the next candidate, and finally to sync.  NULL means the cache could
- * not be created and the failure has been reported.
+ * selected by hint: "auto", "iouring" (or "uring"), "threads", "libaio"
+ * (or "async"/"aio"), "sync", or NULL for auto.  Auto-selection tries
+ * io_uring first, then the threads engine, then libaio, then sync.  An
+ * engine that is not available falls through to the next candidate, and
+ * finally to sync.  NULL means the cache could not be created and the
+ * failure has been reported.
  */
 struct blkio *blkio_create(const char *hint, unsigned block_sectors,
 			   unsigned nr_cache_blocks);

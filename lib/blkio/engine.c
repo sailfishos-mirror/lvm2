@@ -196,9 +196,9 @@ int blkio_completion_result(const struct io_engine *ioe,
 }
 
 /*
- * An engine name or alias is stored inline rather than pointed to, so the
- * row stays one object.  The array is sized for the longest name in the
- * table, and a name that does not fit is a compiler warning.
+ * An engine name or alias is stored inline rather than pointed to.  The
+ * longest name is "iouring", so an 8 byte array holds it with the
+ * terminating NUL, and a too long string is a compiler warning.
  */
 #define ENGINE_NAME_SIZE 8
 
@@ -215,7 +215,14 @@ struct engine_hint {
 	bool auto_select;
 };
 
+#ifdef HAVE_LIBURING_H
+#define ENGINE_URING create_uring_io_engine
+#else
+#define ENGINE_URING NULL
+#endif
+
 static const struct engine_hint _engine_hints[] = {
+	{ "iouring", { "uring" },        ENGINE_URING,             true },
 	{ "threads", { "" },             create_threads_io_engine, true },
 	{ "libaio",  { "async", "aio" }, create_async_io_engine,   true },
 	{ "sync",    { "" },             create_sync_io_engine,    false },

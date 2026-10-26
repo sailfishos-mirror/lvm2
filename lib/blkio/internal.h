@@ -115,11 +115,11 @@ static inline bool blkio_engine_usable(struct io_engine *ioe)
 }
 
 /*
- * Default queue depth for the libaio engine.  This value is also returned
- * via blkio_max_prefetches() which tells the caller how many devices to
- * submit I/O for concurrently.  There will be an open file descriptor for
- * each, so keep it low enough to avoid reaching the default max open file
- * limit (1024) when scanning >1024 devices.
+ * Default queue depth for async and uring engines.  This value is also
+ * returned via blkio_max_prefetches() which tells the caller how many
+ * devices to submit I/O for concurrently.  There will be an open file
+ * descriptor for each, so keep it low enough to avoid reaching the
+ * default max open file limit (1024) when scanning >1024 devices.
  */
 #define BLKIO_MAX_IO 256
 
@@ -132,11 +132,12 @@ static inline bool blkio_engine_usable(struct io_engine *ioe)
 struct io_engine *create_async_io_engine(unsigned queue_depth);
 struct io_engine *create_sync_io_engine(unsigned queue_depth);
 struct io_engine *create_threads_io_engine(unsigned n_threads);
+struct io_engine *create_uring_io_engine(unsigned queue_depth);
 
 /*
  * Create an I/O engine selected by hint.
- * hint: "auto", "threads", "libaio" (or "async"/"aio"), "sync", or NULL
- * (defaults to auto)
+ * hint: "auto", "threads", "iouring" (or "uring"),
+ * "libaio" (or "async"/"aio"), "sync", or NULL (defaults to auto)
  */
 struct io_engine *blkio_create_io_engine(const char *hint);
 
