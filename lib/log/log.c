@@ -166,7 +166,7 @@ static void _check_and_replace_standard_log_streams(FILE *old_stream, FILE *new_
  */
 int reopen_standard_stream(FILE **stream, const char *mode)
 {
-	int fd, fd_copy, new_fd;
+	int fd, fd_copy, new_fd, ret;
 	const char *name;
 	FILE *old_stream = *stream;
 	FILE *new_stream;
@@ -198,14 +198,24 @@ int reopen_standard_stream(FILE **stream, const char *mode)
 	}
 
 	/*
-	 * Install the new stream before closing the old one, so that
-	 * errors logged below never go through the closed (freed) FILE.
-	 * The new stream only refers to fd, which dup2() restores below.
+	 * Install the new stream in the log stream table before closing
+	 * the old one, so that errors logged below never go through the
+	 * closed (freed) FILE.  The new stream only refers to fd, which
+	 * dup2() restores below.
+	 *
+	 * Update *stream only after fclose(): glibc < 2.30 decides
+	 * whether it may free() the FILE by comparing it against the
+	 * stdin/stdout/stderr variables (not against the static stdio
+	 * objects), so assigning *stream first would make fclose() free()
+	 * the static stream.  Update it before reporting an fclose()
+	 * failure, so that no log call reaches the closed stream either.
 	 */
 	_check_and_replace_standard_log_streams(old_stream, new_stream);
+
+	ret = fclose(old_stream);
 	*stream = new_stream;
 
-	if (fclose(old_stream))
+	if (ret)
 		log_sys_error("fclose", name);
 
 	if ((new_fd = dup2(fd_copy, fd)) < 0)
