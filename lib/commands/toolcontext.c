@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2014 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -662,6 +662,19 @@ static int _init_device_ids_refresh(struct cmd_context *cmd)
 	return 1;
 }
 
+/*
+ * The I/O engine the config asks for.  When io_engine itself is unset, the
+ * deprecated use_aio still decides: use_aio=0 means sync I/O.
+ */
+static const char *_io_engine_name(struct cmd_context *cmd)
+{
+	if (!find_config_tree_node(cmd, global_io_engine_CFG, NULL) &&
+	    !find_config_tree_bool(cmd, global_use_aio_CFG, NULL))
+		return "sync";
+
+	return find_config_tree_str(cmd, global_io_engine_CFG, NULL);
+}
+
 static int _process_config(struct cmd_context *cmd)
 {
 	mode_t old_umask;
@@ -847,6 +860,7 @@ static int _process_config(struct cmd_context *cmd)
 		return_0;
 
 	init_io_memory_size(find_config_tree_int(cmd, global_io_memory_size_CFG, NULL));
+	init_io_engine(_io_engine_name(cmd));
 
 	return 1;
 }
@@ -1793,8 +1807,6 @@ struct cmd_context *create_toolcontext(const char *system_dir,
 	if (!(cmd->dev_types = create_dev_types(cmd->proc_dir,
 						find_config_tree_array(cmd, devices_types_CFG, NULL))))
 		goto_out;
-
-	init_use_aio(find_config_tree_bool(cmd, global_use_aio_CFG, NULL));
 
 	if (!_init_dev_cache(cmd))
 		goto_out;

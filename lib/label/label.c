@@ -794,7 +794,7 @@ int label_scan_setup_blkio(void)
 
 	_current_blkio_size_bytes = (uint64_t)cache_blocks * BLKIO_BLOCK_SIZE_IN_SECTORS * SECTOR_SIZE;
 
-	if (!(scan_blkio = blkio_create(use_aio() ? "auto" : "sync",
+	if (!(scan_blkio = blkio_create(io_engine(),
 					BLKIO_BLOCK_SIZE_IN_SECTORS, cache_blocks))) {
 		log_error("Failed to set up blkio with %d blocks.", cache_blocks);
 		return 0;

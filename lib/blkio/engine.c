@@ -13,7 +13,6 @@
  */
 
 #include "lib/blkio/internal.h"
-#include "lib/misc/lvm-globals.h"
 
 #include <errno.h>
 #include <stdbool.h>
@@ -250,12 +249,8 @@ struct io_engine *blkio_create_io_engine(const char *hint)
 
 	for (h = _engine_hints;
 	     h < _engine_hints + DM_ARRAY_SIZE(_engine_hints); h++) {
-		/*
-		 * Auto tries the engines that are good defaults; a hint names
-		 * one.  The deprecated use_aio=0 asks for sync I/O.
-		 */
-		bool wanted = automatic ?
-			(h->auto_select && use_aio()) : _engine_matches(h, hint);
+		/* Auto tries the engines that are good defaults; a hint names one. */
+		bool wanted = automatic ? h->auto_select : _engine_matches(h, hint);
 
 		if (!wanted)
 			continue;

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2011 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -52,6 +52,7 @@ void init_activation_checks(int checks);
 void init_retry_deactivation(int retry);
 void init_unknown_device_name(const char *name);
 void init_io_memory_size(int val);
+void init_io_engine(const char *engine);	/* copies the name */
 
 void set_cmd_name(const char *cmd_name);
 const char *get_cmd_name(void);
@@ -81,6 +82,7 @@ int activation_checks(void);
 int retry_deactivation(void);
 const char *unknown_device_name(void);
 int io_memory_size(void);
+const char *io_engine(void);
 
 #define DMEVENTD_MONITOR_IGNORE -1
 int dmeventd_monitor_mode(void);

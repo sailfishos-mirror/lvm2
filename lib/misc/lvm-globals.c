@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -49,6 +49,7 @@ static int _activation_checks = 0;
 static uint64_t _pv_min_size = ((DEFAULT_PV_MIN_SIZE_KB * 1024L) >> DM_SECTOR_SHIFT);
 static const char *_unknown_device_name = DEFAULT_UNKNOWN_DEVICE_NAME;
 static int _io_memory_size_kb = DEFAULT_IO_MEMORY_SIZE_KB;
+static char _io_engine_name[30] = "";
 
 void init_verbose(int level)
 {
@@ -369,4 +370,18 @@ int io_memory_size(void)
 void init_io_memory_size(int val)
 {
 	_io_memory_size_kb = val;
+}
+
+/*
+ * The named engine outlives the caller: a label scan may be set up long
+ * after the config tree that named it is gone, so keep a copy.
+ */
+void init_io_engine(const char *engine)
+{
+	dm_strncpy(_io_engine_name, engine, sizeof(_io_engine_name));
+}
+
+const char *io_engine(void)
+{
+	return _io_engine_name;
 }

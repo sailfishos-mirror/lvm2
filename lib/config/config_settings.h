@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2018 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2013-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -1207,6 +1207,12 @@ cfg(global_lvmetad_update_wait_time_CFG, "lvmetad_update_wait_time", global_CFG_
 
 cfg(global_use_aio_CFG, "use_aio", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_USE_AIO, vsn(2, 2, 183), NULL, 0, NULL,
 	"Use async I/O when reading and writing devices.\n")
+
+cfg(global_io_engine_CFG, "io_engine", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_IO_ENGINE, vsn(2, 3, 44), NULL, 0, NULL,
+	"Select I/O engine for device reads and writes.\n"
+	"auto - LVM will automatically choose, may change over time.\n"
+	"sync - Use synchronous I/O. Same as deprecated use_aio=0.\n"
+	"libaio - Use async I/O via libaio.\n")
 
 cfg(global_use_lvmlockd_CFG, "use_lvmlockd", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, 0, vsn(2, 2, 124), NULL, 0, NULL,
 	"Use lvmlockd for locking among hosts using LVM on shared storage.\n"
