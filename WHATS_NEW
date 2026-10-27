@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Suggest remedies when duplicate PV devices block VG updates or activation.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
   Accept transient or incomplete dm-raid status during repair and reduction.
