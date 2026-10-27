@@ -55,6 +55,8 @@ struct fixture {
 	int interrupt_stop_fd;
 };
 
+static bool _stop_interrupt_child(pid_t child, int stop_fd);
+
 static void _fill_buffer(uint8_t *buffer, uint8_t seed, size_t count)
 {
 	unsigned i;
@@ -125,16 +127,10 @@ static void _fix_exit(void *fixture)
 		alarm(0);
 
 		if (f->interrupt_child) {
-			if (f->interrupt_stop_fd >= 0) {
-				(void) write(f->interrupt_stop_fd, "x", 1);
-				(void) close(f->interrupt_stop_fd);
-				f->interrupt_stop_fd = -1;
-			}
-
-			while (waitpid(f->interrupt_child, NULL, 0) < 0 &&
-			       errno == EINTR)
-				;
+			(void) _stop_interrupt_child(f->interrupt_child,
+						     f->interrupt_stop_fd);
 			f->interrupt_child = 0;
+			f->interrupt_stop_fd = -1;
 		}
 
 		sigint_restore();

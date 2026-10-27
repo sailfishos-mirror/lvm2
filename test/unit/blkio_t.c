@@ -317,8 +317,10 @@ static struct fixture *_fixture_init(sector_t block_sectors, unsigned nr_cache_b
 	return f;
 }
 
-static void _fixture_exit(struct fixture *f)
+static void _fixture_exit(void *context)
 {
+	struct fixture *f = context;
+
 	if (f) {
 		_expect(f->me, E_DESTROY);
 		blkio_destroy(f->bio);
@@ -332,19 +334,9 @@ static void *_small_fixture_init(void)
 	return _fixture_init(128, 16);
 }
 
-static void _small_fixture_exit(void *context)
-{
-	_fixture_exit(context);
-}
-
 static void *_large_fixture_init(void)
 {
 	return _fixture_init(128, 1024);
-}
-
-static void _large_fixture_exit(void *context)
-{
-	_fixture_exit(context);
 }
 
 /*----------------------------------------------------------------
@@ -1123,7 +1115,7 @@ static void test_write_lock_conflict(void *context)
 
 static struct test_suite *_small_tests(void)
 {
-	struct test_suite *ts = test_suite_create(_small_fixture_init, _small_fixture_exit);
+	struct test_suite *ts = test_suite_create(_small_fixture_init, _fixture_exit);
 	if (!ts) {
 		fprintf(stderr, "out of memory\n");
 		exit(1);
@@ -1148,12 +1140,12 @@ static struct test_suite *_small_tests(void)
 	T("read-bad-issue-intermittent", "failed issue, followed by success", test_read_bad_issue_intermittent);
 	T("read-bad-io", "read issued ok, but io fails", test_read_bad_wait);
 	T("read-bad-io-intermittent", "failed io, followed by success", test_read_bad_wait_intermittent);
-	T("write-bad-issue-stops-flush", "flush fails temporarily if any block fails to write", test_write_bad_issue_stops_flush);
-	T("write-bad-io-stops-flush", "flush fails temporarily if any block fails to write", test_write_bad_io_stops_flush);
+	T("write-bad-issue-stops-flush", "flush fails temporarily if a write cannot be issued", test_write_bad_issue_stops_flush);
+	T("write-bad-io-stops-flush", "flush fails temporarily if a write io fails", test_write_bad_io_stops_flush);
 	T("invalidate-not-present", "invalidate a block that isn't in the cache", test_invalidate_not_present);
 	T("invalidate-present", "invalidate a block that is in the blkio", test_invalidate_present);
-	T("invalidate-read-error", "invalidate a block that errored", test_invalidate_after_read_error);
-	T("invalidate-write-error", "invalidate a block that errored", test_invalidate_after_write_error);
+	T("invalidate-read-error", "invalidate a block after a read error", test_invalidate_after_read_error);
+	T("invalidate-write-error", "invalidate a block after a write error", test_invalidate_after_write_error);
 	T("invalidate-fails-in-held", "invalidating a held block fails", test_invalidate_held_block);
 	T("invalidate-held-keeps-earlier", "failed invalidate does not free earlier blocks", test_invalidate_held_leaves_earlier_block);
 
@@ -1172,7 +1164,7 @@ static struct test_suite *_small_tests(void)
 
 static struct test_suite *_large_tests(void)
 {
-	struct test_suite *ts = test_suite_create(_large_fixture_init, _large_fixture_exit);
+	struct test_suite *ts = test_suite_create(_large_fixture_init, _fixture_exit);
 	if (!ts) {
 		fprintf(stderr, "out of memory\n");
 		exit(1);
