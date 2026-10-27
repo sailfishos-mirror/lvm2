@@ -50,6 +50,52 @@ check lv_field $vg/${lv2}_vdata size "4.00g"
 check lv_field $vg/${lv1} data_percent "0.00"
 lvremove -ff $vg
 
+# Slab size must be a power of two: non-power-of-two values are rounded up
+lvcreate --test --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+	--vdosettings 'vdo_slab_size_mb=300' >out 2>&1
+grep -E "Rounding VDO slab size up from 300.*M.?B to 512.*M.?B" out
+
+# Upper bound: 20000 rounds up to the 32GiB maximum
+lvcreate --test --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+	--vdosettings 'vdo_slab_size_mb=20000' >out 2>&1
+grep -E "Rounding VDO slab size up from .* to 32.*G.?B" out
+
+# Powers of two (including the maximum) are left alone
+for s in 256 32768 ; do
+	lvcreate --test --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+		--vdosettings "vdo_slab_size_mb=$s" >out 2>&1
+	not grep "Rounding VDO slab size" out
+done
+
+# Above the maximum is rejected, not rounded
+not lvcreate --test --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+	--vdosettings 'vdo_slab_size_mb=33000' >out 2>&1
+grep "out of range" out
+not grep "Rounding VDO slab size" out
+
+# Real creation uses the rounded size
+lvcreate --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+	--vdosettings 'vdo_slab_size_mb=300'
+check lv_field $vg/$lv2 vdo_slab_size "512.00m"
+lvremove -ff $vg
+
+# Non-power-of-two slab size from lvm.conf is rounded up as well
+aux lvmconf 'allocation/vdo_slab_size_mb = 300'
+lvcreate --vdo -L4G -V8G -n $lv1 $vg/$lv2 >out 2>&1
+grep -E "Rounding VDO slab size up from 300.*M.?B to 512.*M.?B" out
+check lv_field $vg/$lv2 vdo_slab_size "512.00m"
+lvremove -ff $vg
+
+# --vdosettings overrides lvm.conf, a power of two is not rounded
+lvcreate --vdo -L4G -V8G -n $lv1 $vg/$lv2 \
+	--vdosettings 'vdo_slab_size_mb=256' >out 2>&1
+not grep "Rounding VDO slab size" out
+check lv_field $vg/$lv2 vdo_slab_size "256.00m"
+lvremove -ff $vg
+
+# Restore the default slab size set by aux.sh
+aux lvmconf 'allocation/vdo_slab_size_mb = 128'
+
 
 lvcreate --vdo -L4G -V8G -n $lv1 $vg/$lv2
 check lv_field $vg/$lv1 size "8.00g"

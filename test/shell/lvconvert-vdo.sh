@@ -73,6 +73,13 @@ lvconvert -y --type vdo-pool --vdosettings 'ack_threads=5' $vg/$lv1
 check lv_field $vg/$lv1 vdo_ack_threads "5"
 lvremove -f $vg
 
+# Non-power-of-two slab size is rounded up on conversion as well
+lvcreate -L5G -n $lv1 $vg
+lvconvert -y --type vdo-pool --vdosettings 'vdo_slab_size_mb=300' $vg/$lv1 |& tee out
+grep -E "Rounding VDO slab size up from 300.*M.?B to 512.*M.?B" out
+check lv_field $vg/$lv1 vdo_slab_size "512.00m"
+lvremove -f $vg
+
 #
 lvcreate -L5G -n $lv1 $vg
 lvconvert -y --vdopool $vg/$lv1
