@@ -1512,6 +1512,24 @@ AC_CHECK_LIB([pthread], [pthread_mutex_lock],
 	[PTHREAD_LIBS="-lpthread"], hard_bailout)
 
 ################################################################################
+dnl -- pthread_setname_np is a GNU extension: older libpthread has neither the
+dnl -- declaration nor the symbol, and the BSD variant takes one argument.
+AC_CACHE_CHECK([for pthread_setname_np.],
+	[ac_cv_have_pthread_setname_np],
+	[ac_check_save_LIBS=$LIBS
+	LIBS="$PTHREAD_LIBS $LIBS"
+	AC_LINK_IFELSE([AC_LANG_PROGRAM(
+[#define _GNU_SOURCE 1
+#include <pthread.h>
+int bar(void) { return pthread_setname_np(pthread_self(), "lvm2"); }]
+	 )], [ac_cv_have_pthread_setname_np="yes"], [ac_cv_have_pthread_setname_np="no"])
+	LIBS=$ac_check_save_LIBS])
+
+AC_IF_YES(ac_cv_have_pthread_setname_np,
+	  AC_DEFINE(HAVE_PTHREAD_SETNAME_NP, 1,
+		    [Define if pthread_setname_np accepts a thread and a name]))
+
+################################################################################
 dnl -- Disable selinux
 AC_MSG_CHECKING([whether to enable selinux support])
 AC_ARG_ENABLE(selinux,

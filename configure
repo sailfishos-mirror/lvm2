@@ -14921,6 +14921,51 @@ fi
 
 
 ################################################################################
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for pthread_setname_np." >&5
+printf %s "checking for pthread_setname_np.... " >&6; }
+if test ${ac_cv_have_pthread_setname_np+y}
+then :
+  printf %s "(cached) " >&6
+else case e in #(
+  e) ac_check_save_LIBS=$LIBS
+	LIBS="$PTHREAD_LIBS $LIBS"
+	cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#define _GNU_SOURCE 1
+#include <pthread.h>
+int bar(void) { return pthread_setname_np(pthread_self(), "lvm2"); }
+
+int
+main (void)
+{
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"
+then :
+  ac_cv_have_pthread_setname_np="yes"
+else case e in #(
+  e) ac_cv_have_pthread_setname_np="no" ;;
+esac
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
+    conftest$ac_exeext conftest.$ac_ext
+	LIBS=$ac_check_save_LIBS ;;
+esac
+fi
+{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $ac_cv_have_pthread_setname_np" >&5
+printf '%s\n' "$ac_cv_have_pthread_setname_np" >&6; }
+
+if test $ac_cv_have_pthread_setname_np = yes
+then :
+
+printf '%s\n' "#define HAVE_PTHREAD_SETNAME_NP 1" >>confdefs.h
+
+fi
+
+################################################################################
 { printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking whether to enable selinux support" >&5
 printf %s "checking whether to enable selinux support... " >&6; }
 # Check whether --enable-selinux was given.
