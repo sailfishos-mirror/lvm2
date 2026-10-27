@@ -816,6 +816,7 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
 	    !find_config_tree_bool(cmd, devices_allow_changes_with_duplicate_pvs_CFG, NULL)) {
 		log_error("Cannot activate LVs in VG %s while PVs appear on duplicate devices.",
 			  lv->vg->name);
+		log_duplicate_pv_remedy();
 		return 0;
 	}
 

@@ -46,10 +46,11 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
 	    	if (!find_config_tree_bool(vg->cmd, devices_allow_changes_with_duplicate_pvs_CFG, NULL)) {
 			log_error("Cannot update volume group %s with duplicate PV devices.",
 				  vg->name);
+			log_duplicate_pv_remedy();
 			goto bad;
 		}
 		if (arg_is_set(cmd, uuid_ARG)) {
-			log_error("Resolve duplicate PV UUIDs with vgimportclone (or filters).");
+			log_duplicate_pv_remedy();
 			goto bad;
 		}
 	}

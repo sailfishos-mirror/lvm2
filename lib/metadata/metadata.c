@@ -2924,6 +2924,12 @@ static void _wipe_outdated_pvs(struct cmd_context *cmd, struct volume_group *vg)
 	lvmcache_del_outdated_devs(cmd, vg->name, vgid);
 }
 
+/* Shared remedy hint when duplicate PV devices block VG use */
+void log_duplicate_pv_remedy(void)
+{
+	log_error("Resolve duplicate PV devices with lvmdevices, vgimportclone, or filters (see pvs -a).");
+}
+
 /*
  * After vg_write() returns success,
  * caller MUST call either vg_commit() or vg_revert()
@@ -2969,6 +2975,7 @@ int vg_write(struct volume_group *vg)
 	    !find_config_tree_bool(vg->cmd, devices_allow_changes_with_duplicate_pvs_CFG, NULL)) {
 		log_error("Cannot update volume group %s with duplicate PV devices.",
 			  vg->name);
+		log_duplicate_pv_remedy();
 		return 0;
 	}
 
