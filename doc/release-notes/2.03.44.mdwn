@@ -1,0 +1,71 @@
+<!-- Page title -->
+[[!meta title="Version 2.03.44 - Feature and Bug Fix Release"]]
+
+Version 2.03.44
+===============
+
+* **INCOMPATIBLE** `fsadm` no longer honors `_FSADM_YES` environment variable,
+  use `--yes` on the command line.
+* Improve metadata reading speeds - see `global/io_engine` configuration option. See [[!toggle text="more"]].
+* Deprecate `global/use_aio` configuration option in favor of `global/io_engine`.
+* Lot of small fixes in `dmeventd`, and fixes, modernization, and hardening of scripts mainly `lvresize_fs_helper`, `lvm_import_vdo`, `fsadm`, `lvmdump`, `blkdeactivate`.
+* Detect NVMe multipath devices and handle uncached primary devices.
+* Use the correct VDO pool data LV size for VDO memory checks.
+* Warn about RAID reshape data corruption on kernels older than 6.11.
+* Improvements in RAID handling.
+* Few changes in shared locking.
+* And [[!toggle text="more"]]
+
+[[!toggleable text="""
+Configurable I/O engine
+-----------------------
+
+User can now select from multiple I/O engines, depending on what's supported by the system.
+This will help with metadata reading time especially on systems with heavy use of lvs.
+
+* Deprecate use_aio. `use_aio=0` still selects sync I/O.
+* By default all available engines with installed libraries are on, see configure options below.
+* Default the I/O engine to iouring, then threads, then libaio, then sync.
+
+Changes in command line
+-----------------------
+
+* Use `lvmdump -c` to return lvmlockd status instead of clvmd.
+* Add `lvmdump -A` option to enable all collection options at once.
+
+Improved RAID handling
+----------------------
+
+* Preserve RAID1 recovery state and rebuild markers when reducing images.
+* Accept transient or incomplete dm-raid status during repair and reduction.
+* Report the dead-primary RAID repair advice instead of refusing a rebuild.
+* Run mirror repair from dmeventd when mirror reports in-sync with failed legs.
+* Handle incomplete RAID health status from dm-raid 1.9.0/1.9.1.
+
+Changes in shared locking
+--------------------------
+
+* Apply `lvmlockd --lockopt force` to all lock requests.
+* Keep PR state after failed start - see lvmpersist(8) section *Errors durin PR start*.
+* Allow vgextend before any host starts PR on new devs - see lvmpersist(8).
+* Apply PTPL when extending VG to ensure persistence when power cycling devs.
+
+./configure options
+-------------------
+
+* New `--with{,out}-{libaio,liburing}` options controlling available `io_engine` settings.
+
+And more
+--------
+
+* Improve documentation about PVs layered on top of LVs.
+
+"""]]
+
+<!-- remove the pending tag on release, remove draft tag once editing is complete -->
+[[!tag pending]]
+<!--
+For old releases add Release Timestamp like this, date from git show $COMMIT is fine.
+[[!meta date="Tue Oct 27 13:55:00 2026 +0100"]]
+-->
+
