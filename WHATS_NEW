@@ -1,5 +1,5 @@
-Version 2.03.44 - 
-==================
+Version 2.03.44 - 27th October 2026
+===================================
   Round non-power-of-two VDO slab size up to a power of two in lvcreate.
   Make pthread_setname_np optional for older pthread libraries.
   Fix blkio invalidation of held or dirty blocks and interrupted waits.
