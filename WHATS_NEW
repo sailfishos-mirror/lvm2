@@ -22,6 +22,7 @@ Version 2.03.44 -
   Use the VDO pool data LV size for VDO memory checks.
   Warn about RAID reshape data corruption on kernels older than 6.11.
   Suggest remedies when duplicate PV devices block VG updates or activation.
+  Improve documentation about PVs layered on top of LVs.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
   Accept transient or incomplete dm-raid status during repair and reduction.
@@ -57,6 +58,10 @@ Version 2.03.44 -
   Validate lvresize_fs_helper resize sizes and value-taking options.
   Fix lvresize_fs_helper btrfs, e2fsck handling, and --fsextend/--fsreduce.
   Prevent redundant device access after scan I/O errors (DEV_SCAN_NOT_READ).
+  Apply lvmlockd --lockopt force to all lock requests.
+  Keep PR state after failed start.
+  Apply PTPL when extending VG to ensure persistence when power cycling devs.
+  Allow vgextend before any host starts PR on new devs.
   Fix pvscan autoactivation when DEVLINKS symlinks are not yet created.
 
 Version 2.03.43 - 30th September 2026
