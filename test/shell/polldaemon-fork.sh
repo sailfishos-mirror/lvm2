@@ -11,44 +11,82 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 # Verify the background polldaemon releases the label scan and its I/O
-# engine before become_daemon() forks.
+# engine before become_daemon() forks.  The libaio engine makes this
+# visible in the trace: the label scan creates its context with
+# io_setup(), so every such call must be matched by io_destroy() before
+# the daemon forks and the child would inherit a dead context.
 
 . lib/inittest --skip-with-lvmlockd --skip-with-lvmpolld
 
-which strace || skip
-aux with_sanitizer && skip
+which strace || skip "strace not installed"
+aux with_sanitizer && skip "sanitizer builds cannot be traced reliably"
 
 aux prepare_vg 2
 
 lvcreate -aey -l1 -n $lv1 $vg "$dev1"
 
 # The libaio engine has distinct io_setup/io_destroy syscalls.  Make sure
-# libaio is available and actually selected before tracing the daemon.
+# libaio is available and actually selected before tracing the daemon;
+# another engine would leave no context to follow.
 pvs -vvv --config 'global/io_engine="libaio"' "$dev1" >out 2>&1 || true
-grep -q 'Created.*libaio' out || skip
+grep -q 'Created.*libaio' out || skip "libaio io engine not available"
+
+# Old strace rejects the whole trace set when it does not know one of the
+# names, e.g. clone3, and exits before tracing the command.  Probe each
+# name once: both aio syscalls are required, while any one fork syscall is
+# enough to find where the daemon forks.
+aio_syscalls=(io_setup io_destroy)
+fork_syscalls=(clone clone3 fork vfork)
+trace_syscalls=()
+fork_syscall_re=
+
+for sc in "${aio_syscalls[@]}"; do
+	strace -e trace="$sc" true >/dev/null 2>&1 ||
+		skip "strace cannot trace $sc"
+	trace_syscalls+=("$sc")
+done
+
+for sc in "${fork_syscalls[@]}"; do
+	strace -e trace="$sc" true >/dev/null 2>&1 || continue
+	trace_syscalls+=("$sc")
+	fork_syscall_re="${fork_syscall_re:+$fork_syscall_re|}$sc"
+done
+[[ -n "$fork_syscall_re" ]] || skip "strace cannot trace any fork syscall"
+
+printf -v trace_arg '%s,' "${trace_syscalls[@]}"
+trace_arg=${trace_arg%,}
 
 rm -f trace.out
 LVM_TEST_TAG="kill_me_$PREFIX" strace -f -o trace.out \
-	-e trace=io_setup,io_destroy,clone,clone3,fork,vfork \
-	pvmove -b --config 'global/io_engine="libaio"' "$dev1" "$dev2"
+	-e trace="$trace_arg" \
+	pvmove -b --config 'global/io_engine="libaio"' "$dev1" "$dev2" ||
+	die "pvmove failed under strace"
 
-# The parent must destroy the label scan's aio context before forking.
-awk '
-{
-	if (fork_seen)
-		next
-	if (/io_setup\(/)
-		setups++
-	if (/io_destroy\(/)
-		destroys++
-	if (/(clone|clone3|fork|vfork)\(/)
-		fork_seen = 1
-}
-END {
-	if (!setups || !fork_seen || setups != destroys)
+# Count the aio contexts the parent creates and destroys before it forks.
+# The trace is scanned only up to the first fork syscall, so a context
+# leaked into the child shows up as created > destroyed.
+reason=$(awk -v fork_re="$fork_syscall_re" '
+	!fork_seen {
+		if ($0 ~ /io_setup\(/)
+			created++
+		else if ($0 ~ /io_destroy\(/)
+			destroyed++
+		else if ($0 ~ "(" fork_re ")\\(")
+			fork_seen = 1
+	}
+	END {
+		if (!fork_seen)
+			print "no fork syscall traced"
+		else if (!created)
+			print "label scan created no aio context"
+		else if (created != destroyed)
+			print "aio contexts created: " created + 0 \
+			      ", destroyed before fork: " destroyed + 0
+		else
+			exit 0
 		exit 1
-}
-' trace.out || die "label scan I/O engine was not destroyed before fork"
+	}' trace.out) ||
+	die "label scan I/O engine was not destroyed before fork: $reason"
 
 aux kill_tagged_processes
 pvmove --abort 2>/dev/null || true
