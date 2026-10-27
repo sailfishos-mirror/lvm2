@@ -26,7 +26,7 @@ for i in 1 257 ; do
 	# magic + standard CRC-32 (as written by mdadm) of the 512B header
 	# with crc field set to 0xffffffff and remaining bytes zeroed
 	{ printf '\xde\x11\xde\x11\x4d\x1e\x81\xa1' ; head -c 504 /dev/zero ; } | \
-		dd of="$dev1" bs=512 iflag=fullblock seek=$(( sectors - i )) conv=fdatasync
+		dd of="$dev1" bs=512 seek=$(( sectors - i )) conv=fdatasync
 
 	not pvcreate "$dev1" 2>&1 | tee err
 	grep "device is an md component" err
