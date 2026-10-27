@@ -258,7 +258,9 @@ check pv_field "$dev2" minor "$MINOR2"
 # With allow_changes_with_duplicate_pvs=0, a VG with duplicate devs
 # cannot be modified or activated.
 
-not lvcreate -an -l1 -n $lv2 $vg1
+not lvcreate -an -l1 -n $lv2 $vg1 2>&1 | tee err
+grep "Cannot update volume group" err
+grep "Resolve duplicate PV devices" err
 not lvremove $vg1/$lv1
 not lvchange -ay $vg1/$lv1
 not vgremove $vg1
