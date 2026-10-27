@@ -731,6 +731,7 @@ void pvcreate_params_set_defaults(struct pvcreate_params *pp);
 int vg_write(struct volume_group *vg);
 int vg_commit(struct volume_group *vg);
 void vg_revert(struct volume_group *vg);
+void log_duplicate_pv_remedy(void);
 
 /*
  * Add/remove LV to/from volume group
