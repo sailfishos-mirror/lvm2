@@ -1,5 +1,6 @@
 Version 2.03.45 - 
 ==================
+  Explain RAID extend failures when images share a PV or PVs differ.
 
 Version 2.03.44 - 27th October 2026
 ===================================
