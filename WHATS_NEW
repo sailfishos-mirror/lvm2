@@ -1,3 +1,6 @@
+Version 2.03.45 - 
+==================
+
 Version 2.03.44 - 27th October 2026
 ===================================
   Round non-power-of-two VDO slab size up to a power of two in lvcreate.
