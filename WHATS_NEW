@@ -1,5 +1,6 @@
 Version 2.03.44 - 
 ==================
+  Make pthread_setname_np optional for older pthread libraries.
   Fix blkio invalidation of held or dirty blocks and interrupted waits.
   Report synchronous I/O failures through the blkio completion path.
   Release the label scan before forking the polldaemon.

@@ -212,8 +212,6 @@ static void *_worker_fn(void *arg)
 static bool _create_worker(struct thread_slot *slot, pthread_attr_t *attr,
 			   unsigned idx)
 {
-	char name[16];
-
 	if (pthread_mutex_init(&slot->mutex, NULL))
 		return false;
 
@@ -231,9 +229,15 @@ static bool _create_worker(struct thread_slot *slot, pthread_attr_t *attr,
 		return false;
 	}
 
-	/* pthread name limit: 16 bytes including NUL */
-	(void) dm_snprintf(name, sizeof(name), "io_engine_%u", idx);
-	pthread_setname_np(slot->thread, name);
+#ifdef HAVE_PTHREAD_SETNAME_NP
+	{
+		char name[16];
+
+		/* pthread name limit: 16 bytes including NUL */
+		(void) dm_snprintf(name, sizeof(name), "io_engine_%u", idx);
+		pthread_setname_np(slot->thread, name);
+	}
+#endif
 
 	return true;
 }
