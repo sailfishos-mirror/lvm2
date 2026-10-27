@@ -141,7 +141,10 @@ PREFIX="${COMMON_PREFIX}$$"
 
 # Check we are not conflicting with some exiting setup
 if [[ "$SKIP_ROOT_DM_CHECK" -eq 0 ]]; then
-	d=$(dmsetup info -c -o name --noheadings --rows -S "suspended=Suspended||name=~${PREFIX}[^0-9]")
+	# Use --mangle none: libdm unmangles every name in the reply before the
+	# -S filter runs, so one stale device with an unmangleable name fails
+	# the whole listing and this check would abort every test.
+	d=$(dmsetup info -c -o name --noheadings --rows --mangle none -S "suspended=Suspended||name=~${PREFIX}[^0-9]")
 	case "$d" in
 	"No devices found") ;;
 	"") ;;
