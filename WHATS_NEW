@@ -14,6 +14,7 @@ Version 2.03.44 -
   Warn and use sync I/O when the requested I/O engine is unavailable.
   Zero fill the tail of a short io engine read at the end of a device.
   Drain in-flight libaio on io engine destroy.
+  Remove orphaned pvmove LV when force-removing a RAID LV locked for pvmove.
   Preserve committed metadata when pv_write updates an existing PV.
   Use mdadm-compatible CRC-32 when detecting DDF metadata.
   Detect NVMe multipath devices and handle uncached primary devices.
