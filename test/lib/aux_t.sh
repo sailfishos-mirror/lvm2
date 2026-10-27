@@ -2404,6 +2404,59 @@ kernel_at_least() {
 	version_at_least "$(uname -r)" "$@"
 }
 
+# Print the syscall word and the strace options that trace the reads io
+# engine $1 submits, as "SYSCALL OPTIONS", the spec "check io_reads"
+# takes.  The remaining arguments are the devices the traced command
+# reads, used to trace only the label scan reads.  Return 1 when strace
+# on this host cannot trace this engine, or when tracing it adds no
+# coverage, so the caller can skip the check instead of failing on a
+# trace that can never match.
+io_trace() {
+	local engine=$1
+	local dev
+	local opts
+
+	shift
+	case "$engine" in
+	libaio)
+		# libaio engine (legacy AIO) submits each read with
+		# io_submit().
+		echo "submit -e io_submit"
+		;;
+	threads)
+		# Trace only accesses to the devices under scan, so every
+		# read seen is a label scan read and the count does not
+		# depend on the read size.  The syscall class rather than the
+		# name: strace 4.10 and older print the 64-bit read as
+		# "pread", newer strace prints "pread64", and name filtering
+		# matches only the personality that has the name.
+		opts="-f -e trace=desc"
+		for dev in "$@"; do
+			opts+=" -P $dev"
+		done
+		# The class and -P are both younger than the oldest strace
+		# in use, so skip the check where they are not understood.
+		strace $opts true >/dev/null 2>&1 || return 1
+		echo "pread $opts"
+		;;
+	iouring)
+		# Older strace does not know the io_uring syscall and
+		# refuses the whole name.
+		strace -e io_uring_enter true >/dev/null 2>&1 || return 1
+		echo "enter -e io_uring_enter"
+		;;
+	sync)
+		# sync reads with pread() like the worker threads, and the
+		# threads engine is always available, so tracing sync adds
+		# no coverage.
+		return 1
+		;;
+	*)
+		return 1
+		;;
+	esac
+}
+
 have_fs() {
 	# Verify the kernel can mount filesystem type '$1' AND the mkfs.$1 tool
 	# is present before a test uses it (e.g. with mkfs + mount).

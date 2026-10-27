@@ -39,7 +39,7 @@ run_cnt_pvs() {
 }
 
 # Detect available engines (debug output needed for "Created ... io engine" messages)
-ENGINES=( $(get_io_engines "$dev1") )
+ENGINES=( $(get io_engine "$dev1") )
 
 #
 # Sanity: every engine must return the same PVs before we time it.

@@ -95,26 +95,35 @@ pvscan --cache "$bd3"
 vgchange -aay --autoactivation event $vg2
 check lv_field $vg2/$lv1 lv_active "active"
 
-# Count io to check the pvs_online optimization 
+# Count io to check the pvs_online optimization
 # is working to limit scanning.
+#
+# The counted syscall depends on the io_engine in use, so run the check
+# for each engine this build can create.  The number of reads does not
+# depend on the engine: three for vg1 with two PVs plus the vg_read
+# rescan, one for pvscan --cache of one PV, and two for vg2 with one PV
+# plus the rescan.
+if which strace && ! aux with_sanitizer; then
+ENGINES=( $(get io_engine "$bd1") )
+for engine in "${ENGINES[@]}"; do
+	# sync reads like the threads engine, so it adds no coverage.
+	io_trace_spec=$(aux io_trace "$engine" "$bd1" "$bd2" "$bd3" "$bd4") ||
+		continue
 
-if which strace; then
-vgchange -an
-_clear_online_files
+	vgchange -an
+	_clear_online_files
+	pvscan --cache "$bd1"
+	pvscan --cache "$bd2"
 
-pvscan --cache "$bd1"
-pvscan --cache "$bd2"
-strace -e io_submit vgchange -aay --autoactivation event $vg1 2>&1|tee trace.out
-test "$(grep -c io_submit trace.out)" -eq 3
-rm trace.out
+	engine_cfg="global/io_engine=\"$engine\""
 
-strace -e io_submit pvscan --cache "$bd3" 2>&1|tee trace.out
-test "$(grep -c io_submit trace.out)" -eq 1
-rm trace.out
-
-strace -e io_submit vgchange -aay --autoactivation event $vg2 2>&1|tee trace.out
-test "$(grep -c io_submit trace.out)" -eq 2
-rm trace.out
+	check io_reads "$io_trace_spec" 3 -- \
+		vgchange --config "$engine_cfg" -aay --autoactivation event $vg1
+	check io_reads "$io_trace_spec" 1 -- \
+		pvscan --config "$engine_cfg" --cache "$bd3"
+	check io_reads "$io_trace_spec" 2 -- \
+		vgchange --config "$engine_cfg" -aay --autoactivation event $vg2
+done
 fi
 
 # non-standard usage: no VG name arg, vgchange will only used pvs_online files

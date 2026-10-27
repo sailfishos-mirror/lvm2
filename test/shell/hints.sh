@@ -111,77 +111,23 @@ not grep scan: tmptest
 
 # Test I/O syscalls for different engines
 if which strace && ! aux with_sanitizer; then
-# Count the reads the traced command submitted.  Each counter takes the
-# trace file and, for an engine that batches submissions, the number of
-# submissions one syscall is expected to carry.
-_count_io_submit() {
-	grep -c '^io_submit(' "$1"
-}
+# aux prepare_devs wrote the device list to a file, since it ran in its
+# own process.  The trace covers only accesses to those devices.
+get_devs
 
-# io_uring batches the queued reads: one enter submits the initial scan,
-# another submits the vg_read rescan.  A blocking wait may add an enter
-# with zero submissions, so sum the SQEs submitted rather than counting
-# syscalls.
-_count_io_uring_enter() {
-	local file=$1 batch=$2
-
-	grep -q "^io_uring_enter([^,]*, $batch, 0," "$file" || return 1
-	awk -F'[(,]' '/^io_uring_enter\(/ { s += $3 } END { print s + 0 }' "$file"
-}
-
-# Worker threads read with pread64(); -f is needed to trace them.  Count
-# only the label scan reads on the scanned devices, which the -P options
-# select, so the count does not depend on the read size.  With -f, strace
-# may split a call into an unfinished line and a resumed line.  The call
-# starts once, on the line with the opening parenthesis, so count that
-# line only and not the resumed line that completes the same call.
-_count_pread64() {
-	grep -c 'pread64(' "$1"
-}
-
-ENGINES=( $(get_io_engines "$dev1") )
-
+ENGINES=( $(get io_engine "$dev1") )
 for engine in "${ENGINES[@]}"; do
-	# sync has no submission of its own to trace.
-	if [ "$engine" = sync ]; then
-		continue
-	fi
+	# sync reads like the threads engine, so it adds no coverage.
+	io_trace_spec=$(aux io_trace "$engine" "${DEVICES[@]}") || continue
 
 	engine_cfg="global/io_engine=\"$engine\""
-
-	case "$engine" in
-	libaio)
-		# libaio engine (legacy AIO) submits each read with io_submit().
-		trace_opts="-e io_submit"
-		count_io=_count_io_submit
-		;;
-	iouring)
-		trace_opts="-e io_uring_enter"
-		count_io=_count_io_uring_enter
-		;;
-	threads)
-		# Trace only accesses to the devices under scan, so every
-		# pread64 seen is a label scan read and the count does not
-		# depend on the read size.  aux prepare_devs wrote the device
-		# list to a file, since it ran in its own process.
-		get_devs
-		trace_opts="-f -e pread64"
-		for dev in "${DEVICES[@]}"; do
-			trace_opts+=" -P $dev"
-		done
-		count_io=_count_pread64
-		;;
-	esac
 
 	# 'pvs' submits three reads, one for each PV in hints for initial
 	# scan, and one more in vg_read rescan check.  'pvs -a' submits
 	# seven reads, one for each device, and one more in vg_read rescan
-	# check.
-	strace $trace_opts pvs --config "$engine_cfg" 2>&1|tee tmptest
-	test "$($count_io tmptest 2)" -eq 3
-
-	strace $trace_opts pvs -a --config "$engine_cfg" 2>&1|tee tmptest
-	test "$($count_io tmptest 6)" -eq 7
+	# check.  io_uring submits the initial scan with one batched enter.
+	check io_reads "$io_trace_spec" 3 2 -- pvs --config "$engine_cfg"
+	check io_reads "$io_trace_spec" 7 6 -- pvs -a --config "$engine_cfg"
 done
 fi
 

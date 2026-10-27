@@ -30,7 +30,7 @@ _created_engine() {
 #
 # Discover which engines can actually be created.
 #
-ENGINES=( $(get_io_engines "$dev1") )
+ENGINES=( $(get io_engine "$dev1") )
 
 # Explicit io_engine=auto must select the best available async engine.
 AUTO_ENGINE=sync

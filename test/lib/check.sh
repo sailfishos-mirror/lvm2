@@ -20,6 +20,8 @@
 #  check mirror_legs VG LV N
 #  check mirror_images_on VG LV DEV [DEV...]
 
+#  check io_reads SPEC N [BATCH] -- CMD [ARG...]
+
 # ...
 
 [[ -z "$BASH" ]] || set -e -o pipefail
@@ -482,6 +484,40 @@ raid_leg_status() {
 	done
 
 	die "$1-$2 status ${st[5]} != $3  (${st[*]})"
+}
+
+# Trace the command and check how many reads it submitted.
+# SPEC is the "SYSCALL OPTIONS" line printed by aux io_trace,
+# which names the syscall to count and the options that trace it;
+# N is the expected count, and BATCH, for an engine that batches
+# submissions, the number of submissions one syscall is expected to carry.
+# The traced command follows --.
+io_reads() {
+	local spec=$1
+	local expected=$2
+	local batch=0
+	local syscall
+	local opts
+	local count
+
+	shift 2
+	if [ $# -gt 0 ] && [ "$1" != -- ]; then
+		batch=$1
+		shift
+	fi
+	[ $# -gt 0 ] && [ "$1" = -- ] ||
+		die "io_reads: expected -- before the traced command"
+	shift
+
+	read -r syscall opts <<< "$spec" ||
+		die "io_reads: no syscall to count in \"$spec\""
+	strace $opts "$@" 2>&1 | tee io_trace.log ||
+		die "io_reads: '$*' failed"
+	count=$(get io_count "$syscall" io_trace.log "$batch") ||
+		die "io_reads: cannot count the $syscall reads of '$*'"
+	[ "$count" -eq "$expected" ] ||
+		die "io_reads: '$*' submitted $count reads, expected $expected"
+	rm -f io_trace.log
 }
 
 grep_dmsetup() {
