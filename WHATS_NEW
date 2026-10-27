@@ -19,6 +19,7 @@ Version 2.03.44 -
   Use mdadm-compatible CRC-32 when detecting DDF metadata.
   Detect NVMe multipath devices and handle uncached primary devices.
   Use the VDO pool data LV size for VDO memory checks.
+  Warn about RAID reshape data corruption on kernels older than 6.11.
   Reject cache pool resize with a clear error instead of failing internally.
   Preserve RAID1 recovery state and rebuild markers when reducing images.
   Accept transient or incomplete dm-raid status during repair and reduction.

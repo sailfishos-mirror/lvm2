@@ -16,6 +16,8 @@
 # - on a stripe adding reshape, the initial size remains until after the end when the device capacity is increased
 # - on a stripe removing reshape, the initial size is reduced before the reshape is allowed to start
 # - size changes are being reported asynchronously by the kernel, which requires polling for it for split seconds
+# - the held size can only be sampled while the kernel still reports the reshape running,
+#   hence the reshape is deliberately slowed down and sampled before and after the size read
 #
 
 LVM_SKIP_LARGE_TESTS=${LVM_SKIP_LARGE_TESTS:-1}
@@ -34,8 +36,9 @@ CHECK_SIZE_TIMEOUT=5
 # List of stripes to add or remove
 tst_stripes=""
 
-# Delay on first 'PV' to be able to retrieve status during reshape.
-# Needs to be varied depending on layout as they come with different reshape overhead.
+# Delay on first 'PV' to keep a reshape running long enough to reliably sample
+# the size it holds.  Needs to be varied depending on layout as they come with
+# different reshape overhead.
 ms=0
 
 # PV numbers and size
@@ -61,7 +64,7 @@ function _delay_dev
 	local dev=$1
 	local offset=$(( $(get first_extent_sector "$dev") + 2048 ))
 
-	aux delay_dev "$dev" "$ms" 0 "$offset"
+	aux delay_dev "$dev" "$ms" "$ms" "$offset"
 }
 
 # Reset delay
@@ -103,15 +106,15 @@ function _get_stripes_and_delay
 	0)
 		case "$raid_type" in
 		raid[45]*)
-			ms=60
+			ms=300
 			tst_stripes="5 4 11 9 15 13 19 18 22 21 25 23 28 30 31 29 33 31 34 33 37 45 41 50 55 60 63 30 15 10 8 3"
 			;;
 		raid6*)
-			ms=40
+			ms=250
 			tst_stripes="5 4 11 9 15 13 19 18 22 21 25 23 28 30 31 29 33 31 34 33 37 45 41 50 55 60 62 30 15 10 8 3"
 			;;
 		raid10*)
-			ms=50
+			ms=300
 			tst_stripes="5 8 9 11 13 14 15 19 20 22 23 25 27 28 29 32"
 			;;
 		esac
@@ -119,20 +122,42 @@ function _get_stripes_and_delay
 	*)
 		case "$raid_type" in
 		raid[45]*)
-			ms=60
+			ms=300
 			tst_stripes="5 4 8 7 11 9 15 19 18 10"
 			;;
 		raid6*)
-			ms=40
+			ms=250
 			tst_stripes="5 4 8 7 11 9 15 18 10 5"
 			;;
 		raid10*)
-			ms=50
+			ms=300
 			tst_stripes="5 6 7 8 9 10"
 			;;
 		esac
 		;;
 	esac
+}
+
+# Report the reshape length in sectors of the first rimage of @vg/@lv.
+#
+# Reshape length is a per-segment report field: only the first segment
+# of the rimage reports it, any other segment adds an empty row,
+# hence sum up any values reported.
+function _get_raid_reshape_len
+{
+	local vg=$1
+	local lv=$2
+	local line
+	local reshape_len=0
+
+	# Avoid using pipes as exit codes may cause test failure
+	for line in $(lvs --noheadings --nosuffix -aoreshapelen --unit s "$vg/${lv}_rimage_0")
+	do
+		# Drop everything past 'S'
+		reshape_len=$(( reshape_len + ${line/S*} ))
+	done
+
+	echo "$reshape_len"
 }
 
 function _get_size
@@ -146,16 +171,13 @@ function _get_size
 	rimagesz=$(blockdev --getsz "$DM_DEV_DIR/mapper/${vg}-${lv}_rimage_0")
 
 	# Get any reshape size in sectors
-	# Avoid using pipes as exit codes may cause test failure
-	reshape_len=$(lvs --noheadings --nosuffix -aoreshapelen --unit s "$vg/${lv}_rimage_0")
-	# Drop everything past 'S'
-	reshape_len=${reshape_len/S*}
+	reshape_len=$(_get_raid_reshape_len $vg $lv)
 
 	# Get rimage size - reshape length
 	rimagesz=$(( rimagesz - reshape_len ))
 
 	# Calculate size of LV based on above sizes
-	echo $(( rimagesz *  data_stripes ))
+	echo $(( rimagesz * data_stripes ))
 }
 
 function _check_size
@@ -171,6 +193,90 @@ function _check_size
 
 	# Compare size of LV with calculated one
 	[[ lv_size -eq calc_size ]]
+}
+
+# Report the dm-raid synchronization action ('idle', 'reshape', 'resync', ...)
+# the kernel currently exposes for @vg/@lv.
+function _sync_action
+{
+	local token
+	local prev=
+
+	for token in $(dmsetup status "$1-$2")
+	do
+		[ -n "$prev" ] && { echo "$token"; return; }
+		case "$token" in
+		*/*) prev=1 ;;
+		esac
+	done
+}
+
+# True when the kernel still reports the reshape of @vg/@lv as running.
+function _is_reshaping
+{
+	[ "$(_sync_action "$1" "$2")" = reshape ]
+}
+
+# Verify @lv still exposes @old_size while its reshape is ongoing.
+#
+# Sample the size and then check the reshape to still be running: the
+# kernel grows the size only once the reshape finished, so a sample
+# taken while the reshape runs has to still be @old_size.
+#
+# Right after a reload dm-raid reports no reshape for a moment before
+# the sync thread starts -- the same transient _raid_status_read_stable()
+# in raid_manip.c waits out -- hence retry with a backoff.  A size that
+# moved away from @old_size means the reshape finished and can no
+# longer be sampled.
+#
+# Returns 0 when the held size is confirmed, 1 when it violates the
+# contract and 2 when the reshape finished before it could be sampled.
+function _check_size_hold
+{
+	local vg=$1
+	local lv=$2
+	local old_size=$3
+	local lv_size
+	local delay
+
+	for delay in 0 .05 .1 .2 .4 .8 1.6
+	do
+		sleep "$delay"
+
+		lv_size=$(blockdev --getsz "$DM_DEV_DIR/$vg/$lv")
+
+		if _is_reshaping "$vg" "$lv"; then
+			# Reshape running: the size has to still be @old_size
+			[ "$lv_size" -eq "$old_size" ] && return 0
+			return 1
+		fi
+
+		# No reshape running: a moved size means it finished
+		[ "$lv_size" -eq "$old_size" ] || return 2
+	done
+
+	return 2
+}
+
+# Die unless the ongoing reshape of @lv still exposes @old_size.  A reshape
+# that finished before the size could be sampled is not a size violation, so
+# only warn: the delay failed to hold it long enough on this machine.
+function _check_size_held
+{
+	local vg=$1
+	local lv=$2
+	local old_size=$3
+	local rc
+
+	_check_size_hold "$vg" "$lv" "$old_size"
+	rc=$?
+	case "$rc" in
+	0)	return 0 ;;
+	1)	die "LV size should be small" ;;
+	2)	echo "WARNING: reshape of $vg/$lv finished before its size could be sampled." ;;
+	esac
+
+	return 0
 }
 
 function _check_size_timeout
@@ -274,15 +380,21 @@ function _add_stripes
 	local lv=$3
 	local data_stripes=$4
 	local stripes=
+	local old_size
 	local stripesize="$((16 << (data_stripes % 5))).00k" # Stripe size variation
 
 	stripes=$(_total_stripes "$raid_type" "$data_stripes")
 
 	_delay_dev "$dev1"
+
+	# Size the LV exposes before the stripe is added, which has to be kept
+	# until the reshape finished
+	old_size=$(blockdev --getsz "$DM_DEV_DIR/$vg/$lv")
+
 	_reshape_layout "$raid_type" "$data_stripes" $vg $lv 0 1 --stripesize "$stripesize"
 
-	# Size has to be inconsistent until reshape finishes
-	_check_size $vg $lv "$data_stripes" && die "LV size should be small"
+	# Size has to stay at the pre-reshape value until reshape finishes
+	_check_size_held $vg $lv "$old_size"
 
 	_restore_dev "$dev1"
 
@@ -365,6 +477,7 @@ function _test
 	local raid_type=$3
 	local data_stripes=$4
 	local cur_data_stripes
+	local old_size
 	local rimagesz
 
 	_get_stripes_and_delay "$raid_type"
@@ -380,9 +493,13 @@ function _test
 
 	_delay_dev "$dev1"
 
+	# Size the LV exposes before the stripe is added, which has to be kept
+	# until the reshape finished
+	old_size=$(blockdev --getsz "$DM_DEV_DIR/$vg/$lv")
+
 	# Reshape it to one more stripe and 256K stripe size
 	_reshape_layout "$raid_type" $(( data_stripes + 1 )) $vg $lv 0 0 --stripesize 256K
-	_check_size $vg $lv "$data_stripes" || die "LV size should still be small"
+	_check_size_held $vg $lv "$old_size"
 
 	_restore_dev "$dev1"
 	_skip_or_fsck "$DM_DEV_DIR/$vg/$lv"

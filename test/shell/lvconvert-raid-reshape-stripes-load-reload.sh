@@ -71,7 +71,7 @@ check lv_first_seg_field $vg/$lv1 stripes 16
 
 # Reload table during reshape to test for data corruption
 case "$(uname -r)" in
-  5.[89]*|5.1[012].*|3.10.0-862*|4.18.0-*.el8*)
+  5.[89]*|5.1[012].*|5.14*|3.10.0-862*|4.18.0-*.el8*)
 	echo "Skipping table reload test on on unfixed kernel!!!" ;;
   *)
 for i in {0..5}
