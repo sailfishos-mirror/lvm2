@@ -313,7 +313,7 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
 	struct logical_volume *lv_imeta;
 	struct dm_list allocatable_pvs;
 	struct dm_list *use_pvh;
-	uint64_t lv_size_bytes, meta_bytes, meta_sectors, prev_meta_sectors;
+	uint64_t prev_meta_sectors;
 	uint32_t meta_extents, prev_meta_extents;
 	uint32_t area_count, s;
 
@@ -341,13 +341,18 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
 			return 0;
 		}
 
-		/* the calculated meta_bytes value is always a multiple of 4MB, do not round again */
-		lv_size_bytes = lv_iorig->size * 512;
-		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, vg->extent_size);
-		meta_sectors = meta_bytes / 512;
-		meta_extents = meta_sectors / vg->extent_size;
-		if (!meta_extents)
-			meta_extents = 1;
+		/*
+		 * Use the journal size stored with the image, as lvcreate does
+		 * (0 when none was set: size follows the default buckets).
+		 * The journal size is fixed in the integrity superblock when
+		 * the device is initialized, so the metadata LV must keep room
+		 * for that journal plus the tags of the extended image.
+		 * The size is rounded up to whole VG extents, so it is never
+		 * short of what the journal needs when the extent size does
+		 * not divide the 4MB accounting unit.
+		 */
+		meta_extents = _get_integrity_meta_extents(lv_iorig->le_count, vg->extent_size,
+							   seg_image->integrity_settings.journal_sectors);
 
 		prev_meta_sectors = lv_imeta->size;
 		prev_meta_extents = prev_meta_sectors / vg->extent_size;
