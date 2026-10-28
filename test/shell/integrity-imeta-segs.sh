@@ -14,7 +14,7 @@
 
 SKIP_WITH_LOW_SPACE=256
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux have_integrity 1 5 0 || skip
 
