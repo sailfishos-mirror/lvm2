@@ -98,6 +98,155 @@ static uint64_t _lv_size_bytes_to_integrity_meta_bytes(uint64_t lv_size_bytes, u
 }
 
 /*
+ * Number of VG extents needed by the integrity metadata LV that sits next to
+ * an image holding @extents data extents.  Round up: a fractional extent
+ * cannot be allocated, and the metadata LV must not be smaller than what the
+ * journal needs.
+ */
+static uint32_t _get_integrity_meta_extents(uint32_t extents, uint32_t extent_size,
+					    uint32_t journal_sectors)
+{
+	uint64_t meta_bytes, meta_sectors;
+	uint64_t lv_size_bytes = (uint64_t) extents * extent_size * SECTOR_SIZE;
+
+	meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, journal_sectors, extent_size);
+	meta_sectors = meta_bytes / SECTOR_SIZE;
+
+	return dm_div_up(meta_sectors, extent_size);
+}
+
+/*
+ * Can a request for @extents logical extents be allocated, accounting for the
+ * RAID metadata and integrity metadata LV that each image needs?
+ *
+ * Answers yes/no for one request; raid_integrity_fit_extents() searches
+ * over the requested sizes.
+ *
+ * The budget available to one image is taken as @free_pe / image count.  That
+ * is an even-share estimate: it is the best a pre-allocation check can do
+ * without running the allocator, and on an uneven layout the allocator can
+ * still fail even when the estimate says the request fits.
+ */
+static int _raid_integrity_request_fits(const struct volume_group *vg,
+					const struct segment_type *segtype,
+					uint32_t extents, uint32_t free_pe,
+					uint32_t stripes, uint32_t mirrors,
+					uint32_t region_size, uint32_t journal_sectors)
+{
+	uint32_t extent_size = vg->extent_size;
+	uint32_t images = raid_images_count(segtype, mirrors, stripes);
+	uint64_t rounded_extents, per_image_need;
+	uint32_t data_images, data_per_image, alloc_rimage_extents;
+	uint32_t rmeta_per_image = 0, imeta_per_image;
+	uint32_t per_image_free;
+
+	/*
+	 * Zero stripes cannot form a layout (and would divide by zero in
+	 * the rounding below).
+	 */
+	if (!stripes)
+		return 0;
+
+	rounded_extents = dm_round_up((uint64_t) extents, stripes);
+	if (rounded_extents > UINT32_MAX)
+		return 0;
+
+	/* A raid4/5/6 layout needs at least one data image besides the parity. */
+	if (images <= segtype->parity_devs)
+		return 0;
+
+	/* raid_rimage_extents() takes the data-image count, excluding parity. */
+	data_images = images - segtype->parity_devs;
+
+	data_per_image = raid_rimage_extents(segtype, (uint32_t) rounded_extents,
+					     data_images, mirrors);
+	if (!data_per_image)
+		return 0;
+
+	if (segtype_is_raid_with_meta(segtype)) {
+		/*
+		 * Size the RAID metadata from the same extent count the
+		 * allocator uses: allocate_extents() passes the layout's
+		 * stripes and mirrors straight to raid_rimage_extents().
+		 * For RAID4/5/6 that equals the data-image count above, but
+		 * for RAID10 the two differ (stripes is the mirror group
+		 * count, images the total), and a reservation smaller than
+		 * ah->log_len would let the fit approve a create that the
+		 * allocator then cannot place.
+		 */
+		alloc_rimage_extents = raid_rimage_extents(segtype,
+							   (uint32_t) rounded_extents,
+							   stripes, mirrors);
+		if (!alloc_rimage_extents)
+			return 0;
+
+		rmeta_per_image = raid_rmeta_extents_delta(vg->cmd, 0, alloc_rimage_extents,
+							   region_size, extent_size);
+	}
+
+	imeta_per_image = _get_integrity_meta_extents(data_per_image, extent_size,
+						      journal_sectors);
+
+	per_image_need = (uint64_t) data_per_image + rmeta_per_image + imeta_per_image;
+	per_image_free = free_pe / images;
+
+	return per_image_need <= per_image_free;
+}
+
+/*
+ * Fit a percentage-sized RAID integrity request into the free extents: find
+ * the largest extent count, up to the requested one, whose per-image data,
+ * RAID metadata and integrity metadata all fit in the free extents available
+ * to the allocation.  Use the allocator's image and RAID metadata sizing
+ * helpers so the estimate matches the allocation geometry.  The candidate is
+ * stripe-rounded here because the caller rounds it after this check.  The
+ * required PE count is monotonic, so binary search finds the largest fitting
+ * request.
+ *
+ * Returns the fitted count, which the caller assigns to lp->extents, or 0
+ * (after logging) when not even one extent fits.
+ */
+uint32_t raid_integrity_fit_extents(const struct volume_group *vg,
+				    const struct segment_type *segtype,
+				    uint32_t requested, const struct dm_list *pvh,
+				    uint32_t stripes, uint32_t mirrors,
+				    uint32_t region_size, uint32_t journal_sectors)
+{
+	bool pvh_is_subset = pvh && pvh != &vg->pvs;
+	uint32_t free_pe = pvh_is_subset ?
+		pv_list_extents_free(pvh) : vg->free_count;
+	uint32_t lo = 0, hi = requested, mid, extents;
+
+	while (lo < hi) {
+		mid = lo + (hi - lo) / 2 + 1;	/* upper midpoint, cannot overflow */
+
+		if (_raid_integrity_request_fits(vg, segtype, mid, free_pe,
+						 stripes, mirrors, region_size,
+						 journal_sectors))
+			lo = mid;
+		else
+			hi = mid - 1;
+	}
+
+	extents = lo;
+
+	if (!extents) {
+		log_error("Not enough space for raid LV with integrity.");
+		return 0;
+	}
+
+	if (extents != requested)
+		log_print_unless_silent("Reducing raid size from %s (%u extents) to %s (%u extents) "
+					"to leave space for RAID and integrity metadata.",
+					display_size(vg->cmd, (uint64_t) requested * vg->extent_size),
+					requested,
+					display_size(vg->cmd, (uint64_t) extents * vg->extent_size),
+					extents);
+
+	return extents;
+}
+
+/*
  * The user wants external metadata, but did not specify an existing
  * LV to hold metadata, so create an LV for metadata.
  */
@@ -108,7 +257,7 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 				struct logical_volume **meta_lv)
 {
 	char metaname[NAME_LEN] = { 0 };
-	uint64_t lv_size_bytes, meta_bytes, meta_sectors;
+	uint64_t meta_sectors;
 	struct logical_volume *lv;
 	struct lvcreate_params lp_meta = {
 		.activate = CHANGE_AN,
@@ -133,17 +282,8 @@ static int _lv_create_integrity_metadata(struct cmd_context *cmd,
 		return 0;
 	}
 
-	/* the calculated meta_bytes value is always a multiple of 4MB, do not round again */
-	lv_size_bytes = (uint64_t)lp->extents * (uint64_t)vg->extent_size * 512;
-	meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, settings->journal_sectors, vg->extent_size);
-	meta_sectors = meta_bytes / 512;
-	lp_meta.extents = meta_sectors / vg->extent_size;
-
-	/* Use one extent if the VG extent size is larger than the number of sectors needed. */
-	if (!lp_meta.extents) {
-		log_debug("Round integrity meta size up to one extent.");
-		lp_meta.extents = 1;
-	}
+	lp_meta.extents = _get_integrity_meta_extents(lp->extents, vg->extent_size, settings->journal_sectors);
+	meta_sectors = (uint64_t) lp_meta.extents * vg->extent_size;
 
 	log_verbose("Creating integrity metadata LV %s with size %s.",
 		    metaname, display_size(cmd, meta_sectors));
@@ -1056,5 +1196,3 @@ int integrity_settings_to_str_list(struct dm_integrity_settings *settings, struc
 
 	return 1;
 }
-
-

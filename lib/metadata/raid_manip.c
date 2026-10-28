@@ -1367,6 +1367,18 @@ uint32_t raid_rimage_extents(const struct segment_type *segtype,
 	return r > UINT_MAX ? 0 : (uint32_t) r;
 }
 
+/*
+ * Number of image LVs a RAID LV is built from: the data images implied by the
+ * mirror and stripe layout plus the parity devices the segment type adds.
+ * This is the same area_count + parity_count total the allocator works with.
+ * lv_extend() and the integrity fit check share this one definition.
+ */
+uint32_t raid_images_count(const struct segment_type *segtype,
+			   uint32_t mirrors, uint32_t stripes)
+{
+	return mirrors * stripes + segtype->parity_devs;
+}
+
 /* Return number of data copies for @segtype */
 uint32_t lv_raid_data_copies(const struct segment_type *segtype, uint32_t area_count)
 {

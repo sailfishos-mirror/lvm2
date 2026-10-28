@@ -550,5 +550,14 @@ int get_visible_lvs_using_pv(struct cmd_context *cmd, struct volume_group *vg, s
 
 bool scan_text_mismatch(struct cmd_context *cmd, const char *vgname, const char *vgid);
 
+/* Fit percentage-sized RAID integrity extents into free space; 0 if none. */
+uint32_t raid_integrity_fit_extents(const struct volume_group *vg,
+				    const struct segment_type *segtype,
+				    uint32_t requested, const struct dm_list *pvh,
+				    uint32_t stripes, uint32_t mirrors,
+				    uint32_t region_size, uint32_t journal_sectors);
+
+uint32_t raid_images_count(const struct segment_type *segtype,
+			   uint32_t mirrors, uint32_t stripes);
 
 #endif

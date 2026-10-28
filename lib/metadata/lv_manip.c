@@ -4705,7 +4705,7 @@ int lv_extend(struct logical_volume *lv,
 		 * are AREA_PV.
 		 */
 		if (segtype_is_raid(segtype))
-			sub_lv_count = mirrors * stripes + segtype->parity_devs;
+			sub_lv_count = raid_images_count(segtype, mirrors, stripes);
 		else
 			sub_lv_count = mirrors;
 
@@ -9666,6 +9666,22 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
 					display_size(cmd, (uint64_t) lp->stripe_size),
 					display_size(cmd, (uint64_t) vg->extent_size));
 		lp->stripe_size = vg->extent_size;
+	}
+
+	/*
+	 * A percentage-sized RAID LV is sized from the free PEs before the per-image
+	 * RAID and integrity metadata LVs are known, so the request can be too large
+	 * for the metadata to fit.  Fit lp->extents here instead of letting the
+	 * allocation fail half way through.
+	 */
+	if (seg_is_raid(lp) && lp->raidintegrity && lp->approx_alloc) {
+		lp->extents = raid_integrity_fit_extents(vg, lp->segtype,
+							 lp->extents, lp->pvh,
+							 lp->stripes, lp->mirrors,
+							 lp->region_size,
+							 lp->integrity_settings.journal_sectors);
+		if (!lp->extents)
+			return_NULL;
 	}
 
 	lp->extents = _round_to_stripe_boundary(vg, lp->extents, lp->stripes, 1);
