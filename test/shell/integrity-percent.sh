@@ -109,6 +109,53 @@ check lv_field "$vg/$lv2" lv_size 174.00 --units m --nosuffix
 
 vgremove -ff $vg
 
+# The fit must size the per-image RAID metadata from the extent count the
+# allocator uses, not from the per-image data extent count.  For raid10 the
+# allocator sizes the metadata from the total LV extent count while each image
+# holds only half of it, and the two counts can fall in different metadata
+# extents.  Sizing from the smaller count under-reserves by one extent, the fit
+# approves a request the allocator cannot place, and lvcreate fails after the
+# point of no return.
+#
+# Reaching that boundary means the metadata LV must step up one extent, which
+# happens when the bitmap bits outgrow the fixed 8KiB header.  The step falls
+# at 128 regions, so 128 extents of 4KiB, the smallest extent RAID allows on a
+# 4KiB page host.  A 64KiB page host has no extent below 64KiB and would need
+# 3.9M extents, about 240GiB, to reach the same step, and not even the smallest
+# legal region size brings that into a testable LV size.  The scenario is
+# therefore 4KiB-only by arithmetic, not by choice.
+if test "$(getconf PAGESIZE)" = 4096 ; then
+	vgcreate $SHARED -s 4k $vg2 "$dev1" "$dev2" "$dev3" "$dev4"
+
+	# Leave 2140 free extents on every PV.  With four 4KiB extents per 512KiB
+	# region, raid10 with two stripes has four images, one per PV, and each
+	# image gets a 2140 extent budget.  The integrity metadata LV needs 2048
+	# extents (4MiB of data-derived metadata plus the 4MiB initial journal),
+	# so an image with E extents needs E / 2 data, rmeta and 2048 extents.
+	#
+	# The allocator gives rmeta three extents once the total extent count
+	# reaches 178 (179136 bytes over 512KiB regions rounds into the second
+	# region), while the per-image count of 89 still needs only two.  The fit
+	# may therefore keep at most 178 extents: 89 + 3 + 2048 = 2140.  Sizing
+	# rmeta from 89 instead lets the fit keep 180, and the allocator then
+	# needs 90 + 3 + 2048 = 2141 and fails.
+	pe_count=$(pvs --noheadings -o pv_pe_count "$dev1" | tr -d ' \n')
+	fill=$(( pe_count - 2140 ))
+	meta_devs=("$dev1" "$dev2" "$dev3" "$dev4")
+	for i in "${!meta_devs[@]}"; do
+		lvcreate -an -Zn -l "$fill" -n ${lv2}_fill_$i $vg2 "${meta_devs[$i]}"
+	done
+
+	lvcreate --type raid10 -i 2 --raidintegrity y -n $lv2 -l 100%FREE $vg2
+
+	# 178 extents of 4KiB, with three metadata extents per image.
+	check lv_field "$vg2/$lv2" lv_size 712.00 --units k --nosuffix
+	check lv_field "$vg2/${lv2}_rmeta_0" lv_size 12.00 --units k --nosuffix
+	check lv_field "$vg2/${lv2}_rimage_0_imeta" lv_size 8192.00 --units k --nosuffix
+
+	vgremove -ff $vg2
+fi
+
 # A 1MiB extent size divides the 4MiB accounting unit, so the metadata size is
 # already a whole number of extents and must not be rounded up again.  8 PVs of
 # 64MiB with 1MiB extents hold 63 extents each, 504 in total; raid1 with two
