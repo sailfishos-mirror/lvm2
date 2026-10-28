@@ -1,5 +1,7 @@
 Version 2.03.45 - 
 ==================
+  Round up and size extended RAID integrity metadata with image journal.
+  Fit percentage-sized RAID integrity LVs with their metadata.
   Explain RAID extend failures when images share a PV or PVs differ.
 
 Version 2.03.44 - 27th October 2026
