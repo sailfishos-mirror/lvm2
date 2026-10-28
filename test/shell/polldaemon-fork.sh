@@ -62,26 +62,33 @@ LVM_TEST_TAG="kill_me_$PREFIX" strace -f -o trace.out \
 	pvmove -b --config 'global/io_engine="libaio"' "$dev1" "$dev2" ||
 	die "pvmove failed under strace"
 
-# Count the aio contexts the parent creates and destroys before it forks.
-# The trace is scanned only up to the first fork syscall, so a context
-# leaked into the child shows up as created > destroyed.
+# Track the aio contexts live in each traced process.  A fork must never
+# happen while the forking process still holds one, otherwise the child
+# inherits a dead context.  Not every fork is the polldaemon fork (the
+# command may fork helpers before the label scan runs), so the check is
+# per fork, not "first fork in the trace".  strace -f prefixes each line
+# with the pid; a call that is resumed is only counted at its start.
 reason=$(awk -v fork_re="$fork_syscall_re" '
-	!fork_seen {
-		if ($0 ~ /io_setup\(/)
-			created++
-		else if ($0 ~ /io_destroy\(/)
-			destroyed++
-		else if ($0 ~ "(" fork_re ")\\(")
-			fork_seen = 1
+	{ pid = $1 }
+	/io_setup\(/ { live[pid]++; created++; next }
+	/io_destroy\(/ { live[pid]--; destroyed++; next }
+	$0 ~ ("(" fork_re ")\\(") && $0 !~ /resumed/ {
+		forks++
+		if (live[pid] > 0) {
+			bad = pid
+			exit
+		}
 	}
 	END {
-		if (!fork_seen)
+		if (bad != "")
+			print "aio context live across fork in pid " bad
+		else if (!forks)
 			print "no fork syscall traced"
 		else if (!created)
 			print "label scan created no aio context"
 		else if (created != destroyed)
 			print "aio contexts created: " created + 0 \
-			      ", destroyed before fork: " destroyed + 0
+			      ", destroyed: " destroyed + 0
 		else
 			exit 0
 		exit 1
