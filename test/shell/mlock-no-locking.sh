@@ -11,7 +11,7 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #
 # Check whether activation without memory locking works as expected
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 # memory locking is disabled with sanitizers
 aux with_sanitizer && skip

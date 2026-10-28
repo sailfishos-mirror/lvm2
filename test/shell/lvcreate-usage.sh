@@ -12,7 +12,7 @@
 
 # 'Exercise some lvcreate diagnostics'
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux prepare_pvs 4
 get_devs

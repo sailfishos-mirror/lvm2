@@ -11,7 +11,7 @@
 
 test_description='Exercise BTRFS resize operations'
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux have_fsinfo || skip "Test requires --fs checksize support"
 

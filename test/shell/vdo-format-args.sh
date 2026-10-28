@@ -14,9 +14,7 @@
 # are correctly applied and reflected in the running VDO device.
 # Tests kernel formatting, userspace vdoformat and kernel format fallback.
 
-SKIP_WITH_LVMPOLLD=1
-
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux have_vdo 6 2 0 || skip
 

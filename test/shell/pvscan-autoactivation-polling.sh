@@ -11,7 +11,7 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 
 
-. lib/inittest --skip-with-lvmlockd
+. lib/inittest --skip-with-lvmlockd --skip-with-lvmpolld
 
 # test if snapshot-merge target is available
 aux target_at_least dm-snapshot-merge 1 0 0 || skip

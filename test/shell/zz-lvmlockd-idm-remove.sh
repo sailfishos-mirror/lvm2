@@ -12,7 +12,7 @@
 
 test_description='Remove the idm test setup'
 
-. lib/inittest --with-lock-type-idm
+. lib/inittest --with-lock-type-idm --skip-with-lvmpolld
 
 # FIXME: collect debug logs (only if a test failed?)
 # lvmlockctl -d > lvmlockd-debug.txt

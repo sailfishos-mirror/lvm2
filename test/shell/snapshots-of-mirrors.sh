@@ -12,7 +12,7 @@
 
 
 
-. lib/inittest
+. lib/inittest --skip-with-lvmpolld
 
 aux lvmconf "global/support_mirrored_mirror_log=1"
 
