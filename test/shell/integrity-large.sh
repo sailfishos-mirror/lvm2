@@ -143,18 +143,42 @@ check lv_field $vg/${lv1}_rimage_1_imeta size "20.00m"
 lvchange -an $vg/$lv1
 lvremove $vg/$lv1
 
-# FIXME: remove this or make it optional, because it prevents
-# running this test on scsi devs.
-# As the test doesn't wait for full resync
-# delay legs so not all data need to be written.
+# lvextend must size the integrity metadata with the journal given at creation
+# time.  With 4MiB extents, a 400MiB image with a 32MiB journal (65536 sectors)
+# needs (400 / 500 + 1) * 4MiB = 4MiB for the tags plus the 32MiB journal, i.e.
+# 36MiB.  Extended to 504MiB it needs (504 / 500 + 1) * 4MiB = 8MiB plus the
+# same 32MiB journal, i.e. 40MiB.  Sizing it with the default 4MiB journal of
+# images up to 512MiB gives only 12MiB, so the 36MiB metadata LV looked large
+# enough and was left too small for the journal and the larger tag area.
+check vg_field $vg vg_extent_size 4.00m
+lvcreate --type raid1 -m1 --raidintegrity y -an -L 400m -n $lv1 \
+	--integritysettings journal_sectors=65536 $vg "$dev1" "$dev2"
+check lv_field $vg/${lv1}_rimage_0_imeta size "36.00m"
+check lv_field $vg/${lv1}_rimage_1_imeta size "36.00m"
+
+lvextend -L 504m $vg/$lv1
+check lv_field $vg/${lv1}_rimage_0_imeta size "40.00m"
+check lv_field $vg/${lv1}_rimage_1_imeta size "40.00m"
+
+# the kernel rejects metadata that cannot hold the journal and the tags
+lvchange -ay $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+lvs -a -o+devices $vg
+
+lvchange -an $vg/$lv1
+lvremove $vg/$lv1
+
+# delay legs so not all data need to be written, the lvremove below
+# then runs while the resync is still in progress
 aux delay_dev "$dev1" 400 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"
 aux delay_dev "$dev2" 0 10 "$(( $(get first_extent_sector "$dev2") + 16000 )):1200000"
-
 
 # this succeeds because dev1,dev2 can hold rmeta+rimage
 lvcreate --type raid1 -n $lv1 -L 592M -an $vg "$dev1" "$dev2"
 lvs -a -o+devices $vg
 lvremove $vg/$lv1
+aux enable_dev "$dev1" "$dev2"
 
 # this fails because dev1,dev2 can hold rmeta+rimage, but not imeta
 # and we require imeta to be on same devs as rmeta/rimeta
@@ -174,5 +198,27 @@ lvs -a -o+devices $vg
 # plenty of space
 lvcreate --type raid1 --raidintegrity y -n $lv1 -L 640M -an $vg
 lvs -a -o+devices $vg
+
+vgremove -ff $vg
+
+# lvextend must round the integrity metadata up to whole VG extents.  With 3MiB
+# extents a 498MiB image (166 extents) needs (498 / 500 + 1) * 4MiB = 4MiB of
+# metadata plus the 4MiB initial journal, i.e. 8MiB = 3 extents = 9MiB.  After
+# extending to 600MiB (200 extents) it needs (600 / 500 + 1) * 4MiB = 8MiB plus
+# the 8MiB journal bucket of images over 512MiB, i.e. 16MiB, which is 6 whole
+# extents = 18MiB.  Rounding down would leave 5 extents = 15MiB, short of the
+# 16MiB the journal needs.
+vgcreate $SHARED -s 3m $vg "$dev1" "$dev2"
+lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 166 $vg
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+check lv_field $vg/${lv1}_rimage_0_imeta size "9.00m"
+check lv_field $vg/${lv1}_rimage_1_imeta size "9.00m"
+
+lvextend -l 200 $vg/$lv1
+aux wait_recalc $vg/${lv1}_rimage_0
+aux wait_recalc $vg/${lv1}_rimage_1
+check lv_field $vg/${lv1}_rimage_0_imeta size "18.00m"
+check lv_field $vg/${lv1}_rimage_1_imeta size "18.00m"
 
 vgremove -ff $vg
