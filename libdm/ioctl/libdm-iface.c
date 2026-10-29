@@ -459,6 +459,10 @@ static int _open_and_assign_control_fd(const char *control)
 }
 #endif
 
+/*
+ * Callers hold _control_fd_mutex: this assigns _control_fd, which they share
+ * with _close_control_fd() and _get_control_fd().
+ */
 static int _open_control(void)
 {
 #ifdef DM_IOCTLS
@@ -499,6 +503,12 @@ static int _open_control(void)
 
 	if (!_create_dm_bitset(1)) {
 		log_error("Failed to set up list of device-mapper major numbers");
+		/*
+		 * _get_control_fd() returns _control_fd regardless of this
+		 * failure, so close it to report the failure and let a later
+		 * call retry the initialisation.
+		 */
+		_close_control_fd();
 		return 0;
 	}
 
@@ -2805,7 +2815,11 @@ DM_EXPORT_NEW_SYMBOL(int, dm_task_run, 1_02_197)
 	if ((dmt->type == DM_DEVICE_SUSPEND) && dmt->enable_checks)
 		return _suspend_with_validation_v4(dmt);
 
-	if (!_open_control()) {
+	/*
+	 * _get_control_fd() takes _control_fd_mutex around the shared open, so
+	 * two threads cannot open at once and leak a descriptor.
+	 */
+	if (_get_control_fd() < 0) {
 		_udev_complete(dmt);
 		return_0;
 	}
