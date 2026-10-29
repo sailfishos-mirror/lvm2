@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2012 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -496,15 +496,20 @@ void fs_unlock(void)
 {
 	/* Do not allow syncing device name with suspended devices */
 	if (!dm_get_suspended_counter()) {
-		if (!dm_udev_get_sync_support())
-			log_debug_activation("Not syncing device names (--noudevsync ?  %d).",
-					     dm_udev_get_checking());
-		else
-			log_debug_activation("Syncing device names");
-		/* Wait for all processed udev devices */
-		if (!dm_udev_wait(_fs_cookie))
-			stack;
-		_fs_cookie = DM_COOKIE_AUTO_CREATE; /* Reset cookie */
+		/* Without a cookie there is nothing to wait for */
+		if (_fs_cookie != DM_COOKIE_AUTO_CREATE) {
+			if (!dm_udev_get_sync_support())
+				log_debug_activation("Not syncing device names (--noudevsync ?  %d).",
+						     dm_udev_get_checking());
+			else
+				log_debug_activation("Syncing device names");
+
+			/* Wait for all processed udev devices */
+			if (!dm_udev_wait(_fs_cookie))
+				stack;
+
+			_fs_cookie = DM_COOKIE_AUTO_CREATE; /* Reset cookie */
+		}
 		dm_lib_release();
 		_pop_fs_ops();
 	}
