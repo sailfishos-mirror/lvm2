@@ -3577,7 +3577,7 @@ static int _run_script(struct cmd_context *cmd, int argc, char **argv)
 
 static void _nonroot_warning(void)
 {
-	if (getuid() || geteuid())
+	if (geteuid())
 		log_warn("WARNING: Running as a non-root user. Functionality may be unavailable.");
 }
 

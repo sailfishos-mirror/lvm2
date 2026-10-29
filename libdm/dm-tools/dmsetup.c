@@ -7229,10 +7229,25 @@ static int _process_switches(int *argcp, char ***argvp, const char *dev_dir)
 	return 1;
 }
 
+/*
+ * libdm keeps a non-root control-node denial out of the error output, and
+ * every command that talks to the driver needs that node, so the failure
+ * otherwise reaches the user as a bare "Command failed.".  Warn when the
+ * command fails rather than at startup: splitname and help work unprivileged
+ * and their output is parsed by udev rules and scripts.
+ */
+static void _nonroot_warning(void)
+{
+	if (geteuid())
+		log_warn("WARNING: Running as a non-root user. "
+			 "Functionality may be unavailable.");
+}
+
 static int _perform_command_for_all_repeatable_args(CMD_ARGS)
 {
 	do {
 		if (!cmd->fn(cmd, subcommand, argc, argv++, NULL, multiple_devices)) {
+			_nonroot_warning();
 			log_error("Command failed.");
 			return 0;
 		}
