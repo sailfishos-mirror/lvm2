@@ -612,7 +612,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
 	vdo_pool_lv->status |= LV_VDO_POOL;
 	data_lv->status |= LV_VDO_POOL_DATA;
 
-	if (use_kernel) {
+	if (use_kernel && !test_mode()) {
 		vdo_pool_lv->status |= LV_VDOFORMAT;
 
 		if (!_format_vdo_pool_kernel(vdo_pool_lv)) {
