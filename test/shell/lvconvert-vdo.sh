@@ -68,6 +68,11 @@ lvcreate -L5G -n $lv1 $vg
 not lvconvert --type vdo-pool $vg/$lv1 |& tee out
 grep "WARNING" out
 
+lvconvert --test --yes --type vdo-pool --name $lv2 --virtualsize 5G $vg/$lv1
+check lv_field $vg/$lv1 segtype linear
+check lv_field $vg/$lv1 lv_name $lv1
+check lv_not_exists $vg $lv2
+
 # Check --vdosettings is also applied to converted vdo-pool
 lvconvert -y --type vdo-pool --vdosettings 'ack_threads=5' $vg/$lv1
 check lv_field $vg/$lv1 vdo_ack_threads "5"
