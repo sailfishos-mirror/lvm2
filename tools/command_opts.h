@@ -93,7 +93,8 @@ static void _command_factor_options(const struct command *cmds, int ncmds,
 		for (ro = 0; ro < cmd->ro_count + cmd->any_ro_count; ro++) {
 			names[def_cn].all_options[cmd->required_opt_args[ro].opt] = 1;
 
-			if ((cmd->required_opt_args[ro].opt == size_ARG) && !strncmp(cmd->name, "lv", 2))
+			if (opt_implies_extents(cmd->required_opt_args[ro].opt,
+						&cnames[def_cn]))
 				names[def_cn].all_options[extents_ARG] = 1;
 		}
 

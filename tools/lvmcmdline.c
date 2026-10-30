@@ -1308,8 +1308,7 @@ static void _set_valid_args_for_command_name(int ci)
 			command_names_args[ci].valid_args[num_args] = opt_enum;
 			num_args++;
 
-			/* Automatically recognize --extents in addition to --size. */
-			if (opt_enum == size_ARG) {
+			if (opt_implies_extents(opt_enum, &command_names[ci])) {
 				command_names_args[ci].valid_args[num_args] = extents_ARG;
 				num_args++;
 			}

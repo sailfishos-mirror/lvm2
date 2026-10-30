@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.
- * Copyright (C) 2004-2015 Red Hat, Inc. All rights reserved.
+ * Copyright (C) 2004-2026 Red Hat, Inc. All rights reserved.
  *
  * This file is part of LVM2.
  *
@@ -38,6 +38,21 @@ struct command_name {
 	unsigned int flags;
 	uint16_t lvm_command_enum; /* as declared in commands.h with _COMMAND */
 };
+
+static inline int command_has_alternate_extents(const struct command_name *cname)
+{
+	return (cname->flags & ALTERNATIVE_EXTENTS) ? 1 : 0;
+}
+
+/*
+ * --size implies --extents on command names with ALTERNATIVE_EXTENTS.
+ * The fold and the valid-args path use this predicate to add the implied
+ * --extents; the parser rejects --size elsewhere.
+ */
+static inline int opt_implies_extents(int opt, const struct command_name *cname)
+{
+	return (opt == size_ARG) && command_has_alternate_extents(cname);
+}
 
 struct command_name_args {
 	uint16_t num_args;
@@ -272,7 +287,6 @@ void print_usage_common_cmd(const struct command_name *cname, struct command *cm
 void print_usage_common_lvm(const struct command_name *cname, struct command *cmd);
 void print_usage_notes(const struct command_name *cname);
 void factor_common_options(void);
-int command_has_alternate_extents(const struct command_name *cname);
 int configure_command_option_values(const struct command_name *cname, int arg_enum, int val_enum);
 const struct command_name *find_command_name(const char *name);
 

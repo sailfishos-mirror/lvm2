@@ -882,6 +882,13 @@ skip:
 		cmd->ignore_opt_args[cmd->io_count++].opt = opt;
 	}
 
+	if (cmd->name && (opt == size_ARG) &&
+	    !command_has_alternate_extents(&command_names[cmd->lvm_command_enum])) {
+		log_error("Parsing command defs: %s uses --size but its "
+			  "command name does not allow --extents.", cmd->name);
+		cmd->cmd_flags |= CMD_FLAG_PARSE_ERROR;
+	}
+
 	*takes_arg = opt_names[opt].val_enum ? 1 : 0;
 }
 
@@ -1263,13 +1270,6 @@ void factor_common_options(void)
 	_command_factor_options(commands, COMMAND_COUNT, command_names,
 				command_names_args);
 	factored = 1;
-}
-
-/* FIXME: use a flag in command_name struct? */
-
-int command_has_alternate_extents(const struct command_name *cname)
-{
-	return (cname->flags & ALTERNATIVE_EXTENTS) ? 1 : 0;
 }
 
 static int _long_name_compare(const void *on1, const void *on2)
