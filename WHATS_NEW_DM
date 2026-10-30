@@ -1,5 +1,6 @@
 Version 1.02.219 - 
 ===================
+  Fix a race when opening the device-mapper control node.
 
 Version 1.02.218 - 27th October 2026
 ====================================
