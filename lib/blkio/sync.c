@@ -108,5 +108,8 @@ struct io_engine *create_sync_io_engine(unsigned queue_depth)
 
 	log_debug("Created sync io engine.");
 
+	/* Suppress false positive leak warnings from gcc -fanalyzer. */
+	GCC_SUPPRESS_LEAK_WARNING
 	return &e->base;
+	GCC_UNSUPPRESS_WARNINGS
 }
