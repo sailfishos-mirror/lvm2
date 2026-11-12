@@ -1,2 +1,4 @@
-.
+polldaemon-fork.sh
+lvchange-raid1-writemostly.sh
+#.
 #pvcreate
